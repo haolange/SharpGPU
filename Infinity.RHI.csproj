@@ -1,0 +1,78 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net7.0</TargetFramework>
+		<Platforms>x64;ARM64</Platforms>
+		<AssemblyName>Infinity.RHI</AssemblyName>
+		<RootNamespace>Infinity.RHI</RootNamespace>
+		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+		<IntermediateOutputPath>../../../Intermediate/Graphics/RHI/</IntermediateOutputPath>
+		<Nullable>enable</Nullable>
+		<BaseOutputPath>$(ProjectDir)../../../Binaries/Graphics/RHI/</BaseOutputPath>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+		<PlatformTarget>x64</PlatformTarget>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<WarningLevel>3</WarningLevel>
+		<OutputPath>../../../Binaries/Graphics/RHI/Win64/Debug/</OutputPath>
+		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+		<WarningsAsErrors />
+		<DefineConstants>$(DefineConstants)TRACE;</DefineConstants>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+		<WarningsAsErrors></WarningsAsErrors>
+		<OutputPath>../../../Binaries/Graphics/RHI/Win64/Release/</OutputPath>
+		<WarningLevel>3</WarningLevel>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<Optimize>true</Optimize>
+		<PlatformTarget>x64</PlatformTarget>
+		<DefineConstants>$(DefineConstants)TRACE;</DefineConstants>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
+		<PlatformTarget>ARM64</PlatformTarget>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<WarningLevel>3</WarningLevel>
+		<OutputPath>../../../Binaries/Graphics/RHI/ARM64/Debug/</OutputPath>
+		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+		<WarningsAsErrors />
+		<DefineConstants>$(DefineConstants)TRACE;</DefineConstants>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
+		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+		<WarningsAsErrors></WarningsAsErrors>
+		<OutputPath>../../../Binaries/Graphics/RHI/ARM64/Release/</OutputPath>
+		<WarningLevel>3</WarningLevel>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<Optimize>true</Optimize>
+		<PlatformTarget>ARM64</PlatformTarget>
+		<DefineConstants>$(DefineConstants)TRACE;</DefineConstants>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Evergine.Bindings.Vulkan" Version="2023.2.1.12" />
+		<PackageReference Include="NUnit" Version="3.13.3" />
+		<PackageReference Include="Silk.NET.Vulkan" Version="2.16.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.AMD" Version="2.16.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.ANDROID" Version="2.16.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.ARM" Version="2.16.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.EXT" Version="2.16.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.HUAWEI" Version="2.16.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.INTEL" Version="2.16.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" Version="2.16.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.MVK" Version="2.16.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.NV" Version="2.16.0" />
+		<PackageReference Include="TerraFX.Interop.D3D12MemoryAllocator" Version="2.0.1.3" />
+		<PackageReference Include="Vortice.Vulkan" Version="1.6.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\..\Core\Infinity.Core.csproj" />
+	  <ProjectReference Include="..\..\ThirdParty\Apple\Metal\Apple.Metal.csproj" />
+	</ItemGroup>
+
+</Project>
