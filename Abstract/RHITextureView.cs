@@ -4,10 +4,10 @@ namespace Infinity.Graphics
 {
     public struct RHITextureViewDescriptor
     {
-        public int MipCount;
-        public int BaseMipLevel;
-        public int ArrayLayerCount;
-        public int BaseArrayLayer;
+        public uint MipCount;
+        public uint BaseMipLevel;
+        public uint BaseArrayLayer;
+        public uint ArrayLayerCount;
         public EPixelFormat Format;
         public ETextureViewType ViewType;
         public ETextureViewDimension Dimension;

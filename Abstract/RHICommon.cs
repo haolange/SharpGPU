@@ -493,8 +493,8 @@
 
     public enum ETextureViewType : byte
     {
-        DepthStencil,
-        RenderTarget,
+        //DepthStencil,
+        //RenderTarget,
         ShaderResource,
         UnorderedAccess,
         Undefined

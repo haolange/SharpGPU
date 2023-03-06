@@ -92,8 +92,8 @@ namespace Infinity.Graphics
         public float4 ClearValue;
         public ELoadAction LoadAction;
         public EStoreAction StoreAction;
-        public RHITextureView RenderTarget;
-        public RHITextureView ResolveTarget;
+        public RHITexture RenderTarget;
+        public RHITexture ResolveTarget;
     }
 
     public struct RHIDepthStencilAttachmentDescriptor
@@ -106,7 +106,7 @@ namespace Infinity.Graphics
         public int StencilClearValue;
         public ELoadAction StencilLoadAction;
         public EStoreAction StencilStoreAction;
-        public RHITextureView DepthStencilTarget;
+        public RHITexture DepthStencilTarget;
     }
 
     public struct RHIGraphicsPassDescriptor

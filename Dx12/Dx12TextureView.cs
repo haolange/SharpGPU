@@ -39,16 +39,16 @@ namespace Infinity.Graphics
             m_LifeState = false;
             m_Dx12Texture = texture;
 
-            if (descriptor.ViewType == ETextureViewType.DepthStencil)
+            /*if (descriptor.ViewType == ETextureViewType.DepthStencil)
             {
                 if(Dx12Utility.IsDepthStencilTexture(texture.Descriptor.Usage))
                 {
                     m_LifeState.x = true;
 
-                    //D3D12_DEPTH_STENCIL_DESC desc = new D3D12_DEPTH_STENCIL_DESC();
-                    //desc.Format = /*Dx12Utility.GetNativeFormat(descriptor.format)*/ DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
-                    //desc.ViewDimension = /*Dx12Utility.GetNativeViewDimension(descriptor.Dimension)*/ D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2D;
-                    /*Dx12Utility.FillTexture2DDSV(ref desc.Texture2D, descriptor);
+                    D3D12_DEPTH_STENCIL_DESC desc = new D3D12_DEPTH_STENCIL_DESC();
+                    desc.Format = Dx12Utility.GetNativeFormat(descriptor.format);
+                    desc.ViewDimension = Dx12Utility.GetNativeViewDimension(descriptor.Dimension);
+                    Dx12Utility.FillTexture2DDSV(ref desc.Texture2D, descriptor);
                     Dx12Utility.FillTexture3DDSV(ref desc.Texture3D, descriptor);
                     Dx12Utility.FillTexture2DArrayDSV(ref desc.Texture2DArray, descriptor);
 
@@ -57,7 +57,7 @@ namespace Infinity.Graphics
                     m_NativeDescriptorHeap = allocation.DescriptorHeap;
                     m_NativeCpuDescriptorHandle = allocation.CpuHandle;
                     m_NativeGpuDescriptorHandle = allocation.GpuHandle;
-                    m_Dx12Texture.Dx12Device.NativeDevice->CreateRenderTargetView(texture.NativeResource, &desc, m_NativeCpuDescriptorHandle);*/
+                    m_Dx12Texture.Dx12Device.NativeDevice->CreateRenderTargetView(texture.NativeResource, &desc, m_NativeCpuDescriptorHandle);
                 }
             }
             else if (descriptor.ViewType == ETextureViewType.RenderTarget)
@@ -67,8 +67,8 @@ namespace Infinity.Graphics
                     m_LifeState.y = true;
 
                     D3D12_RENDER_TARGET_VIEW_DESC desc = new D3D12_RENDER_TARGET_VIEW_DESC();
-                    desc.Format = /*Dx12Utility.GetNativeFormat(descriptor.format)*/ DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
-                    desc.ViewDimension = /*Dx12Utility.GetNativeViewDimension(descriptor.Dimension)*/ D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2D;
+                    desc.Format = Dx12Utility.GetNativeFormat(descriptor.format);
+                    desc.ViewDimension = Dx12Utility.GetNativeViewDimension(descriptor.Dimension);
                     Dx12Utility.FillTexture2DRTV(ref desc.Texture2D, descriptor);
                     Dx12Utility.FillTexture3DRTV(ref desc.Texture3D, descriptor);
                     Dx12Utility.FillTexture2DArrayRTV(ref desc.Texture2DArray, descriptor);
@@ -81,7 +81,7 @@ namespace Infinity.Graphics
                     m_Dx12Texture.Dx12Device.NativeDevice->CreateRenderTargetView(m_Dx12Texture.NativeResource, &desc, m_NativeCpuDescriptorHandle);
                 }
             } 
-            else if (descriptor.ViewType == ETextureViewType.ShaderResource)
+            else*/ if (descriptor.ViewType == ETextureViewType.ShaderResource)
             {
                 if(Dx12Utility.IsShaderResourceTexture(texture.Descriptor.Usage))
                 {
