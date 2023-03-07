@@ -966,6 +966,18 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12PipelineState.PrimitiveTopology);
         }
 
+        public override void SetScissor(in Rect rect)
+        {
+            RECT tempScissor = new RECT((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->RSSetScissorRects(1, &tempScissor);
+        }
+
+        public override void SetScissor(in Memory<Rect> rects)
+        {
+            throw new NotImplementedException();
+        }
+
         public override void SetViewport(in Viewport viewport)
         {
             D3D12_VIEWPORT tempViewport = new D3D12_VIEWPORT(viewport.TopLeftX, viewport.TopLeftY, viewport.Width, viewport.Height, viewport.MinDepth, viewport.MaxDepth);
@@ -974,18 +986,6 @@ namespace Infinity.Graphics
         }
 
         public override void SetViewport(in Memory<Viewport> viewports)
-        {
-            throw new NotImplementedException();
-        }
-
-        public override void SetScissorRect(in Rect rect)
-        {
-            RECT tempScissor = new RECT((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom);
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->RSSetScissorRects(1, &tempScissor);
-        }
-
-        public override void SetScissorRect(in Memory<Rect> rects)
         {
             throw new NotImplementedException();
         }

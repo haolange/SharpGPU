@@ -292,10 +292,10 @@ namespace Infinity.Graphics
         public abstract void BeginPass(in RHIGraphicsPassDescriptor descriptor);
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipelineState(RHIGraphicsPipeline pipeline);
+        public abstract void SetScissor(in Rect rect);
+        public abstract void SetScissor(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
         public abstract void SetViewport(in Memory<Viewport> viewports);
-        public abstract void SetScissorRect(in Rect rect);
-        public abstract void SetScissorRect(in Memory<Rect> rects);
         public abstract void SetBlendFactor(in float4 value);
         public abstract void SetBindGroup(RHIBindGroup bindGroup);
         public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot = 0, in uint offset = 0);
