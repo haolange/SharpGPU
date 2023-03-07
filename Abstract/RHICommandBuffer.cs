@@ -40,7 +40,9 @@ namespace Infinity.Graphics
         public abstract void Begin(string name);
         public abstract RHIBlitEncoder GetBlitEncoder();
         public abstract RHIComputeEncoder GetComputeEncoder();
+        public abstract RHIMeshletEncoder GetMeshletEncoder();
         public abstract RHIGraphicsEncoder GetGraphicsEncoder();
+        public abstract RHIRaytracingEncoder GetRaytracingEncoder();
         public abstract void End();
         //public abstract void Commit(RHIFence? fence = null);
         //public abstract void WaitUntilCompleted();

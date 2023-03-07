@@ -1,12 +1,11 @@
 ﻿using System;
 using System.Diagnostics;
 using Infinity.Mathmatics;
+using Infinity.Collections;
 using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using Viewport = Infinity.Mathmatics.Viewport;
-using System.Reflection.Metadata.Ecma335;
-using Infinity.Collections;
 
 namespace Infinity.Graphics
 {
@@ -345,6 +344,479 @@ namespace Infinity.Graphics
             PopDebugGroup();
             m_PipelineState = null;
             m_PipelineLayout = null;
+        }
+
+        protected override void Release()
+        {
+
+        }
+    }
+
+    internal unsafe class Dx12RaytracingEncoder : RHIRaytracingEncoder
+    {
+        public Dx12RaytracingEncoder(Dx12CommandBuffer cmdBuffer)
+        {
+            m_CommandBuffer = cmdBuffer;
+        }
+
+        public override void BeginPass(string name)
+        {
+            PushDebugGroup(name);
+        }
+
+        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        {
+            m_PipelineLayout = pipelineLayout;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
+        }
+
+        public override void SetPipelineState(RHIRaytracingPipeline pipelineState)
+        {
+            m_PipelineState = pipelineState;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12RaytracingPipeline dx12PipelineState = pipelineState as Dx12RaytracingPipeline;
+            dx12CommandBuffer.NativeCommandList->SetPipelineState1(dx12PipelineState.NativePipelineState);
+        }
+
+        public override void SetBindGroup(RHIBindGroup bindGroup)
+        {
+            Dx12BindGroup dx12BindGroup = bindGroup as Dx12BindGroup;
+            Dx12BindGroupLayout dx12BindGroupLayout = dx12BindGroup.BindGroupLayout;
+
+            for (int i = 0; i < dx12BindGroup.NativeGpuDescriptorHandles.Length; ++i)
+            {
+                Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+
+                Dx12BindTypeAndParameterSlot? parameter = null;
+                ref Dx12BindInfo bindInfo = ref dx12BindGroupLayout.BindInfos[i];
+
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.All, dx12BindGroupLayout.Index, bindInfo.BindSlot, bindInfo.BindType);
+                if (parameter.HasValue)
+                {
+                    Debug.Assert(parameter.Value.BindType == bindInfo.BindType);
+                    Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+                    dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12BindGroup.NativeGpuDescriptorHandles[i]);
+                }
+
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.Compute, dx12BindGroupLayout.Index, bindInfo.BindSlot, bindInfo.BindType);
+                if (parameter.HasValue)
+                {
+                    Debug.Assert(parameter.Value.BindType == bindInfo.BindType);
+                    Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+                    dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12BindGroup.NativeGpuDescriptorHandles[i]);
+                }
+            }
+        }
+
+        public override RHITopLevelAccelStruct BuildRaytracingAccelerationStructure(RHITopLevelAccelStructDescriptor descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override RHIBottomLevelAccelStruct BuildRaytracingAccelerationStructure(RHIBottomLevelAccelStructDescriptor descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void UpdateRaytracingAccelerationStructure(RHITopLevelAccelStruct tlas, RHITopLevelAccelStructDescriptor descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void BeginQuery(RHIQuery query, in uint index)
+        {
+            uint num = index * 8;
+            Dx12Query dx12Query = query as Dx12Query;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            switch (query.QueryDescriptor.Type)
+            {
+                case EQueryType.Occlusion:
+                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
+                    break;
+
+                case EQueryType.BinaryOcclusion:
+                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
+                    break;
+
+                default:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index, 1, dx12Query.QueryResult, num);
+                    break;
+            }
+        }
+
+        public override void EndQuery(RHIQuery query, in uint index)
+        {
+            uint num = index * 8;
+            Dx12Query dx12Query = query as Dx12Query;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            switch (query.QueryDescriptor.Type)
+            {
+                case EQueryType.Occlusion:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index, 1, dx12Query.QueryResult, num);
+                    break;
+
+                case EQueryType.BinaryOcclusion:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index, 1, dx12Query.QueryResult, num);
+                    break;
+
+                default:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index, 1, dx12Query.QueryResult, num);
+                    break;
+            }
+        }
+
+        public override void PushDebugGroup(string name)
+        {
+            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
+            Marshal.FreeHGlobal(namePtr);
+        }
+
+        public override void PopDebugGroup()
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->EndEvent();
+        }
+
+        public override void EndPass()
+        {
+            PopDebugGroup();
+            m_PipelineState = null;
+            m_PipelineLayout = null;
+        }
+
+        protected override void Release()
+        {
+
+        }
+    }
+
+    internal unsafe class Dx12MeshletEncoder : RHIMeshletEncoder
+    {
+        protected TValueArray<Dx12DescriptorInfo> m_AttachmentInfos;
+
+        public Dx12MeshletEncoder(Dx12CommandBuffer cmdBuffer)
+        {
+            m_CommandBuffer = cmdBuffer;
+            m_AttachmentInfos = new TValueArray<Dx12DescriptorInfo>(5);
+        }
+
+        public override void BeginPass(in RHIGraphicsPassDescriptor descriptor)
+        {
+            PushDebugGroup(descriptor.Name);
+
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            // set render targets
+            m_AttachmentInfos.Clear();
+            D3D12_CPU_DESCRIPTOR_HANDLE* rtvHandles = stackalloc D3D12_CPU_DESCRIPTOR_HANDLE[descriptor.ColorAttachmentDescriptors.Length];
+
+            for (int i = 0; i < descriptor.ColorAttachmentDescriptors.Length; ++i)
+            {
+                Dx12Texture texture = descriptor.ColorAttachmentDescriptors.Span[i].RenderTarget as Dx12Texture;
+                Debug.Assert(texture != null);
+
+                /*RHITextureViewDescriptor viewDescriptor;
+                {
+                    viewDescriptor.MipCount = texture.Descriptor.MipCount;
+                    viewDescriptor.BaseMipLevel = 0;
+                    viewDescriptor.BaseArrayLayer = 0;
+                    viewDescriptor.ArrayLayerCount = texture.Descriptor.Extent.z;
+                    viewDescriptor.Format = texture.Descriptor.Format;
+                    viewDescriptor.ViewType = ETextureViewType.RenderTarget;
+                    viewDescriptor.Dimension = ETextureViewDimension.Texture2D;
+                }*/
+                D3D12_RENDER_TARGET_VIEW_DESC desc = new D3D12_RENDER_TARGET_VIEW_DESC();
+                desc.Format = /*Dx12Utility.GetNativeFormat(texture.Descriptor.Format)*/ DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
+                desc.ViewDimension = /*Dx12Utility.GetNativeViewDimension(texture.Descriptor.Dimension)*/ D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2D;
+                /*Dx12Utility.FillTexture2DRTV(ref desc.Texture2D, viewDescriptor);
+                Dx12Utility.FillTexture3DRTV(ref desc.Texture3D, viewDescriptor);
+                Dx12Utility.FillTexture2DArrayRTV(ref desc.Texture2DArray, viewDescriptor);*/
+
+                Dx12DescriptorInfo allocation = texture.Dx12Device.AllocateRtvDescriptor(1);
+                m_AttachmentInfos.Add(allocation);
+
+                rtvHandles[i] = allocation.CpuHandle;
+                texture.Dx12Device.NativeDevice->CreateRenderTargetView(texture.NativeResource, &desc, rtvHandles[i]);
+            }
+
+            D3D12_CPU_DESCRIPTOR_HANDLE? dsvHandle = null;
+            if (descriptor.DepthStencilAttachmentDescriptor != null)
+            {
+                Dx12Texture texture = descriptor.DepthStencilAttachmentDescriptor?.DepthStencilTarget as Dx12Texture;
+                Debug.Assert(texture != null);
+
+                /*RHITextureViewDescriptor viewDescriptor;
+                {
+                    viewDescriptor.MipCount = texture.Descriptor.MipCount;
+                    viewDescriptor.BaseMipLevel = 0;
+                    viewDescriptor.BaseArrayLayer = 0;
+                    viewDescriptor.ArrayLayerCount = texture.Descriptor.Extent.z;
+                    viewDescriptor.Format = texture.Descriptor.Format;
+                    viewDescriptor.ViewType = ETextureViewType.DepthStencil;
+                    viewDescriptor.Dimension = ETextureViewDimension.Texture2D;
+                }*/
+                D3D12_DEPTH_STENCIL_VIEW_DESC desc = new D3D12_DEPTH_STENCIL_VIEW_DESC();
+                desc.Flags = /*Dx12Utility.GetNativeDSVFlag(descriptor.DepthStencilAttachmentDescriptor.Value)*/D3D12_DSV_FLAGS.D3D12_DSV_FLAG_NONE;
+                desc.Format = /*Dx12Utility.GetNativeFormat(texture.Descriptor.Format)*/ DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+                desc.ViewDimension = /*Dx12Utility.GetNativeViewDimension(viewDescriptor.Dimension)*/ D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2D;
+
+                Dx12DescriptorInfo allocation = texture.Dx12Device.AllocateDsvDescriptor(1);
+                m_AttachmentInfos.Add(allocation);
+
+                dsvHandle = allocation.CpuHandle;
+                texture.Dx12Device.NativeDevice->CreateDepthStencilView(texture.NativeResource, &desc, dsvHandle.Value);
+            }
+
+            dx12CommandBuffer.NativeCommandList->OMSetRenderTargets((uint)descriptor.ColorAttachmentDescriptors.Length, rtvHandles, false, dsvHandle.HasValue ? (D3D12_CPU_DESCRIPTOR_HANDLE*)&dsvHandle : null);
+
+            // clear render targets
+            for (int i = 0; i < descriptor.ColorAttachmentDescriptors.Length; ++i)
+            {
+                ref RHIColorAttachmentDescriptor colorAttachmentDescriptor = ref descriptor.ColorAttachmentDescriptors.Span[i];
+
+                if (colorAttachmentDescriptor.LoadAction != ELoadAction.Clear)
+                {
+                    continue;
+                }
+
+                float4 clearValue = colorAttachmentDescriptor.ClearValue;
+                dx12CommandBuffer.NativeCommandList->ClearRenderTargetView(rtvHandles[i], (float*)&clearValue, 0, null);
+            }
+            if (dsvHandle.HasValue)
+            {
+                RHIDepthStencilAttachmentDescriptor? depthStencilAttachmentDescriptor = descriptor.DepthStencilAttachmentDescriptor;
+                if (depthStencilAttachmentDescriptor?.DepthLoadAction != ELoadAction.Clear && depthStencilAttachmentDescriptor?.StencilLoadAction != ELoadAction.Clear)
+                {
+                    return;
+                }
+
+                dx12CommandBuffer.NativeCommandList->ClearDepthStencilView(dsvHandle.Value, Dx12Utility.GetDx12ClearFlagByDSA(depthStencilAttachmentDescriptor.Value), depthStencilAttachmentDescriptor.Value.DepthClearValue, Convert.ToByte(depthStencilAttachmentDescriptor.Value.StencilClearValue), 0, null);
+            }
+
+            if (descriptor.ShadingRateDescriptor.HasValue)
+            {
+                if (descriptor.ShadingRateDescriptor.Value.ShadingRateTexture != null)
+                {
+                    D3D12_SHADING_RATE_COMBINER shadingRateCombiner = Dx12Utility.ConvertToDx12ShadingRateCombiner(descriptor.ShadingRateDescriptor.Value.ShadingRateCombiner);
+                    Dx12Texture dx12Texture = descriptor.ShadingRateDescriptor.Value.ShadingRateTexture as Dx12Texture;
+                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRateDescriptor.Value.ShadingRate), &shadingRateCombiner);
+                    dx12CommandBuffer.NativeCommandList->RSSetShadingRateImage(dx12Texture.NativeResource);
+                }
+                else
+                {
+                    D3D12_SHADING_RATE_COMBINER* shadingRateCombiners = stackalloc D3D12_SHADING_RATE_COMBINER[2] { D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MAX, D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MAX };
+                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRateDescriptor.Value.ShadingRate), shadingRateCombiners);
+                    //dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRateDescriptor.Value.ShadingRate), null);
+                }
+            }
+        }
+
+        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        {
+            Debug.Assert(pipelineLayout != null);
+
+            m_PipelineLayout = pipelineLayout;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
+        }
+
+        public override void SetPipelineState(RHIMeshletPipeline pipelineState)
+        {
+            m_PipelineState = pipelineState;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12MeshletPipeline dx12PipelineState = pipelineState as Dx12MeshletPipeline;
+            dx12CommandBuffer.NativeCommandList->OMSetStencilRef((uint)dx12PipelineState.StencilRef);
+            dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12PipelineState.NativePipelineState);
+            dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12PipelineState.PrimitiveTopology);
+        }
+
+        public override void SetViewport(in Viewport viewport)
+        {
+            D3D12_VIEWPORT tempViewport = new D3D12_VIEWPORT(viewport.TopLeftX, viewport.TopLeftY, viewport.Width, viewport.Height, viewport.MinDepth, viewport.MaxDepth);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->RSSetViewports(1, &tempViewport);
+        }
+
+        public override void SetViewport(in Memory<Viewport> viewports)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void SetScissorRect(in Rect rect)
+        {
+            RECT tempScissor = new RECT((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->RSSetScissorRects(1, &tempScissor);
+        }
+
+        public override void SetScissorRect(in Memory<Rect> rects)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void SetBlendFactor(in float4 value)
+        {
+            float4 tempValue = value;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->OMSetBlendFactor((float*)&tempValue);
+        }
+
+        public override void SetBindGroup(RHIBindGroup bindGroup)
+        {
+            Dx12BindGroup dx12BindGroup = bindGroup as Dx12BindGroup;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12BindGroupLayout dx12BindGroupLayout = dx12BindGroup.BindGroupLayout;
+
+            for (int i = 0; i < dx12BindGroup.NativeGpuDescriptorHandles.Length; ++i)
+            {
+                Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+
+                Dx12BindTypeAndParameterSlot? parameter = null;
+                ref Dx12BindInfo bindInfo = ref dx12BindGroupLayout.BindInfos[i];
+
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.All, dx12BindGroupLayout.Index, bindInfo.BindSlot, bindInfo.BindType);
+                if (parameter.HasValue)
+                {
+                    Debug.Assert(parameter.Value.BindType == bindInfo.BindType);
+                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindGroup.NativeGpuDescriptorHandles[i]);
+                }
+
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.Vertex, dx12BindGroupLayout.Index, bindInfo.BindSlot, bindInfo.BindType);
+                if (parameter.HasValue)
+                {
+                    Debug.Assert(parameter.Value.BindType == bindInfo.BindType);
+                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindGroup.NativeGpuDescriptorHandles[i]);
+                }
+
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.Fragment, dx12BindGroupLayout.Index, bindInfo.BindSlot, bindInfo.BindType);
+                if (parameter.HasValue)
+                {
+                    Debug.Assert(parameter.Value.BindType == bindInfo.BindType);
+                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindGroup.NativeGpuDescriptorHandles[i]);
+                }
+            }
+        }
+
+        public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset)
+        {
+            throw new NotImplementedException();
+        }
+
+        /*public override void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer)
+        {
+            //Dx12IndirectCommandBuffer dx12IndirectCommandBuffer = indirectCommandBuffer as Dx12IndirectCommandBuffer;
+            //dx12CommandBuffer.NativeCommandList->ExecuteIndirect(null, indirectCommandBuffer.Count, dx12IndirectCommandBuffer.NativeResource, indirectCommandBuffer.Offset, null, 0);
+        }*/
+
+        public override void BeginQuery(RHIQuery query, in uint index)
+        {
+            uint num = index * 8;
+            Dx12Query dx12Query = query as Dx12Query;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            switch (query.QueryDescriptor.Type)
+            {
+                case EQueryType.Occlusion:
+                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
+                    break;
+
+                case EQueryType.BinaryOcclusion:
+                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
+                    break;
+
+                default:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index, 1, dx12Query.QueryResult, num);
+                    break;
+            }
+        }
+
+        public override void EndQuery(RHIQuery query, in uint index)
+        {
+            uint num = index * 8;
+            Dx12Query dx12Query = query as Dx12Query;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            switch (query.QueryDescriptor.Type)
+            {
+                case EQueryType.Occlusion:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index, 1, dx12Query.QueryResult, num);
+                    break;
+
+                case EQueryType.BinaryOcclusion:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index, 1, dx12Query.QueryResult, num);
+                    break;
+
+                default:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index, 1, dx12Query.QueryResult, num);
+                    break;
+            }
+        }
+
+        public override void PushDebugGroup(string name)
+        {
+            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
+            Marshal.FreeHGlobal(namePtr);
+        }
+
+        public override void PopDebugGroup()
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->EndEvent();
+        }
+
+        public override void EndPass()
+        {
+            PopDebugGroup();
+            m_PipelineState = null;
+            m_PipelineLayout = null;
+
+            Dx12Device device = (m_CommandBuffer.CommandPool.Queue as Dx12Queue).Dx12Device;
+            Dx12CommandPool cmdPool = m_CommandBuffer.CommandPool as Dx12CommandPool;
+            for (int i = 0; i < m_AttachmentInfos.length; ++i)
+            {
+                int index = m_AttachmentInfos[i].Index;
+
+                if (i < m_AttachmentInfos.length)
+                {
+                    device.FreeRtvDescriptor(index);
+                }
+                else
+                {
+                    device.FreeDsvDescriptor(index);
+                }
+            }
         }
 
         protected override void Release()

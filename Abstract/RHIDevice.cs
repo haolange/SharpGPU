@@ -11,6 +11,15 @@ namespace Infinity.Graphics
 
     public abstract class RHIDevice : Disposal
     {
+        public abstract bool IsMRTSupported { get; }
+        public abstract bool IsShadowMapSupported { get; }
+        public abstract bool IsRaytracingSupported { get; }
+        public abstract bool IsComputeShaderSupported { get; }
+        public abstract bool IsFlipProjectionRequired { get; }
+        public abstract EClipDepth ClipDepth { get; }
+        public abstract EMatrixMajorness MatrixMajorness { get; }
+        public abstract EMultiviewStrategy MultiviewStrategy { get; }
+
         public abstract int GetQueueCount(in EQueueType type);
         public abstract RHIQueue GetQueue(in EQueueType type, in int index);
         public abstract RHIFence CreateFence();

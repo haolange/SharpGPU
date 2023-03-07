@@ -8,6 +8,15 @@ namespace Infinity.Graphics
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal unsafe class MtlDevice : RHIDevice
     {
+        public override bool IsMRTSupported => true;
+        public override bool IsShadowMapSupported => true;
+        public override bool IsRaytracingSupported => true;
+        public override bool IsComputeShaderSupported => true;
+        public override bool IsFlipProjectionRequired => false;
+        public override EClipDepth ClipDepth => EClipDepth.ZeroToOne;
+        public override EMatrixMajorness MatrixMajorness => EMatrixMajorness.RowMajor;
+        public override EMultiviewStrategy MultiviewStrategy => EMultiviewStrategy.Unsupported;
+
         public MtlGPU MtlGpu
         {
             get

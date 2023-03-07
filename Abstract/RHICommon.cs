@@ -8,6 +8,28 @@
         Undefined
     }
 
+    public enum EClipDepth : byte
+    {
+        ZeroToOne,
+        NegativeOneToOne,
+        Undefined
+    }
+
+    public enum EMatrixMajorness : byte
+    {
+        RowMajor,
+        ColumnMajor,
+        Undefined
+    }
+
+    public enum EMultiviewStrategy : byte
+    {
+        ViewIndex,
+        Unsupported,
+        RenderTargetIndex,
+        Undefined
+    }
+
     public enum EGpuType : byte
     {
         Hardware,

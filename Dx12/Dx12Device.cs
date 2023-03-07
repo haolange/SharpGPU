@@ -83,6 +83,15 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12Device : RHIDevice
     {
+        public override bool IsMRTSupported => true;
+        public override bool IsShadowMapSupported => true;
+        public override bool IsRaytracingSupported => true;
+        public override bool IsComputeShaderSupported => true;
+        public override bool IsFlipProjectionRequired => false;
+        public override EClipDepth ClipDepth => EClipDepth.ZeroToOne;
+        public override EMatrixMajorness MatrixMajorness => EMatrixMajorness.RowMajor;
+        public override EMultiviewStrategy MultiviewStrategy => EMultiviewStrategy.Unsupported;
+
         public Dx12GPU Dx12Gpu
         {
             get

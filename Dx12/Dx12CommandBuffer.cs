@@ -19,7 +19,9 @@ namespace Infinity.Graphics
 
         private Dx12BlitEncoder m_BlitEncoder;
         private Dx12ComputeEncoder m_ComputeEncoder;
+        private Dx12MeshletEncoder m_MeshletEncoder;
         private Dx12GraphicsEncoder m_GraphicsEncoder;
+        private Dx12RaytracingEncoder m_RaytracingEncoder;
         private ID3D12GraphicsCommandList5* m_NativeCommandList;
 
         public Dx12CommandBuffer(Dx12CommandPool cmdPool)
@@ -35,7 +37,9 @@ namespace Infinity.Graphics
 
             m_BlitEncoder = new Dx12BlitEncoder(this);
             m_ComputeEncoder = new Dx12ComputeEncoder(this);
+            m_MeshletEncoder = new Dx12MeshletEncoder(this);
             m_GraphicsEncoder = new Dx12GraphicsEncoder(this);
+            m_RaytracingEncoder = new Dx12RaytracingEncoder(this);
         }
 
         public override void Begin(string name)
@@ -65,9 +69,19 @@ namespace Infinity.Graphics
             return m_ComputeEncoder;
         }
 
+        public override RHIMeshletEncoder GetMeshletEncoder()
+        {
+            return m_MeshletEncoder;
+        }
+
         public override RHIGraphicsEncoder GetGraphicsEncoder()
         {
             return m_GraphicsEncoder;
+        }
+
+        public override RHIRaytracingEncoder GetRaytracingEncoder()
+        {
+            return m_RaytracingEncoder;
         }
 
         public override void End()
