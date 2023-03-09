@@ -52,7 +52,7 @@ namespace Infinity.Graphics
     {
         Success,
         NotReady,
-        MAX
+        Undefined
     };
 
     public abstract class RHIFence : Disposal
