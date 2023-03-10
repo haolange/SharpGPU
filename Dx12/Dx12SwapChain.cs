@@ -78,6 +78,7 @@ namespace Infinity.Graphics
             Dx12Queue dx12Queue = (Dx12Queue)descriptor.PresentQueue;
             Dx12Instance dx12Instance = m_Dx12Device.Dx12Gpu.Dx12Instance;
 
+#if false
             DXGI_SWAP_CHAIN_DESC1 desc = new DXGI_SWAP_CHAIN_DESC1();
             desc.Stereo = false;
             desc.BufferCount = (uint)descriptor.Count;
@@ -94,6 +95,28 @@ namespace Infinity.Graphics
             bool success = SUCCEEDED(dx12Instance.DXGIFactory->CreateSwapChainForHwnd((IUnknown*)dx12Queue.NativeCommandQueue, new HWND(descriptor.Surface.ToPointer()), &desc, null, null, &dx12SwapChain1));
             Debug.Assert(success);
             m_NativeSwapChain = (IDXGISwapChain4*)dx12SwapChain1;
+#else
+            DXGI_SWAP_CHAIN_DESC desc = new DXGI_SWAP_CHAIN_DESC();
+            desc.Flags = (uint)DXGI_SWAP_CHAIN_FLAG.DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+            desc.Windowed = true;
+            desc.BufferCount = descriptor.Count;
+            desc.SampleDesc = new DXGI_SAMPLE_DESC(1, 0);
+            desc.SwapEffect = /*Dx12Utility.ConvertToDx12SwapEffect(descriptor.PresentMode)*/ DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_DISCARD;
+            desc.OutputWindow = new HWND(descriptor.Surface.ToPointer());
+            desc.BufferDesc.Width = descriptor.Extent.x;
+            desc.BufferDesc.Height = descriptor.Extent.y;
+            desc.BufferDesc.Format = /*Dx12Utility.ConvertToDx12Format(descriptor.Format)*/DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
+            desc.BufferDesc.Scaling = DXGI_MODE_SCALING.DXGI_MODE_SCALING_UNSPECIFIED;
+            desc.BufferDesc.RefreshRate.Numerator = 60;
+            desc.BufferDesc.RefreshRate.Denominator = 1;
+            desc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER.DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+            desc.BufferUsage = descriptor.FrameBufferOnly ? DXGI.DXGI_USAGE_RENDER_TARGET_OUTPUT : (DXGI.DXGI_USAGE_SHADER_INPUT | DXGI.DXGI_USAGE_RENDER_TARGET_OUTPUT);
+
+            IDXGISwapChain* dx12SwapChain1;
+            bool success = SUCCEEDED(dx12Instance.DXGIFactory->CreateSwapChain((IUnknown*)dx12Queue.NativeCommandQueue, &desc, &dx12SwapChain1));
+            Debug.Assert(success);
+            m_NativeSwapChain = (IDXGISwapChain4*)dx12SwapChain1;
+#endif
         }
 
         private void FetchDx12Textures(in RHISwapChainDescriptor descriptor)
