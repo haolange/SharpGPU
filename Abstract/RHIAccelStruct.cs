@@ -39,9 +39,9 @@ namespace Infinity.Graphics
 
     public class RHIAccelStructAABBs : RHIAccelStructGeometry
     {
+        public uint Count;
         public uint Stride;
         public uint Offset;
-        public ulong Count;
         public RHIBuffer? AABBs;
         public EAccelStructGeometryFlags GeometryFlags;
 
@@ -73,11 +73,11 @@ namespace Infinity.Graphics
     [StructLayout(LayoutKind.Sequential)]
     public struct RHIAccelStructInstance
     {
-        public EAccelStructInstanceFlags Flags;
-        public float4x4 TransformMatrix;
         public uint InstanceID;
         public byte InstanceMask;
-        public uint InstanceContributionToHitGroupIndex;
+        public uint HitGroupIndex;
+        public float4x4 TransformMatrix;
+        public EAccelStructInstanceFlags Flags;
         public RHIBottomLevelAccelStruct BottonLevelAccelStruct;
     }
 
