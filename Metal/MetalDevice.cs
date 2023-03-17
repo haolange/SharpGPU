@@ -93,7 +93,7 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHITopLevelAccelStruct CreateAccelerationStructure(in RHITopLevelAccelStructDescriptor)
+        public override RHITopLevelAccelStruct CreateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
