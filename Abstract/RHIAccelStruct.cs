@@ -97,12 +97,9 @@ namespace Infinity.Graphics
 
     public abstract class RHITopLevelAccelStruct : Disposal
     {
-        public RHITopLevelAccelStructDescriptor Descriptor;
+        public RHITopLevelAccelStructDescriptor Descriptor => m_Descriptor;
 
-        protected RHITopLevelAccelStruct(RHIDevice device, in RHITopLevelAccelStructDescriptor descriptor)
-        {
-            Descriptor = descriptor;
-        }
+        protected RHITopLevelAccelStructDescriptor m_Descriptor;
 
         public abstract RHIBufferView CreateBufferView(in RHIBufferViewDescriptor descriptor);
         public abstract void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
@@ -110,12 +107,9 @@ namespace Infinity.Graphics
 
     public abstract class RHIBottomLevelAccelStruct : Disposal
     {
-        public RHIBottomLevelAccelStructDescriptor Descriptor;
+        public RHIBottomLevelAccelStructDescriptor Descriptor => m_Descriptor;
 
-        protected RHIBottomLevelAccelStruct(RHIDevice device, in RHIBottomLevelAccelStructDescriptor descriptor)
-        {
-            Descriptor = descriptor;
-        }
+        protected RHIBottomLevelAccelStructDescriptor m_Descriptor;
 
         public abstract RHIBufferView CreateBufferView(in RHIBufferViewDescriptor descriptor);
         public abstract void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);

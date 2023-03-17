@@ -235,6 +235,16 @@ namespace Infinity.Graphics
             return new Dx12SamplerState(this, descriptor);
         }
 
+        public override RHITopLevelAccelStruct CreateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
+        {
+            return new Dx12TopLevelAccelStruct(this, descriptor);
+        }
+
+        public override RHIBottomLevelAccelStruct CreateAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor)
+        {
+            return new Dx12BottomLevelAccelStruct(this, descriptor);
+        }
+
         public override RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor)
         {
             return new Dx12Function(descriptor);
