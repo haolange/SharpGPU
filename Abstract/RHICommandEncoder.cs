@@ -328,11 +328,10 @@ namespace Infinity.Graphics
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipelineState(RHIRaytracingPipeline pipeline);
         public abstract void SetBindGroup(RHIBindGroup bindGroup);
-        public abstract RHITopLevelAccelStruct BuildRaytracingAccelerationStructure(RHITopLevelAccelStructDescriptor descriptor);
-        public abstract RHIBottomLevelAccelStruct BuildRaytracingAccelerationStructure(RHIBottomLevelAccelStructDescriptor descriptor);
-        public abstract void UpdateRaytracingAccelerationStructure(RHITopLevelAccelStruct tlas, RHITopLevelAccelStructDescriptor descriptor);
-        public abstract void Dispatch(in uint width, in uint height, in uint depth);
-        public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
+        public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct tlas);
+        public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct blas);
+        public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
+        public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable);
         //public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
         public abstract void BeginQuery(RHIQuery query, in uint index);
         public abstract void EndQuery(RHIQuery query, in uint index);

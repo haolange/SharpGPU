@@ -130,7 +130,7 @@ namespace Infinity.Graphics
 
         public override void Update(RHIRaytracingPipeline rayTracingPipeline)
         {
-            Dx12RaytracingPipeline? dx12RaytracingPipeline = rayTracingPipeline as Dx12RaytracingPipeline;
+            throw new NotImplementedException();
         }
 
         protected override void Release()

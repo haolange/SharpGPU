@@ -141,18 +141,25 @@ namespace Infinity.Graphics
                 return m_DrawIndirectSignature;
             }
         }
-        public ID3D12CommandSignature* DispatchIndirectSignature
-        {
-            get
-            {
-                return m_DispatchIndirectSignature;
-            }
-        }
         public ID3D12CommandSignature* DrawIndexedIndirectSignature
         {
             get
             {
                 return m_DrawIndexedIndirectSignature;
+            }
+        }
+        public ID3D12CommandSignature* DispatchRayIndirectSignature
+        {
+            get
+            {
+                return m_DispatchRayIndirectSignature;
+            }
+        }
+        public ID3D12CommandSignature* DispatchComputeIndirectSignature
+        {
+            get
+            {
+                return m_DispatchComputeIndirectSignature;
             }
         }
 
@@ -163,8 +170,9 @@ namespace Infinity.Graphics
         private Dx12DescriptorHeap m_SamplerHeap;
         private Dx12DescriptorHeap m_CbvSrvUavHeap;
         private ID3D12CommandSignature* m_DrawIndirectSignature;
-        private ID3D12CommandSignature* m_DispatchIndirectSignature;
         private ID3D12CommandSignature* m_DrawIndexedIndirectSignature;
+        private ID3D12CommandSignature* m_DispatchRayIndirectSignature;
+        private ID3D12CommandSignature* m_DispatchComputeIndirectSignature;
         private Dictionary<EQueueType, List<Dx12Queue>> m_GpuQueues;
 
         public Dx12Device(Dx12GPU gpu, in RHIDeviceDescriptor descriptor) 
@@ -412,15 +420,6 @@ namespace Infinity.Graphics
             Debug.Assert(success);
             m_DrawIndirectSignature = commandSignature;
 
-            indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
-            //commandSignatureDesc.NodeMask = nodeMask;
-            commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
-            commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DISPATCH_ARGUMENTS);
-            commandSignatureDesc.NumArgumentDescs = 1;
-            success = SUCCEEDED(m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature));
-            Debug.Assert(success);
-            m_DispatchIndirectSignature = commandSignature;
-
             indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
             //commandSignatureDesc.NodeMask = nodeMask;
             commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
@@ -429,6 +428,24 @@ namespace Infinity.Graphics
             success = SUCCEEDED(m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature));
             Debug.Assert(success);
             m_DrawIndexedIndirectSignature = commandSignature;
+
+            indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS;
+            //commandSignatureDesc.NodeMask = nodeMask;
+            commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
+            commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DISPATCH_RAYS_DESC);
+            commandSignatureDesc.NumArgumentDescs = 1;
+            success = SUCCEEDED(m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature));
+            Debug.Assert(success);
+            m_DispatchRayIndirectSignature = commandSignature;
+
+            indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
+            //commandSignatureDesc.NodeMask = nodeMask;
+            commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
+            commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DISPATCH_ARGUMENTS);
+            commandSignatureDesc.NumArgumentDescs = 1;
+            success = SUCCEEDED(m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature));
+            Debug.Assert(success);
+            m_DispatchComputeIndirectSignature = commandSignature;
         }
 
         protected override void Release()
@@ -445,8 +462,9 @@ namespace Infinity.Graphics
                 }
             }
             m_DrawIndirectSignature->Release();
-            m_DispatchIndirectSignature->Release();
             m_DrawIndexedIndirectSignature->Release();
+            m_DispatchRayIndirectSignature->Release();
+            m_DispatchComputeIndirectSignature->Release();
             m_NativeDevice->Release();
         }
     }

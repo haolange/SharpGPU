@@ -37,7 +37,7 @@ namespace Infinity.Graphics
         public EAccelStructGeometryFlags GetGeometryFlags();
     }
 
-    public class RHIAccelStructAABBs : RHIAccelStructGeometry
+    public struct RHIAccelStructAABBs : RHIAccelStructGeometry
     {
         public uint Count;
         public uint Stride;
@@ -51,7 +51,7 @@ namespace Infinity.Graphics
         }
     }
 
-    public class RHIAccelStructTriangles : RHIAccelStructGeometry
+    public struct RHIAccelStructTriangles : RHIAccelStructGeometry
     {
         public uint IndexCount;
         public uint IndexOffset;
@@ -103,6 +103,9 @@ namespace Infinity.Graphics
         {
             Descriptor = descriptor;
         }
+
+        public abstract RHIBufferView CreateBufferView(in RHIBufferViewDescriptor descriptor);
+        public abstract void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
     }
 
     public abstract class RHIBottomLevelAccelStruct : Disposal
@@ -113,5 +116,8 @@ namespace Infinity.Graphics
         {
             Descriptor = descriptor;
         }
+
+        public abstract RHIBufferView CreateBufferView(in RHIBufferViewDescriptor descriptor);
+        public abstract void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
     }
 }

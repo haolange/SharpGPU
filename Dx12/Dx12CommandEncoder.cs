@@ -6,6 +6,7 @@ using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using Viewport = Infinity.Mathmatics.Viewport;
+using System.Reflection.Metadata;
 
 namespace Infinity.Graphics
 {
@@ -274,7 +275,7 @@ namespace Infinity.Graphics
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
             Dx12Device dx12Device = ((Dx12Queue)m_CommandBuffer.CommandPool.Queue).Dx12Device;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
+            dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchComputeIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
         }
 
         public override void BeginQuery(RHIQuery query, in uint index)
@@ -410,28 +411,50 @@ namespace Infinity.Graphics
             }
         }
 
-        public override RHITopLevelAccelStruct BuildRaytracingAccelerationStructure(RHITopLevelAccelStructDescriptor descriptor)
+        public override void BuildAccelerationStructure(RHITopLevelAccelStruct tlas)
         {
-            throw new NotImplementedException();
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12TopLevelAccelStruct topLevelAccelStruct = tlas as Dx12TopLevelAccelStruct;
+            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC accelStrucDescription = topLevelAccelStruct.NativeAccelStrucDescriptor;
+            dx12CommandBuffer.NativeCommandList->BuildRaytracingAccelerationStructure(&accelStrucDescription, 0, null);
         }
 
-        public override RHIBottomLevelAccelStruct BuildRaytracingAccelerationStructure(RHIBottomLevelAccelStructDescriptor descriptor)
+        public override void BuildAccelerationStructure(RHIBottomLevelAccelStruct blas)
         {
-            throw new NotImplementedException();
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12BottomLevelAccelStruct bottomLevelAccelStruct = blas as Dx12BottomLevelAccelStruct;
+            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC accelStrucDescription = bottomLevelAccelStruct.NativeAccelStrucDescriptor;
+            dx12CommandBuffer.NativeCommandList->BuildRaytracingAccelerationStructure(&accelStrucDescription, 0, null);
         }
 
-        public override void UpdateRaytracingAccelerationStructure(RHITopLevelAccelStruct tlas, RHITopLevelAccelStructDescriptor descriptor)
+        public override void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable)
         {
-            throw new NotImplementedException();
+            Dx12FunctionTable dx12FunctionTable = functionTable as Dx12FunctionTable;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            D3D12_DISPATCH_RAYS_DESC dispatchRayDescriptor;
+            dispatchRayDescriptor.Depth = depth;
+            dispatchRayDescriptor.Width = width; 
+            dispatchRayDescriptor.Height = height; 
+            dispatchRayDescriptor.MissShaderTable.SizeInBytes = dx12FunctionTable.MissSize;
+            dispatchRayDescriptor.MissShaderTable.StartAddress = dx12FunctionTable.MissAddress;
+            dispatchRayDescriptor.MissShaderTable.StrideInBytes = dx12FunctionTable.MissStride;
+            dispatchRayDescriptor.HitGroupTable.SizeInBytes = dx12FunctionTable.HitGroupSize;
+            dispatchRayDescriptor.HitGroupTable.StartAddress = dx12FunctionTable.HitGroupAddress;
+            dispatchRayDescriptor.HitGroupTable.StrideInBytes = dx12FunctionTable.HitGroupStride;
+            dispatchRayDescriptor.RayGenerationShaderRecord.SizeInBytes = dx12FunctionTable.RayGenSize;
+            dispatchRayDescriptor.RayGenerationShaderRecord.StartAddress = dx12FunctionTable.RayGenAddress;
+            dispatchRayDescriptor.CallableShaderTable = default;
+
+            dx12CommandBuffer.NativeCommandList->DispatchRays(&dispatchRayDescriptor);
         }
 
-        public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
+        public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable)
         {
-            throw new NotImplementedException();
-        }
-
-        public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset)
-        {
+            Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
+            Dx12Device dx12Device = ((Dx12Queue)m_CommandBuffer.CommandPool.Queue).Dx12Device;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchRayIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
             throw new NotImplementedException();
         }
 
