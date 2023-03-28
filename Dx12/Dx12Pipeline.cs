@@ -176,6 +176,7 @@ namespace Infinity.Graphics
 
         public Dx12ComputePipeline(Dx12Device device, in RHIComputePipelineDescriptor descriptor)
         {
+            m_Descriptor = descriptor;
             Dx12Function computeFunction = descriptor.ComputeFunction as Dx12Function;
             Dx12PipelineLayout pipelineLayout = descriptor.PipelineLayout as Dx12PipelineLayout;
 
@@ -219,6 +220,8 @@ namespace Infinity.Graphics
 
         public Dx12RaytracingPipeline(Dx12Device device, in RHIRaytracingPipelineDescriptor descriptor)
         {
+            m_Descriptor = descriptor;
+
             m_MaxLocalRootParameters = 0;
             Span<RHIRayHitGroupDescriptor> rayHitGroupSpan = descriptor.RayHitGroupDescriptors.Span;
             Span<RHIRayGeneralGroupDescriptor> rayMissGroupSpan = descriptor.RayMissGroupDescriptors.Span;
@@ -499,7 +502,7 @@ namespace Infinity.Graphics
 
         public Dx12MeshletPipeline(Dx12Device device, in RHIMeshletPipelineDescriptor descriptor)
         {
-
+            m_Descriptor = descriptor;
         }
 
         protected override void Release()
@@ -546,6 +549,7 @@ namespace Infinity.Graphics
 
         public Dx12GraphicsPipeline(Dx12Device device, in RHIGraphicsPipelineDescriptor descriptor)
         {
+            m_Descriptor = descriptor;
             Dx12Function vertexFunction = descriptor.VertexFunction as Dx12Function;
             Dx12Function fragmentFunction = descriptor.FragmentFunction as Dx12Function;
             Dx12PipelineLayout pipelineLayout = descriptor.PipelineLayout as Dx12PipelineLayout;

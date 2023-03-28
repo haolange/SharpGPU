@@ -238,7 +238,7 @@ namespace Infinity.Graphics
     {
         protected RHICommandBuffer? m_CommandBuffer;
         protected RHIPipelineLayout? m_PipelineLayout;
-        protected RHIComputePipeline? m_PipelineState;
+        protected RHIComputePipeline? m_Pipeline;
 
         public RHIComputePassScoper BeginScopedPass(string name)
         {
@@ -247,8 +247,8 @@ namespace Infinity.Graphics
         }
 
         public abstract void BeginPass(string name);
-        public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipelineState(RHIComputePipeline pipeline);
+        public abstract void SetPipeline(RHIComputePipeline pipeline);
+        //public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetBindGroup(RHIBindGroup bindGroup);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
@@ -264,7 +264,7 @@ namespace Infinity.Graphics
     {
         protected RHICommandBuffer? m_CommandBuffer;
         protected RHIPipelineLayout? m_PipelineLayout;
-        protected RHIMeshletPipeline? m_PipelineState;
+        protected RHIMeshletPipeline? m_Pipeline;
 
         public RHIMeshletPassScoper BeginScopedPass(in RHIMeshletPassDescriptor descriptor)
         {
@@ -273,13 +273,13 @@ namespace Infinity.Graphics
         }
 
         public abstract void BeginPass(in RHIMeshletPassDescriptor descriptor);
-        public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipelineState(RHIMeshletPipeline pipeline);
         public abstract void SetViewport(in Viewport viewport);
         public abstract void SetViewport(in Memory<Viewport> viewports);
         public abstract void SetScissorRect(in Rect rect);
         public abstract void SetScissorRect(in Memory<Rect> rects);
         public abstract void SetBlendFactor(in float4 value);
+        public abstract void SetPipeline(RHIMeshletPipeline pipeline);
+        //public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetBindGroup(RHIBindGroup bindGroup);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
@@ -295,7 +295,7 @@ namespace Infinity.Graphics
     {
         protected RHICommandBuffer? m_CommandBuffer;
         protected RHIPipelineLayout? m_PipelineLayout;
-        protected RHIGraphicsPipeline? m_PipelineState;
+        protected RHIGraphicsPipeline? m_Pipeline;
 
         public RHIGraphicsPassScoper BeginScopedPass(in RHIGraphicsPassDescriptor descriptor)
         {
@@ -310,8 +310,8 @@ namespace Infinity.Graphics
         public abstract void SetViewport(in Memory<Viewport> viewports);
         public abstract void SetBlendFactor(in float4 value);
         public abstract void NextSubpass();
-        public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipelineState(RHIGraphicsPipeline pipeline);
+        public abstract void SetPipeline(RHIGraphicsPipeline pipeline);
+        //public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetBindGroup(RHIBindGroup bindGroup);
         public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot = 0, in uint offset = 0);
         public abstract void SetIndexBuffer(RHIBuffer buffer, in EIndexFormat format, in uint offset = 0);
@@ -331,7 +331,7 @@ namespace Infinity.Graphics
     {
         protected RHICommandBuffer? m_CommandBuffer;
         protected RHIPipelineLayout? m_PipelineLayout;
-        protected RHIRaytracingPipeline? m_PipelineState;
+        protected RHIRaytracingPipeline? m_Pipeline;
 
         public RHIRaytracingPassScoper BeginScopedPass(string name)
         {
@@ -340,8 +340,8 @@ namespace Infinity.Graphics
         }
 
         public abstract void BeginPass(string name);
-        public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipelineState(RHIRaytracingPipeline pipeline);
+        public abstract void SetPipeline(RHIRaytracingPipeline pipeline);
+        //public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetBindGroup(RHIBindGroup bindGroup);
         public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct tlas);
         public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct blas);

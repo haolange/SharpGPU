@@ -7,6 +7,7 @@ using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using Viewport = Infinity.Mathmatics.Viewport;
 using System.Reflection.Metadata;
+using Silk.NET.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -218,21 +219,27 @@ namespace Infinity.Graphics
             PushDebugGroup(name);
         }
 
-        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        public override void SetPipeline(RHIComputePipeline pipeline)
+        {
+            Debug.Assert(pipeline != null);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            m_Pipeline = pipeline;
+            Dx12ComputePipeline dx12Pipeline = pipeline as Dx12ComputePipeline;
+            dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12Pipeline.NativePipelineState);
+
+            m_PipelineLayout = pipeline.Descriptor.PipelineLayout;
+            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
+        }
+
+        /*public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
         {
             m_PipelineLayout = pipelineLayout;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
             dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
-        }
-
-        public override void SetPipelineState(RHIComputePipeline pipelineState)
-        {
-            m_PipelineState = pipelineState;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12ComputePipeline dx12PipelineState = pipelineState as Dx12ComputePipeline;
-            dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12PipelineState.NativePipelineState);
-        }
+        }*/
 
         public override void SetBindGroup(RHIBindGroup bindGroup)
         {
@@ -343,7 +350,7 @@ namespace Infinity.Graphics
         public override void EndPass()
         {
             PopDebugGroup();
-            m_PipelineState = null;
+            m_Pipeline = null;
             m_PipelineLayout = null;
         }
 
@@ -365,21 +372,27 @@ namespace Infinity.Graphics
             PushDebugGroup(name);
         }
 
-        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        public override void SetPipeline(RHIRaytracingPipeline pipeline)
+        {
+            Debug.Assert(pipeline != null);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            m_Pipeline = pipeline;
+            Dx12RaytracingPipeline dx12Pipeline = pipeline as Dx12RaytracingPipeline;
+            dx12CommandBuffer.NativeCommandList->SetPipelineState1(dx12Pipeline.NativePipelineState);
+
+            m_PipelineLayout = pipeline.Descriptor.PipelineLayout;
+            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
+        }
+
+        /*public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
         {
             m_PipelineLayout = pipelineLayout;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
             dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
-        }
-
-        public override void SetPipelineState(RHIRaytracingPipeline pipelineState)
-        {
-            m_PipelineState = pipelineState;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12RaytracingPipeline dx12PipelineState = pipelineState as Dx12RaytracingPipeline;
-            dx12CommandBuffer.NativeCommandList->SetPipelineState1(dx12PipelineState.NativePipelineState);
-        }
+        }*/
 
         public override void SetBindGroup(RHIBindGroup bindGroup)
         {
@@ -523,7 +536,7 @@ namespace Infinity.Graphics
         public override void EndPass()
         {
             PopDebugGroup();
-            m_PipelineState = null;
+            m_Pipeline = null;
             m_PipelineLayout = null;
         }
 
@@ -654,26 +667,6 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
-        {
-            Debug.Assert(pipelineLayout != null);
-
-            m_PipelineLayout = pipelineLayout;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
-            dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
-        }
-
-        public override void SetPipelineState(RHIMeshletPipeline pipelineState)
-        {
-            m_PipelineState = pipelineState;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12MeshletPipeline dx12PipelineState = pipelineState as Dx12MeshletPipeline;
-            dx12CommandBuffer.NativeCommandList->OMSetStencilRef((uint)dx12PipelineState.StencilRef);
-            dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12PipelineState.NativePipelineState);
-            dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12PipelineState.PrimitiveTopology);
-        }
-
         public override void SetViewport(in Viewport viewport)
         {
             D3D12_VIEWPORT tempViewport = new D3D12_VIEWPORT(viewport.TopLeftX, viewport.TopLeftY, viewport.Width, viewport.Height, viewport.MinDepth, viewport.MaxDepth);
@@ -704,6 +697,32 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->OMSetBlendFactor((float*)&tempValue);
         }
+
+        public override void SetPipeline(RHIMeshletPipeline pipeline)
+        {
+            Debug.Assert(pipeline != null);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            m_Pipeline = pipeline;
+            Dx12MeshletPipeline dx12Pipeline = pipeline as Dx12MeshletPipeline;
+            dx12CommandBuffer.NativeCommandList->OMSetStencilRef((uint)dx12Pipeline.StencilRef);
+            dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12Pipeline.NativePipelineState);
+            dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12Pipeline.PrimitiveTopology);
+
+            m_PipelineLayout = pipeline.Descriptor.PipelineLayout;
+            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
+        }
+
+        /*public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        {
+            Debug.Assert(pipelineLayout != null);
+
+            m_PipelineLayout = pipelineLayout;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
+        }*/
 
         public override void SetBindGroup(RHIBindGroup bindGroup)
         {
@@ -822,7 +841,7 @@ namespace Infinity.Graphics
         public override void EndPass()
         {
             PopDebugGroup();
-            m_PipelineState = null;
+            m_Pipeline = null;
             m_PipelineLayout = null;
 
             Dx12Device device = (m_CommandBuffer.CommandPool.Queue as Dx12Queue).Dx12Device;
@@ -1005,7 +1024,23 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        public override void SetPipeline(RHIGraphicsPipeline pipeline)
+        {
+            Debug.Assert(pipeline != null);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            m_Pipeline = pipeline;
+            Dx12GraphicsPipeline dx12Pipeline = pipeline as Dx12GraphicsPipeline;
+            dx12CommandBuffer.NativeCommandList->OMSetStencilRef((uint)dx12Pipeline.StencilRef);
+            dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12Pipeline.NativePipelineState);
+            dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12Pipeline.PrimitiveTopology);
+
+            m_PipelineLayout = pipeline.Descriptor.PipelineLayout;
+            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
+        }
+
+        /*public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
         {
             Debug.Assert(pipelineLayout != null);
 
@@ -1013,17 +1048,7 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
             dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
-        }
-
-        public override void SetPipelineState(RHIGraphicsPipeline pipelineState)
-        {
-            m_PipelineState = pipelineState;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12GraphicsPipeline dx12PipelineState = pipelineState as Dx12GraphicsPipeline;
-            dx12CommandBuffer.NativeCommandList->OMSetStencilRef((uint)dx12PipelineState.StencilRef);
-            dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12PipelineState.NativePipelineState);
-            dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12PipelineState.PrimitiveTopology);
-        }
+        }*/
 
         public override void SetBindGroup(RHIBindGroup bindGroup)
         {
@@ -1064,12 +1089,12 @@ namespace Infinity.Graphics
         public override void SetVertexBuffer(RHIBuffer buffer, in uint slot = 0, in uint offset = 0)
         {
             Dx12Buffer dx12Buffer = buffer as Dx12Buffer;
-            Dx12GraphicsPipeline dx12PipelineState = m_PipelineState as Dx12GraphicsPipeline;
+            Dx12GraphicsPipeline dx12Pipeline = m_Pipeline as Dx12GraphicsPipeline;
 
             D3D12_VERTEX_BUFFER_VIEW vertexBufferView = new D3D12_VERTEX_BUFFER_VIEW
             {
                 SizeInBytes = buffer.SizeInBytes - offset,
-                StrideInBytes = (uint)dx12PipelineState.VertexStrides[slot],
+                StrideInBytes = (uint)dx12Pipeline.VertexStrides[slot],
                 BufferLocation = dx12Buffer.NativeResource->GetGPUVirtualAddress() + offset
             };
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1188,7 +1213,7 @@ namespace Infinity.Graphics
         public override void EndPass()
         {
             PopDebugGroup();
-            m_PipelineState = null;
+            m_Pipeline = null;
             m_PipelineLayout = null;
 
             Dx12Device device = (m_CommandBuffer.CommandPool.Queue as Dx12Queue).Dx12Device;

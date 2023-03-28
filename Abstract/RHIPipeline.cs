@@ -176,21 +176,29 @@ namespace Infinity.Graphics
 
     public abstract class RHIComputePipeline : Disposal
     {
+        public RHIComputePipelineDescriptor Descriptor => m_Descriptor;
 
+        protected RHIComputePipelineDescriptor m_Descriptor;
     }
 
     public abstract class RHIRaytracingPipeline : Disposal
     {
+        public RHIRaytracingPipelineDescriptor Descriptor => m_Descriptor;
 
+        protected RHIRaytracingPipelineDescriptor m_Descriptor;
     }
 
     public abstract class RHIMeshletPipeline : Disposal
     {
+        public RHIMeshletPipelineDescriptor Descriptor => m_Descriptor;
 
+        protected RHIMeshletPipelineDescriptor m_Descriptor;
     }
 
     public abstract class RHIGraphicsPipeline : Disposal
     {
+        public RHIGraphicsPipelineDescriptor Descriptor => m_Descriptor;
 
+        protected RHIGraphicsPipelineDescriptor m_Descriptor;
     }
 }
