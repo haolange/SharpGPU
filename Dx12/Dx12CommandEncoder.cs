@@ -543,7 +543,7 @@ namespace Infinity.Graphics
             m_AttachmentInfos = new TValueArray<Dx12DescriptorInfo>(5);
         }
 
-        public override void BeginPass(in RHIGraphicsPassDescriptor descriptor)
+        public override void BeginPass(in RHIMeshletPassDescriptor descriptor)
         {
             PushDebugGroup(descriptor.Name);
 
@@ -969,26 +969,6 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
-        {
-            Debug.Assert(pipelineLayout != null);
-
-            m_PipelineLayout = pipelineLayout;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
-            dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
-        }
-
-        public override void SetPipelineState(RHIGraphicsPipeline pipelineState)
-        {
-            m_PipelineState = pipelineState;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12GraphicsPipeline dx12PipelineState = pipelineState as Dx12GraphicsPipeline;
-            dx12CommandBuffer.NativeCommandList->OMSetStencilRef((uint)dx12PipelineState.StencilRef);
-            dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12PipelineState.NativePipelineState);
-            dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12PipelineState.PrimitiveTopology);
-        }
-
         public override void SetScissor(in Rect rect)
         {
             RECT tempScissor = new RECT((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom);
@@ -1018,6 +998,31 @@ namespace Infinity.Graphics
             float4 tempValue = value;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->OMSetBlendFactor((float*)&tempValue);
+        }
+
+        public override void NextSubpass()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        {
+            Debug.Assert(pipelineLayout != null);
+
+            m_PipelineLayout = pipelineLayout;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
+        }
+
+        public override void SetPipelineState(RHIGraphicsPipeline pipelineState)
+        {
+            m_PipelineState = pipelineState;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12GraphicsPipeline dx12PipelineState = pipelineState as Dx12GraphicsPipeline;
+            dx12CommandBuffer.NativeCommandList->OMSetStencilRef((uint)dx12PipelineState.StencilRef);
+            dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12PipelineState.NativePipelineState);
+            dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12PipelineState.PrimitiveTopology);
         }
 
         public override void SetBindGroup(RHIBindGroup bindGroup)

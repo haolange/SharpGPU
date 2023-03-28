@@ -4,23 +4,6 @@ using Infinity.Mathmatics;
 
 namespace Infinity.Graphics
 {
-    public struct RHIBufferCopyDescriptor
-    {
-        public uint Offset;
-        public uint RowPitch;
-        public uint3 TextureHeight;
-        public RHIBuffer Buffer;
-    }
-
-    public struct RHITextureCopyDescriptor
-    {
-        public uint MipLevel;
-        public uint SliceBase;
-        public uint SliceCount;
-        public uint3 Origin;
-        public RHITexture Texture;
-    }
-
     public struct RHIIndirectDispatchArgs
     {
         public uint GroupCountX;
@@ -66,6 +49,29 @@ namespace Infinity.Graphics
         }
     }
 
+    public struct RHIBufferCopyDescriptor
+    {
+        public uint Offset;
+        public uint RowPitch;
+        public uint3 TextureHeight;
+        public RHIBuffer Buffer;
+    }
+
+    public struct RHITextureCopyDescriptor
+    {
+        public uint MipLevel;
+        public uint SliceBase;
+        public uint SliceCount;
+        public uint3 Origin;
+        public RHITexture Texture;
+    }
+
+    public struct RHISubpassDescriptor
+    {
+        public ReadOnlyMemory<uint> InputAttachmentIndex;
+        public ReadOnlyMemory<uint> OutputAttachmentIndex;
+    }
+
     public struct RHIShadingRateDescriptor
     {
         public EShadingRate ShadingRate;
@@ -107,16 +113,24 @@ namespace Infinity.Graphics
         public ELoadAction StencilLoadAction;
         public EStoreAction StencilStoreAction;
         public RHITexture DepthStencilTarget;
+        public RHITexture DepthStencilResolve;
+    }
+
+    public struct RHIMeshletPassDescriptor
+    {
+        public string Name;
+        public RHIShadingRateDescriptor? ShadingRateDescriptor;
+        public Memory<RHIColorAttachmentDescriptor> ColorAttachmentDescriptors;
+        public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachmentDescriptor;
     }
 
     public struct RHIGraphicsPassDescriptor
     {
         public string Name;
         public RHIShadingRateDescriptor? ShadingRateDescriptor;
+        public Memory<RHISubpassDescriptor>? SubpassDescriptors;
         public Memory<RHIColorAttachmentDescriptor> ColorAttachmentDescriptors;
         public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachmentDescriptor;
-        // ToDo TimestampQuery https://gpuweb.github.io/gpuweb/#render-pass-encoder-creation
-        // ToDo OcclusionQuery https://gpuweb.github.io/gpuweb/#render-pass-encoder-creation
     }
 
     public struct RHIBlitPassScoper : IDisposable
@@ -252,13 +266,13 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIMeshletPipeline? m_PipelineState;
 
-        public RHIMeshletPassScoper BeginScopedPass(in RHIGraphicsPassDescriptor descriptor)
+        public RHIMeshletPassScoper BeginScopedPass(in RHIMeshletPassDescriptor descriptor)
         {
             BeginPass(descriptor);
             return new RHIMeshletPassScoper(this);
         }
 
-        public abstract void BeginPass(in RHIGraphicsPassDescriptor descriptor);
+        public abstract void BeginPass(in RHIMeshletPassDescriptor descriptor);
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipelineState(RHIMeshletPipeline pipeline);
         public abstract void SetViewport(in Viewport viewport);
@@ -290,13 +304,14 @@ namespace Infinity.Graphics
         }
 
         public abstract void BeginPass(in RHIGraphicsPassDescriptor descriptor);
-        public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipelineState(RHIGraphicsPipeline pipeline);
         public abstract void SetScissor(in Rect rect);
         public abstract void SetScissor(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
         public abstract void SetViewport(in Memory<Viewport> viewports);
         public abstract void SetBlendFactor(in float4 value);
+        public abstract void NextSubpass();
+        public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
+        public abstract void SetPipelineState(RHIGraphicsPipeline pipeline);
         public abstract void SetBindGroup(RHIBindGroup bindGroup);
         public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot = 0, in uint offset = 0);
         public abstract void SetIndexBuffer(RHIBuffer buffer, in EIndexFormat format, in uint offset = 0);
