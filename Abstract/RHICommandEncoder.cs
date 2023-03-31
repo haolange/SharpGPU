@@ -68,8 +68,9 @@ namespace Infinity.Graphics
 
     public struct RHISubpassDescriptor
     {
-        public ReadOnlyMemory<uint> InputAttachmentIndex;
-        public ReadOnlyMemory<uint> OutputAttachmentIndex;
+        public bool bUaseDepthStencil;
+        public ReadOnlyMemory<byte>? InputAttachmentIndex;
+        public ReadOnlyMemory<byte>? OutputAttachmentIndex;
     }
 
     public struct RHIShadingRateDescriptor
