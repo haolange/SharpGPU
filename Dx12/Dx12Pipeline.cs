@@ -583,20 +583,20 @@ namespace Infinity.Graphics
                 DepthStencilState = Dx12Utility.CreateDx12DepthStencilState(descriptor.RenderStateDescriptor.DepthStencilStateDescriptor)
             };
 
-            if (descriptor.OutputStateDescriptor.OutputDepthAttachmentDescriptor.HasValue)
+            if (descriptor.OutputStateDescriptor.DepthStencilFormat.HasValue)
             {
                 description.DSVFormat = DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
-                //description.DSVFormat = Dx12Utility.ConvertToDx12Format(descriptor.outputState.depthAttachment.Value.format);
+                //description.DSVFormat = Dx12Utility.ConvertToDx12Format(descriptor.OutputStateDescriptor.DepthStencilFormat.Value);
             }
 
-            for (int i = 0; i < descriptor.OutputStateDescriptor.OutputColorAttachmentDescriptors.Length; ++i)
+            for (int i = 0; i < descriptor.OutputStateDescriptor.ColorFormats.Length; ++i)
             {
                 description.RTVFormats[i] = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
-                //description.RTVFormats[i] = Dx12Utility.ConvertToDx12Format(descriptor.outputState.colorAttachments.Span[i].format);
+                //description.RTVFormats[i] = Dx12Utility.ConvertToDx12Format(descriptor.OutputStateDescriptor.ColorFormats.Span[i]);
             }
 
             description.Flags = D3D12_PIPELINE_STATE_FLAGS.D3D12_PIPELINE_STATE_FLAG_NONE;
-            description.NumRenderTargets = (uint)descriptor.OutputStateDescriptor.OutputColorAttachmentDescriptors.Length;
+            description.NumRenderTargets = (uint)descriptor.OutputStateDescriptor.ColorFormats.Length;
             description.SampleDesc = Dx12Utility.ConvertToDx12SampleCount(descriptor.OutputStateDescriptor.SampleCount);
             //description.StreamOutput = new StreamOutputDescription();
 

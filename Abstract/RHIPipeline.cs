@@ -4,18 +4,12 @@ using Infinity.Mathmatics;
 
 namespace Infinity.Graphics
 {
-    public struct RHIOutputAttachmentDescriptor
-    {
-        public bool ResolveMSAA;
-        public EPixelFormat Format;
-    }
-
     public struct RHIOutputStateDescriptor
     {
         //public uint SliceCount;
         public ESampleCount SampleCount;
-        public RHIOutputAttachmentDescriptor? OutputDepthAttachmentDescriptor;
-        public Memory<RHIOutputAttachmentDescriptor> OutputColorAttachmentDescriptors;
+        public EPixelFormat? DepthStencilFormat;
+        public Memory<EPixelFormat> ColorFormats;
     }
 
     public struct RHIVertexElementDescriptor
