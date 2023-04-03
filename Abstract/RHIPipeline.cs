@@ -86,7 +86,6 @@ namespace Infinity.Graphics
         public bool DepthEnable;
         public bool DepthWriteMask;
         public bool StencilEnable;
-        public byte StencilReference;
         public byte StencilReadMask;
         public byte StencilWriteMask;
         public EComparisonMode ComparisonMode;

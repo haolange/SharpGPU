@@ -310,6 +310,7 @@ namespace Infinity.Graphics
         public abstract void SetViewport(in Viewport viewport);
         public abstract void SetViewport(in Memory<Viewport> viewports);
         public abstract void SetBlendFactor(in float4 value);
+        public abstract void SetStencilRefValue(in uint value);
         public abstract void NextSubpass();
         public abstract void SetPipeline(RHIGraphicsPipeline pipeline);
         //public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);

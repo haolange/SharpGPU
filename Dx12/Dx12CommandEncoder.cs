@@ -1046,6 +1046,12 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->OMSetBlendFactor((float*)&tempValue);
         }
 
+        public override void SetStencilRefValue(in uint value)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->OMSetStencilRef(value);
+        }
+
         public override void NextSubpass()
         {
             throw new NotImplementedException("Dx12 is not support subpass. Please do not use NextSubpass command in graphics encoder");
@@ -1058,7 +1064,6 @@ namespace Infinity.Graphics
 
             m_Pipeline = pipeline;
             Dx12GraphicsPipeline dx12Pipeline = pipeline as Dx12GraphicsPipeline;
-            dx12CommandBuffer.NativeCommandList->OMSetStencilRef((uint)dx12Pipeline.StencilRef);
             dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12Pipeline.NativePipelineState);
             dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12Pipeline.PrimitiveTopology);
 

@@ -513,13 +513,6 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12GraphicsPipeline : RHIGraphicsPipeline
     {
-        public uint StencilRef
-        {
-            get
-            {
-                return m_StencilRef;
-            }
-        }
         public uint[] VertexStrides
         {
             get
@@ -542,7 +535,6 @@ namespace Infinity.Graphics
             }
         }
 
-        private uint m_StencilRef;
         private uint[] m_VertexStrides;
         private ID3D12PipelineState* m_NativePipelineState;
         private D3D_PRIMITIVE_TOPOLOGY m_PrimitiveTopology;
@@ -565,7 +557,6 @@ namespace Infinity.Graphics
                 }
             }
 
-            m_StencilRef = descriptor.RenderStateDescriptor.DepthStencilStateDescriptor.StencilReference;
             m_PrimitiveTopology = Dx12Utility.ConvertToDx12PrimitiveTopology(descriptor.PrimitiveTopology);
 
             D3D12_PRIMITIVE_TOPOLOGY_TYPE primitiveTopologyType = Dx12Utility.ConvertToDx12PrimitiveTopologyType(descriptor.PrimitiveTopology);
