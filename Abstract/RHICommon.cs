@@ -423,10 +423,8 @@
 
     public enum EPresentMode : byte
     {
-        // ToDo
-        // 1. DirectX SwapEffect #see https://docs.microsoft.com/en-us/windows/win32/api/dxgi/ne-dxgi-dxgi_swap_effect
-        // 2. Vulkan VkPresentModeKHR #see https://www.khronos.org/registry/vulkan/specs/1.3-extensions/man/html/VkPresentModeKHR.html
-        VSync,
+        VSyncFull,
+        VSyncHalf,
         Immediately,
         Undefined
     }

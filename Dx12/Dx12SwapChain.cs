@@ -107,7 +107,7 @@ namespace Infinity.Graphics
             desc.BufferDesc.Height = descriptor.Extent.y;
             desc.BufferDesc.Format = /*Dx12Utility.ConvertToDx12Format(descriptor.Format)*/DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
             desc.BufferDesc.Scaling = DXGI_MODE_SCALING.DXGI_MODE_SCALING_UNSPECIFIED;
-            desc.BufferDesc.RefreshRate.Numerator = 60;
+            desc.BufferDesc.RefreshRate.Numerator = descriptor.FPS;
             desc.BufferDesc.RefreshRate.Denominator = 1;
             desc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER.DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
             desc.BufferUsage = descriptor.FrameBufferOnly ? DXGI.DXGI_USAGE_RENDER_TARGET_OUTPUT : (DXGI.DXGI_USAGE_SHADER_INPUT | DXGI.DXGI_USAGE_RENDER_TARGET_OUTPUT);

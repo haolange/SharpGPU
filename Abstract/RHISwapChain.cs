@@ -7,6 +7,7 @@ namespace Infinity.Graphics
     public struct RHISwapChainDescriptor
     {
         public bool FrameBufferOnly;
+        public uint FPS;
         public uint Count;
         public uint2 Extent;
         public IntPtr Surface;

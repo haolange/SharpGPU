@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using static TerraFX.Interop.Windows.Windows;
+using Silk.NET.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -65,7 +66,20 @@ namespace Infinity.Graphics
 
         internal static uint ConvertToDx12SyncInterval(in EPresentMode presentMode)
         {
-            return (uint)(presentMode == EPresentMode.VSync ? 1 : 0);
+            switch (presentMode)
+            {
+                case EPresentMode.VSyncFull:
+                    return 1;
+
+                case EPresentMode.VSyncHalf:
+                    return 2;
+
+                case EPresentMode.Immediately:
+                    return 0;
+
+                default:
+                    return 0;
+            }
         }
 
         internal static D3D12_FILTER ConvertToDx12Filter(in RHISamplerDescriptor descriptor)
