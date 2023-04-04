@@ -230,9 +230,9 @@ namespace Infinity.Graphics
             return new Dx12Texture(this, descriptor);
         }
 
-        public override RHISamplerState CreateSamplerState(in RHISamplerStateDescriptor descriptor)
+        public override RHISampler CreateSampler(in RHISamplerDescriptor descriptor)
         {
-            return new Dx12SamplerState(this, descriptor);
+            return new Dx12Sampler(this, descriptor);
         }
 
         public override RHITopLevelAccelStruct CreateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)

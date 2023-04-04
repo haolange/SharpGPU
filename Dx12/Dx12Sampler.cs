@@ -3,7 +3,7 @@
 namespace Infinity.Graphics
 {
 #pragma warning disable CA1416 
-    internal unsafe class Dx12SamplerState : RHISamplerState
+    internal unsafe class Dx12Sampler : RHISampler
     {
         public ID3D12DescriptorHeap* NativeDescriptorHeap
         {
@@ -33,7 +33,7 @@ namespace Infinity.Graphics
         private D3D12_CPU_DESCRIPTOR_HANDLE m_NativeCpuDescriptorHandle;
         private D3D12_GPU_DESCRIPTOR_HANDLE m_NativeGpuDescriptorHandle;
 
-        public Dx12SamplerState(Dx12Device device, in RHISamplerStateDescriptor descriptor)
+        public Dx12Sampler(Dx12Device device, in RHISamplerDescriptor descriptor)
         {
             m_Dx12Device = device;
 

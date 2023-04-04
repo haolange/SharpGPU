@@ -3,7 +3,7 @@ using Infinity.Core;
 
 namespace Infinity.Graphics
 {
-    public struct RHISamplerStateDescriptor
+    public struct RHISamplerDescriptor
     {
         public uint Anisotropy;
         public float LodMinClamp;
@@ -17,19 +17,19 @@ namespace Infinity.Graphics
         public EComparisonMode ComparisonMode;
     }
 
-    public struct RHIStaticSamplerStateElement
+    public struct RHIStaticSamplerElement
     {
         public uint BindSlot;
-        public RHISamplerStateDescriptor SamplerStateDescriptor;
+        public RHISamplerDescriptor SamplerDescriptor;
     }
 
-    public struct RHIStaticSamplerStateDescriptor
+    public struct RHIStaticSamplerDescriptor
     {
         public uint Index;
-        public Memory<RHIStaticSamplerStateElement> Elements;
+        public Memory<RHIStaticSamplerElement> Elements;
     }
 
-    public abstract class RHISamplerState : Disposal
+    public abstract class RHISampler : Disposal
     {
 
     }

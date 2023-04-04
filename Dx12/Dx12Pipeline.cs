@@ -102,11 +102,11 @@ namespace Infinity.Graphics
             }
 
             D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlag = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_NONE;
-            if (descriptor.IsLocalSignature)
+            if (descriptor.bIsLocalSignature)
             {
                 rootSignatureFlag |= D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;
             }
-            if (descriptor.AllowVertexLayout)
+            if (descriptor.bUseVertexLayout)
             {
                 rootSignatureFlag |= D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
             }

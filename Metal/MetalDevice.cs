@@ -88,7 +88,7 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHISamplerState CreateSamplerState(in RHISamplerStateDescriptor descriptor)
+        public override RHISampler CreateSampler(in RHISamplerDescriptor descriptor)
         {
             throw new NotImplementedException();
         }

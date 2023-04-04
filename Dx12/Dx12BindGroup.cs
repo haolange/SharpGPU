@@ -53,8 +53,8 @@ namespace Infinity.Graphics
                         nativeGpuDescriptorHandle = textureView.NativeGpuDescriptorHandle;
                         break;
 
-                    case EBindType.SamplerState:
-                        Dx12SamplerState samplerState = element.SamplerState as Dx12SamplerState;
+                    case EBindType.Sampler:
+                        Dx12Sampler samplerState = element.Sampler as Dx12Sampler;
                         nativeGpuDescriptorHandle = samplerState.NativeGpuDescriptorHandle;
                         break;
 
@@ -84,8 +84,8 @@ namespace Infinity.Graphics
                     nativeGpuDescriptorHandle = textureView.NativeGpuDescriptorHandle;
                     break;
 
-                case EBindType.SamplerState:
-                    Dx12SamplerState samplerState = element.SamplerState as Dx12SamplerState;
+                case EBindType.Sampler:
+                    Dx12Sampler samplerState = element.Sampler as Dx12Sampler;
                     nativeGpuDescriptorHandle = samplerState.NativeGpuDescriptorHandle;
                     break;
 

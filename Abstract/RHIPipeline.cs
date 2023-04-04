@@ -155,11 +155,11 @@ namespace Infinity.Graphics
 
     public struct RHIPipelineLayoutDescriptor
     {
-        public bool IsLocalSignature;
-        public bool AllowVertexLayout;
+        public bool bUseVertexLayout;
+        public bool bIsLocalSignature;
         public RHIBindGroupLayout[] BindGroupLayouts;
         //public RHIPipelineConstantLayout[] PipelineConstantLayouts;
-        public Memory<RHIStaticSamplerStateDescriptor>? StaticSamplerStates;
+        public Memory<RHIStaticSamplerDescriptor>? StaticSamplers;
     };
 
     public abstract class RHIPipelineLayout : Disposal

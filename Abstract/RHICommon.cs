@@ -267,7 +267,7 @@
         Buffer,
         Texture,
         Bindless,
-        SamplerState,
+        Sampler,
         UniformBuffer,
         StorageBuffer,
         StorageTexture,
