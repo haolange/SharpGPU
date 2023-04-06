@@ -34,12 +34,12 @@ namespace Infinity.Graphics
             D3D12_RESOURCE_DESC textureDesc = new D3D12_RESOURCE_DESC();
             textureDesc.MipLevels = (ushort)descriptor.MipCount;
             textureDesc.Format = /*Dx12Utility.GetNativeFormat(Descriptor->Format)*/DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_TYPELESS;
-            textureDesc.Width = (ulong)descriptor.Extent.x;
-            textureDesc.Height = (uint)descriptor.Extent.y;
+            textureDesc.Width = descriptor.Extent.x;
+            textureDesc.Height = descriptor.Extent.y;
             textureDesc.DepthOrArraySize = (ushort)descriptor.Extent.z;
             textureDesc.Flags = Dx12Utility.ConvertToDx12TextureFlag(descriptor.Usage);
-            textureDesc.SampleDesc.Count = (uint)descriptor.Samples.x;
-            textureDesc.SampleDesc.Quality = (uint)descriptor.Samples.y;
+            textureDesc.SampleDesc.Count = descriptor.Samples;
+            textureDesc.SampleDesc.Quality = 0;
             textureDesc.Dimension = Dx12Utility.ConvertToDx12TextureDimension(descriptor.Dimension);
 
             ID3D12Resource* dx12Resource;
