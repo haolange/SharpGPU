@@ -274,10 +274,10 @@ namespace Infinity.Graphics
         }
 
         public abstract void BeginPass(in RHIMeshletPassDescriptor descriptor);
+        public abstract void SetScissor(in Rect rect);
+        public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
-        public abstract void SetViewport(in Memory<Viewport> viewports);
-        public abstract void SetScissorRect(in Rect rect);
-        public abstract void SetScissorRect(in Memory<Rect> rects);
+        public abstract void SetViewports(in Memory<Viewport> viewports);
         public abstract void SetBlendFactor(in float4 value);
         public abstract void SetPipeline(RHIMeshletPipeline pipeline);
         //public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
@@ -306,9 +306,9 @@ namespace Infinity.Graphics
 
         public abstract void BeginPass(in RHIGraphicsPassDescriptor descriptor);
         public abstract void SetScissor(in Rect rect);
-        public abstract void SetScissor(in Memory<Rect> rects);
+        public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
-        public abstract void SetViewport(in Memory<Viewport> viewports);
+        public abstract void SetViewports(in Memory<Viewport> viewports);
         public abstract void SetBlendFactor(in float4 value);
         public abstract void SetStencilRefValue(in uint value);
         public abstract void NextSubpass();
