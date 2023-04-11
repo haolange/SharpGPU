@@ -37,9 +37,9 @@ namespace Infinity.Graphics
             m_NativeCommandQueue = descriptor.Queue;
         }
 
-        public override RHICommandPool CreateCommandPool()
+        public override RHICommandAllocator CreateCommandAllocator()
         {
-            return new Dx12CommandPool(this);
+            return new Dx12CommandAllocator(this);
         }
 
         public override void Submit(RHICommandBuffer cmdBuffer, RHIFence fence)

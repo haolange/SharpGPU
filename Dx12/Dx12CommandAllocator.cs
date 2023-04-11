@@ -5,7 +5,7 @@ using static TerraFX.Interop.Windows.Windows;
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
-    internal unsafe class Dx12CommandPool : RHICommandPool
+    internal unsafe class Dx12CommandAllocator : RHICommandAllocator
     {
         public ID3D12CommandAllocator* NativeCommandAllocator
         {
@@ -17,7 +17,7 @@ namespace Infinity.Graphics
 
         private ID3D12CommandAllocator* m_NativeCommandAllocator;
 
-        public Dx12CommandPool(Dx12Queue queue)
+        public Dx12CommandAllocator(Dx12Queue queue)
         {
             m_Queue = queue;
 

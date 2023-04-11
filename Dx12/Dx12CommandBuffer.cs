@@ -24,11 +24,11 @@ namespace Infinity.Graphics
         private Dx12RaytracingEncoder m_RaytracingEncoder;
         private ID3D12GraphicsCommandList5* m_NativeCommandList;
 
-        public Dx12CommandBuffer(Dx12CommandPool cmdPool)
+        public Dx12CommandBuffer(Dx12CommandAllocator cmdAllocator)
         {
-            m_CommandPool = cmdPool;
-            Dx12Queue queue = cmdPool.Queue as Dx12Queue;
-            Dx12CommandPool dx12CommandPool = m_CommandPool as Dx12CommandPool;
+            m_CommandAllocator = cmdAllocator;
+            Dx12Queue queue = cmdAllocator.Queue as Dx12Queue;
+            Dx12CommandAllocator dx12CommandPool = m_CommandAllocator as Dx12CommandAllocator;
 
             ID3D12GraphicsCommandList5* commandList;
             bool success = SUCCEEDED(queue.Dx12Device.NativeDevice->CreateCommandList(0, Dx12Utility.ConvertToDx12QueueType(queue.Type), dx12CommandPool.NativeCommandAllocator, null, __uuidof<ID3D12GraphicsCommandList5>(), (void**)&commandList));
@@ -44,8 +44,8 @@ namespace Infinity.Graphics
 
         public override void Begin(string name)
         {
-            Dx12CommandPool dx12CommandPool = m_CommandPool as Dx12CommandPool;
-            Dx12Queue queue = m_CommandPool.Queue as Dx12Queue;
+            Dx12CommandAllocator dx12CommandPool = m_CommandAllocator as Dx12CommandAllocator;
+            Dx12Queue queue = m_CommandAllocator.Queue as Dx12Queue;
 
             m_NativeCommandList->Reset(dx12CommandPool.NativeCommandAllocator, null);
 
@@ -92,7 +92,7 @@ namespace Infinity.Graphics
 
         /*public override void Commit(RHIFence? fence)
         {
-            Dx12CommandPool dx12CommandPool = m_CommandPool as Dx12CommandPool;
+            Dx12CommandAllocator dx12CommandPool = m_CommandPool as Dx12CommandAllocator;
             Dx12Queue queue = m_CommandPool.Queue as Dx12Queue;
 
             ID3D12CommandList** ppCommandLists = stackalloc ID3D12CommandList*[1] { (ID3D12CommandList*)m_NativeCommandList };

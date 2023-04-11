@@ -32,7 +32,7 @@ namespace Infinity.Graphics
             m_NativeQueue = descriptor.cmdQueue;
         }
 
-        public override RHICommandPool CreateCommandPool()
+        public override RHICommandAllocator CreateCommandAllocator()
         {
             throw new NotImplementedException();
         }

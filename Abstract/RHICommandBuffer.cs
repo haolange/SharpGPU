@@ -21,15 +21,15 @@ namespace Infinity.Graphics
 
     public abstract class RHICommandBuffer : Disposal
     {
-        public RHICommandPool CommandPool
+        public RHICommandAllocator CommandAllocator
         {
             get
             {
-                return m_CommandPool;
+                return m_CommandAllocator;
             }
         }
 
-        protected RHICommandPool m_CommandPool;
+        protected RHICommandAllocator m_CommandAllocator;
 
         public RHICommandBufferScoper BeginScoped(string name)
         {

@@ -3,7 +3,7 @@
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8618
-    public abstract class RHICommandPool : Disposal
+    public abstract class RHICommandAllocator : Disposal
     {
         public RHIQueue Queue
         {

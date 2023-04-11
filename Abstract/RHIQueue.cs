@@ -34,7 +34,7 @@ namespace Infinity.Graphics
         }
 
         protected EQueueType m_Type;
-        public abstract RHICommandPool CreateCommandPool();
+        public abstract RHICommandAllocator CreateCommandAllocator();
         public abstract void Submit(RHICommandBuffer cmdBuffer, RHIFence fence);
     }
 }
