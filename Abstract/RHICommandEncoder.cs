@@ -121,6 +121,7 @@ namespace Infinity.Graphics
     {
         public string Name;
         public RHIShadingRateDescriptor? ShadingRateDescriptor;
+        public Memory<RHISubpassDescriptor>? SubpassDescriptors;
         public Memory<RHIColorAttachmentDescriptor> ColorAttachmentDescriptors;
         public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachmentDescriptor;
     }

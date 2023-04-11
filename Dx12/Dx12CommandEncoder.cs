@@ -554,24 +554,32 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12MeshletEncoder : RHIMeshletEncoder
     {
-        protected TValueArray<Dx12DescriptorInfo> m_AttachmentInfos;
+        protected byte m_SubPassIndex;
+        protected TValueArray<Dx12AttachmentInfo> m_AttachmentInfos;
 
         public Dx12MeshletEncoder(Dx12CommandBuffer cmdBuffer)
         {
             m_CommandBuffer = cmdBuffer;
-            m_AttachmentInfos = new TValueArray<Dx12DescriptorInfo>(5);
+            m_AttachmentInfos = new TValueArray<Dx12AttachmentInfo>(5);
         }
 
         public override void BeginPass(in RHIMeshletPassDescriptor descriptor)
         {
+            m_SubPassIndex = 0;
             PushDebugGroup(descriptor.Name);
 
+            if (descriptor.SubpassDescriptors != null)
+            {
+                throw new NotImplementedException("Dx12 is not support subpass. Please do not use subpass descriptors");
+            }
+
+            m_AttachmentInfos.Clear();
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
-            // set render targets
-            m_AttachmentInfos.Clear();
+            D3D12_CPU_DESCRIPTOR_HANDLE? dsvHandle = null;
             D3D12_CPU_DESCRIPTOR_HANDLE* rtvHandles = stackalloc D3D12_CPU_DESCRIPTOR_HANDLE[descriptor.ColorAttachmentDescriptors.Length];
 
+            // create render target views
             for (int i = 0; i < descriptor.ColorAttachmentDescriptors.Length; ++i)
             {
                 Dx12Texture texture = descriptor.ColorAttachmentDescriptors.Span[i].RenderTarget as Dx12Texture;
@@ -588,20 +596,24 @@ namespace Infinity.Graphics
                     viewDescriptor.Dimension = ETextureDimension.Texture2D;
                 }*/
                 D3D12_RENDER_TARGET_VIEW_DESC desc = new D3D12_RENDER_TARGET_VIEW_DESC();
-                desc.Format = /*Dx12Utility.GetNativeFormat(texture.Descriptor.Format)*/ DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
-                desc.ViewDimension = /*Dx12Utility.GetNativeViewDimension(texture.Descriptor.Dimension)*/ D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2D;
+                desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
+                desc.ViewDimension = Dx12Utility.ConvertToDx12TextureRTVDimension(texture.Descriptor.Dimension);
                 /*Dx12Utility.FillTexture2DRTV(ref desc.Texture2D, viewDescriptor);
                 Dx12Utility.FillTexture3DRTV(ref desc.Texture3D, viewDescriptor);
                 Dx12Utility.FillTexture2DArrayRTV(ref desc.Texture2DArray, viewDescriptor);*/
 
-                Dx12DescriptorInfo allocation = texture.Dx12Device.AllocateRtvDescriptor(1);
-                m_AttachmentInfos.Add(allocation);
+                Dx12AttachmentInfo dx12AttachmentInfo = new Dx12AttachmentInfo();
+                {
+                    dx12AttachmentInfo.bDepthStencil = false;
+                    dx12AttachmentInfo.AttachmentInfo = texture.Dx12Device.AllocateRtvDescriptor(1);
+                }
+                m_AttachmentInfos.Add(dx12AttachmentInfo);
 
-                rtvHandles[i] = allocation.CpuHandle;
+                rtvHandles[i] = dx12AttachmentInfo.AttachmentInfo.CpuHandle;
                 texture.Dx12Device.NativeDevice->CreateRenderTargetView(texture.NativeResource, &desc, rtvHandles[i]);
             }
 
-            D3D12_CPU_DESCRIPTOR_HANDLE? dsvHandle = null;
+            // create depth stencil view
             if (descriptor.DepthStencilAttachmentDescriptor != null)
             {
                 Dx12Texture texture = descriptor.DepthStencilAttachmentDescriptor?.DepthStencilTarget as Dx12Texture;
@@ -618,17 +630,22 @@ namespace Infinity.Graphics
                     viewDescriptor.Dimension = ETextureDimension.Texture2D;
                 }*/
                 D3D12_DEPTH_STENCIL_VIEW_DESC desc = new D3D12_DEPTH_STENCIL_VIEW_DESC();
-                desc.Flags = /*Dx12Utility.GetNativeDSVFlag(descriptor.DepthStencilAttachmentDescriptor.Value)*/D3D12_DSV_FLAGS.D3D12_DSV_FLAG_NONE;
-                desc.Format = /*Dx12Utility.GetNativeFormat(texture.Descriptor.Format)*/ DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
-                desc.ViewDimension = /*Dx12Utility.GetNativeViewDimension(viewDescriptor.Dimension)*/ D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2D;
+                desc.Flags = Dx12Utility.GetDx12DSVFlag(descriptor.DepthStencilAttachmentDescriptor.Value.DepthReadOnly, descriptor.DepthStencilAttachmentDescriptor.Value.StencilReadOnly);
+                desc.Format = Dx12Utility.ConvertToDx12Format(texture.Descriptor.Format);
+                desc.ViewDimension = Dx12Utility.ConvertToDx12TextureDSVDimension(texture.Descriptor.Dimension);
 
-                Dx12DescriptorInfo allocation = texture.Dx12Device.AllocateDsvDescriptor(1);
-                m_AttachmentInfos.Add(allocation);
+                Dx12AttachmentInfo dx12AttachmentInfo = new Dx12AttachmentInfo();
+                {
+                    dx12AttachmentInfo.bDepthStencil = true;
+                    dx12AttachmentInfo.AttachmentInfo = texture.Dx12Device.AllocateDsvDescriptor(1);
+                }
+                m_AttachmentInfos.Add(dx12AttachmentInfo);
 
-                dsvHandle = allocation.CpuHandle;
+                dsvHandle = dx12AttachmentInfo.AttachmentInfo.CpuHandle;
                 texture.Dx12Device.NativeDevice->CreateDepthStencilView(texture.NativeResource, &desc, dsvHandle.Value);
             }
 
+            // set render targets
             dx12CommandBuffer.NativeCommandList->OMSetRenderTargets((uint)descriptor.ColorAttachmentDescriptors.Length, rtvHandles, false, dsvHandle.HasValue ? (D3D12_CPU_DESCRIPTOR_HANDLE*)&dsvHandle : null);
 
             // clear render targets
@@ -644,6 +661,8 @@ namespace Infinity.Graphics
                 float4 clearValue = colorAttachmentDescriptor.ClearValue;
                 dx12CommandBuffer.NativeCommandList->ClearRenderTargetView(rtvHandles[i], (float*)&clearValue, 0, null);
             }
+
+            // clear depth stencil target
             if (dsvHandle.HasValue)
             {
                 RHIDepthStencilAttachmentDescriptor? depthStencilAttachmentDescriptor = descriptor.DepthStencilAttachmentDescriptor;
@@ -655,6 +674,7 @@ namespace Infinity.Graphics
                 dx12CommandBuffer.NativeCommandList->ClearDepthStencilView(dsvHandle.Value, Dx12Utility.GetDx12ClearFlagByDSA(depthStencilAttachmentDescriptor.Value), depthStencilAttachmentDescriptor.Value.DepthClearValue, Convert.ToByte(depthStencilAttachmentDescriptor.Value.StencilClearValue), 0, null);
             }
 
+            // set shading rate
             if (descriptor.ShadingRateDescriptor.HasValue)
             {
                 if (descriptor.ShadingRateDescriptor.Value.ShadingRateTexture != null)
@@ -858,6 +878,7 @@ namespace Infinity.Graphics
         public override void EndPass()
         {
             PopDebugGroup();
+
             m_Pipeline = null;
             m_PipelineLayout = null;
 
@@ -866,9 +887,9 @@ namespace Infinity.Graphics
 
             for (int i = 0; i < m_AttachmentInfos.length; ++i)
             {
-                int index = m_AttachmentInfos[i].Index;
+                int index = m_AttachmentInfos[i].AttachmentInfo.Index;
 
-                if (i < m_AttachmentInfos.length)
+                if (!m_AttachmentInfos[i].bDepthStencil)
                 {
                     device.FreeRtvDescriptor(index);
                 }
