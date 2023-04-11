@@ -425,6 +425,7 @@
     {
         VSyncFull,
         VSyncHalf,
+        VSyncQuad,
         Immediately,
         Undefined
     }
