@@ -1,3 +1,5 @@
+Pending.txt*
+
 # Visual Studio cache directory
 .vs/
 .idea/
@@ -12,8 +14,3 @@ obj
 bin
 Binaries
 Intermediate
-
-# library Files
-RHI
-Apple
-ShaderLib
