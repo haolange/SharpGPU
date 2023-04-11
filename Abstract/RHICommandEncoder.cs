@@ -261,6 +261,34 @@ namespace Infinity.Graphics
         public abstract void EndPass();
     }
 
+    public abstract class RHIRaytracingEncoder : Disposal
+    {
+        protected RHICommandBuffer? m_CommandBuffer;
+        protected RHIPipelineLayout? m_PipelineLayout;
+        protected RHIRaytracingPipeline? m_Pipeline;
+
+        public RHIRaytracingPassScoper BeginScopedPass(string name)
+        {
+            BeginPass(name);
+            return new RHIRaytracingPassScoper(this);
+        }
+
+        public abstract void BeginPass(string name);
+        public abstract void SetPipeline(RHIRaytracingPipeline pipeline);
+        //public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
+        public abstract void SetBindGroup(RHIBindGroup bindGroup);
+        public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct tlas);
+        public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct blas);
+        public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
+        public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable);
+        //public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
+        public abstract void BeginQuery(RHIQuery query, in uint index);
+        public abstract void EndQuery(RHIQuery query, in uint index);
+        public abstract void PushDebugGroup(string name);
+        public abstract void PopDebugGroup();
+        public abstract void EndPass();
+    }
+    
     public abstract class RHIMeshletEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;
@@ -278,7 +306,9 @@ namespace Infinity.Graphics
         public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
         public abstract void SetViewports(in Memory<Viewport> viewports);
+        public abstract void SetStencilRef(in uint value);
         public abstract void SetBlendFactor(in float4 value);
+        public abstract void NextSubpass();
         public abstract void SetPipeline(RHIMeshletPipeline pipeline);
         //public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetBindGroup(RHIBindGroup bindGroup);
@@ -309,8 +339,8 @@ namespace Infinity.Graphics
         public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
         public abstract void SetViewports(in Memory<Viewport> viewports);
+        public abstract void SetStencilRef(in uint value);
         public abstract void SetBlendFactor(in float4 value);
-        public abstract void SetStencilRefValue(in uint value);
         public abstract void NextSubpass();
         public abstract void SetPipeline(RHIGraphicsPipeline pipeline);
         //public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
@@ -321,34 +351,6 @@ namespace Infinity.Graphics
         public abstract void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance);
         public abstract void DrawIndirect(RHIBuffer argsBuffer, in uint offset);
         public abstract void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset);
-        //public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
-        public abstract void BeginQuery(RHIQuery query, in uint index);
-        public abstract void EndQuery(RHIQuery query, in uint index);
-        public abstract void PushDebugGroup(string name);
-        public abstract void PopDebugGroup();
-        public abstract void EndPass();
-    }
-
-    public abstract class RHIRaytracingEncoder : Disposal
-    {
-        protected RHICommandBuffer? m_CommandBuffer;
-        protected RHIPipelineLayout? m_PipelineLayout;
-        protected RHIRaytracingPipeline? m_Pipeline;
-
-        public RHIRaytracingPassScoper BeginScopedPass(string name)
-        {
-            BeginPass(name);
-            return new RHIRaytracingPassScoper(this);
-        }
-
-        public abstract void BeginPass(string name);
-        public abstract void SetPipeline(RHIRaytracingPipeline pipeline);
-        //public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetBindGroup(RHIBindGroup bindGroup);
-        public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct tlas);
-        public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct blas);
-        public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
-        public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable);
         //public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
         public abstract void BeginQuery(RHIQuery query, in uint index);
         public abstract void EndQuery(RHIQuery query, in uint index);

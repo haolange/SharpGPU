@@ -697,11 +697,22 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
+        public override void SetStencilRef(in uint value)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->OMSetStencilRef(value);
+        }
+
         public override void SetBlendFactor(in float4 value)
         {
             float4 tempValue = value;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->OMSetBlendFactor((float*)&tempValue);
+        }
+
+        public override void NextSubpass()
+        {
+            throw new NotImplementedException("Dx12 is not support subpass. Please do not use NextSubpass command in graphics encoder");
         }
 
         public override void SetPipeline(RHIMeshletPipeline pipeline)
@@ -1040,17 +1051,17 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
+        public override void SetStencilRef(in uint value)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->OMSetStencilRef(value);
+        }
+
         public override void SetBlendFactor(in float4 value)
         {
             float4 tempValue = value;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->OMSetBlendFactor((float*)&tempValue);
-        }
-
-        public override void SetStencilRefValue(in uint value)
-        {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->OMSetStencilRef(value);
         }
 
         public override void NextSubpass()
