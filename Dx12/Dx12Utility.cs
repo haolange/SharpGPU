@@ -7,10 +7,11 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using static TerraFX.Interop.Windows.Windows;
 using Silk.NET.Vulkan;
+using TerraFX.Interop.Windows;
 
 namespace Infinity.Graphics
 {
-#pragma warning disable CS8600, CS8602
+#pragma warning disable CS8600, CS8602, CA1416
     internal static unsafe class Dx12Utility
     {
         public static void CHECK_BOOL(bool cond, [CallerFilePath] string __FILE__ = "", [CallerLineNumber] int __LINE__ = 0, [CallerArgumentExpression("cond")] string expr = "")
@@ -92,15 +93,58 @@ namespace Infinity.Graphics
             EFilterMode mipFilter = descriptor.MipFilter;
 
             if (minFilter == EFilterMode.Point && magFilter == EFilterMode.Point && mipFilter == EFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT; }
-            if (minFilter == EFilterMode.Point && magFilter == EFilterMode.Point && mipFilter == EFilterMode.Linear)  { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR; }
+            if (minFilter == EFilterMode.Point && magFilter == EFilterMode.Point && mipFilter == EFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR; }
             if (minFilter == EFilterMode.Point && magFilter == EFilterMode.Linear && mipFilter == EFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT; }
-            if (minFilter == EFilterMode.Point && magFilter == EFilterMode.Linear && mipFilter == EFilterMode.Linear)  { return D3D12_FILTER.D3D12_FILTER_MIN_POINT_MAG_MIP_LINEAR; }
+            if (minFilter == EFilterMode.Point && magFilter == EFilterMode.Linear && mipFilter == EFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_POINT_MAG_MIP_LINEAR; }
             if (minFilter == EFilterMode.Linear && magFilter == EFilterMode.Point && mipFilter == EFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_LINEAR_MAG_MIP_POINT; }
-            if (minFilter == EFilterMode.Linear && magFilter == EFilterMode.Point && mipFilter == EFilterMode.Linear)  { return D3D12_FILTER.D3D12_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR; }
+            if (minFilter == EFilterMode.Linear && magFilter == EFilterMode.Point && mipFilter == EFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR; }
             if (minFilter == EFilterMode.Linear && magFilter == EFilterMode.Linear && mipFilter == EFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT; }
-            if (minFilter == EFilterMode.Linear && magFilter == EFilterMode.Linear && mipFilter == EFilterMode.Linear)  { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR; }
+            if (minFilter == EFilterMode.Linear && magFilter == EFilterMode.Linear && mipFilter == EFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR; }
             if (minFilter == EFilterMode.Anisotropic || magFilter == EFilterMode.Anisotropic || mipFilter == EFilterMode.Anisotropic) { return D3D12_FILTER.D3D12_FILTER_ANISOTROPIC; }
             return D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT;
+        }
+
+        internal static D3D12_TEXTURE_ADDRESS_MODE ConvertToDx12AddressMode(in EAddressMode addressMode)
+        {
+            switch (addressMode)
+            {
+                case EAddressMode.MirrorRepeat:
+                    return D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
+
+                case EAddressMode.ClampToEdge:
+                    return D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+            }
+            return D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+        }
+
+        // convert to dx12 format COMPARISON func
+        internal static D3D12_COMPARISON_FUNC ConvertToDx12ComparisonMode(in EComparisonMode comparisonMode)
+        {
+            switch (comparisonMode)
+            {
+                case EComparisonMode.Less:
+                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_LESS;
+
+                case EComparisonMode.Equal:
+                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_EQUAL;
+
+                case EComparisonMode.LessEqual:
+                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_LESS_EQUAL;
+
+                case EComparisonMode.Greater:
+                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_GREATER;
+
+                case EComparisonMode.NotEqual:
+                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NOT_EQUAL;
+
+                case EComparisonMode.GreaterEqual:
+                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+
+                case EComparisonMode.Always:
+                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_ALWAYS;
+            }
+
+            return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER;
         }
 
         internal static D3D12_HEAP_TYPE ConvertToDx12ResourceFlagByUsage(in EStorageMode resourceUsage)
@@ -597,14 +641,353 @@ namespace Infinity.Graphics
             return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
         }
 
+        //convert dxgi format to pixel format
         internal static DXGI_FORMAT ConvertToDx12Format(in EPixelFormat pixelFormat)
         {
-            throw new NotImplementedException();
+            switch (pixelFormat)
+            {
+                case EPixelFormat.R8_UNorm:
+                case EPixelFormat.R8_SNorm:
+                case EPixelFormat.R8_UInt:
+                case EPixelFormat.R8_SInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8_TYPELESS;
+
+                case EPixelFormat.R16_UInt:
+                case EPixelFormat.R16_SInt:
+                case EPixelFormat.R16_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16_TYPELESS;
+
+                case EPixelFormat.R8G8_UInt:
+                case EPixelFormat.R8G8_SInt:
+                case EPixelFormat.R8G8_UNorm:
+                case EPixelFormat.R8G8_SNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_TYPELESS;
+
+                case EPixelFormat.R32_UInt:
+                case EPixelFormat.R32_SInt:
+                case EPixelFormat.R32_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS;
+
+                case EPixelFormat.R16G16_UInt:
+                case EPixelFormat.R16G16_SInt:
+                case EPixelFormat.R16G16_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_TYPELESS;
+
+                case EPixelFormat.R8G8B8A8_UInt:
+                case EPixelFormat.R8G8B8A8_SInt:
+                case EPixelFormat.R8G8B8A8_UNorm:
+                case EPixelFormat.R8G8B8A8_UNorm_Srgb:
+                case EPixelFormat.R8G8B8A8_SNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_TYPELESS;
+
+                case EPixelFormat.B8G8R8A8_UNorm:
+                case EPixelFormat.B8G8R8A8_UNorm_Srgb:
+                    return DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_TYPELESS;
+
+                case EPixelFormat.R99GB99_E5_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
+
+                case EPixelFormat.R10G10B10A2_UInt:
+                case EPixelFormat.R10G10B10A2_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_R10G10B10A2_TYPELESS;
+
+                case EPixelFormat.R11G11B10_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R11G11B10_FLOAT;
+
+                case EPixelFormat.RG32_UInt:
+                case EPixelFormat.RG32_SInt:
+                case EPixelFormat.RG32_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_TYPELESS;
+
+                case EPixelFormat.R16G16B16A16_UInt:
+                case EPixelFormat.R16G16B16A16_SInt:
+                case EPixelFormat.R16G16B16A16_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_TYPELESS;
+
+                case EPixelFormat.R32G32B32A32_UInt:
+                case EPixelFormat.R32G32B32A32_SInt:
+                case EPixelFormat.R32G32B32A32_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_TYPELESS;
+
+                case EPixelFormat.D16_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_D16_UNORM;
+
+                case EPixelFormat.D24_UNorm_S8_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_D24_UNORM_S8_UINT;
+
+                case EPixelFormat.D32_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT;
+
+                case EPixelFormat.D32_Float_S8_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+
+                case EPixelFormat.RGBA_DXT1_SRGB:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM_SRGB;
+
+                case EPixelFormat.RGB_DXT1_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM;
+
+                case EPixelFormat.RGBA_DXT1_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM;
+
+                case EPixelFormat.RGBA_DXT3_SRGB:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC2_UNORM_SRGB;
+
+                case EPixelFormat.RGBA_DXT3_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC2_UNORM;
+
+                case EPixelFormat.RGBA_DXT5_SRGB:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM_SRGB;
+
+                case EPixelFormat.RGBA_DXT5_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM;
+
+                case EPixelFormat.R_BC4_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC4_UNORM;
+
+                case EPixelFormat.R_BC4_SNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC4_SNORM;
+
+                case EPixelFormat.RG_BC5_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC5_UNORM;
+
+                case EPixelFormat.RG_BC5_SNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC5_SNORM;
+
+                case EPixelFormat.RGB_BC6H_UFloat:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC6H_UF16;
+
+                case EPixelFormat.RGB_BC6H_SFloat:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC6H_SF16;
+
+                case EPixelFormat.RGBA_BC7_SRGB:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM_SRGB;
+
+                case EPixelFormat.RGBA_BC7_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM;
+
+                case EPixelFormat.RGBA_ASTC4X4_SRGB:
+                case EPixelFormat.RGBA_ASTC4X4_UNorm:
+                case EPixelFormat.RGBA_ASTC4X4_UFloat:
+                case EPixelFormat.RGBA_ASTC5X5_SRGB:
+                case EPixelFormat.RGBA_ASTC5X5_UNorm:
+                case EPixelFormat.RGBA_ASTC5X5_UFloat:
+                case EPixelFormat.RGBA_ASTC6X6_SRGB:
+                case EPixelFormat.RGBA_ASTC6X6_UNorm:
+                case EPixelFormat.RGBA_ASTC6X6_UFloat:
+                case EPixelFormat.RGBA_ASTC8X8_SRGB:
+                case EPixelFormat.RGBA_ASTC8X8_UNorm:
+                case EPixelFormat.RGBA_ASTC8X8_UFloat:
+                case EPixelFormat.RGBA_ASTC10X10_SRGB:
+                case EPixelFormat.RGBA_ASTC10X10_UNorm:
+                case EPixelFormat.RGBA_ASTC10X10_UFloat:
+                case EPixelFormat.RGBA_ASTC12X12_SRGB:
+                case EPixelFormat.RGBA_ASTC12X12_UNorm:
+                case EPixelFormat.RGBA_ASTC12X12_UFloat:
+                    return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
+
+                case EPixelFormat.YUV2:
+                    return DXGI_FORMAT.DXGI_FORMAT_YUY2;
+            }
+            return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
         }
 
         internal static DXGI_FORMAT ConvertToDx12ViewFormat(in EPixelFormat pixelFormat)
         {
-            throw new NotImplementedException();
+            switch (pixelFormat)
+            {
+                case EPixelFormat.R8_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8_UNORM;
+
+                case EPixelFormat.R8_SNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8_SNORM;
+
+                case EPixelFormat.R8_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8_UINT;
+
+                case EPixelFormat.R8_SInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8_SINT;
+
+                case EPixelFormat.R16_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16_UINT;
+
+                case EPixelFormat.R16_SInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16_SINT;
+
+                case EPixelFormat.R16_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16_FLOAT;
+
+                case EPixelFormat.R8G8_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_UNORM;
+
+                case EPixelFormat.R8G8_SNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_SNORM;
+
+                case EPixelFormat.R8G8_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_UINT;
+
+                case EPixelFormat.R8G8_SInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_SINT;
+
+                case EPixelFormat.R32_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32_UINT;
+
+                case EPixelFormat.R32_SInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32_SINT;
+
+                case EPixelFormat.R32_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32_FLOAT;
+
+                case EPixelFormat.R16G16_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_UINT;
+
+                case EPixelFormat.R16G16_SInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_SINT;
+
+                case EPixelFormat.R16G16_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_FLOAT;
+
+                case EPixelFormat.R8G8B8A8_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
+
+                case EPixelFormat.R8G8B8A8_UNorm_Srgb:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+
+                case EPixelFormat.R8G8B8A8_SNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_SNORM;
+
+                case EPixelFormat.R8G8B8A8_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UINT;
+
+                case EPixelFormat.R8G8B8A8_SInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_SINT;
+
+                case EPixelFormat.B8G8R8A8_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM;
+
+                case EPixelFormat.B8G8R8A8_UNorm_Srgb:
+                    return DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+
+                case EPixelFormat.R99GB99_E5_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
+
+                case EPixelFormat.R10G10B10A2_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R10G10B10A2_UINT;
+
+                case EPixelFormat.R10G10B10A2_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_R10G10B10A2_UNORM;
+
+                case EPixelFormat.R11G11B10_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R11G11B10_FLOAT;
+
+                case EPixelFormat.RG32_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_UINT;
+
+                case EPixelFormat.RG32_SInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_SINT;
+
+                case EPixelFormat.RG32_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT;
+
+                case EPixelFormat.R16G16B16A16_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_UINT;
+
+                case EPixelFormat.R16G16B16A16_SInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_SINT;
+
+                case EPixelFormat.R16G16B16A16_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT;
+
+                case EPixelFormat.R32G32B32A32_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_UINT;
+
+                case EPixelFormat.R32G32B32A32_SInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_SINT;
+
+                case EPixelFormat.R32G32B32A32_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT;
+
+                case EPixelFormat.D16_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_D16_UNORM;
+
+                case EPixelFormat.D24_UNorm_S8_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_D24_UNORM_S8_UINT;
+
+                case EPixelFormat.D32_Float:
+                    return DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT;
+
+                case EPixelFormat.D32_Float_S8_UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+
+                case EPixelFormat.RGBA_DXT1_SRGB:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM_SRGB;
+
+                case EPixelFormat.RGB_DXT1_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM;
+
+                case EPixelFormat.RGBA_DXT1_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM;
+
+                case EPixelFormat.RGBA_DXT3_SRGB:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC2_UNORM_SRGB;
+
+                case EPixelFormat.RGBA_DXT3_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC2_UNORM;
+
+                case EPixelFormat.RGBA_DXT5_SRGB:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM_SRGB;
+
+                case EPixelFormat.RGBA_DXT5_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM;
+
+                case EPixelFormat.R_BC4_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC4_UNORM;
+
+                case EPixelFormat.R_BC4_SNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC4_SNORM;
+
+                case EPixelFormat.RG_BC5_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC5_UNORM;
+
+                case EPixelFormat.RG_BC5_SNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC5_SNORM;
+
+                case EPixelFormat.RGB_BC6H_UFloat:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC6H_UF16;
+
+                case EPixelFormat.RGB_BC6H_SFloat:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC6H_SF16;
+
+                case EPixelFormat.RGBA_BC7_SRGB:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM_SRGB;
+
+                case EPixelFormat.RGBA_BC7_UNorm:
+                    return DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM;
+
+                case EPixelFormat.RGBA_ASTC4X4_SRGB:
+                case EPixelFormat.RGBA_ASTC4X4_UNorm:
+                case EPixelFormat.RGBA_ASTC4X4_UFloat:
+                case EPixelFormat.RGBA_ASTC5X5_SRGB:
+                case EPixelFormat.RGBA_ASTC5X5_UNorm:
+                case EPixelFormat.RGBA_ASTC5X5_UFloat:
+                case EPixelFormat.RGBA_ASTC6X6_SRGB:
+                case EPixelFormat.RGBA_ASTC6X6_UNorm:
+                case EPixelFormat.RGBA_ASTC6X6_UFloat:
+                case EPixelFormat.RGBA_ASTC8X8_SRGB:
+                case EPixelFormat.RGBA_ASTC8X8_UNorm:
+                case EPixelFormat.RGBA_ASTC8X8_UFloat:
+                case EPixelFormat.RGBA_ASTC10X10_SRGB:
+                case EPixelFormat.RGBA_ASTC10X10_UNorm:
+                case EPixelFormat.RGBA_ASTC10X10_UFloat:
+                case EPixelFormat.RGBA_ASTC12X12_SRGB:
+                case EPixelFormat.RGBA_ASTC12X12_UNorm:
+                case EPixelFormat.RGBA_ASTC12X12_UFloat:
+                    return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
+
+                case EPixelFormat.YUV2:
+                    return DXGI_FORMAT.DXGI_FORMAT_YUY2;
+            }
+            return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
         }
 
         internal static DXGI_FORMAT ConvertToDx12IndexFormat(in EIndexFormat format)
@@ -629,6 +1012,44 @@ namespace Infinity.Graphics
                     return new DXGI_SAMPLE_DESC(8, 0);
             }
             return new DXGI_SAMPLE_DESC(0, 0);
+        }
+
+        internal static D3D12_SRV_DIMENSION ConvertToDx12TextureSRVDimension(in ETextureViewDimension dimension)
+        {
+            switch (dimension)
+            {
+                case ETextureViewDimension.Texture2DArray:
+                    return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+
+                case ETextureViewDimension.TextureCube:
+                    return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURECUBE;
+
+                case ETextureViewDimension.TextureCubeArray:
+                    return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
+
+                case ETextureViewDimension.Texture3D:
+                    return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE3D;
+            }
+            return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2D;
+        }
+
+        internal static D3D12_UAV_DIMENSION ConvertToDx12TextureUAVDimension(in ETextureViewDimension dimension)
+        {
+            switch (dimension)
+            {
+                case ETextureViewDimension.Texture2DArray:
+                    return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+
+                case ETextureViewDimension.TextureCube:
+                    return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+
+                case ETextureViewDimension.TextureCubeArray:
+                    return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+
+                case ETextureViewDimension.Texture3D:
+                    return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE3D;
+            }
+            return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2D;
         }
 
         internal static byte[] ConvertToDx12SemanticNameByte(this ESemanticType type)
@@ -819,12 +1240,12 @@ namespace Infinity.Graphics
         {
             D3D12_CLEAR_FLAGS result = new D3D12_CLEAR_FLAGS();
 
-            if (depthStencilAttachment.DepthLoadAction == ELoadAction.Clear) 
+            if (depthStencilAttachment.DepthLoadAction == ELoadAction.Clear)
             {
                 result |= D3D12_CLEAR_FLAGS.D3D12_CLEAR_FLAG_DEPTH;
             }
 
-            if (depthStencilAttachment.StencilLoadAction == ELoadAction.Clear) 
+            if (depthStencilAttachment.StencilLoadAction == ELoadAction.Clear)
             {
                 result |= D3D12_CLEAR_FLAGS.D3D12_CLEAR_FLAG_STENCIL;
             }
@@ -890,7 +1311,8 @@ namespace Infinity.Graphics
 
         internal static void FillTexture2DSRV(ref D3D12_TEX2D_SRV srv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture2D) == ETextureViewDimension.Texture2D)) {
+            if (!((descriptor.Dimension & ETextureViewDimension.Texture2D) == ETextureViewDimension.Texture2D))
+            {
                 return;
             }
             srv.MostDetailedMip = (uint)descriptor.BaseMipLevel;
@@ -901,7 +1323,8 @@ namespace Infinity.Graphics
 
         internal static void FillTexture2DArraySRV(ref D3D12_TEX2D_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture2DArray) == ETextureViewDimension.Texture2DArray)) {
+            if (!((descriptor.Dimension & ETextureViewDimension.Texture2DArray) == ETextureViewDimension.Texture2DArray))
+            {
                 return;
             }
             srv.MostDetailedMip = (uint)descriptor.BaseMipLevel;
@@ -914,7 +1337,8 @@ namespace Infinity.Graphics
 
         internal static void FillTextureCubeSRV(ref D3D12_TEXCUBE_SRV srv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.TextureCube) == ETextureViewDimension.TextureCube)) {
+            if (!((descriptor.Dimension & ETextureViewDimension.TextureCube) == ETextureViewDimension.TextureCube))
+            {
                 return;
             }
             srv.MipLevels = (uint)descriptor.MipCount;
@@ -924,7 +1348,8 @@ namespace Infinity.Graphics
 
         internal static void FillTextureCubeArraySRV(ref D3D12_TEXCUBE_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.TextureCubeArray) == ETextureViewDimension.TextureCubeArray)) {
+            if (!((descriptor.Dimension & ETextureViewDimension.TextureCubeArray) == ETextureViewDimension.TextureCubeArray))
+            {
                 return;
             }
             srv.MostDetailedMip = (uint)descriptor.BaseMipLevel;
@@ -936,7 +1361,8 @@ namespace Infinity.Graphics
 
         internal static void FillTexture3DSRV(ref D3D12_TEX3D_SRV srv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture3D) == ETextureViewDimension.Texture3D)) {
+            if (!((descriptor.Dimension & ETextureViewDimension.Texture3D) == ETextureViewDimension.Texture3D))
+            {
                 return;
             }
             srv.MipLevels = (uint)descriptor.MipCount;
@@ -946,7 +1372,8 @@ namespace Infinity.Graphics
 
         internal static void FillTexture2DUAV(ref D3D12_TEX2D_UAV uav, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture2D) == ETextureViewDimension.Texture2D)) {
+            if (!((descriptor.Dimension & ETextureViewDimension.Texture2D) == ETextureViewDimension.Texture2D))
+            {
                 return;
             }
             uav.MipSlice = (uint)descriptor.BaseMipLevel;
@@ -955,7 +1382,8 @@ namespace Infinity.Graphics
 
         internal static void FillTexture2DArrayUAV(ref D3D12_TEX2D_ARRAY_UAV uav, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture2DArray) == ETextureViewDimension.Texture2DArray)) {
+            if (!((descriptor.Dimension & ETextureViewDimension.Texture2DArray) == ETextureViewDimension.Texture2DArray))
+            {
                 return;
             }
             uav.MipSlice = (uint)descriptor.BaseMipLevel;
@@ -966,7 +1394,8 @@ namespace Infinity.Graphics
 
         internal static void FillTexture3DUAV(ref D3D12_TEX3D_UAV uav, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture3D) == ETextureViewDimension.Texture3D)) {
+            if (!((descriptor.Dimension & ETextureViewDimension.Texture3D) == ETextureViewDimension.Texture3D))
+            {
                 return;
             }
             uav.WSize = (uint)descriptor.ArrayLayerCount;
@@ -976,7 +1405,8 @@ namespace Infinity.Graphics
 
         internal static void FillTexture2DRTV(ref D3D12_TEX2D_RTV rtv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture2D) == ETextureViewDimension.Texture2D)) {
+            if (!((descriptor.Dimension & ETextureViewDimension.Texture2D) == ETextureViewDimension.Texture2D))
+            {
                 return;
             }
             rtv.MipSlice = (uint)descriptor.BaseMipLevel;
@@ -985,7 +1415,8 @@ namespace Infinity.Graphics
 
         internal static void FillTexture2DArrayRTV(ref D3D12_TEX2D_ARRAY_RTV rtv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture2DArray) == ETextureViewDimension.Texture2DArray)) {
+            if (!((descriptor.Dimension & ETextureViewDimension.Texture2DArray) == ETextureViewDimension.Texture2DArray))
+            {
                 return;
             }
             rtv.MipSlice = (uint)descriptor.BaseMipLevel;
@@ -996,7 +1427,8 @@ namespace Infinity.Graphics
 
         internal static void FillTexture3DRTV(ref D3D12_TEX3D_RTV rtv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture3D) == ETextureViewDimension.Texture3D)) {
+            if (!((descriptor.Dimension & ETextureViewDimension.Texture3D) == ETextureViewDimension.Texture3D))
+            {
                 return;
             }
             rtv.WSize = (uint)descriptor.ArrayLayerCount;
@@ -1004,5 +1436,5 @@ namespace Infinity.Graphics
             rtv.FirstWSlice = (uint)descriptor.BaseArrayLayer;
         }
     }
-#pragma warning restore CS8600, CS8602
+#pragma warning restore CS8600, CS8602, CA1416
 }

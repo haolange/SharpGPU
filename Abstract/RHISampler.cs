@@ -5,9 +5,10 @@ namespace Infinity.Graphics
 {
     public struct RHISamplerDescriptor
     {
+        public float LodMin;
+        public float LodMax;
+        public float MipLODBias;
         public uint Anisotropy;
-        public float LodMinClamp;
-        public float LodMaxClamp;
         public EFilterMode MagFilter;
         public EFilterMode MinFilter;
         public EFilterMode MipFilter;

@@ -33,7 +33,7 @@ namespace Infinity.Graphics
             D3D12_HEAP_PROPERTIES heapProperties = new D3D12_HEAP_PROPERTIES(Dx12Utility.ConvertToDx12ResourceFlagByUsage(descriptor.StorageMode));
             D3D12_RESOURCE_DESC textureDesc = new D3D12_RESOURCE_DESC();
             textureDesc.MipLevels = (ushort)descriptor.MipCount;
-            textureDesc.Format = /*Dx12Utility.GetNativeFormat(Descriptor->Format)*/DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_TYPELESS;
+            textureDesc.Format = Dx12Utility.ConvertToDx12Format(descriptor.Format);
             textureDesc.Width = descriptor.Extent.x;
             textureDesc.Height = descriptor.Extent.y;
             textureDesc.DepthOrArraySize = (ushort)descriptor.Extent.z;

@@ -88,8 +88,8 @@ namespace Infinity.Graphics
                     m_LifeState.z = true;
 
                     D3D12_SHADER_RESOURCE_VIEW_DESC desc = new D3D12_SHADER_RESOURCE_VIEW_DESC();
-                    desc.Format = /*Dx12Utility.GetNativeFormat(descriptor.format)*/ DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
-                    desc.ViewDimension = /*Dx12Utility.GetNativeViewDimension(descriptor.Dimension)*/ D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2D;
+                    desc.Format = Dx12Utility.ConvertToDx12ViewFormat(descriptor.Format);
+                    desc.ViewDimension = Dx12Utility.ConvertToDx12TextureSRVDimension(descriptor.Dimension);
                     Dx12Utility.FillTexture2DSRV(ref desc.Texture2D, descriptor);
                     Dx12Utility.FillTexture2DArraySRV(ref desc.Texture2DArray, descriptor);
                     Dx12Utility.FillTextureCubeSRV(ref desc.TextureCube, descriptor);
@@ -111,8 +111,8 @@ namespace Infinity.Graphics
                     m_LifeState.w = true;
 
                     D3D12_UNORDERED_ACCESS_VIEW_DESC desc = new D3D12_UNORDERED_ACCESS_VIEW_DESC();
-                    desc.Format = /*Dx12Utility.GetNativeFormat(descriptor.format)*/ DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
-                    desc.ViewDimension = /*Dx12Utility.GetNativeViewDimension(descriptor.Dimension)*/ D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2D;
+                    desc.Format = Dx12Utility.ConvertToDx12ViewFormat(descriptor.Format);
+                    desc.ViewDimension = Dx12Utility.ConvertToDx12TextureUAVDimension(descriptor.Dimension);
                     Dx12Utility.FillTexture2DUAV(ref desc.Texture2D, descriptor);
                     Dx12Utility.FillTexture3DUAV(ref desc.Texture3D, descriptor);
                     Dx12Utility.FillTexture2DArrayUAV(ref desc.Texture2DArray, descriptor);

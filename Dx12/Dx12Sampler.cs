@@ -38,14 +38,15 @@ namespace Infinity.Graphics
             m_Dx12Device = device;
 
             D3D12_SAMPLER_DESC desc = new D3D12_SAMPLER_DESC();
-            desc.MinLOD = descriptor.LodMinClamp;
-            desc.MaxLOD = descriptor.LodMaxClamp;
+            desc.MinLOD = descriptor.LodMin;
+            desc.MaxLOD = descriptor.LodMax;
+            desc.MipLODBias = descriptor.MipLODBias;
+            desc.MaxAnisotropy = descriptor.Anisotropy;
             desc.Filter = Dx12Utility.ConvertToDx12Filter(descriptor);
-            desc.AddressU = /*Dx12Utility.GetNativeAddressMode(Descriptor->AddressModeU)*/D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-            desc.AddressV = /*Dx12Utility.GetNativeAddressMode(Descriptor->AddressModeV)*/D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-            desc.AddressW = /*Dx12Utility.GetNativeAddressMode(Descriptor->AddressModeW)*/D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-            desc.MaxAnisotropy = (uint)descriptor.Anisotropy;
-            desc.ComparisonFunc = /*Dx12Utility.GetNativeComparisonFunc(Descriptor->ComparisonFunc)*/D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER;
+            desc.AddressU = Dx12Utility.ConvertToDx12AddressMode(descriptor.AddressModeU);
+            desc.AddressV = Dx12Utility.ConvertToDx12AddressMode(descriptor.AddressModeV);
+            desc.AddressW = Dx12Utility.ConvertToDx12AddressMode(descriptor.AddressModeW);
+            desc.ComparisonFunc = Dx12Utility.ConvertToDx12ComparisonMode(descriptor.ComparisonMode);
 
             Dx12DescriptorInfo allocation = device.AllocateSamplerDescriptor(1);
             m_HeapIndex = allocation.Index;
