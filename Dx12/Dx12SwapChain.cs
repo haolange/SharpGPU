@@ -105,7 +105,7 @@ namespace Infinity.Graphics
             desc.OutputWindow = new HWND(descriptor.Surface.ToPointer());
             desc.BufferDesc.Width = descriptor.Extent.x;
             desc.BufferDesc.Height = descriptor.Extent.y;
-            desc.BufferDesc.Format = /*Dx12Utility.ConvertToDx12Format(descriptor.Format)*/DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
+            desc.BufferDesc.Format = Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(descriptor.Format));
             desc.BufferDesc.Scaling = DXGI_MODE_SCALING.DXGI_MODE_SCALING_UNSPECIFIED;
             desc.BufferDesc.RefreshRate.Numerator = descriptor.FPS;
             desc.BufferDesc.RefreshRate.Denominator = 1;
@@ -126,7 +126,7 @@ namespace Infinity.Graphics
                 textureDescriptor.Extent = new uint3(descriptor.Extent.xy, 1);
                 textureDescriptor.Samples = 1;
                 textureDescriptor.MipCount = 1;
-                textureDescriptor.Format = descriptor.Format;
+                textureDescriptor.Format = RHIUtility.ConvertToPixelFormat(descriptor.Format);
                 textureDescriptor.State = ETextureState.Present;
                 textureDescriptor.Usage = ETextureUsage.RenderTarget;
                 textureDescriptor.Dimension = ETextureDimension.Texture2D;
@@ -141,7 +141,7 @@ namespace Infinity.Graphics
                 viewDescriptor.ArrayLayerCount = 1;
                 viewDescriptor.Format = descriptor.Format;
                 viewDescriptor.ViewType = ETextureViewType.RenderTarget;
-                viewDescriptor.Dimension = ETextureViewDimension.Texture2D;
+                viewDescriptor.Dimension = ETextureDimension.Texture2D;
             }*/
 
             for (int i = 0; i < descriptor.Count; ++i)

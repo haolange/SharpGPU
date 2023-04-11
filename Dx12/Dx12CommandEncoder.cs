@@ -585,7 +585,7 @@ namespace Infinity.Graphics
                     viewDescriptor.ArrayLayerCount = texture.Descriptor.Extent.z;
                     viewDescriptor.Format = texture.Descriptor.Format;
                     viewDescriptor.ViewType = ETextureViewType.RenderTarget;
-                    viewDescriptor.Dimension = ETextureViewDimension.Texture2D;
+                    viewDescriptor.Dimension = ETextureDimension.Texture2D;
                 }*/
                 D3D12_RENDER_TARGET_VIEW_DESC desc = new D3D12_RENDER_TARGET_VIEW_DESC();
                 desc.Format = /*Dx12Utility.GetNativeFormat(texture.Descriptor.Format)*/ DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -615,7 +615,7 @@ namespace Infinity.Graphics
                     viewDescriptor.ArrayLayerCount = texture.Descriptor.Extent.z;
                     viewDescriptor.Format = texture.Descriptor.Format;
                     viewDescriptor.ViewType = ETextureViewType.DepthStencil;
-                    viewDescriptor.Dimension = ETextureViewDimension.Texture2D;
+                    viewDescriptor.Dimension = ETextureDimension.Texture2D;
                 }*/
                 D3D12_DEPTH_STENCIL_VIEW_DESC desc = new D3D12_DEPTH_STENCIL_VIEW_DESC();
                 desc.Flags = /*Dx12Utility.GetNativeDSVFlag(descriptor.DepthStencilAttachmentDescriptor.Value)*/D3D12_DSV_FLAGS.D3D12_DSV_FLAG_NONE;
@@ -927,11 +927,11 @@ namespace Infinity.Graphics
                     viewDescriptor.ArrayLayerCount = texture.Descriptor.Extent.z;
                     viewDescriptor.Format = texture.Descriptor.Format;
                     viewDescriptor.ViewType = ETextureViewType.RenderTarget;
-                    viewDescriptor.Dimension = ETextureViewDimension.Texture2D;
+                    viewDescriptor.Dimension = ETextureDimension.Texture2D;
                 }*/
                 D3D12_RENDER_TARGET_VIEW_DESC desc = new D3D12_RENDER_TARGET_VIEW_DESC();
-                desc.Format = /*Dx12Utility.GetNativeFormat(texture.Descriptor.Format)*/ DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
-                desc.ViewDimension = /*Dx12Utility.GetNativeViewDimension(texture.Descriptor.Dimension)*/ D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2D;
+                desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
+                desc.ViewDimension = Dx12Utility.ConvertToDx12TextureRTVDimension(texture.Descriptor.Dimension);
                 /*Dx12Utility.FillTexture2DRTV(ref desc.Texture2D, viewDescriptor);
                 Dx12Utility.FillTexture3DRTV(ref desc.Texture3D, viewDescriptor);
                 Dx12Utility.FillTexture2DArrayRTV(ref desc.Texture2DArray, viewDescriptor);*/
@@ -961,12 +961,12 @@ namespace Infinity.Graphics
                     viewDescriptor.ArrayLayerCount = texture.Descriptor.Extent.z;
                     viewDescriptor.Format = texture.Descriptor.Format;
                     viewDescriptor.ViewType = ETextureViewType.DepthStencil;
-                    viewDescriptor.Dimension = ETextureViewDimension.Texture2D;
+                    viewDescriptor.Dimension = ETextureDimension.Texture2D;
                 }*/
                 D3D12_DEPTH_STENCIL_VIEW_DESC desc = new D3D12_DEPTH_STENCIL_VIEW_DESC();
-                desc.Flags = /*Dx12Utility.GetNativeDSVFlag(descriptor.DepthStencilAttachmentDescriptor.Value)*/D3D12_DSV_FLAGS.D3D12_DSV_FLAG_NONE;
-                desc.Format = /*Dx12Utility.GetNativeFormat(texture.Descriptor.Format)*/ DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
-                desc.ViewDimension = /*Dx12Utility.GetNativeViewDimension(viewDescriptor.Dimension)*/ D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2D;
+                desc.Flags = Dx12Utility.GetDx12DSVFlag(descriptor.DepthStencilAttachmentDescriptor.Value.DepthReadOnly, descriptor.DepthStencilAttachmentDescriptor.Value.StencilReadOnly);
+                desc.Format = Dx12Utility.ConvertToDx12Format(texture.Descriptor.Format);
+                desc.ViewDimension = Dx12Utility.ConvertToDx12TextureDSVDimension(texture.Descriptor.Dimension);
 
                 Dx12AttachmentInfo dx12AttachmentInfo = new Dx12AttachmentInfo();
                 {

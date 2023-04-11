@@ -1,4 +1,6 @@
-﻿namespace Infinity.Graphics
+﻿using TerraFX.Interop.DirectX;
+
+namespace Infinity.Graphics
 {
     public enum ERHIBackend : byte
     {
@@ -50,6 +52,14 @@
         Timestamp,
         Occlusion,
         BinaryOcclusion,
+        Undefined
+    }
+
+    public enum ESwapChainFormat : byte
+    {
+        R8G8B8A8_UNorm,
+        R10G10B10A2_UNorm,
+        R16G16B16A16_Float,
         Undefined
     }
 
@@ -234,14 +244,9 @@
     public enum ETextureDimension : byte
     {
         Texture2D,
-        Texture3D,
-        Undefined
-    }
-
-    public enum ETextureViewDimension : byte
-    {
-        Texture2D,
+        Texture2DMS,
         Texture2DArray,
+        Texture2DArrayMS,
         TextureCube,
         TextureCubeArray,
         Texture3D,
@@ -558,5 +563,24 @@
         Triangles,
         Procedural,
         Undefined
+    }
+
+    internal static unsafe class RHIUtility
+    {
+        internal static EPixelFormat ConvertToPixelFormat(in ESwapChainFormat swapChainFormat)
+        {
+            switch (swapChainFormat)
+            {
+                case ESwapChainFormat.R8G8B8A8_UNorm:
+                    return EPixelFormat.R8G8B8A8_UNorm;
+
+                case ESwapChainFormat.R10G10B10A2_UNorm:
+                    return EPixelFormat.R10G10B10A2_UNorm;
+
+                case ESwapChainFormat.R16G16B16A16_Float:
+                    return EPixelFormat.R16G16B16A16_Float;
+            }
+            return EPixelFormat.R8G8B8A8_UNorm_Srgb;
+        }
     }
 }

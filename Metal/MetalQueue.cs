@@ -1,6 +1,5 @@
 ﻿using System;
 using Apple.Metal;
-using System.Diagnostics;
 
 namespace Infinity.Graphics
 {
@@ -20,6 +19,13 @@ namespace Infinity.Graphics
                 return m_NativeQueue;
             }
         }
+        public override ulong Frequency
+        {
+            get
+            {
+                throw new NotImplementedException();
+            }
+        }
 
         private MtlDevice m_MtlDevice;
         private EQueueType m_QueueType;
@@ -37,9 +43,14 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override void Submit(RHICommandBuffer cmdBuffer, RHIFence fence)
+        public override void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore)
         {
             throw new NotImplementedException();
+        }
+
+        public override void Submit(ReadOnlyMemory<RHISubmitDescriptor> submitDescriptors, RHIFence fence)
+        {
+            throw new NotImplementedException("ToDo : batch submit");
         }
 
         protected override void Release()

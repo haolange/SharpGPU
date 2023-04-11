@@ -10,7 +10,7 @@ namespace Infinity.Graphics
         public uint ArrayLayerCount;
         public EPixelFormat Format;
         public ETextureViewType ViewType;
-        public ETextureViewDimension Dimension;
+        public ETextureDimension Dimension;
     }
 
     public abstract class RHITextureView : Disposal

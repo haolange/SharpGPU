@@ -6,8 +6,6 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using static TerraFX.Interop.Windows.Windows;
-using Silk.NET.Vulkan;
-using TerraFX.Interop.Windows;
 
 namespace Infinity.Graphics
 {
@@ -299,13 +297,18 @@ namespace Infinity.Graphics
             switch (dimension)
             {
                 case ETextureDimension.Texture2D:
+                case ETextureDimension.Texture2DArray:
+                case ETextureDimension.Texture2DMS:
+                case ETextureDimension.Texture2DArrayMS:
+                case ETextureDimension.TextureCube:
+                case ETextureDimension.TextureCubeArray:
                     return D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 
                 case ETextureDimension.Texture3D:
                     return D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE3D;
 
                 default:
-                    return D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE1D;
+                    return D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_UNKNOWN;
             }
         }
 
@@ -1013,40 +1016,104 @@ namespace Infinity.Graphics
             }
             return new DXGI_SAMPLE_DESC(0, 0);
         }
+        
+        internal static D3D12_DSV_FLAGS GetDx12DSVFlag(in bool bDepthReadOnly, in bool bStencilReadOnly)
+        {
+            D3D12_DSV_FLAGS outFlag = D3D12_DSV_FLAGS.D3D12_DSV_FLAG_NONE;
 
-        internal static D3D12_SRV_DIMENSION ConvertToDx12TextureSRVDimension(in ETextureViewDimension dimension)
+            if (bDepthReadOnly)
+            {
+                outFlag |= D3D12_DSV_FLAGS.D3D12_DSV_FLAG_READ_ONLY_DEPTH;
+            }
+
+            if (bStencilReadOnly)
+            {
+                outFlag |= D3D12_DSV_FLAGS.D3D12_DSV_FLAG_READ_ONLY_STENCIL;
+            }
+
+            return outFlag;
+        }
+
+        internal static D3D12_DSV_DIMENSION ConvertToDx12TextureDSVDimension(in ETextureDimension dimension)
         {
             switch (dimension)
             {
-                case ETextureViewDimension.Texture2DArray:
+                case ETextureDimension.Texture2DMS:
+                    return D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2DMS;
+
+                case ETextureDimension.Texture2DArray:
+                    return D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+
+                case ETextureDimension.Texture2DArrayMS:
+                    return D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
+            }
+            return D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2D;
+        }
+
+        internal static D3D12_RTV_DIMENSION ConvertToDx12TextureRTVDimension(in ETextureDimension dimension)
+        {
+            switch (dimension)
+            {
+                case ETextureDimension.Texture2DMS:
+                    return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2DMS;
+
+                case ETextureDimension.Texture2DArray:
+                    return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+
+                case ETextureDimension.Texture2DArrayMS:
+                    return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
+
+                case ETextureDimension.Texture3D:
+                    return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE3D;
+            }
+            return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2D;
+        }
+
+        internal static D3D12_SRV_DIMENSION ConvertToDx12TextureSRVDimension(in ETextureDimension dimension)
+        {
+            switch (dimension)
+            {
+                case ETextureDimension.Texture2DMS:
+                    return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2DMS;
+
+                case ETextureDimension.Texture2DArray:
                     return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
 
-                case ETextureViewDimension.TextureCube:
+                case ETextureDimension.Texture2DArrayMS:
+                    return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
+
+                case ETextureDimension.TextureCube:
                     return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURECUBE;
 
-                case ETextureViewDimension.TextureCubeArray:
+                case ETextureDimension.TextureCubeArray:
                     return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
 
-                case ETextureViewDimension.Texture3D:
+                case ETextureDimension.Texture3D:
                     return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE3D;
             }
             return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2D;
         }
 
-        internal static D3D12_UAV_DIMENSION ConvertToDx12TextureUAVDimension(in ETextureViewDimension dimension)
+        internal static D3D12_UAV_DIMENSION ConvertToDx12TextureUAVDimension(in ETextureDimension dimension)
         {
             switch (dimension)
             {
-                case ETextureViewDimension.Texture2DArray:
+                case ETextureDimension.Texture2DMS:
+                    return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DMS;
+
+                case ETextureDimension.Texture2DArray:
                     return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
 
-                case ETextureViewDimension.TextureCube:
+                case ETextureDimension.Texture2DArrayMS:
+                    return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DMSARRAY;
+
+                case ETextureDimension.TextureCube:
                     return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
 
-                case ETextureViewDimension.TextureCubeArray:
+                case ETextureDimension.TextureCubeArray:
                     return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
 
-                case ETextureViewDimension.Texture3D:
+                case ETextureDimension.Texture3D:
                     return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE3D;
             }
             return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2D;
@@ -1311,7 +1378,7 @@ namespace Infinity.Graphics
 
         internal static void FillTexture2DSRV(ref D3D12_TEX2D_SRV srv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture2D) == ETextureViewDimension.Texture2D))
+            if (!((descriptor.Dimension & ETextureDimension.Texture2D) == ETextureDimension.Texture2D))
             {
                 return;
             }
@@ -1323,7 +1390,7 @@ namespace Infinity.Graphics
 
         internal static void FillTexture2DArraySRV(ref D3D12_TEX2D_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture2DArray) == ETextureViewDimension.Texture2DArray))
+            if (!((descriptor.Dimension & ETextureDimension.Texture2DArray) == ETextureDimension.Texture2DArray))
             {
                 return;
             }
@@ -1337,7 +1404,7 @@ namespace Infinity.Graphics
 
         internal static void FillTextureCubeSRV(ref D3D12_TEXCUBE_SRV srv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.TextureCube) == ETextureViewDimension.TextureCube))
+            if (!((descriptor.Dimension & ETextureDimension.TextureCube) == ETextureDimension.TextureCube))
             {
                 return;
             }
@@ -1348,7 +1415,7 @@ namespace Infinity.Graphics
 
         internal static void FillTextureCubeArraySRV(ref D3D12_TEXCUBE_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.TextureCubeArray) == ETextureViewDimension.TextureCubeArray))
+            if (!((descriptor.Dimension & ETextureDimension.TextureCubeArray) == ETextureDimension.TextureCubeArray))
             {
                 return;
             }
@@ -1361,7 +1428,7 @@ namespace Infinity.Graphics
 
         internal static void FillTexture3DSRV(ref D3D12_TEX3D_SRV srv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture3D) == ETextureViewDimension.Texture3D))
+            if (!((descriptor.Dimension & ETextureDimension.Texture3D) == ETextureDimension.Texture3D))
             {
                 return;
             }
@@ -1372,7 +1439,7 @@ namespace Infinity.Graphics
 
         internal static void FillTexture2DUAV(ref D3D12_TEX2D_UAV uav, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture2D) == ETextureViewDimension.Texture2D))
+            if (!((descriptor.Dimension & ETextureDimension.Texture2D) == ETextureDimension.Texture2D))
             {
                 return;
             }
@@ -1382,7 +1449,7 @@ namespace Infinity.Graphics
 
         internal static void FillTexture2DArrayUAV(ref D3D12_TEX2D_ARRAY_UAV uav, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture2DArray) == ETextureViewDimension.Texture2DArray))
+            if (!((descriptor.Dimension & ETextureDimension.Texture2DArray) == ETextureDimension.Texture2DArray))
             {
                 return;
             }
@@ -1394,7 +1461,7 @@ namespace Infinity.Graphics
 
         internal static void FillTexture3DUAV(ref D3D12_TEX3D_UAV uav, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture3D) == ETextureViewDimension.Texture3D))
+            if (!((descriptor.Dimension & ETextureDimension.Texture3D) == ETextureDimension.Texture3D))
             {
                 return;
             }
@@ -1405,7 +1472,7 @@ namespace Infinity.Graphics
 
         internal static void FillTexture2DRTV(ref D3D12_TEX2D_RTV rtv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture2D) == ETextureViewDimension.Texture2D))
+            if (!((descriptor.Dimension & ETextureDimension.Texture2D) == ETextureDimension.Texture2D))
             {
                 return;
             }
@@ -1415,7 +1482,7 @@ namespace Infinity.Graphics
 
         internal static void FillTexture2DArrayRTV(ref D3D12_TEX2D_ARRAY_RTV rtv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture2DArray) == ETextureViewDimension.Texture2DArray))
+            if (!((descriptor.Dimension & ETextureDimension.Texture2DArray) == ETextureDimension.Texture2DArray))
             {
                 return;
             }
@@ -1427,7 +1494,7 @@ namespace Infinity.Graphics
 
         internal static void FillTexture3DRTV(ref D3D12_TEX3D_RTV rtv, in RHITextureViewDescriptor descriptor)
         {
-            if (!((descriptor.Dimension & ETextureViewDimension.Texture3D) == ETextureViewDimension.Texture3D))
+            if (!((descriptor.Dimension & ETextureDimension.Texture3D) == ETextureDimension.Texture3D))
             {
                 return;
             }

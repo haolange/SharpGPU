@@ -1,9 +1,9 @@
-﻿using System.Diagnostics;
+﻿using System;
 using TerraFX.Interop.DirectX;
 
 namespace Infinity.Graphics
 {
-#pragma warning disable CS8600, CS8602
+#pragma warning disable CS8600, CS8602, CA1416
     internal unsafe struct Dx12CommandQueueDescriptor
     {
         public EQueueType Type;
@@ -26,6 +26,15 @@ namespace Infinity.Graphics
                 return m_NativeCommandQueue;
             }
         }
+        public override ulong Frequency
+        {
+            get
+            {
+                ulong result = 0;
+                m_NativeCommandQueue->GetTimestampFrequency(&result);
+                return result;
+            }
+        }
 
         private Dx12Device m_Dx12Device;
         private ID3D12CommandQueue* m_NativeCommandQueue;
@@ -42,7 +51,7 @@ namespace Infinity.Graphics
             return new Dx12CommandAllocator(this);
         }
 
-        public override void Submit(RHICommandBuffer cmdBuffer, RHIFence fence)
+        public override void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore)
         {
             if (cmdBuffer != null)
             {
@@ -51,12 +60,29 @@ namespace Infinity.Graphics
                 m_NativeCommandQueue->ExecuteCommandLists(1, ppCommandLists);
             }
 
-            if (fence != null)
+            if (signalFence != null)
             {
-                Dx12Fence dx12Fence = fence as Dx12Fence;
+                Dx12Fence dx12Fence = signalFence as Dx12Fence;
                 dx12Fence.Reset();
                 m_NativeCommandQueue->Signal(dx12Fence.NativeFence, 1);
             }
+
+            if (signalSemaphore != null)
+            {
+                throw new NotImplementedException("ToDo : signal semaphore");
+                //m_NativeCommandQueue->Signal(dx12Fence.NativeFence, 1);
+            }
+
+            if (waitSemaphore != null)
+            {
+                throw new NotImplementedException("ToDo : wait semaphore");
+                //m_NativeCommandQueue->Wait(dx12Fence.NativeFence, 1);
+            }
+        }
+
+        public override void Submit(ReadOnlyMemory<RHISubmitDescriptor> submitDescriptors, RHIFence fence)
+        {
+            throw new NotImplementedException("ToDo : batch submit");
         }
 
         protected override void Release()
@@ -64,5 +90,5 @@ namespace Infinity.Graphics
             m_NativeCommandQueue->Release();
         }
     }
-#pragma warning restore CS8600, CS8602
+#pragma warning restore CS8600, CS8602, CA1416
 }

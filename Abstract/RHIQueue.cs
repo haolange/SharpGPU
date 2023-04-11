@@ -23,6 +23,13 @@ namespace Infinity.Graphics
         public static bool operator !=(in RHIQueueDescriptor value1, in RHIQueueDescriptor value2) => !value1.Equals(value2);
     }
 
+    public struct RHISubmitDescriptor
+    {
+        public RHISemaphore[] WaitSemaphores;
+        public RHISemaphore[] SignalSemaphores;
+        public RHICommandBuffer[] CommandBuffers;
+    }
+
     public abstract class RHIQueue : Disposal
     {
         public EQueueType Type
@@ -32,9 +39,14 @@ namespace Infinity.Graphics
                 return m_Type;
             }
         }
+        public abstract ulong Frequency
+        {
+            get;
+        }
 
         protected EQueueType m_Type;
         public abstract RHICommandAllocator CreateCommandAllocator();
-        public abstract void Submit(RHICommandBuffer cmdBuffer, RHIFence fence);
+        public abstract void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore);
+        public abstract void Submit(ReadOnlyMemory<RHISubmitDescriptor> submitDescriptors, RHIFence signalFence);
     }
 }
