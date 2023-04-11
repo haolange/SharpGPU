@@ -6,8 +6,6 @@ using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using Viewport = Infinity.Mathmatics.Viewport;
-using System.Reflection.Metadata;
-using Silk.NET.Vulkan;
 
 namespace Infinity.Graphics
 {
