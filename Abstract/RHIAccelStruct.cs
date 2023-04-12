@@ -7,13 +7,13 @@ namespace Infinity.Graphics
 {
     public enum EAccelStructFlags : byte
     {
-        None,
-        AllowUpdate,
-        PerformUpdate,
-        MinimizeMemory,
-        PreferFastTrace,
-        PreferFastBuild,
-        AllowCompactation
+        None = 0,
+        AllowUpdate = 0x1,
+        PerformUpdate = 0x2,
+        MinimizeMemory = 0x4,
+        PreferFastTrace = 0x8,
+        PreferFastBuild = 0x10,
+        AllowCompaction = 0x20
     }
 
     public enum EAccelStructGeometryFlags : byte
