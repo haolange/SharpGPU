@@ -275,10 +275,10 @@ namespace Infinity.Graphics
         Texture,
         Bindless,
         Sampler,
+        AccelStruct,
         UniformBuffer,
         StorageBuffer,
         StorageTexture,
-        AccelerationStructure,
         Undefined
     }
 
@@ -498,7 +498,7 @@ namespace Infinity.Graphics
         IndirectBuffer = 0x0004,
         ShaderResource = 0x0008,
         UnorderedAccess = 0x0010,
-        AccelerationStructure = 0x0040,
+        AccelStruct = 0x0040,
         Undefined
     }
 
@@ -507,6 +507,7 @@ namespace Infinity.Graphics
         UniformBuffer,
         ShaderResource,
         UnorderedAccess,
+        AccelStruct,
         Undefined
     }
 

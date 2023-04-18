@@ -48,7 +48,7 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override void Submit(ReadOnlyMemory<RHISubmitDescriptor> submitDescriptors, RHIFence fence)
+        public override void Submit(in RHISubmitDescriptor submitDescriptor, RHIFence fence)
         {
             throw new NotImplementedException("ToDo : batch submit");
         }

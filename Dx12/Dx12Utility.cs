@@ -1219,6 +1219,7 @@ namespace Infinity.Graphics
             {
                 case EBindType.Buffer:
                 case EBindType.Texture:
+                case EBindType.AccelStruct:
                     return D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 
                 case EBindType.Sampler:
@@ -1344,6 +1345,11 @@ namespace Infinity.Graphics
         internal static bool IsConstantBuffer(in EBufferUsage bufferflag)
         {
             return (bufferflag & EBufferUsage.UniformBuffer) == EBufferUsage.UniformBuffer;
+        }
+
+        internal static bool IsAccelStruct(in EBufferUsage bufferflag)
+        {
+            return (bufferflag & EBufferUsage.AccelStruct) == EBufferUsage.AccelStruct;
         }
 
         internal static bool IsShaderResourceBuffer(in EBufferUsage bufferflag)

@@ -28,7 +28,7 @@ namespace Infinity.Graphics
         }
 
         private int m_HeapIndex;
-        private bool3 m_LifeState;
+        private bool4 m_LifeState;
         private Dx12Buffer m_Dx12Buffer;
         private ID3D12DescriptorHeap* m_NativeDescriptorHeap;
         private D3D12_CPU_DESCRIPTOR_HANDLE m_NativeCpuDescriptorHandle;
@@ -57,11 +57,33 @@ namespace Infinity.Graphics
                     m_Dx12Buffer.Dx12Device.NativeDevice->CreateConstantBufferView(&desc, m_NativeCpuDescriptorHandle);
                 }
             }
+            else if (descriptor.ViewType == EBufferViewType.AccelStruct)
+            {
+                if (Dx12Utility.IsAccelStruct(buffer.Descriptor.Usage))
+                {
+                    m_LifeState.y = true;
+
+                    D3D12_SHADER_RESOURCE_VIEW_DESC desc = new D3D12_SHADER_RESOURCE_VIEW_DESC();
+                    desc.Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
+                    desc.Buffer.NumElements = (uint)descriptor.Count;
+                    desc.Buffer.FirstElement = (ulong)descriptor.Offset;
+                    desc.Buffer.StructureByteStride = (uint)descriptor.Stride;
+                    desc.ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_BUFFER;
+                    desc.Shader4ComponentMapping = 5768;
+
+                    Dx12DescriptorInfo allocation = m_Dx12Buffer.Dx12Device.AllocateCbvSrvUavDescriptor(1);
+                    m_HeapIndex = allocation.Index;
+                    m_NativeDescriptorHeap = allocation.DescriptorHeap;
+                    m_NativeCpuDescriptorHandle = allocation.CpuHandle;
+                    m_NativeGpuDescriptorHandle = allocation.GpuHandle;
+                    m_Dx12Buffer.Dx12Device.NativeDevice->CreateShaderResourceView(m_Dx12Buffer.NativeResource, &desc, m_NativeCpuDescriptorHandle);
+                }
+            }
             else if (descriptor.ViewType == EBufferViewType.ShaderResource)
             {
                 if (Dx12Utility.IsShaderResourceBuffer(buffer.Descriptor.Usage))
                 {
-                    m_LifeState.y = true;
+                    m_LifeState.z = true;
 
                     D3D12_SHADER_RESOURCE_VIEW_DESC desc = new D3D12_SHADER_RESOURCE_VIEW_DESC();
                     desc.Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
@@ -83,7 +105,7 @@ namespace Infinity.Graphics
             {
                 if (Dx12Utility.IsUnorderedAccessBuffer(buffer.Descriptor.Usage))
                 {
-                    m_LifeState.z = true;
+                    m_LifeState.w = true;
 
                     D3D12_UNORDERED_ACCESS_VIEW_DESC desc = new D3D12_UNORDERED_ACCESS_VIEW_DESC();
                     desc.Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
@@ -104,7 +126,7 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            if (m_LifeState.x || m_LifeState.y || m_LifeState.z)
+            if (m_LifeState.x || m_LifeState.y || m_LifeState.z || m_LifeState.w)
             {
                 m_Dx12Buffer.Dx12Device.FreeCbvSrvUavDescriptor(m_HeapIndex);
             }
