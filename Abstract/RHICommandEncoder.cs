@@ -135,92 +135,11 @@ namespace Infinity.Graphics
         public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachmentDescriptor;
     }
 
-    public struct RHIBlitPassScoper : IDisposable
-    {
-        RHIBlitEncoder m_BlitEncoder;
-
-        internal RHIBlitPassScoper(RHIBlitEncoder blitEncoder)
-        {
-            m_BlitEncoder = blitEncoder;
-        }
-
-        public void Dispose()
-        {
-            m_BlitEncoder.EndPass();
-        }
-    }
-
-    public struct RHIComputePassScoper : IDisposable
-    {
-        RHIComputeEncoder m_ComputeEncoder;
-
-        internal RHIComputePassScoper(RHIComputeEncoder computeEncoder)
-        {
-            m_ComputeEncoder = computeEncoder;
-        }
-
-        public void Dispose()
-        {
-            m_ComputeEncoder.EndPass();
-        }
-    }
-
-    public struct RHIMeshletPassScoper : IDisposable
-    {
-        RHIMeshletEncoder m_MeshletEncoder;
-
-        internal RHIMeshletPassScoper(RHIMeshletEncoder meshletEncoder)
-        {
-            m_MeshletEncoder = meshletEncoder;
-        }
-
-        public void Dispose()
-        {
-            m_MeshletEncoder.EndPass();
-        }
-    }
-
-    public struct RHIGraphicsPassScoper : IDisposable
-    {
-        RHIGraphicsEncoder m_GraphicsEncoder;
-
-        internal RHIGraphicsPassScoper(RHIGraphicsEncoder graphicsEncoder)
-        {
-            m_GraphicsEncoder = graphicsEncoder;
-        }
-
-        public void Dispose()
-        {
-            m_GraphicsEncoder.EndPass();
-        }
-    }
-
-    public struct RHIRaytracingPassScoper : IDisposable
-    {
-        RHIRaytracingEncoder m_RaytracingEncoder;
-
-        internal RHIRaytracingPassScoper(RHIRaytracingEncoder raytracingEncoder)
-        {
-            m_RaytracingEncoder = raytracingEncoder;
-        }
-
-        public void Dispose()
-        {
-            m_RaytracingEncoder.EndPass();
-        }
-    }
-
     public abstract class RHIBlitEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;
 
-        public RHIBlitPassScoper BeginScopedPass(string name)
-        {
-            BeginPass(name);
-            return new RHIBlitPassScoper(this);
-        }
-
-        public abstract void BeginPass(string name);
+        internal abstract void BeginPass(string name);
         public abstract void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size);
         public abstract void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size);
         public abstract void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size);
@@ -231,7 +150,7 @@ namespace Infinity.Graphics
         public abstract void EndQuery(RHIQuery query, in uint index);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        public abstract void EndPass();
+        internal abstract void EndPass();
         // TODO WriteTimeStamp(...)
         // TODO ResolveQuery(...)
     }
@@ -242,13 +161,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIComputePipeline? m_Pipeline;
 
-        public RHIComputePassScoper BeginScopedPass(string name)
-        {
-            BeginPass(name);
-            return new RHIComputePassScoper(this);
-        }
-
-        public abstract void BeginPass(string name);
+        internal abstract void BeginPass(string name);
         public abstract void SetPipeline(RHIComputePipeline pipeline);
         //public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetBindGroup(RHIBindGroup bindGroup);
@@ -259,7 +172,7 @@ namespace Infinity.Graphics
         public abstract void EndQuery(RHIQuery query, in uint index);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        public abstract void EndPass();
+        internal abstract void EndPass();
     }
 
     public abstract class RHIRaytracingEncoder : Disposal
@@ -268,13 +181,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIRaytracingPipeline? m_Pipeline;
 
-        public RHIRaytracingPassScoper BeginScopedPass(string name)
-        {
-            BeginPass(name);
-            return new RHIRaytracingPassScoper(this);
-        }
-
-        public abstract void BeginPass(string name);
+        internal abstract void BeginPass(string name);
         public abstract void SetPipeline(RHIRaytracingPipeline pipeline);
         //public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetBindGroup(RHIBindGroup bindGroup);
@@ -287,7 +194,7 @@ namespace Infinity.Graphics
         public abstract void EndQuery(RHIQuery query, in uint index);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        public abstract void EndPass();
+        internal abstract void EndPass();
     }
     
     public abstract class RHIMeshletEncoder : Disposal
@@ -296,13 +203,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIMeshletPipeline? m_Pipeline;
 
-        public RHIMeshletPassScoper BeginScopedPass(in RHIMeshletPassDescriptor descriptor)
-        {
-            BeginPass(descriptor);
-            return new RHIMeshletPassScoper(this);
-        }
-
-        public abstract void BeginPass(in RHIMeshletPassDescriptor descriptor);
+        internal abstract void BeginPass(in RHIMeshletPassDescriptor descriptor);
         public abstract void SetScissor(in Rect rect);
         public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
@@ -320,7 +221,7 @@ namespace Infinity.Graphics
         public abstract void EndQuery(RHIQuery query, in uint index);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        public abstract void EndPass();
+        internal abstract void EndPass();
     }
 
     public abstract class RHIGraphicsEncoder : Disposal
@@ -329,13 +230,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIGraphicsPipeline? m_Pipeline;
 
-        public RHIGraphicsPassScoper BeginScopedPass(in RHIGraphicsPassDescriptor descriptor)
-        {
-            BeginPass(descriptor);
-            return new RHIGraphicsPassScoper(this);
-        }
-
-        public abstract void BeginPass(in RHIGraphicsPassDescriptor descriptor);
+        internal abstract void BeginPass(in RHIGraphicsPassDescriptor descriptor);
         public abstract void SetScissor(in Rect rect);
         public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
@@ -357,6 +252,6 @@ namespace Infinity.Graphics
         public abstract void EndQuery(RHIQuery query, in uint index);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        public abstract void EndPass();
+        internal abstract void EndPass();
     }
 }

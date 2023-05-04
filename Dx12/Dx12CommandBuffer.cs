@@ -3,6 +3,8 @@ using System.Diagnostics;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using static TerraFX.Interop.Windows.Windows;
+using System.Xml.Linq;
+using System.Runtime.CompilerServices;
 
 namespace Infinity.Graphics
 {
@@ -42,6 +44,7 @@ namespace Infinity.Graphics
             m_RaytracingEncoder = new Dx12RaytracingEncoder(this);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void Begin(string name)
         {
             Dx12CommandAllocator dx12CommandPool = m_CommandAllocator as Dx12CommandAllocator;
@@ -59,35 +62,106 @@ namespace Infinity.Graphics
             m_NativeCommandList->SetDescriptorHeaps(2, &*resourceBarriers);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override RHIBlitEncoder BeginBlitPass(string name)
+        {
+            m_BlitEncoder.BeginPass(name);
+            return m_BlitEncoder;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override void EndBlitPass()
+        {
+            m_BlitEncoder.EndPass();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override RHIComputeEncoder BeginComputePass(string name)
+        {
+            m_ComputeEncoder.BeginPass(name);
+            return m_ComputeEncoder;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override void EndComputePass()
+        {
+            m_ComputeEncoder.EndPass();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override RHIRaytracingEncoder BeginRaytracingPass(string name)
+        {
+            m_RaytracingEncoder.BeginPass(name);
+            return m_RaytracingEncoder;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override void EndRaytracingPass()
+        {
+            m_RaytracingEncoder.EndPass();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override RHIMeshletEncoder BeginMeshletPass(in RHIMeshletPassDescriptor descriptor)
+        {
+            m_MeshletEncoder.BeginPass(descriptor);
+            return m_MeshletEncoder;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override void EndMeshletPass()
+        {
+            m_MeshletEncoder.EndPass();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override RHIGraphicsEncoder BeginGraphicsPass(in RHIGraphicsPassDescriptor descriptor)
+        {
+            m_GraphicsEncoder.BeginPass(descriptor);
+            return m_GraphicsEncoder;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override void EndGraphicsPass()
+        {
+            m_GraphicsEncoder.EndPass();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override void End()
+        {
+            m_NativeCommandList->EndEvent();
+            m_NativeCommandList->Close();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIBlitEncoder GetBlitEncoder()
         {
             return m_BlitEncoder;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIComputeEncoder GetComputeEncoder()
         {
             return m_ComputeEncoder;
         }
 
-        public override RHIMeshletEncoder GetMeshletEncoder()
-        {
-            return m_MeshletEncoder;
-        }
-
-        public override RHIGraphicsEncoder GetGraphicsEncoder()
-        {
-            return m_GraphicsEncoder;
-        }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIRaytracingEncoder GetRaytracingEncoder()
         {
             return m_RaytracingEncoder;
         }
 
-        public override void End()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override RHIMeshletEncoder GetMeshletEncoder()
         {
-            m_NativeCommandList->EndEvent();
-            m_NativeCommandList->Close();
+            return m_MeshletEncoder;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override RHIGraphicsEncoder GetGraphicsEncoder()
+        {
+            return m_GraphicsEncoder;
         }
 
         /*public override void Commit(RHIFence? fence)

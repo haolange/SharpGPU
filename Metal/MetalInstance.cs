@@ -27,7 +27,7 @@ namespace Infinity.Graphics
             {
                 NSArray gpus = MTLDevice.MTLCopyAllDevices();
                 gpusPtr = gpus.NativePtr;
-                gpuCount = (int)gpus.count.ToUInt32();
+                gpuCount = (int)gpus.count;
             }
 
             m_GPUs = new List<MtlGPU>(gpuCount);
