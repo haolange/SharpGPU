@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
-    <MSBuildProjectExtensionsPath>$(ProjectDir)../../../Intermediate/Graphics/RHI/</MSBuildProjectExtensionsPath>
-    <BaseIntermediateOutputPath>$(ProjectDir)../../../Intermediate/Graphics/RHI/</BaseIntermediateOutputPath>
     <UseHostCompilerIfAvailable>false</UseHostCompilerIfAvailable>
+    <BaseIntermediateOutputPath>$(ProjectDir)../../../Intermediate/Graphics/RHI/</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(ProjectDir)../../../Intermediate/Graphics/RHI/</MSBuildProjectExtensionsPath>
   </PropertyGroup>
 </Project>
