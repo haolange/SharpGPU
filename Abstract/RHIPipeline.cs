@@ -157,7 +157,7 @@ namespace Infinity.Graphics
     {
         public bool bUseVertexLayout;
         public bool bIsLocalSignature;
-        public RHIBindGroupLayout[] BindGroupLayouts;
+        public RHIBindTableLayout[] BindTableLayouts;
         //public RHIPipelineConstantLayout[] PipelineConstantLayouts;
         public Memory<RHIStaticSamplerDescriptor>? StaticSamplers;
     };

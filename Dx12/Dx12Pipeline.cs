@@ -47,10 +47,10 @@ namespace Infinity.Graphics
             m_FragmentParameterMap = new Dictionary<int, Dx12BindTypeAndParameterSlot>(5);
             m_ComputeParameterMap = new Dictionary<int, Dx12BindTypeAndParameterSlot>(5);
 
-            for (int i = 0; i < descriptor.BindGroupLayouts.Length; ++i)
+            for (int i = 0; i < descriptor.BindTableLayouts.Length; ++i)
             {
-                Dx12BindGroupLayout bindGroupLayout = descriptor.BindGroupLayouts[i] as Dx12BindGroupLayout;
-                m_ParameterCount += bindGroupLayout.BindInfos.Length;
+                Dx12BindTableLayout bindTableLayout = descriptor.BindTableLayouts[i] as Dx12BindTableLayout;
+                m_ParameterCount += bindTableLayout.BindInfos.Length;
             }
 
             D3D12_DESCRIPTOR_RANGE1* rootDescriptorRangePtr = stackalloc D3D12_DESCRIPTOR_RANGE1[m_ParameterCount];
@@ -59,13 +59,13 @@ namespace Infinity.Graphics
             D3D12_ROOT_PARAMETER1* rootParameterPtr = stackalloc D3D12_ROOT_PARAMETER1[m_ParameterCount];
             Span<D3D12_ROOT_PARAMETER1> rootParameterViews = new Span<D3D12_ROOT_PARAMETER1>(rootParameterPtr, m_ParameterCount);
 
-            for (int i = 0; i < descriptor.BindGroupLayouts.Length; ++i)
+            for (int i = 0; i < descriptor.BindTableLayouts.Length; ++i)
             {
-                Dx12BindGroupLayout bindGroupLayout = descriptor.BindGroupLayouts[i] as Dx12BindGroupLayout;
+                Dx12BindTableLayout bindTableLayout = descriptor.BindTableLayouts[i] as Dx12BindTableLayout;
 
-                for (int j = 0; j < bindGroupLayout.BindInfos.Length; ++j)
+                for (int j = 0; j < bindTableLayout.BindInfos.Length; ++j)
                 {
-                    ref Dx12BindInfo bindInfo = ref bindGroupLayout.BindInfos[j];
+                    ref Dx12BindInfo bindInfo = ref bindTableLayout.BindInfos[j];
 
                     ref D3D12_DESCRIPTOR_RANGE1 rootDescriptorRange = ref rootDescriptorRangeViews[i + j];
                     rootDescriptorRange.Init(Dx12Utility.ConvertToDx12BindType(bindInfo.BindType), bindInfo.IsBindless ? bindInfo.Count : 1, bindInfo.BindSlot, bindInfo.Index, Dx12Utility.GetDx12DescriptorRangeFalag(bindInfo.BindType));

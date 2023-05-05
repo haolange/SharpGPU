@@ -255,14 +255,14 @@ namespace Infinity.Graphics
             return new Dx12SwapChain(this, descriptor);
         }
 
-        public override RHIBindGroupLayout CreateBindGroupLayout(in RHIBindGroupLayoutDescriptor descriptor)
+        public override RHIBindTableLayout CreateBindTableLayout(in RHIBindTableLayoutDescriptor descriptor)
         {
-            return new Dx12BindGroupLayout(descriptor);
+            return new Dx12BindTableLayout(descriptor);
         }
 
-        public override RHIBindGroup CreateBindGroup(in RHIBindGroupDescriptor descriptor)
+        public override RHIBindTable CreateBindTable(in RHIBindTableDescriptor descriptor)
         {
-            return new Dx12BindGroup(descriptor);
+            return new Dx12BindTable(descriptor);
         }
 
         public override RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor)

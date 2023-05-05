@@ -7,21 +7,21 @@ namespace Infinity.Graphics
         Metal,
         Vulkan,
         DirectX12,
-        Undefined
+        Pending
     }
 
     public enum EClipDepth : byte
     {
         ZeroToOne,
         NegativeOneToOne,
-        Undefined
+        Pending
     }
 
     public enum EMatrixMajorness : byte
     {
         RowMajor,
         ColumnMajor,
-        Undefined
+        Pending
     }
 
     public enum EMultiviewStrategy : byte
@@ -29,14 +29,14 @@ namespace Infinity.Graphics
         ViewIndex,
         Unsupported,
         RenderTargetIndex,
-        Undefined
+        Pending
     }
 
     public enum EGpuType : byte
     {
         Hardware,
         Software,
-        Undefined
+        Pending
     }
 
     public enum EQueueType : byte
@@ -44,7 +44,7 @@ namespace Infinity.Graphics
         Blit,
         Compute,
         Graphics,
-        Undefined
+        Pending
     }
 
     public enum EQueryType : byte
@@ -52,7 +52,7 @@ namespace Infinity.Graphics
         Timestamp,
         Occlusion,
         BinaryOcclusion,
-        Undefined
+        Pending
     }
 
     public enum ESwapChainFormat : byte
@@ -60,7 +60,7 @@ namespace Infinity.Graphics
         R8G8B8A8_UNorm,
         R10G10B10A2_UNorm,
         R16G16B16A16_Float,
-        Undefined
+        Pending
     }
 
     public enum EPixelFormat : byte
@@ -149,7 +149,7 @@ namespace Infinity.Graphics
         RGBA_ASTC12X12_UFloat,
         // YUV 4:2:2 Video resource format.
         YUV2,
-        Undefined
+        Pending
     }
 
     public enum ESemanticFormat : byte
@@ -202,7 +202,7 @@ namespace Infinity.Graphics
         Int2,
         Int3,
         Int4,
-        Undefined
+        Pending
     }
 
     public enum ESemanticType : byte
@@ -216,7 +216,7 @@ namespace Infinity.Graphics
         BlendIndices = 6,
         BlendWeight = 7,
         ShadingRate = 8,
-        Undefined
+        Pending
     }
 
     public enum EShadingRate : byte
@@ -228,7 +228,7 @@ namespace Infinity.Graphics
         Rate2x4 = 6,
         Rate4x2 = 9,
         Rate4x4 = 10,
-        Undefined
+        Pending
     }
 
     public enum EShadingRateCombiner : byte
@@ -238,7 +238,7 @@ namespace Infinity.Graphics
         Sum = 2,
         Override = 3,
         Passthrough = 4,
-        Undefined
+        Pending
     }
 
     public enum ETextureDimension : byte
@@ -250,7 +250,7 @@ namespace Infinity.Graphics
         TextureCube,
         TextureCubeArray,
         Texture3D,
-        Undefined
+        Pending
     }
 
     public enum EAddressMode : byte
@@ -258,7 +258,7 @@ namespace Infinity.Graphics
         Repeat,
         ClampToEdge,
         MirrorRepeat,
-        Undefined
+        Pending
     }
 
     public enum EFilterMode : byte
@@ -266,7 +266,7 @@ namespace Infinity.Graphics
         Point,
         Linear,
         Anisotropic,
-        Undefined
+        Pending
     }
 
     public enum EBindType : byte
@@ -279,14 +279,14 @@ namespace Infinity.Graphics
         UniformBuffer,
         StorageBuffer,
         StorageTexture,
-        Undefined
+        Pending
     }
 
     public enum EVertexStepMode : byte
     {
         PerVertex,
         PerInstance,
-        Undefined
+        Pending
     }
 
     public enum EPrimitiveTopology : byte
@@ -300,7 +300,7 @@ namespace Infinity.Graphics
         LineStripAdj,
         TriangleListAdj,
         TriangleStripAdj,
-        Undefined
+        Pending
     }
 
     public enum EPrimitiveTopologyType : byte
@@ -308,14 +308,14 @@ namespace Infinity.Graphics
         Point,
         Line,
         Triangle,
-        Undefined
+        Pending
     }
 
     public enum EIndexFormat : byte
     {
         UInt16,
         UInt32,
-        Undefined
+        Pending
     }
 
     public enum ESampleCount : byte
@@ -324,7 +324,7 @@ namespace Infinity.Graphics
         Count2 = 2,
         Count4 = 4,
         Count8 = 8,
-        Undefined
+        Pending
     }
 
     public enum EBlendMode : byte
@@ -346,7 +346,7 @@ namespace Infinity.Graphics
         InverseSecondarySourceColor = 0x11,
         SecondarySourceAlpha = 0x12,
         InverseSecondarySourceAlpha = 0x13,
-        Undefined
+        Pending
     }
 
     public enum EBlendOp : byte
@@ -356,7 +356,7 @@ namespace Infinity.Graphics
         ReverseSubstract = 3,
         Min = 4,
         Max = 5,
-        Undefined
+        Pending
     }
 
     public enum EColorWriteChannel : byte
@@ -367,7 +367,7 @@ namespace Infinity.Graphics
         Blue = 4,
         Alpha = 8,
         All = 15,
-        Undefined
+        Pending
     }
 
     public enum EComparisonMode : byte
@@ -380,7 +380,7 @@ namespace Infinity.Graphics
         NotEqual = 5,
         GreaterEqual = 6,
         Always = 7,
-        Undefined
+        Pending
     }
 
     public enum EStencilOp : byte
@@ -393,14 +393,14 @@ namespace Infinity.Graphics
         Invert = 6,
         Increment = 7,
         Decrement = 8,
-        Undefined
+        Pending
     }
 
     public enum EFillMode : byte
     {
         Solid = 3,
         Wireframe = 2,
-        Undefined
+        Pending
     }
 
     public enum ECullMode : byte
@@ -408,7 +408,7 @@ namespace Infinity.Graphics
         None = 1,
         Back = 3,
         Front = 2,
-        Undefined
+        Pending
     }
 
     public enum ELoadAction : byte
@@ -416,7 +416,7 @@ namespace Infinity.Graphics
         Load,
         Clear,
         DontCare,
-        Undefined
+        Pending
     }
 
     public enum EStoreAction : byte
@@ -425,7 +425,7 @@ namespace Infinity.Graphics
         Resolve,
         StoreAndResolve,
         DontCare,
-        Undefined
+        Pending
     }
 
     public enum EPresentMode : byte
@@ -434,14 +434,14 @@ namespace Infinity.Graphics
         VSyncHalf,
         VSyncQuad,
         Immediately,
-        Undefined
+        Pending
     }
 
     public enum EResourceType : byte
     {
         Buffer,
         Texture,
-        Undefined
+        Pending
     }
 
     public enum EStorageMode : byte
@@ -450,7 +450,7 @@ namespace Infinity.Graphics
         Static = 1,
         Dynamic = 2,
         Staging = 3,
-        Undefined
+        Pending
     }
 
     public enum EBufferState
@@ -469,7 +469,7 @@ namespace Infinity.Graphics
         AccelStructWrite = 0x00000400,
         AccelStructBuildInput = 0x00000800,
         AccelStructBuildBlast = 0x00001000,
-        Undefined
+        Pending
     }
 
     public enum ETextureState
@@ -487,7 +487,7 @@ namespace Infinity.Graphics
         ShaderResource = 0x00000200,
         UnorderedAccess = 0x00000400,
         ShadingRateSurface = 0x00000800,
-        Undefined
+        Pending
     }
 
     public enum EBufferUsage
@@ -499,7 +499,7 @@ namespace Infinity.Graphics
         ShaderResource = 0x0008,
         UnorderedAccess = 0x0010,
         AccelStruct = 0x0040,
-        Undefined
+        Pending
     }
 
     public enum EBufferViewType : byte
@@ -508,7 +508,7 @@ namespace Infinity.Graphics
         ShaderResource,
         UnorderedAccess,
         AccelStruct,
-        Undefined
+        Pending
     }
 
     public enum ETextureUsage
@@ -517,7 +517,7 @@ namespace Infinity.Graphics
         RenderTarget = 0x0001,
         ShaderResource = 0x0002,
         UnorderedAccess = 0x0004,
-        Undefined
+        Pending
     }
 
     public enum ETextureViewType : byte
@@ -526,7 +526,7 @@ namespace Infinity.Graphics
         //RenderTarget,
         ShaderResource,
         UnorderedAccess,
-        Undefined
+        Pending
     }
 
     public enum EFunctionType
@@ -537,7 +537,7 @@ namespace Infinity.Graphics
         Task = 0x0004,
         Mesh = 0x0008,
         RayTracing = 0x0010,
-        Undefined
+        Pending
     }
 
     public enum EFunctionStage
@@ -556,14 +556,14 @@ namespace Infinity.Graphics
         RayGeneration = 0x0400,
         //AllRayTracing = 0x0800,
         All = 0x1000,
-        Undefined
+        Pending
     }
 
     public enum EHitGroupType : byte
     {
         Triangles,
         Procedural,
-        Undefined
+        Pending
     }
 
     internal static unsafe class RHIUtility

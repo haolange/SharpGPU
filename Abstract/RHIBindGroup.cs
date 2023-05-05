@@ -3,7 +3,7 @@ using Infinity.Core;
 
 namespace Infinity.Graphics
 {
-    public struct RHIBindGroupElement
+    public struct RHIBindTableElement
     {
         //public int Slot;
         //public EBindType BindType;
@@ -12,14 +12,14 @@ namespace Infinity.Graphics
         public RHITextureView TextureView;
     }
 
-    public struct RHIBindGroupDescriptor
+    public struct RHIBindTableDescriptor
     {
-        public RHIBindGroupLayout Layout;
-        public Memory<RHIBindGroupElement> Elements;
+        public RHIBindTableLayout Layout;
+        public Memory<RHIBindTableElement> Elements;
     }
 
-    public abstract class RHIBindGroup : Disposal
+    public abstract class RHIBindTable : Disposal
     {
-        public abstract void SetBindElement(in RHIBindGroupElement element, in EBindType bindType, in int slot);
+        public abstract void SetBindElement(in RHIBindTableElement element, in EBindType bindType, in int slot);
     }
 }

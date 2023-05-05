@@ -113,12 +113,12 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHIBindGroupLayout CreateBindGroupLayout(in RHIBindGroupLayoutDescriptor descriptor)
+        public override RHIBindTableLayout CreateBindTableLayout(in RHIBindTableLayoutDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
 
-        public override RHIBindGroup CreateBindGroup(in RHIBindGroupDescriptor descriptor)
+        public override RHIBindTable CreateBindTable(in RHIBindTableDescriptor descriptor)
         {
             throw new NotImplementedException();
         }

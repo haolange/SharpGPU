@@ -4,13 +4,13 @@ using TerraFX.Interop.DirectX;
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
-    internal unsafe class Dx12BindGroup : RHIBindGroup
+    internal unsafe class Dx12BindTable : RHIBindTable
     {
-        public Dx12BindGroupLayout BindGroupLayout
+        public Dx12BindTableLayout BindTableLayout
         {
             get
             {
-                return m_BindGroupLayout;
+                return m_BindTableLayout;
             }
         }
         public D3D12_GPU_DESCRIPTOR_HANDLE[] NativeGpuDescriptorHandles
@@ -21,21 +21,21 @@ namespace Infinity.Graphics
             }
         }
 
-        private Dx12BindGroupLayout m_BindGroupLayout;
+        private Dx12BindTableLayout m_BindTableLayout;
         private D3D12_GPU_DESCRIPTOR_HANDLE[] m_NativeGpuDescriptorHandles;
 
-        public Dx12BindGroup(in RHIBindGroupDescriptor descriptor)
+        public Dx12BindTable(in RHIBindTableDescriptor descriptor)
         {
-            Dx12BindGroupLayout bindGroupLayout = descriptor.Layout as Dx12BindGroupLayout;
-            Debug.Assert(bindGroupLayout != null);
+            Dx12BindTableLayout bindTableLayout = descriptor.Layout as Dx12BindTableLayout;
+            Debug.Assert(bindTableLayout != null);
 
-            m_BindGroupLayout = bindGroupLayout;
+            m_BindTableLayout = bindTableLayout;
             m_NativeGpuDescriptorHandles = new D3D12_GPU_DESCRIPTOR_HANDLE[descriptor.Elements.Length];
 
             for (int i = 0; i < descriptor.Elements.Length; ++i)
             {
-                ref Dx12BindInfo bindInfo = ref bindGroupLayout.BindInfos[i];
-                ref RHIBindGroupElement element = ref descriptor.Elements.Span[i];
+                ref Dx12BindInfo bindInfo = ref bindTableLayout.BindInfos[i];
+                ref RHIBindTableElement element = ref descriptor.Elements.Span[i];
 
                 ref D3D12_GPU_DESCRIPTOR_HANDLE nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[i];
                 switch (bindInfo.BindType)
@@ -65,7 +65,7 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void SetBindElement(in RHIBindGroupElement element, in EBindType bindType, in int slot)
+        public override void SetBindElement(in RHIBindTableElement element, in EBindType bindType, in int slot)
         {
             ref D3D12_GPU_DESCRIPTOR_HANDLE nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[slot];
 

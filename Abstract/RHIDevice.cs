@@ -33,8 +33,8 @@ namespace Infinity.Graphics
         public abstract RHIBottomLevelAccelStruct CreateAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor);
         public abstract RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor);
         public abstract RHISwapChain CreateSwapChain(in RHISwapChainDescriptor descriptor);
-        public abstract RHIBindGroupLayout CreateBindGroupLayout(in RHIBindGroupLayoutDescriptor descriptor);
-        public abstract RHIBindGroup CreateBindGroup(in RHIBindGroupDescriptor descriptor);
+        public abstract RHIBindTableLayout CreateBindTableLayout(in RHIBindTableLayoutDescriptor descriptor);
+        public abstract RHIBindTable CreateBindTable(in RHIBindTableDescriptor descriptor);
         public abstract RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor);
         public abstract RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor);
         public abstract RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor);
