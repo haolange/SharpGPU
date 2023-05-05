@@ -46,7 +46,7 @@ namespace Infinity.Graphics
             Debug.Assert(m_FenceEvent != null);
         }
 
-        public override void Reset()
+        internal override void Reset()
         {
             m_NativeFence->Signal(0);
         }

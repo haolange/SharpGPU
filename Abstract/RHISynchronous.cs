@@ -62,7 +62,7 @@ namespace Infinity.Graphics
             get;
         }
 
-        public abstract void Reset();
+        internal abstract void Reset();
         public abstract void Wait();
     }
 
