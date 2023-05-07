@@ -430,9 +430,7 @@ namespace Infinity.Graphics
 
     public enum EPresentMode : byte
     {
-        VSyncFull,
-        VSyncHalf,
-        VSyncQuad,
+        VSync,
         Immediately,
         Pending
     }

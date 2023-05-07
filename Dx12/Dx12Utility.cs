@@ -67,14 +67,8 @@ namespace Infinity.Graphics
         {
             switch (presentMode)
             {
-                case EPresentMode.VSyncFull:
+                case EPresentMode.VSync:
                     return 1;
-
-                case EPresentMode.VSyncHalf:
-                    return 2;
-
-                case EPresentMode.VSyncQuad:
-                    return 4;
 
                 case EPresentMode.Immediately:
                     return 0;
