@@ -288,7 +288,7 @@ namespace Infinity.Graphics
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
-            Dx12Device dx12Device = ((Dx12Queue)m_CommandBuffer.CommandAllocator.Queue).Dx12Device;
+            Dx12Device dx12Device = ((Dx12Queue)m_CommandBuffer.Queue).Dx12Device;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchComputeIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
         }
@@ -476,7 +476,7 @@ namespace Infinity.Graphics
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable)
         {
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
-            Dx12Device dx12Device = ((Dx12Queue)m_CommandBuffer.CommandAllocator.Queue).Dx12Device;
+            Dx12Device dx12Device = ((Dx12Queue)m_CommandBuffer.Queue).Dx12Device;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchRayIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
             throw new NotImplementedException();
@@ -891,8 +891,7 @@ namespace Infinity.Graphics
             m_Pipeline = null;
             m_PipelineLayout = null;
 
-            Dx12Device device = (m_CommandBuffer.CommandAllocator.Queue as Dx12Queue).Dx12Device;
-            Dx12CommandAllocator cmdAllocator = m_CommandBuffer.CommandAllocator as Dx12CommandAllocator;
+            Dx12Device device = (m_CommandBuffer.Queue as Dx12Queue).Dx12Device;
 
             for (int i = 0; i < m_AttachmentInfos.length; ++i)
             {
@@ -1207,7 +1206,7 @@ namespace Infinity.Graphics
         public override void DrawIndirect(RHIBuffer argsBuffer, in uint offset)
         {
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
-            Dx12Device dx12Device = ((Dx12Queue)m_CommandBuffer.CommandAllocator.Queue).Dx12Device;
+            Dx12Device dx12Device = ((Dx12Queue)m_CommandBuffer.Queue).Dx12Device;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DrawIndirectSignature, 1, dx12Buffer.NativeResource, offset, null, 0);
         }
@@ -1215,7 +1214,7 @@ namespace Infinity.Graphics
         public override void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset)
         {
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
-            Dx12Device dx12Device = ((Dx12Queue)m_CommandBuffer.CommandAllocator.Queue).Dx12Device;
+            Dx12Device dx12Device = ((Dx12Queue)m_CommandBuffer.Queue).Dx12Device;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DrawIndexedIndirectSignature, 1, dx12Buffer.NativeResource, offset, null, 0);
         }
@@ -1295,8 +1294,7 @@ namespace Infinity.Graphics
             m_Pipeline = null;
             m_PipelineLayout = null;
 
-            Dx12Device device = (m_CommandBuffer.CommandAllocator.Queue as Dx12Queue).Dx12Device;
-            Dx12CommandAllocator cmdAllocator = m_CommandBuffer.CommandAllocator as Dx12CommandAllocator;
+            Dx12Device device = (m_CommandBuffer.Queue as Dx12Queue).Dx12Device;
 
             for (int i = 0; i < m_AttachmentInfos.length; ++i)
             {

@@ -46,9 +46,9 @@ namespace Infinity.Graphics
             m_NativeCommandQueue = descriptor.Queue;
         }
 
-        public override RHICommandAllocator CreateCommandAllocator()
+        public override RHICommandBuffer CreateCommandBuffer()
         {
-            return new Dx12CommandAllocator(this);
+            return new Dx12CommandBuffer(this);
         }
 
         public override void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore)

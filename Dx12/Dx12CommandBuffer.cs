@@ -2,15 +2,21 @@
 using System.Diagnostics;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
-using static TerraFX.Interop.Windows.Windows;
-using System.Xml.Linq;
 using System.Runtime.CompilerServices;
+using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal unsafe class Dx12CommandBuffer : RHICommandBuffer
     {
+        public ID3D12CommandAllocator* NativeCommandAllocator
+        {
+            get
+            {
+                return m_NativeCommandAllocator;
+            }
+        }
         public ID3D12GraphicsCommandList5* NativeCommandList
         {
             get
@@ -24,16 +30,20 @@ namespace Infinity.Graphics
         private Dx12MeshletEncoder m_MeshletEncoder;
         private Dx12GraphicsEncoder m_GraphicsEncoder;
         private Dx12RaytracingEncoder m_RaytracingEncoder;
+        private ID3D12CommandAllocator* m_NativeCommandAllocator;
         private ID3D12GraphicsCommandList5* m_NativeCommandList;
 
-        public Dx12CommandBuffer(Dx12CommandAllocator cmdAllocator)
+        public Dx12CommandBuffer(Dx12Queue queue)
         {
-            m_CommandAllocator = cmdAllocator;
-            Dx12Queue queue = cmdAllocator.Queue as Dx12Queue;
-            Dx12CommandAllocator dx12CommandPool = m_CommandAllocator as Dx12CommandAllocator;
+            m_Queue = queue;
+
+            ID3D12CommandAllocator* commandAllocator;
+            bool success = SUCCEEDED(queue.Dx12Device.NativeDevice->CreateCommandAllocator(Dx12Utility.ConvertToDx12QueueType(queue.Type), __uuidof<ID3D12CommandAllocator>(), (void**)&commandAllocator));
+            Debug.Assert(success);
+            m_NativeCommandAllocator = commandAllocator;
 
             ID3D12GraphicsCommandList5* commandList;
-            bool success = SUCCEEDED(queue.Dx12Device.NativeDevice->CreateCommandList(0, Dx12Utility.ConvertToDx12QueueType(queue.Type), dx12CommandPool.NativeCommandAllocator, null, __uuidof<ID3D12GraphicsCommandList5>(), (void**)&commandList));
+            success = SUCCEEDED(queue.Dx12Device.NativeDevice->CreateCommandList(0, Dx12Utility.ConvertToDx12QueueType(queue.Type), m_NativeCommandAllocator, null, __uuidof<ID3D12GraphicsCommandList5>(), (void**)&commandList));
             Debug.Assert(success);
             m_NativeCommandList = commandList;
 
@@ -47,15 +57,14 @@ namespace Infinity.Graphics
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void Begin(string name)
         {
-            Dx12CommandAllocator dx12CommandPool = m_CommandAllocator as Dx12CommandAllocator;
-            Dx12Queue queue = m_CommandAllocator.Queue as Dx12Queue;
-
-            m_NativeCommandList->Reset(dx12CommandPool.NativeCommandAllocator, null);
+            m_NativeCommandAllocator->Reset();
+            m_NativeCommandList->Reset(m_NativeCommandAllocator, null);
 
             IntPtr namePtr = Marshal.StringToHGlobalUni(name);
             m_NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
             Marshal.FreeHGlobal(namePtr);
 
+            Dx12Queue queue = m_Queue as Dx12Queue;
             ID3D12DescriptorHeap** resourceBarriers = stackalloc ID3D12DescriptorHeap*[2];
             resourceBarriers[0] = queue.Dx12Device.SamplerHeap.DescriptorHeap;
             resourceBarriers[1] = queue.Dx12Device.CbvSrvUavHeap.DescriptorHeap;
@@ -183,6 +192,7 @@ namespace Infinity.Graphics
         protected override void Release()
         {
             m_NativeCommandList->Release();
+            m_NativeCommandAllocator->Release();
         }
     }
 

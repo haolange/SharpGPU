@@ -45,7 +45,7 @@ namespace Infinity.Graphics
         }
 
         protected EQueueType m_Type;
-        public abstract RHICommandAllocator CreateCommandAllocator();
+        public abstract RHICommandBuffer CreateCommandBuffer();
         public abstract void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore);
         public abstract void Submit(in RHISubmitDescriptor submitDescriptor, RHIFence signalFence);
     }
