@@ -78,6 +78,21 @@ namespace Infinity.Graphics
             }
         }
 
+        internal static DXGI_SWAP_EFFECT ConvertToDx12SwapEffect(in EPresentMode presentMode)
+        {
+            switch (presentMode)
+            {
+                case EPresentMode.VSync:
+                    return DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+
+                case EPresentMode.Immediately:
+                    return DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_DISCARD;
+
+                default:
+                    return DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_DISCARD;
+            }
+        }
+
         internal static D3D12_FILTER ConvertToDx12Filter(in RHISamplerDescriptor descriptor)
         {
             EFilterMode minFilter = descriptor.MinFilter;

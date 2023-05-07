@@ -11,20 +11,20 @@ namespace Infinity.Graphics
         public uint Count;
         public uint2 Extent;
         public IntPtr Surface;
+        public EPresentMode PresentMode;
         public ESwapChainFormat Format;
         public RHIQueue PresentQueue;
     }
 
     public abstract class RHISwapChain : Disposal
     {
-        public abstract int BackBufferIndex
+        public abstract int BackTextureIndex
         {
             get;
         }
 
-        public abstract RHITexture GetTexture(in int index);
-        //public abstract RHITextureView GetTextureView(in int index);
+        public abstract RHITexture AcquireBackTexture();
         public abstract void Resize(in uint2 extent);
-        public abstract void Present(in EPresentMode presentMode);
+        public abstract void Present();
     }
 }
