@@ -16,7 +16,7 @@ namespace Infinity.Graphics
         {
             get;
         }
-        public abstract ERHIBackend RHIType
+        public abstract ERHIBackend BackendType
         {
             get;
         }
@@ -25,19 +25,19 @@ namespace Infinity.Graphics
 
         public static ERHIBackend GetBackendByPlatform(in bool bForceVulkan)
         {
-            ERHIBackend rhiType = bForceVulkan ? ERHIBackend.Vulkan : ERHIBackend.DirectX12;
+            ERHIBackend backendType = bForceVulkan ? ERHIBackend.Vulkan : ERHIBackend.DirectX12;
 
             if (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS())
             {
-                rhiType = bForceVulkan ? ERHIBackend.Vulkan : ERHIBackend.Metal;
+                backendType = bForceVulkan ? ERHIBackend.Vulkan : ERHIBackend.Metal;
             }
 
             if (OperatingSystem.IsLinux() || OperatingSystem.IsAndroid())
             {
-                rhiType = ERHIBackend.Vulkan;
+                backendType = ERHIBackend.Vulkan;
             }
 
-            return rhiType;
+            return backendType;
         }
 
         public static RHIInstance? Create(in RHIInstanceDescriptor descriptor)

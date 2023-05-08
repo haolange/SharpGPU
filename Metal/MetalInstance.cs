@@ -8,7 +8,7 @@ namespace Infinity.Graphics
     internal unsafe class MtlInstance : RHIInstance
     {
         public override int DeviceCount => m_Devices.Count;
-        public override ERHIBackend RHIType => ERHIBackend.Metal;
+        public override ERHIBackend BackendType => ERHIBackend.Metal;
 
         private List<MtlDevice> m_Devices;
 

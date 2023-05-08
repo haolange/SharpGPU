@@ -16,7 +16,7 @@ namespace Infinity.Graphics
             }
         }
         public override int DeviceCount => m_Devices.Count;
-        public override ERHIBackend RHIType => ERHIBackend.DirectX12;
+        public override ERHIBackend BackendType => ERHIBackend.DirectX12;
 
         private List<Dx12Device> m_Devices;
         private IDXGIFactory7* m_DXGIFactory;
