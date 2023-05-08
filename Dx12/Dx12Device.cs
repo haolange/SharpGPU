@@ -7,6 +7,7 @@ using TerraFX.Interop.DirectX;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using static TerraFX.Interop.Windows.Windows;
+using TerraFX.Interop.Gdiplus;
 
 namespace Infinity.Graphics
 {
@@ -32,7 +33,7 @@ namespace Infinity.Graphics
         private D3D12_DESCRIPTOR_HEAP_TYPE m_Type;
         private ID3D12DescriptorHeap* m_DescriptorHeap;
 
-        public Dx12DescriptorHeap(ID3D12Device6* device, in D3D12_DESCRIPTOR_HEAP_TYPE type, in D3D12_DESCRIPTOR_HEAP_FLAGS flag, in uint count)
+        public Dx12DescriptorHeap(ID3D12Device10* device, in D3D12_DESCRIPTOR_HEAP_TYPE type, in D3D12_DESCRIPTOR_HEAP_FLAGS flag, in uint count)
         {
             m_CacheMap = new TValueArray<int>((int)count);
             for (int i = 0; i < (int)count; ++i)
@@ -83,10 +84,8 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12Device : RHIDevice
     {
-        public override bool IsMRTSupported => true;
-        public override bool IsShadowMapSupported => true;
-        public override bool IsRaytracingSupported => true;
-        public override bool IsComputeShaderSupported => true;
+        public override bool IsRaytracingSupported => bRaytracingSupported;
+        public override bool IsRaytracingQuerySupported => bRaytracingQuerySupported;
         public override bool IsFlipProjectionRequired => false;
         public override EClipDepth ClipDepth => EClipDepth.ZeroToOne;
         public override EMatrixMajorness MatrixMajorness => EMatrixMajorness.RowMajor;
@@ -134,7 +133,7 @@ namespace Infinity.Graphics
                 return m_DXGIAdapter;
             }
         }
-        public ID3D12Device6* NativeDevice
+        public ID3D12Device10* NativeDevice
         {
             get
             {
@@ -170,13 +169,15 @@ namespace Infinity.Graphics
             }
         }
 
+        private bool bRaytracingSupported;
+        private bool bRaytracingQuerySupported;
         private Dx12Instance m_Dx12Instance;
         private Dx12DescriptorHeap m_DsvHeap;
         private Dx12DescriptorHeap m_RtvHeap;
         private Dx12DescriptorHeap m_SamplerHeap;
         private Dx12DescriptorHeap m_CbvSrvUavHeap;
         private IDXGIAdapter1* m_DXGIAdapter;
-        private ID3D12Device6* m_NativeDevice;
+        private ID3D12Device10* m_NativeDevice;
         private ID3D12CommandSignature* m_DrawIndirectSignature;
         private ID3D12CommandSignature* m_DrawIndexedIndirectSignature;
         private ID3D12CommandSignature* m_DispatchRayIndirectSignature;
@@ -187,7 +188,7 @@ namespace Infinity.Graphics
             m_DXGIAdapter = adapter;
             m_Dx12Instance = instance;
             CreateDevice();
-            CreateFeatureSet();
+            CheckFeatureSupport();
             CreateDescriptorHeaps();
             CreateCommandSignatures();
         }
@@ -365,16 +366,55 @@ namespace Infinity.Graphics
 
         private void CreateDevice()
         {
-            ID3D12Device6* device;
-            bool success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1, __uuidof<ID3D12Device6>(), (void**)&device));
+            ID3D12Device10* device;
+            bool success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_2, __uuidof<ID3D12Device10>(), (void**)&device));
+            if (!success)
+            {
+                success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1, __uuidof<ID3D12Device10>(), (void**)&device));
+
+                if (!success)
+                {
+                    success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_0, __uuidof<ID3D12Device10>(), (void**)&device));
+                }
+            }
             Debug.Assert(success);
             m_NativeDevice = device;
         }
 
-        private void CreateFeatureSet()
+        private void CheckFeatureSupport()
         {
-            D3D12_FEATURE_DATA_D3D12_OPTIONS6 options;
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS6, &options, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS6));
+            // check feature level
+            D3D_FEATURE_LEVEL* aLevels = stackalloc D3D_FEATURE_LEVEL[3];
+            aLevels[0] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_0;
+            aLevels[1] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1;
+            aLevels[2] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_2;
+
+            D3D12_FEATURE_DATA_FEATURE_LEVELS dLevels;
+            dLevels.NumFeatureLevels = 3;
+            dLevels.pFeatureLevelsRequested = aLevels;
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_FEATURE_LEVELS, &dLevels, (uint)sizeof(D3D12_FEATURE_DATA_FEATURE_LEVELS));
+
+            // check raytracing level
+            D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5;
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS5, &options5, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5));
+            
+            switch (options5.RaytracingTier)
+            {
+                case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_0:
+                    bRaytracingSupported = true;
+                    bRaytracingQuerySupported = false;
+                    break;
+
+                case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_1:
+                    bRaytracingSupported = true;
+                    bRaytracingQuerySupported = true;
+                    break;
+
+                case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_NOT_SUPPORTED:
+                    bRaytracingSupported = false;
+                    bRaytracingQuerySupported = false;
+                    break;
+            }
         }
 
         private void CreateDescriptorHeaps()
@@ -410,14 +450,17 @@ namespace Infinity.Graphics
             Debug.Assert(success);
             m_DrawIndexedIndirectSignature = commandSignature;
 
-            indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS;
-            //commandSignatureDesc.NodeMask = nodeMask;
-            commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
-            commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DISPATCH_RAYS_DESC);
-            commandSignatureDesc.NumArgumentDescs = 1;
-            success = SUCCEEDED(m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature));
-            Debug.Assert(success);
-            m_DispatchRayIndirectSignature = commandSignature;
+            if(IsRaytracingSupported)
+            {
+                indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS;
+                //commandSignatureDesc.NodeMask = nodeMask;
+                commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
+                commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DISPATCH_RAYS_DESC);
+                commandSignatureDesc.NumArgumentDescs = 1;
+                success = SUCCEEDED(m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature));
+                Debug.Assert(success);
+                m_DispatchRayIndirectSignature = commandSignature;
+            }
 
             indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
             //commandSignatureDesc.NodeMask = nodeMask;
@@ -437,7 +480,10 @@ namespace Infinity.Graphics
             m_CbvSrvUavHeap.Dispose();
             m_DrawIndirectSignature->Release();
             m_DrawIndexedIndirectSignature->Release();
-            m_DispatchRayIndirectSignature->Release();
+            if (IsRaytracingSupported)
+            {
+                m_DispatchRayIndirectSignature->Release();
+            }
             m_DispatchComputeIndirectSignature->Release();
             m_NativeDevice->Release();
             m_DXGIAdapter->Release();
