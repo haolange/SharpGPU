@@ -3,10 +3,11 @@ using Infinity.Core;
 
 namespace Infinity.Graphics
 {
-    public struct RHIDeviceDescriptor
+    public struct RHIDeviceProperty
     {
-        public int QueueInfoCount => QueueInfos.Length;
-        public Memory<RHIQueueDescriptor> QueueInfos;
+        public EGpuType Type;
+        public uint VendorId;
+        public uint DeviceId;
     }
 
     public abstract class RHIDevice : Disposal
@@ -20,8 +21,8 @@ namespace Infinity.Graphics
         public abstract EMatrixMajorness MatrixMajorness { get; }
         public abstract EMultiviewStrategy MultiviewStrategy { get; }
 
-        public abstract int GetQueueCount(in EQueueType type);
-        public abstract RHIQueue GetQueue(in EQueueType type, in int index);
+        public abstract RHIDeviceProperty GetDeviceProperty();
+        public abstract RHIQueue CreateQueue(in EQueueType type);
         public abstract RHIFence CreateFence();
         public abstract RHISemaphore CreateSemaphore();
         public abstract RHIQuery CreateQuery(in RHIQueryDescriptor descriptor);

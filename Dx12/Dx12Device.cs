@@ -92,11 +92,11 @@ namespace Infinity.Graphics
         public override EMatrixMajorness MatrixMajorness => EMatrixMajorness.RowMajor;
         public override EMultiviewStrategy MultiviewStrategy => EMultiviewStrategy.Unsupported;
 
-        public Dx12GPU Dx12Gpu
+        public Dx12Instance Dx12Instance
         {
             get
             {
-                return m_Dx12Gpu;
+                return m_Dx12Instance;
             }
         }
         public Dx12DescriptorHeap DsvHeap
@@ -125,6 +125,13 @@ namespace Infinity.Graphics
             get
             {
                 return m_CbvSrvUavHeap;
+            }
+        }
+        public IDXGIAdapter1* DXGIAdapter
+        {
+            get
+            {
+                return m_DXGIAdapter;
             }
         }
         public ID3D12Device6* NativeDevice
@@ -163,41 +170,43 @@ namespace Infinity.Graphics
             }
         }
 
-        private Dx12GPU m_Dx12Gpu;
-        private ID3D12Device6* m_NativeDevice;
+        private Dx12Instance m_Dx12Instance;
         private Dx12DescriptorHeap m_DsvHeap;
         private Dx12DescriptorHeap m_RtvHeap;
         private Dx12DescriptorHeap m_SamplerHeap;
         private Dx12DescriptorHeap m_CbvSrvUavHeap;
+        private IDXGIAdapter1* m_DXGIAdapter;
+        private ID3D12Device6* m_NativeDevice;
         private ID3D12CommandSignature* m_DrawIndirectSignature;
         private ID3D12CommandSignature* m_DrawIndexedIndirectSignature;
         private ID3D12CommandSignature* m_DispatchRayIndirectSignature;
         private ID3D12CommandSignature* m_DispatchComputeIndirectSignature;
-        private Dictionary<EQueueType, List<Dx12Queue>> m_GpuQueues;
 
-        public Dx12Device(Dx12GPU gpu, in RHIDeviceDescriptor descriptor) 
+        public Dx12Device(Dx12Instance instance, in IDXGIAdapter1* adapter) 
         {
-            m_Dx12Gpu = gpu;
+            m_DXGIAdapter = adapter;
+            m_Dx12Instance = instance;
             CreateDevice();
             CreateFeatureSet();
-            CreateQueues(descriptor);
             CreateDescriptorHeaps();
             CreateCommandSignatures();
         }
 
-        public override int GetQueueCount(in EQueueType type)
+        public override RHIDeviceProperty GetDeviceProperty()
         {
-            bool hashValue = m_GpuQueues.TryGetValue(type, out List<Dx12Queue> queueArray);
-            Debug.Assert(hashValue);
-            return queueArray.Count;
+            DXGI_ADAPTER_DESC1 desc;
+            m_DXGIAdapter->GetDesc1(&desc);
+
+            RHIDeviceProperty deviceProperty;
+            deviceProperty.VendorId = desc.VendorId;
+            deviceProperty.DeviceId = desc.DeviceId;
+            deviceProperty.Type = (desc.Flags & (uint)DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE) == 1 ? EGpuType.Software : EGpuType.Hardware;
+            return deviceProperty;
         }
 
-        public override RHIQueue GetQueue(in EQueueType type, in int index)
+        public override RHIQueue CreateQueue(in EQueueType type)
         {
-            bool hashValue = m_GpuQueues.TryGetValue(type, out List<Dx12Queue> queueArray);
-            Debug.Assert(hashValue);
-            Debug.Assert(index >= 0 && index < queueArray?.Count);
-            return queueArray[index];
+            return new Dx12Queue(this, type);
         }
 
         public override RHIFence CreateFence()
@@ -357,7 +366,7 @@ namespace Infinity.Graphics
         private void CreateDevice()
         {
             ID3D12Device6* device;
-            bool success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_Dx12Gpu.DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1, __uuidof<ID3D12Device6>(), (void**)&device));
+            bool success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1, __uuidof<ID3D12Device6>(), (void**)&device));
             Debug.Assert(success);
             m_NativeDevice = device;
         }
@@ -366,44 +375,6 @@ namespace Infinity.Graphics
         {
             D3D12_FEATURE_DATA_D3D12_OPTIONS6 options;
             m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS6, &options, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS6));
-        }
-
-        private void CreateQueues(in RHIDeviceDescriptor descriptor)
-        {
-            Dictionary<EQueueType, int> queueCountMap = new Dictionary<EQueueType, int>(3);
-            for (int i = 0; i < descriptor.QueueInfoCount; ++i)
-            {
-                RHIQueueDescriptor queueInfo = descriptor.QueueInfos.Span[i];
-                if (queueCountMap.TryGetValue(queueInfo.Type, out int value))
-                {
-                    queueCountMap[queueInfo.Type] = 0;
-                }
-
-                queueCountMap.TryAdd(queueInfo.Type, (int)queueInfo.Count);
-            }
-
-            m_GpuQueues = new Dictionary<EQueueType, List<Dx12Queue>>(3);
-            foreach (KeyValuePair<EQueueType, int> iter in queueCountMap)
-            {
-                List<Dx12Queue> tempQueues = new List<Dx12Queue>(iter.Value);
-
-                D3D12_COMMAND_QUEUE_DESC queueDesc = new D3D12_COMMAND_QUEUE_DESC();
-                queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAGS.D3D12_COMMAND_QUEUE_FLAG_NONE;
-                queueDesc.Type = Dx12Utility.ConvertToDx12QueueType(iter.Key);
-                for (int i = 0; i < iter.Value; ++i)
-                {
-                    ID3D12CommandQueue* commandQueue;
-                    bool success = SUCCEEDED(m_NativeDevice->CreateCommandQueue(&queueDesc, __uuidof<ID3D12CommandQueue>(), (void**)&commandQueue));
-                    Debug.Assert(success);
-
-                    Dx12CommandQueueDescriptor queueDescriptor;
-                    queueDescriptor.Type = iter.Key;
-                    queueDescriptor.Queue = commandQueue;
-                    tempQueues.Add(new Dx12Queue(this, queueDescriptor));
-                }
-
-                m_GpuQueues.TryAdd(iter.Key, tempQueues);
-            }
         }
 
         private void CreateDescriptorHeaps()
@@ -464,18 +435,12 @@ namespace Infinity.Graphics
             m_RtvHeap.Dispose();
             m_SamplerHeap.Dispose();
             m_CbvSrvUavHeap.Dispose();
-            foreach (KeyValuePair<EQueueType, List<Dx12Queue>> gpuQueue in m_GpuQueues)
-            {
-                for (int i = 0; i < gpuQueue.Value.Count; ++i)
-                {
-                    gpuQueue.Value[i].Dispose();
-                }
-            }
             m_DrawIndirectSignature->Release();
             m_DrawIndexedIndirectSignature->Release();
             m_DispatchRayIndirectSignature->Release();
             m_DispatchComputeIndirectSignature->Release();
             m_NativeDevice->Release();
+            m_DXGIAdapter->Release();
         }
     }
 #pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416

@@ -17,13 +17,6 @@ namespace Infinity.Graphics
         public override EMatrixMajorness MatrixMajorness => EMatrixMajorness.RowMajor;
         public override EMultiviewStrategy MultiviewStrategy => EMultiviewStrategy.Unsupported;
 
-        public MtlGPU MtlGpu
-        {
-            get
-            {
-                return m_MtlGpu;
-            }
-        }
         public MTLDevice NativeDevice
         {
             get
@@ -31,31 +24,31 @@ namespace Infinity.Graphics
                 return m_NativeDevice;
             }
         }
+        public MtlInstance MtlInstance
+        {
+            get
+            {
+                return m_MtlInstance;
+            }
+        }
 
-        private MtlGPU m_MtlGpu;
         private MTLDevice m_NativeDevice;
-        private Dictionary<EQueueType, List<MtlQueue>> m_Queues;
+        private MtlInstance m_MtlInstance;
 
-        public MtlDevice(MtlGPU gpu, in RHIDeviceDescriptor descriptor)
+        public MtlDevice(MtlInstance instance, in IntPtr devicePtr)
         {
-            m_MtlGpu = gpu;
-            CreateDevice();
-            CreateQueues(descriptor);
+            m_MtlInstance = instance;
+            CreateDevice(devicePtr);
         }
 
-        public override int GetQueueCount(in EQueueType type)
+        public override RHIDeviceProperty GetDeviceProperty()
         {
-            bool hashValue = m_Queues.TryGetValue(type, out List<MtlQueue> queueArray);
-            Debug.Assert(hashValue);
-            return queueArray.Count;
+            throw new NotImplementedException();
         }
 
-        public override RHIQueue GetQueue(in EQueueType type, in int index)
+        public override RHIQueue CreateQueue(in EQueueType type)
         {
-            bool hashValue = m_Queues.TryGetValue(type, out List<MtlQueue> queueArray);
-            Debug.Assert(hashValue);
-            Debug.Assert(index >= 0 && index < queueArray?.Count);
-            return queueArray[index];
+            throw new NotImplementedException();
         }
 
         public override RHIFence CreateFence()
@@ -148,44 +141,10 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        private void CreateDevice()
+        private void CreateDevice(in IntPtr devicePtr)
         {
-            Debug.Assert(m_MtlGpu.GpuPtr.ToPointer() != null);
-            m_NativeDevice = new MTLDevice(m_MtlGpu.GpuPtr);
-        }
-
-        private void CreateQueues(in RHIDeviceDescriptor descriptor)
-        {
-            Dictionary<EQueueType, int> queueCountMap = new Dictionary<EQueueType, int>(3);
-            for (int i = 0; i < descriptor.QueueInfoCount; ++i)
-            {
-                RHIQueueDescriptor queueInfo = descriptor.QueueInfos.Span[i];
-                if (queueCountMap.TryGetValue(queueInfo.Type, out int value))
-                {
-                    queueCountMap[queueInfo.Type] = 0;
-                }
-
-                queueCountMap.TryAdd(queueInfo.Type, (int)queueInfo.Count);
-            }
-
-            m_Queues = new Dictionary<EQueueType, List<MtlQueue>>(3);
-            foreach (KeyValuePair<EQueueType, int> iter in queueCountMap)
-            {
-                List<MtlQueue> tempQueues = new List<MtlQueue>(iter.Value);
-
-                for (int i = 0; i < iter.Value; ++i)
-                {
-                    MTLCommandQueue commandQueue = m_NativeDevice.newCommandQueue();
-                    Debug.Assert(commandQueue.NativePtr.ToPointer() != null);
-
-                    MtlCommandQueueDescriptor queueDescriptor;
-                    queueDescriptor.cmdQueue = commandQueue;
-                    queueDescriptor.queueType = iter.Key;
-                    tempQueues.Add(new MtlQueue(this, queueDescriptor));
-                }
-
-                m_Queues.TryAdd(iter.Key, tempQueues);
-            }
+            Debug.Assert(devicePtr.ToPointer() != null);
+            m_NativeDevice = new MTLDevice(devicePtr);
         }
 
         protected override void Release()

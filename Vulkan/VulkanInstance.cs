@@ -8,7 +8,7 @@ namespace Infinity.Graphics
 {
     internal class VkInstance : RHIInstance
     {
-        public override int GpuCount => 1;
+        public override int DeviceCount => 1;
         public override ERHIBackend RHIType => ERHIBackend.Vulkan;
 
         public VkInstance(in RHIInstanceDescriptor descriptor)
@@ -16,7 +16,7 @@ namespace Infinity.Graphics
 
         }
 
-        public override RHIGPU GetGpu(in int index)
+        public override RHIDevice GetDevice(in int index)
         {
             throw new NotImplementedException();
         }

@@ -7,12 +7,12 @@ namespace Infinity.Graphics
     {
         public ERHIBackend Backend;
         public bool EnableDebugLayer;
-        public bool EnableGpuValidatior;
+        public bool EnableValidatior;
     }
 
     public abstract class RHIInstance : Disposal
     {
-        public abstract int GpuCount
+        public abstract int DeviceCount
         {
             get;
         }
@@ -21,7 +21,7 @@ namespace Infinity.Graphics
             get;
         }
 
-        public abstract RHIGPU GetGpu(in int index);
+        public abstract RHIDevice GetDevice(in int index);
 
         public static ERHIBackend GetBackendByPlatform(in bool bForceVulkan)
         {

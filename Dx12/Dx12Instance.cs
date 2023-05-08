@@ -5,7 +5,7 @@ using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
 {
-#pragma warning disable CA1416
+#pragma warning disable CA1416, CS8602, CS8618
     internal unsafe class Dx12Instance : RHIInstance
     {
         public IDXGIFactory7* DXGIFactory
@@ -15,15 +15,14 @@ namespace Infinity.Graphics
                 return m_DXGIFactory;
             }
         }
-        public override int GpuCount => m_GPUs.Count;
+        public override int DeviceCount => m_Devices.Count;
         public override ERHIBackend RHIType => ERHIBackend.DirectX12;
 
-        private List<Dx12GPU> m_GPUs;
+        private List<Dx12Device> m_Devices;
         private IDXGIFactory7* m_DXGIFactory;
 
         public Dx12Instance(in RHIInstanceDescriptor descriptor)
         {
-            m_GPUs = new List<Dx12GPU>(4);
             CreateDX12Factory(descriptor);
             EnumerateAdapters(descriptor);
         }
@@ -40,7 +39,7 @@ namespace Infinity.Graphics
                     debug->EnableDebugLayer();
                     factoryFlags |= DXGI.DXGI_CREATE_FACTORY_DEBUG;
 
-                    if (descriptor.EnableGpuValidatior)
+                    if (descriptor.EnableValidatior)
                     {
                         ID3D12Debug1* debug1;
                         if (SUCCEEDED(debug->QueryInterface(__uuidof<ID3D12Debug1>(), (void**)&debug1)))
@@ -61,28 +60,29 @@ namespace Infinity.Graphics
         private void EnumerateAdapters(in RHIInstanceDescriptor descriptor)
         {
             IDXGIAdapter1* adapter = null;
+            m_Devices = new List<Dx12Device>(2);
 
             for (uint i = 0; SUCCEEDED(m_DXGIFactory->EnumAdapters1(i, &adapter)); ++i)
             {
-                m_GPUs.Add(new Dx12GPU(this, adapter));
+                m_Devices.Add(new Dx12Device(this, adapter));
                 adapter = null;
             }
         }
 
-        public override RHIGPU GetGpu(in int index)
+        public override RHIDevice GetDevice(in int index)
         {
-            return m_GPUs[index];
+            return m_Devices[index];
         }
 
         protected override void Release()
         {
             DXGIFactory->Release();
 
-            for(int i = 0; i < m_GPUs?.Count; ++i)
+            for(int i = 0; i < m_Devices.Count; ++i)
             {
-                m_GPUs?[i].Dispose();
+                m_Devices?[i].Dispose();
             }
         }
     }
-#pragma warning restore CA1416
+#pragma warning restore CA1416, CS8602, CS8618
 }

@@ -1,15 +1,16 @@
 ﻿using System;
+using Infinity.Core;
+using System.Diagnostics;
+using Infinity.Collections;
+using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CA1416
-    internal unsafe struct Dx12CommandQueueDescriptor
-    {
-        public EQueueType Type;
-        public ID3D12CommandQueue* Queue;
-    }
-
     internal unsafe class Dx12Queue : RHIQueue
     {
         public Dx12Device Dx12Device
@@ -39,11 +40,20 @@ namespace Infinity.Graphics
         private Dx12Device m_Dx12Device;
         private ID3D12CommandQueue* m_NativeCommandQueue;
 
-        public Dx12Queue(Dx12Device device, in Dx12CommandQueueDescriptor descriptor)
+        public Dx12Queue(Dx12Device device, in EQueueType queueType)
         {
-            m_Type = descriptor.Type;
+            m_Type = queueType;
             m_Dx12Device = device;
-            m_NativeCommandQueue = descriptor.Queue;
+
+            D3D12_COMMAND_QUEUE_DESC queueDesc = new D3D12_COMMAND_QUEUE_DESC();
+            queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAGS.D3D12_COMMAND_QUEUE_FLAG_NONE;
+            queueDesc.Type = Dx12Utility.ConvertToDx12QueueType(queueType);
+
+            ID3D12CommandQueue* commandQueue;
+            bool success = SUCCEEDED(m_Dx12Device.NativeDevice->CreateCommandQueue(&queueDesc, __uuidof<ID3D12CommandQueue>(), (void**)&commandQueue));
+            Debug.Assert(success);
+
+            m_NativeCommandQueue = commandQueue;
         }
 
         public override RHICommandBuffer CreateCommandBuffer()
