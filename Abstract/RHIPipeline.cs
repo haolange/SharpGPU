@@ -153,20 +153,6 @@ namespace Infinity.Graphics
         public Memory<RHIVertexLayoutDescriptor> VertexLayoutDescriptors;
     }
 
-    public struct RHIPipelineLayoutDescriptor
-    {
-        public bool bUseVertexLayout;
-        public bool bIsLocalSignature;
-        public RHIBindTableLayout[] BindTableLayouts;
-        //public RHIPipelineConstantLayout[] PipelineConstantLayouts;
-        public Memory<RHIStaticSamplerDescriptor>? StaticSamplers;
-    };
-
-    public abstract class RHIPipelineLayout : Disposal
-    {
-
-    }
-
     public abstract class RHIComputePipeline : Disposal
     {
         public RHIComputePipelineDescriptor Descriptor => m_Descriptor;
