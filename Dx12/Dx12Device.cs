@@ -1,87 +1,12 @@
 ﻿using System;
-using Infinity.Core;
 using System.Diagnostics;
-using Infinity.Collections;
 using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using static TerraFX.Interop.Windows.Windows;
-using TerraFX.Interop.Gdiplus;
 
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
-    internal unsafe struct Dx12DescriptorInfo
-    {
-        public int Index;
-        public ID3D12DescriptorHeap* DescriptorHeap;
-        public D3D12_CPU_DESCRIPTOR_HANDLE CpuHandle;
-        public D3D12_GPU_DESCRIPTOR_HANDLE GpuHandle;
-    };
-
-    internal unsafe class Dx12DescriptorHeap : Disposal
-    {
-        public uint DescriptorSize => m_DescriptorSize;
-        public D3D12_DESCRIPTOR_HEAP_TYPE Type => m_Type;
-        public ID3D12DescriptorHeap* DescriptorHeap => m_DescriptorHeap;
-        public D3D12_CPU_DESCRIPTOR_HANDLE CpuStartHandle => m_DescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-        public D3D12_GPU_DESCRIPTOR_HANDLE GpuStartHandle => m_DescriptorHeap->GetGPUDescriptorHandleForHeapStart();
-
-        private uint m_DescriptorSize;
-        private TValueArray<int> m_CacheMap;
-        private D3D12_DESCRIPTOR_HEAP_TYPE m_Type;
-        private ID3D12DescriptorHeap* m_DescriptorHeap;
-
-        public Dx12DescriptorHeap(ID3D12Device10* device, in D3D12_DESCRIPTOR_HEAP_TYPE type, in D3D12_DESCRIPTOR_HEAP_FLAGS flag, in uint count)
-        {
-            m_CacheMap = new TValueArray<int>((int)count);
-            for (int i = 0; i < (int)count; ++i)
-            {
-                m_CacheMap.Add(i);
-            }
-
-            m_Type = type;
-            m_DescriptorSize = device->GetDescriptorHandleIncrementSize(type);
-
-            D3D12_DESCRIPTOR_HEAP_DESC descriptorInfo;
-            descriptorInfo.Type = type;
-            descriptorInfo.Flags = flag;
-            descriptorInfo.NumDescriptors = count;
-
-            ID3D12DescriptorHeap* descriptorHeap;
-            bool success = SUCCEEDED(device->CreateDescriptorHeap(&descriptorInfo, __uuidof<ID3D12DescriptorHeap>(), (void**)&descriptorHeap));
-            Debug.Assert(success);
-            m_DescriptorHeap = descriptorHeap;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int Allocate()
-        {
-            int index = m_CacheMap[m_CacheMap.length - 1];
-            m_CacheMap.RemoveSwapAtIndex(m_CacheMap.length - 1);
-            return index;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int Allocate(in int count)
-        {
-            return -1;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Free(in int index)
-        {
-            m_CacheMap.Add(index);
-        }
-
-        protected override void Release()
-        {
-            m_CacheMap.Dispose();
-            m_DescriptorHeap->Release();
-        }
-    }
-
     internal unsafe class Dx12Device : RHIDevice
     {
         public override bool IsRaytracingSupported => bRaytracingSupported;

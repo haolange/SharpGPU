@@ -6,7 +6,6 @@ using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using Viewport = Infinity.Mathmatics.Viewport;
-using System.Reflection.Metadata;
 
 namespace Infinity.Graphics
 {
@@ -224,27 +223,23 @@ namespace Infinity.Graphics
             PushDebugGroup(name);
         }
 
+        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            m_PipelineLayout = pipelineLayout;
+            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
+        }
+
         public override void SetPipeline(RHIComputePipeline pipeline)
         {
-            Debug.Assert(pipeline != null);
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
             m_Pipeline = pipeline;
             Dx12ComputePipeline dx12Pipeline = pipeline as Dx12ComputePipeline;
             dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12Pipeline.NativePipelineState);
-
-            m_PipelineLayout = pipeline.Descriptor.PipelineLayout;
-            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
-            dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
-
-        /*public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
-        {
-            m_PipelineLayout = pipelineLayout;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
-            dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
-        }*/
 
         public override void SetBindTable(in uint tableIndex, RHIBindTable bindTable)
         {
@@ -380,27 +375,23 @@ namespace Infinity.Graphics
             PushDebugGroup(name);
         }
 
+        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            m_PipelineLayout = pipelineLayout;
+            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
+        }
+
         public override void SetPipeline(RHIRaytracingPipeline pipeline)
         {
-            Debug.Assert(pipeline != null);
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
             m_Pipeline = pipeline;
             Dx12RaytracingPipeline dx12Pipeline = pipeline as Dx12RaytracingPipeline;
             dx12CommandBuffer.NativeCommandList->SetPipelineState1(dx12Pipeline.NativePipelineState);
-
-            m_PipelineLayout = pipeline.Descriptor.PipelineLayout;
-            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
-            dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
-
-        /*public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
-        {
-            m_PipelineLayout = pipelineLayout;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
-            dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
-        }*/
 
         public override void SetBindTable(in uint tableIndex, RHIBindTable bindTable)
         {
@@ -740,31 +731,23 @@ namespace Infinity.Graphics
             throw new NotImplementedException("Dx12 is not support subpass. Please do not use NextSubpass command in graphics encoder");
         }
 
+        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            m_PipelineLayout = pipelineLayout;
+            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
+        }
+
         public override void SetPipeline(RHIMeshletPipeline pipeline)
         {
-            Debug.Assert(pipeline != null);
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
             m_Pipeline = pipeline;
             Dx12MeshletPipeline dx12Pipeline = pipeline as Dx12MeshletPipeline;
-            dx12CommandBuffer.NativeCommandList->OMSetStencilRef((uint)dx12Pipeline.StencilRef);
             dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12Pipeline.NativePipelineState);
-            dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12Pipeline.PrimitiveTopology);
-
-            m_PipelineLayout = pipeline.Descriptor.PipelineLayout;
-            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
-            dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
-
-        /*public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
-        {
-            Debug.Assert(pipelineLayout != null);
-
-            m_PipelineLayout = pipelineLayout;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
-            dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
-        }*/
 
         public override void SetBindTable(in uint tableIndex, RHIBindTable bindTable)
         {
@@ -1098,30 +1081,23 @@ namespace Infinity.Graphics
             throw new NotImplementedException("Dx12 is not support subpass. Please do not use NextSubpass command in graphics encoder");
         }
 
+        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            m_PipelineLayout = pipelineLayout;
+            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
+        }
+
         public override void SetPipeline(RHIGraphicsPipeline pipeline)
         {
-            Debug.Assert(pipeline != null);
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
             m_Pipeline = pipeline;
             Dx12GraphicsPipeline dx12Pipeline = pipeline as Dx12GraphicsPipeline;
             dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12Pipeline.NativePipelineState);
-            dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12Pipeline.PrimitiveTopology);
-
-            m_PipelineLayout = pipeline.Descriptor.PipelineLayout;
-            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
-            dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
-
-        /*public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
-        {
-            Debug.Assert(pipelineLayout != null);
-
-            m_PipelineLayout = pipelineLayout;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
-            dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
-        }*/
 
         public override void SetBindTable(in uint tableIndex, RHIBindTable bindTable)
         {
