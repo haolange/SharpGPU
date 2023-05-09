@@ -247,9 +247,9 @@ namespace Infinity.Graphics
             Dx12BindTableLayout dx12BindTableLayout = dx12BindTable.BindTableLayout;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
-            #if DEBUG
-                Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
-            #endif
+#if DEBUG
+            Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
+#endif
 
             for (int i = 0; i < dx12BindTable.NativeGpuDescriptorHandles.Length; ++i)
             {
@@ -399,9 +399,9 @@ namespace Infinity.Graphics
             Dx12BindTableLayout dx12BindTableLayout = dx12BindTable.BindTableLayout;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
-            #if DEBUG
-                Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
-            #endif
+#if DEBUG
+            Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
+#endif
 
             for (int i = 0; i < dx12BindTable.NativeGpuDescriptorHandles.Length; ++i)
             {
@@ -449,8 +449,8 @@ namespace Infinity.Graphics
 
             D3D12_DISPATCH_RAYS_DESC dispatchRayDescriptor;
             dispatchRayDescriptor.Depth = depth;
-            dispatchRayDescriptor.Width = width; 
-            dispatchRayDescriptor.Height = height; 
+            dispatchRayDescriptor.Width = width;
+            dispatchRayDescriptor.Height = height;
             dispatchRayDescriptor.MissShaderTable.SizeInBytes = dx12FunctionTable.MissSize;
             dispatchRayDescriptor.MissShaderTable.StartAddress = dx12FunctionTable.MissAddress;
             dispatchRayDescriptor.MissShaderTable.StrideInBytes = dx12FunctionTable.MissStride;
@@ -737,7 +737,7 @@ namespace Infinity.Graphics
 
             m_PipelineLayout = pipelineLayout;
             Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
-            dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
+            dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
 
         public override void SetPipeline(RHIMeshletPipeline pipeline)
@@ -747,6 +747,7 @@ namespace Infinity.Graphics
             m_Pipeline = pipeline;
             Dx12MeshletPipeline dx12Pipeline = pipeline as Dx12MeshletPipeline;
             dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12Pipeline.NativePipelineState);
+            dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12Pipeline.PrimitiveTopology);
         }
 
         public override void SetBindTable(in uint tableIndex, RHIBindTable bindTable)
@@ -755,9 +756,9 @@ namespace Infinity.Graphics
             Dx12BindTableLayout dx12BindTableLayout = dx12BindTable.BindTableLayout;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
-            #if DEBUG
-                Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
-            #endif
+#if DEBUG
+            Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
+#endif
 
             for (int i = 0; i < dx12BindTable.NativeGpuDescriptorHandles.Length; ++i)
             {
@@ -914,7 +915,7 @@ namespace Infinity.Graphics
             m_SubPassIndex = 0;
             PushDebugGroup(descriptor.Name);
 
-            if(descriptor.SubpassDescriptors != null)
+            if (descriptor.SubpassDescriptors != null)
             {
                 throw new NotImplementedException("Dx12 is not support subpass. Please do not use subpass descriptors");
             }
@@ -1087,7 +1088,7 @@ namespace Infinity.Graphics
 
             m_PipelineLayout = pipelineLayout;
             Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
-            dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
+            dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
 
         public override void SetPipeline(RHIGraphicsPipeline pipeline)
@@ -1097,6 +1098,7 @@ namespace Infinity.Graphics
             m_Pipeline = pipeline;
             Dx12GraphicsPipeline dx12Pipeline = pipeline as Dx12GraphicsPipeline;
             dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12Pipeline.NativePipelineState);
+            dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12Pipeline.PrimitiveTopology);
         }
 
         public override void SetBindTable(in uint tableIndex, RHIBindTable bindTable)
@@ -1105,9 +1107,9 @@ namespace Infinity.Graphics
             Dx12BindTableLayout dx12BindTableLayout = dx12BindTable.BindTableLayout;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
-            #if DEBUG
-                Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
-            #endif
+#if DEBUG
+            Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
+#endif
 
             for (int i = 0; i < dx12BindTable.NativeGpuDescriptorHandles.Length; ++i)
             {
