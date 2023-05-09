@@ -444,47 +444,61 @@ namespace Infinity.Graphics
 
     public enum EStorageMode : byte
     {
-        Default = 0,
-        Static = 1,
-        Dynamic = 2,
-        Staging = 3,
+        Default,
+        Static,
+        Dynamic,
+        Staging,
+        Pending
+    }
+
+    public enum EOwnerState : byte
+    {
+        BlitToBlit,
+        BlitToCompute,
+        BlitToGraphics,
+        ComputeToBlit,
+        ComputeToCompute,
+        ComputeToGraphics,
+        GraphicsToBlit,
+        GraphicsToCompute,
+        GraphicsToGraphics,
         Pending
     }
 
     public enum EBufferState
     {
-        Common = 0,
-        GenericRead = 0x00000001,
-        CopyDest = 0x00000002,
-        CopySource = 0x00000004,
-        IndexBuffer = 0x00000008,
-        VertexBuffer = 0x00000010,
-        ConstantBuffer = 0x00000020,
-        IndirectArgument = 0x00000040,
-        ShaderResource = 0x00000080,
-        UnorderedAccess = 0x00000100,
-        AccelStructRead = 0x00000200,
-        AccelStructWrite = 0x00000400,
-        AccelStructBuildInput = 0x00000800,
-        AccelStructBuildBlast = 0x00001000,
+        Common,
+        GenericRead,
+        CopyDest,
+        CopySource,
+        IndexBuffer,
+        VertexBuffer,
+        ConstantBuffer,
+        IndirectArgument,
+        ShaderResource,
+        UnorderedAccess,
+        AccelStructRead,
+        AccelStructWrite,
+        AccelStructBuildInput,
+        AccelStructBuildBlast,
         Pending
     }
 
     public enum ETextureState
     {
-        Common = 0,
-        Present = 0x00000001,
-        GenericRead = 0x00000002,
-        CopyDest = 0x00000004,
-        CopySource = 0x00000008,
-        ResolveDest = 0x00000010,
-        ResolveSource = 0x00000020,
-        DepthRead = 0x00000040,
-        DepthWrite = 0x00000080,
-        RenderTarget = 0x00000100,
-        ShaderResource = 0x00000200,
-        UnorderedAccess = 0x00000400,
-        ShadingRateSurface = 0x00000800,
+        Common,
+        Present,
+        GenericRead,
+        CopyDest,
+        CopySource,
+        ResolveDest,
+        ResolveSource,
+        DepthRead,
+        DepthWrite,
+        RenderTarget,
+        ShaderResource,
+        UnorderedAccess,
+        ShadingRateSurface,
         Pending
     }
 
@@ -527,14 +541,14 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EFunctionType
+    public enum EFunctionType : byte
     {
-        Compute = 0x0020,
-        Vertex = 0x0001,
-        Fragment = 0x0002,
-        Task = 0x0004,
-        Mesh = 0x0008,
-        RayTracing = 0x0010,
+        Compute,
+        Vertex,
+        Fragment,
+        Task,
+        Mesh,
+        RayTracing,
         Pending
     }
 
