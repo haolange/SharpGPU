@@ -273,12 +273,19 @@ namespace Infinity.Graphics
     {
         Buffer,
         Texture,
-        Bindless,
         Sampler,
         AccelStruct,
         UniformBuffer,
         StorageBuffer,
         StorageTexture,
+        Pending
+    }
+
+    public enum EBindlessType : byte
+    {
+        Buffer,
+        Texture,
+        Sampler,
         Pending
     }
 

@@ -65,10 +65,8 @@ namespace Infinity.Graphics
 
                     D3D12_SHADER_RESOURCE_VIEW_DESC desc = new D3D12_SHADER_RESOURCE_VIEW_DESC();
                     desc.Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
-                    desc.Buffer.NumElements = (uint)descriptor.Count;
-                    desc.Buffer.FirstElement = (ulong)descriptor.Offset;
-                    desc.Buffer.StructureByteStride = (uint)descriptor.Stride;
-                    desc.ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_BUFFER;
+                    desc.RaytracingAccelerationStructure.Location = m_Dx12Buffer.NativeResource->GetGPUVirtualAddress();
+                    desc.ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
                     desc.Shader4ComponentMapping = 5768;
 
                     Dx12DescriptorInfo allocation = m_Dx12Buffer.Dx12Device.AllocateCbvSrvUavDescriptor(1);

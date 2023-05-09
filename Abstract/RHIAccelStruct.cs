@@ -101,7 +101,6 @@ namespace Infinity.Graphics
 
         protected RHITopLevelAccelStructDescriptor m_Descriptor;
 
-        public abstract RHIBufferView CreateBufferView(in RHIBufferViewDescriptor descriptor);
         public abstract void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
     }
 
@@ -111,7 +110,6 @@ namespace Infinity.Graphics
 
         protected RHIBottomLevelAccelStructDescriptor m_Descriptor;
 
-        public abstract RHIBufferView CreateBufferView(in RHIBufferViewDescriptor descriptor);
         public abstract void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
     }
 }

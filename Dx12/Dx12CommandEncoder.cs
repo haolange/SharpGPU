@@ -932,22 +932,22 @@ namespace Infinity.Graphics
                 Dx12Texture texture = descriptor.ColorAttachmentDescriptors.Span[i].RenderTarget as Dx12Texture;
                 Debug.Assert(texture != null);
 
-                /*RHITextureViewDescriptor viewDescriptor;
+                RHITextureViewDescriptor viewDescriptor;
                 {
                     viewDescriptor.MipCount = texture.Descriptor.MipCount;
                     viewDescriptor.BaseMipLevel = 0;
                     viewDescriptor.BaseArrayLayer = 0;
                     viewDescriptor.ArrayLayerCount = texture.Descriptor.Extent.z;
                     viewDescriptor.Format = texture.Descriptor.Format;
-                    viewDescriptor.ViewType = ETextureViewType.RenderTarget;
-                    viewDescriptor.Dimension = ETextureDimension.Texture2D;
-                }*/
+                    viewDescriptor.ViewType = ETextureViewType.Pending;
+                    viewDescriptor.Dimension = texture.Descriptor.Dimension;
+                }
                 D3D12_RENDER_TARGET_VIEW_DESC desc = new D3D12_RENDER_TARGET_VIEW_DESC();
                 desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
                 desc.ViewDimension = Dx12Utility.ConvertToDx12TextureRTVDimension(texture.Descriptor.Dimension);
-                /*Dx12Utility.FillTexture2DRTV(ref desc.Texture2D, viewDescriptor);
+                Dx12Utility.FillTexture2DRTV(ref desc.Texture2D, viewDescriptor);
                 Dx12Utility.FillTexture3DRTV(ref desc.Texture3D, viewDescriptor);
-                Dx12Utility.FillTexture2DArrayRTV(ref desc.Texture2DArray, viewDescriptor);*/
+                Dx12Utility.FillTexture2DArrayRTV(ref desc.Texture2DArray, viewDescriptor);
 
                 Dx12AttachmentInfo dx12AttachmentInfo = new Dx12AttachmentInfo();
                 {
@@ -966,20 +966,23 @@ namespace Infinity.Graphics
                 Dx12Texture texture = descriptor.DepthStencilAttachmentDescriptor?.DepthStencilTarget as Dx12Texture;
                 Debug.Assert(texture != null);
 
-                /*RHITextureViewDescriptor viewDescriptor;
+                RHITextureViewDescriptor viewDescriptor;
                 {
                     viewDescriptor.MipCount = texture.Descriptor.MipCount;
                     viewDescriptor.BaseMipLevel = 0;
                     viewDescriptor.BaseArrayLayer = 0;
                     viewDescriptor.ArrayLayerCount = texture.Descriptor.Extent.z;
                     viewDescriptor.Format = texture.Descriptor.Format;
-                    viewDescriptor.ViewType = ETextureViewType.DepthStencil;
-                    viewDescriptor.Dimension = ETextureDimension.Texture2D;
-                }*/
+                    viewDescriptor.ViewType = ETextureViewType.Pending;
+                    viewDescriptor.Dimension = texture.Descriptor.Dimension;
+                }
                 D3D12_DEPTH_STENCIL_VIEW_DESC desc = new D3D12_DEPTH_STENCIL_VIEW_DESC();
                 desc.Flags = Dx12Utility.GetDx12DSVFlag(descriptor.DepthStencilAttachmentDescriptor.Value.DepthReadOnly, descriptor.DepthStencilAttachmentDescriptor.Value.StencilReadOnly);
                 desc.Format = Dx12Utility.ConvertToDx12Format(texture.Descriptor.Format);
                 desc.ViewDimension = Dx12Utility.ConvertToDx12TextureDSVDimension(texture.Descriptor.Dimension);
+                /*Dx12Utility.FillTexture2DDSV(ref desc.Texture2D, viewDescriptor);
+                Dx12Utility.FillTexture3DDSV(ref desc.Texture3D, viewDescriptor);
+                Dx12Utility.FillTexture2DArrayDSV(ref desc.Texture2DArray, viewDescriptor);*/
 
                 Dx12AttachmentInfo dx12AttachmentInfo = new Dx12AttachmentInfo();
                 {

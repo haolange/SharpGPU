@@ -66,10 +66,10 @@ namespace Infinity.Graphics
                     ref Dx12BindInfo bindInfo = ref bindTableLayout.BindInfos[j];
 
                     ref D3D12_DESCRIPTOR_RANGE1 rootDescriptorRange = ref rootDescriptorRangeViews[i + j];
-                    rootDescriptorRange.Init(Dx12Utility.ConvertToDx12BindType(bindInfo.BindType), bindInfo.IsBindless ? bindInfo.Count : 1, bindInfo.BindSlot, bindInfo.Index, Dx12Utility.GetDx12DescriptorRangeFalag(bindInfo.BindType));
+                    rootDescriptorRange.Init(Dx12Utility.ConvertToDx12BindType(bindInfo.BindType), bindInfo.IsBindless ? bindInfo.BindlessDescriptor.Value.Count : 1, bindInfo.BindSlot, bindInfo.Index, Dx12Utility.GetDx12DescriptorRangeFalag(bindInfo.BindType));
 
                     ref D3D12_ROOT_PARAMETER1 rootParameterView = ref rootParameterViews[i + j];
-                    rootParameterView.InitAsDescriptorTable(1, rootDescriptorRangePtr + (i + j), Dx12Utility.ConvertToDx12ShaderStage(bindInfo.FunctionStage));
+                    rootParameterView.InitAsDescriptorTable(1, rootDescriptorRangePtr + (i + j), Dx12Utility.ConvertToDx12ShaderStage(bindInfo.Visibility));
 
                     Dx12BindTypeAndParameterSlot parameter;
                     {
@@ -77,22 +77,22 @@ namespace Infinity.Graphics
                         parameter.BindType = bindInfo.BindType;
                     }
 
-                    if ((bindInfo.FunctionStage & EFunctionStage.All) == EFunctionStage.All)
+                    if ((bindInfo.Visibility & EFunctionStage.All) == EFunctionStage.All)
                     {
                         m_AllParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.BindSlot, Dx12Utility.GetDx12BindKey(bindInfo.BindType)).GetHashCode(), parameter);
                     }
 
-                    if ((bindInfo.FunctionStage & EFunctionStage.Vertex) == EFunctionStage.Vertex)
+                    if ((bindInfo.Visibility & EFunctionStage.Vertex) == EFunctionStage.Vertex)
                     {
                         m_VertexParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.BindSlot, Dx12Utility.GetDx12BindKey(bindInfo.BindType)).GetHashCode(), parameter);
                     }
 
-                    if ((bindInfo.FunctionStage & EFunctionStage.Fragment) == EFunctionStage.Fragment)
+                    if ((bindInfo.Visibility & EFunctionStage.Fragment) == EFunctionStage.Fragment)
                     {
                         m_FragmentParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.BindSlot, Dx12Utility.GetDx12BindKey(bindInfo.BindType)).GetHashCode(), parameter);
                     }
 
-                    if ((bindInfo.FunctionStage & EFunctionStage.Compute) == EFunctionStage.Compute)
+                    if ((bindInfo.Visibility & EFunctionStage.Compute) == EFunctionStage.Compute)
                     {
                         m_ComputeParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.BindSlot, Dx12Utility.GetDx12BindKey(bindInfo.BindType)).GetHashCode(), parameter);
                     }

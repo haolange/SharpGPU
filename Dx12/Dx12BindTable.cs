@@ -1,5 +1,7 @@
 ﻿using System.Diagnostics;
+using System.Xml.Linq;
 using TerraFX.Interop.DirectX;
+using TerraFX.Interop.Windows;
 
 namespace Infinity.Graphics
 {
@@ -57,10 +59,11 @@ namespace Infinity.Graphics
                         Dx12Sampler samplerState = element.Sampler as Dx12Sampler;
                         nativeGpuDescriptorHandle = samplerState.NativeGpuDescriptorHandle;
                         break;
+                }
 
-                    case EBindType.Bindless:
-                        //Todo Bindless
-                        break;
+                if(bindInfo.IsBindless)
+                {
+                    //Todo Bindless
                 }
             }
         }
@@ -68,7 +71,6 @@ namespace Infinity.Graphics
         public override void SetBindElement(in RHIBindTableElement element, in EBindType bindType, in int slot)
         {
             ref D3D12_GPU_DESCRIPTOR_HANDLE nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[slot];
-
             switch (bindType)
             {
                 case EBindType.Buffer:
@@ -88,12 +90,15 @@ namespace Infinity.Graphics
                     Dx12Sampler samplerState = element.Sampler as Dx12Sampler;
                     nativeGpuDescriptorHandle = samplerState.NativeGpuDescriptorHandle;
                     break;
-
-                case EBindType.Bindless:
-                    //Todo Bindless
-                    break;
             }
         }
+
+        public override void SetBindElement(in RHIBindTableElement element, in RHIBindlessDescriptor bindlessDescriptor, in int slot)
+        {
+            ref D3D12_GPU_DESCRIPTOR_HANDLE nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[slot];
+            //Todo Bindless
+        }
+
 
         protected override void Release()
         {

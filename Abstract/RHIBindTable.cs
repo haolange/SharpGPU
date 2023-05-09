@@ -10,6 +10,7 @@ namespace Infinity.Graphics
         public RHISampler Sampler;
         public RHIBufferView BufferView;
         public RHITextureView TextureView;
+        public RHITopLevelAccelStruct AccelStruct;
     }
 
     public struct RHIBindTableDescriptor
@@ -21,5 +22,6 @@ namespace Infinity.Graphics
     public abstract class RHIBindTable : Disposal
     {
         public abstract void SetBindElement(in RHIBindTableElement element, in EBindType bindType, in int slot);
+        public abstract void SetBindElement(in RHIBindTableElement element, in RHIBindlessDescriptor BindlessDescriptor, in int slot);
     }
 }
