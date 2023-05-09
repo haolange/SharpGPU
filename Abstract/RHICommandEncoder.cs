@@ -162,7 +162,7 @@ namespace Infinity.Graphics
         internal abstract void BeginPass(string name);
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipeline(RHIComputePipeline pipeline);
-        public abstract void SetBindTable(in uint tableIndex, RHIBindTable bindTable);
+        public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
         // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
@@ -182,7 +182,7 @@ namespace Infinity.Graphics
         internal abstract void BeginPass(string name);
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipeline(RHIRaytracingPipeline pipeline);
-        public abstract void SetBindTable(in uint tableIndex, RHIBindTable bindTable);
+        public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
         public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct tlas);
         public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct blas);
         public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
@@ -211,7 +211,7 @@ namespace Infinity.Graphics
         public abstract void NextSubpass();
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipeline(RHIMeshletPipeline pipeline);
-        public abstract void SetBindTable(in uint tableIndex, RHIBindTable bindTable);
+        public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
         // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
@@ -238,9 +238,9 @@ namespace Infinity.Graphics
         public abstract void NextSubpass();
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipeline(RHIGraphicsPipeline pipeline);
-        public abstract void SetBindTable(in uint tableIndex, RHIBindTable bindTable);
-        public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot = 0, in uint offset = 0);
-        public abstract void SetIndexBuffer(RHIBuffer buffer, in EIndexFormat format, in uint offset = 0);
+        public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
+        public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset);
+        public abstract void SetIndexBuffer(RHIBuffer buffer, in uint offset, in EIndexFormat format);
         public abstract void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance);
         public abstract void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance);
         public abstract void DrawIndirect(RHIBuffer argsBuffer, in uint offset);

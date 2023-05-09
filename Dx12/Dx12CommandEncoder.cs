@@ -241,7 +241,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12Pipeline.NativePipelineState);
         }
 
-        public override void SetBindTable(in uint tableIndex, RHIBindTable bindTable)
+        public override void SetBindTable(RHIBindTable bindTable, in uint tableIndex)
         {
             Dx12BindTable dx12BindTable = bindTable as Dx12BindTable;
             Dx12BindTableLayout dx12BindTableLayout = dx12BindTable.BindTableLayout;
@@ -393,7 +393,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->SetPipelineState1(dx12Pipeline.NativePipelineState);
         }
 
-        public override void SetBindTable(in uint tableIndex, RHIBindTable bindTable)
+        public override void SetBindTable(RHIBindTable bindTable, in uint tableIndex)
         {
             Dx12BindTable dx12BindTable = bindTable as Dx12BindTable;
             Dx12BindTableLayout dx12BindTableLayout = dx12BindTable.BindTableLayout;
@@ -750,7 +750,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12Pipeline.PrimitiveTopology);
         }
 
-        public override void SetBindTable(in uint tableIndex, RHIBindTable bindTable)
+        public override void SetBindTable(RHIBindTable bindTable, in uint tableIndex)
         {
             Dx12BindTable dx12BindTable = bindTable as Dx12BindTable;
             Dx12BindTableLayout dx12BindTableLayout = dx12BindTable.BindTableLayout;
@@ -1101,7 +1101,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12Pipeline.PrimitiveTopology);
         }
 
-        public override void SetBindTable(in uint tableIndex, RHIBindTable bindTable)
+        public override void SetBindTable(RHIBindTable bindTable, in uint tableIndex)
         {
             Dx12BindTable dx12BindTable = bindTable as Dx12BindTable;
             Dx12BindTableLayout dx12BindTableLayout = dx12BindTable.BindTableLayout;
@@ -1156,7 +1156,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->IASetVertexBuffers(slot, 1, &vertexBufferView);
         }
 
-        public override void SetIndexBuffer(RHIBuffer buffer, in EIndexFormat format, in uint offset = 0)
+        public override void SetIndexBuffer(RHIBuffer buffer, in uint offset, in EIndexFormat format)
         {
             Dx12Buffer dx12Buffer = buffer as Dx12Buffer;
             D3D12_INDEX_BUFFER_VIEW indexBufferView = new D3D12_INDEX_BUFFER_VIEW

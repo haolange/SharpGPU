@@ -455,13 +455,13 @@ namespace Infinity.Graphics
     {
         BlitToBlit,
         BlitToCompute,
-        BlitToGraphics,
+        BlitToGfx,
         ComputeToBlit,
         ComputeToCompute,
-        ComputeToGraphics,
-        GraphicsToBlit,
-        GraphicsToCompute,
-        GraphicsToGraphics,
+        ComputeToGfx,
+        GfxToBlit,
+        GfxToCompute,
+        GfxToGfx,
         Pending
     }
 
