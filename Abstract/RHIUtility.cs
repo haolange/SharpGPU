@@ -511,22 +511,22 @@ namespace Infinity.Graphics
 
     public enum EBufferUsage
     {
+        AccelStruct = 0x0010,
         IndexBuffer = 0x0020,
         VertexBuffer = 0x0001,
         UniformBuffer = 0x0002,
         IndirectBuffer = 0x0004,
         ShaderResource = 0x0008,
         UnorderedAccess = 0x0010,
-        AccelStruct = 0x0040,
         Pending
     }
 
     public enum EBufferViewType : byte
     {
+        AccelStruct,
         UniformBuffer,
         ShaderResource,
         UnorderedAccess,
-        AccelStruct,
         Pending
     }
 
