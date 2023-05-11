@@ -31,6 +31,30 @@ namespace Infinity.Graphics
         }
     }
 
+    internal unsafe class Dx12FunctionLibrary : RHIFunctionLibrary
+    {
+        public D3D12_SHADER_BYTECODE NativeShaderBytecode
+        {
+            get
+            {
+                return m_NativeShaderBytecode;
+            }
+        }
+
+        private D3D12_SHADER_BYTECODE m_NativeShaderBytecode;
+
+        public Dx12FunctionLibrary(in RHIFunctionLibraryDescriptor descriptor)
+        {
+            m_Descriptor = descriptor;
+            m_NativeShaderBytecode = new D3D12_SHADER_BYTECODE(descriptor.ByteCode.ToPointer(), new UIntPtr(descriptor.ByteSize));
+        }
+
+        protected override void Release()
+        {
+
+        }
+    }
+
     internal struct Dx12FunctionTableEntry
     {
         public string ShaderIdentifier;
@@ -53,7 +77,6 @@ namespace Infinity.Graphics
         private uint m_ProgramCount;
         private Dx12Device m_Dx12Device;
         private ID3D12Resource* m_NativeResource;
-        private ID3D12StateObjectProperties* ObjectProperties;
         private Dx12FunctionTableEntry m_RayGenerationProgram;
         private TArray<Dx12FunctionTableEntry> m_MissPrograms;
         private TArray<Dx12FunctionTableEntry> m_HitGroupPrograms;
@@ -119,18 +142,21 @@ namespace Infinity.Graphics
 
             ID3D12Resource* dx12Resource;
             bool success = SUCCEEDED(m_Dx12Device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &resourceDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ, null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource));
+#if DEBUG
             Debug.Assert(success);
+#endif
             m_NativeResource = dx12Resource;
 
             ID3D12StateObjectProperties* objectProperties;
             success = SUCCEEDED(dx12RaytracingPipeline.NativePipelineState->QueryInterface(__uuidof<ID3D12StateObjectProperties>(), (void**)&objectProperties));
+#if DEBUG
             Debug.Assert(success);
-            ObjectProperties = objectProperties;
+#endif
         }
 
         public override void Update(RHIRaytracingPipeline rayTracingPipeline)
         {
-            throw new NotImplementedException();
+            throw new NotImplementedException("To Do .....");
         }
 
         protected override void Release()

@@ -95,23 +95,6 @@ namespace Infinity.Graphics
         public RHIDepthStencilStateDescriptor DepthStencilStateDescriptor;
     }
 
-    public struct RHIRayHitGroupDescriptor
-    {
-        public string Name;
-        public EHitGroupType Type;
-        public RHIPipelineLayout PipelineLayout;
-        public RHIFunctionDescriptor? AnyHitDescriptor;
-        public RHIFunctionDescriptor? IntersectDescriptor;
-        public RHIFunctionDescriptor? ClosestHitDescriptor;
-    }
-
-    public struct RHIRayGeneralGroupDescriptor
-    {
-        public string Name;
-        public RHIPipelineLayout PipelineLayout;
-        public RHIFunctionDescriptor GeneralDescriptor;
-    }
-
     public struct RHIComputePipelineDescriptor
     {
         public uint3 ThreadSize;
@@ -119,13 +102,30 @@ namespace Infinity.Graphics
         public RHIPipelineLayout PipelineLayout;
     }
 
+    public struct RHIRayHitGroupDescriptor
+    {
+        public string Name;
+        public EHitGroupType Type;
+        internal RHIPipelineLayout PipelineLayout;
+        public RHIRayFunctionDescriptor? AnyHitDescriptor;
+        public RHIRayFunctionDescriptor? IntersectDescriptor;
+        public RHIRayFunctionDescriptor? ClosestHitDescriptor;
+    }
+
+    public struct RHIRayGeneralGroupDescriptor
+    {
+        public string Name;
+        internal RHIPipelineLayout PipelineLayout;
+        public RHIRayFunctionDescriptor GeneralDescriptor;
+    }
+
     public struct RHIRaytracingPipelineDescriptor
     {
         public uint MaxPayloadSize;
         public uint MaxAttributeSize;
         public uint MaxRecursionDepth;
-        public RHIFunction FunctionLibrary;
         public RHIPipelineLayout PipelineLayout;
+        public RHIFunctionLibrary FunctionLibrary;
         public RHIRayGeneralGroupDescriptor RayGenerationDescriptor;
         public Memory<RHIRayHitGroupDescriptor> RayHitGroupDescriptors;
         public Memory<RHIRayGeneralGroupDescriptor> RayMissGroupDescriptors;

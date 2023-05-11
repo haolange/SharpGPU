@@ -11,6 +11,17 @@ namespace Infinity.Graphics
         public EFunctionType Type;
     }
 
+    public struct RHIRayFunctionDescriptor
+    {
+        public string EntryName;
+    }
+
+    public struct RHIFunctionLibraryDescriptor
+    {
+        public uint ByteSize;
+        public IntPtr ByteCode;
+    }
+
     public abstract class RHIFunction : Disposal
     {
         public RHIFunctionDescriptor Descriptor
@@ -22,6 +33,19 @@ namespace Infinity.Graphics
         }
 
         protected RHIFunctionDescriptor m_Descriptor;
+    }
+
+    public abstract class RHIFunctionLibrary : Disposal
+    {
+        public RHIFunctionLibraryDescriptor Descriptor
+        {
+            get
+            {
+                return m_Descriptor;
+            }
+        }
+
+        protected RHIFunctionLibraryDescriptor m_Descriptor;
     }
 
     public abstract class RHIFunctionTable : Disposal

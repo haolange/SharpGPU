@@ -27,6 +27,13 @@ namespace Infinity.Graphics
         {
 
         }
+
+        protected override void Release()
+        {
+            m_ResultBuffer->Release();
+            m_ScratchBuffer->Release();
+            m_InstancesBuffer->Release();
+        }
     }
 
     internal unsafe class Dx12BottomLevelAccelStruct : RHIBottomLevelAccelStruct
@@ -81,6 +88,12 @@ namespace Infinity.Graphics
                         break;
                 }
             }
+        }
+
+        protected override void Release()
+        {
+            m_ResultBuffer->Release();
+            m_ScratchBuffer->Release();
         }
     }
 #pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416
