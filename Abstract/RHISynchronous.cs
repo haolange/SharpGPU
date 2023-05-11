@@ -45,14 +45,14 @@ namespace Infinity.Graphics
 
     public struct RHIBarrier
     {
-        public EBarrierType BarrierType => m_BarrierType;
-        public EResourceType ResourceType => m_ResourceType;
-        public RHIBufferUAVBarrierDescriptor BufferUAVBarrier => m_BufferUAVBarrier;
-        public RHITextureUAVBarrierDescriptor TextureUAVBarrier => m_TextureUAVBarrier;
-        public RHIBufferAliasingBarrierDescriptor BufferAliasingBarrier => m_BufferAliasingBarrier;
-        public RHITextureAliasingBarrierDescriptor TextureAliasingBarrier => m_TextureAliasingBarrier;
-        public RHIBufferTransitionBarrierDescriptor BufferTransitionBarrier => m_BufferTransitionBarrier;
-        public RHITextureTransitionBarrierDescriptor TextureTransitionBarrier => m_TextureTransitionBarrier;
+        internal EBarrierType BarrierType => m_BarrierType;
+        internal EResourceType ResourceType => m_ResourceType;
+        internal RHIBufferUAVBarrierDescriptor BufferUAVBarrier => m_BufferUAVBarrier;
+        internal RHITextureUAVBarrierDescriptor TextureUAVBarrier => m_TextureUAVBarrier;
+        internal RHIBufferAliasingBarrierDescriptor BufferAliasingBarrier => m_BufferAliasingBarrier;
+        internal RHITextureAliasingBarrierDescriptor TextureAliasingBarrier => m_TextureAliasingBarrier;
+        internal RHIBufferTransitionBarrierDescriptor BufferTransitionBarrier => m_BufferTransitionBarrier;
+        internal RHITextureTransitionBarrierDescriptor TextureTransitionBarrier => m_TextureTransitionBarrier;
 
         private EBarrierType m_BarrierType;
         private EResourceType m_ResourceType;

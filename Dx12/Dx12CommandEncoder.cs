@@ -91,7 +91,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureUAVBarrier.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(texture != null);
 #endif
                         resource = texture.NativeResource;
                     }
@@ -111,7 +111,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureAliasingBarrier.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(texture != null);
 #endif
                         resource = texture.NativeResource;
                     }
@@ -136,7 +136,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureTransitionBarrier.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(texture != null);
 #endif
 
                         resource = texture.NativeResource;
@@ -169,7 +169,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferUAVBarrier.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null);
 #endif
                             resource = buffer.NativeResource;
                         }
@@ -177,7 +177,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureUAVBarrier.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                            Debug.Assert(texture != null);
 #endif
                             resource = texture.NativeResource;
                         }
@@ -189,7 +189,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferAliasingBarrier.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null);
 #endif
                             resource = buffer.NativeResource;
                         }
@@ -197,7 +197,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureAliasingBarrier.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                            Debug.Assert(texture != null);
 #endif
                             resource = texture.NativeResource;
                         }
@@ -209,7 +209,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferTransitionBarrier.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null);
 #endif
 
                             resource = buffer.NativeResource;
@@ -220,7 +220,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureTransitionBarrier.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                            Debug.Assert(texture != null);
 #endif
 
                             resource = texture.NativeResource;
