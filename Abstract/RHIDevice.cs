@@ -20,7 +20,6 @@ namespace Infinity.Graphics
         public abstract EMultiviewStrategy MultiviewStrategy { get; }
 
         public abstract RHIDeviceProperty GetDeviceProperty();
-        public abstract RHICommandQueue CreateCommandQueue(in EQueueType type);
         public abstract RHIFence CreateFence();
         public abstract RHISemaphore CreateSemaphore();
         public abstract RHIQuery CreateQuery(in RHIQueryDescriptor descriptor);
@@ -28,6 +27,7 @@ namespace Infinity.Graphics
         public abstract RHIBuffer CreateBuffer(in RHIBufferDescriptor descriptor);
         public abstract RHITexture CreateTexture(in RHITextureDescriptor descriptor);
         public abstract RHISampler CreateSampler(in RHISamplerDescriptor descriptor);
+        public abstract RHICommandQueue CreateCommandQueue(in EQueueType type);
         public abstract RHITopLevelAccelStruct CreateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
         public abstract RHIBottomLevelAccelStruct CreateAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor);
         public abstract RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor);

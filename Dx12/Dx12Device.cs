@@ -130,11 +130,6 @@ namespace Infinity.Graphics
             return deviceProperty;
         }
 
-        public override RHICommandQueue CreateCommandQueue(in EQueueType type)
-        {
-            return new Dx12CommandQueue(this, type);
-        }
-
         public override RHIFence CreateFence()
         {
             return new Dx12Fence(this);
@@ -168,6 +163,11 @@ namespace Infinity.Graphics
         public override RHISampler CreateSampler(in RHISamplerDescriptor descriptor)
         {
             return new Dx12Sampler(this, descriptor);
+        }
+
+        public override RHICommandQueue CreateCommandQueue(in EQueueType type)
+        {
+            return new Dx12CommandQueue(this, type);
         }
 
         public override RHITopLevelAccelStruct CreateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)

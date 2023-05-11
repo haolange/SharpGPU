@@ -37,11 +37,6 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHICommandQueue CreateCommandQueue(in EQueueType type)
-        {
-            throw new NotImplementedException();
-        }
-
         public override RHIFence CreateFence()
         {
             throw new NotImplementedException();
@@ -73,6 +68,11 @@ namespace Infinity.Graphics
         }
 
         public override RHISampler CreateSampler(in RHISamplerDescriptor descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override RHICommandQueue CreateCommandQueue(in EQueueType type)
         {
             throw new NotImplementedException();
         }
