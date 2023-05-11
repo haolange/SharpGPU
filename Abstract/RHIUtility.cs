@@ -442,6 +442,13 @@ namespace Infinity.Graphics
         Pending
     }
 
+    public enum EBarrierType : byte
+    {
+        UAV,
+        Aliasing,
+        Triansition
+    }
+
     public enum EResourceType : byte
     {
         Buffer,
