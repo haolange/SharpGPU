@@ -4,14 +4,7 @@ using Infinity.Mathmatics;
 
 namespace Infinity.Graphics
 {
-    public struct RHISubmitDescriptor
-    {
-        public RHISemaphore[] WaitSemaphores;
-        public RHISemaphore[] SignalSemaphores;
-        public RHICommandBuffer[] CommandBuffers;
-    }
-
-    public abstract class RHIQueue : Disposal
+    public abstract class RHICommandQueue : Disposal
     {
         public EQueueType Type
         {
@@ -28,6 +21,6 @@ namespace Infinity.Graphics
         protected EQueueType m_Type;
         public abstract RHICommandBuffer CreateCommandBuffer();
         public abstract void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore);
-        public abstract void Submit(in RHISubmitDescriptor submitDescriptor, RHIFence signalFence);
+        public abstract void Submits(RHICommandBuffer[] cmdBuffers, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores);
     }
 }

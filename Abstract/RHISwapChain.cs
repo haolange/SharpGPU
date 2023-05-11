@@ -13,7 +13,7 @@ namespace Infinity.Graphics
         public IntPtr Surface;
         public EPresentMode PresentMode;
         public ESwapChainFormat Format;
-        public RHIQueue PresentQueue;
+        public RHICommandQueue PresentQueue;
     }
 
     public abstract class RHISwapChain : Disposal

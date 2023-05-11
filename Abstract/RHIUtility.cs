@@ -32,7 +32,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EGpuType : byte
+    public enum EDeviceType : byte
     {
         Hardware,
         Software,

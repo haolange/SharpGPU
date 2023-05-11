@@ -97,15 +97,15 @@ namespace Infinity.Graphics
 
     public abstract class RHICommandBuffer : Disposal
     {
-        public RHIQueue Queue
+        public RHICommandQueue CommandQueue
         {
             get
             {
-                return m_Queue;
+                return m_CommandQueue;
             }
         }
 
-        protected RHIQueue m_Queue;
+        protected RHICommandQueue m_CommandQueue;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public RHICommandBufferScoper BeginScoped(string name)

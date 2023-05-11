@@ -126,13 +126,13 @@ namespace Infinity.Graphics
             RHIDeviceProperty deviceProperty;
             deviceProperty.VendorId = desc.VendorId;
             deviceProperty.DeviceId = desc.DeviceId;
-            deviceProperty.Type = (desc.Flags & (uint)DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE) == 1 ? EGpuType.Software : EGpuType.Hardware;
+            deviceProperty.Type = (desc.Flags & (uint)DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE) == 1 ? EDeviceType.Software : EDeviceType.Hardware;
             return deviceProperty;
         }
 
-        public override RHIQueue CreateQueue(in EQueueType type)
+        public override RHICommandQueue CreateCommandQueue(in EQueueType type)
         {
-            return new Dx12Queue(this, type);
+            return new Dx12CommandQueue(this, type);
         }
 
         public override RHIFence CreateFence()

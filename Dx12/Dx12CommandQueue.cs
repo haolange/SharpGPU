@@ -11,7 +11,7 @@ using static TerraFX.Interop.Windows.Windows;
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CA1416
-    internal unsafe class Dx12Queue : RHIQueue
+    internal unsafe class Dx12CommandQueue : RHICommandQueue
     {
         public Dx12Device Dx12Device
         {
@@ -40,7 +40,7 @@ namespace Infinity.Graphics
         private Dx12Device m_Dx12Device;
         private ID3D12CommandQueue* m_NativeCommandQueue;
 
-        public Dx12Queue(Dx12Device device, in EQueueType queueType)
+        public Dx12CommandQueue(Dx12Device device, in EQueueType queueType)
         {
             m_Type = queueType;
             m_Dx12Device = device;
@@ -90,7 +90,7 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void Submit(in RHISubmitDescriptor submitDescriptor, RHIFence fence)
+        public override void Submits(RHICommandBuffer[] cmdBuffers, RHIFence fence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores)
         {
             throw new NotImplementedException("ToDo : batch submit");
         }

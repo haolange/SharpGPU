@@ -10,7 +10,7 @@ namespace Infinity.Graphics
         public MTLCommandQueue cmdQueue;
     }
 
-    internal unsafe class MtlQueue : RHIQueue
+    internal unsafe class MtlCommandQueue : RHICommandQueue
     {
         public MTLCommandQueue NativeQueue
         {
@@ -31,7 +31,7 @@ namespace Infinity.Graphics
         private EQueueType m_QueueType;
         private MTLCommandQueue m_NativeQueue;
 
-        public MtlQueue(MtlDevice device, in MtlCommandQueueDescriptor descriptor)
+        public MtlCommandQueue(MtlDevice device, in MtlCommandQueueDescriptor descriptor)
         {
             m_MtlDevice = device;
             m_QueueType = descriptor.queueType;
@@ -48,7 +48,7 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override void Submit(in RHISubmitDescriptor submitDescriptor, RHIFence fence)
+        public override void Submits(RHICommandBuffer[] cmdBuffers, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores)
         {
             throw new NotImplementedException("ToDo : batch submit");
         }

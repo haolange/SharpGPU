@@ -33,17 +33,17 @@ namespace Infinity.Graphics
         private ID3D12CommandAllocator* m_NativeCommandAllocator;
         private ID3D12GraphicsCommandList5* m_NativeCommandList;
 
-        public Dx12CommandBuffer(Dx12Queue queue)
+        public Dx12CommandBuffer(Dx12CommandQueue commandQueue)
         {
-            m_Queue = queue;
+            m_CommandQueue = commandQueue;
 
             ID3D12CommandAllocator* commandAllocator;
-            bool success = SUCCEEDED(queue.Dx12Device.NativeDevice->CreateCommandAllocator(Dx12Utility.ConvertToDx12QueueType(queue.Type), __uuidof<ID3D12CommandAllocator>(), (void**)&commandAllocator));
+            bool success = SUCCEEDED(commandQueue.Dx12Device.NativeDevice->CreateCommandAllocator(Dx12Utility.ConvertToDx12QueueType(commandQueue.Type), __uuidof<ID3D12CommandAllocator>(), (void**)&commandAllocator));
             Debug.Assert(success);
             m_NativeCommandAllocator = commandAllocator;
 
             ID3D12GraphicsCommandList5* commandList;
-            success = SUCCEEDED(queue.Dx12Device.NativeDevice->CreateCommandList(0, Dx12Utility.ConvertToDx12QueueType(queue.Type), m_NativeCommandAllocator, null, __uuidof<ID3D12GraphicsCommandList5>(), (void**)&commandList));
+            success = SUCCEEDED(commandQueue.Dx12Device.NativeDevice->CreateCommandList(0, Dx12Utility.ConvertToDx12QueueType(commandQueue.Type), m_NativeCommandAllocator, null, __uuidof<ID3D12GraphicsCommandList5>(), (void**)&commandList));
             Debug.Assert(success);
             m_NativeCommandList = commandList;
 
@@ -64,10 +64,10 @@ namespace Infinity.Graphics
             m_NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
             Marshal.FreeHGlobal(namePtr);
 
-            Dx12Queue queue = m_Queue as Dx12Queue;
+            Dx12CommandQueue commandQueue = m_CommandQueue as Dx12CommandQueue;
             ID3D12DescriptorHeap** resourceBarriers = stackalloc ID3D12DescriptorHeap*[2];
-            resourceBarriers[0] = queue.Dx12Device.SamplerHeap.DescriptorHeap;
-            resourceBarriers[1] = queue.Dx12Device.CbvSrvUavHeap.DescriptorHeap;
+            resourceBarriers[0] = commandQueue.Dx12Device.SamplerHeap.DescriptorHeap;
+            resourceBarriers[1] = commandQueue.Dx12Device.CbvSrvUavHeap.DescriptorHeap;
             m_NativeCommandList->SetDescriptorHeaps(2, &*resourceBarriers);
         }
 
@@ -176,16 +176,16 @@ namespace Infinity.Graphics
         /*public override void Commit(RHIFence? fence)
         {
             Dx12CommandAllocator dx12CommandPool = m_CommandPool as Dx12CommandAllocator;
-            Dx12Queue queue = m_CommandPool.Queue as Dx12Queue;
+            Dx12CommandQueue commandQueue = m_CommandPool.CommandQueue as Dx12CommandQueue;
 
             ID3D12CommandList** ppCommandLists = stackalloc ID3D12CommandList*[1] { (ID3D12CommandList*)m_NativeCommandList };
-            queue.NativeCommandQueue->ExecuteCommandLists(1, ppCommandLists);
+            commandQueue.NativeCommandQueue->ExecuteCommandLists(1, ppCommandLists);
 
             if (fence != null)
             {
                 Dx12Fence dx12Fence = fence as Dx12Fence;
                 dx12Fence.Reset();
-                queue.NativeCommandQueue->Signal(dx12Fence.NativeFence, 1);
+                commandQueue.NativeCommandQueue->Signal(dx12Fence.NativeFence, 1);
             }
         }*/
 

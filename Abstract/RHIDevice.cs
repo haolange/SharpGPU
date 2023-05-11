@@ -5,7 +5,7 @@ namespace Infinity.Graphics
 {
     public struct RHIDeviceProperty
     {
-        public EGpuType Type;
+        public EDeviceType Type;
         public uint VendorId;
         public uint DeviceId;
     }
@@ -20,7 +20,7 @@ namespace Infinity.Graphics
         public abstract EMultiviewStrategy MultiviewStrategy { get; }
 
         public abstract RHIDeviceProperty GetDeviceProperty();
-        public abstract RHIQueue CreateQueue(in EQueueType type);
+        public abstract RHICommandQueue CreateCommandQueue(in EQueueType type);
         public abstract RHIFence CreateFence();
         public abstract RHISemaphore CreateSemaphore();
         public abstract RHIQuery CreateQuery(in RHIQueryDescriptor descriptor);

@@ -37,7 +37,7 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHIQueue CreateQueue(in EQueueType type)
+        public override RHICommandQueue CreateCommandQueue(in EQueueType type)
         {
             throw new NotImplementedException();
         }

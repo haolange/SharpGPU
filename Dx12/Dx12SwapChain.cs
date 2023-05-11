@@ -54,7 +54,7 @@ namespace Infinity.Graphics
 
         private void CreateDX12SwapChain(in RHISwapChainDescriptor descriptor) 
         {
-            Dx12Queue dx12Queue = (Dx12Queue)descriptor.PresentQueue;
+            Dx12CommandQueue dx12Queue = (Dx12CommandQueue)descriptor.PresentQueue;
             Dx12Instance dx12Instance = m_Dx12Device.Dx12Instance;
 
 #if true
