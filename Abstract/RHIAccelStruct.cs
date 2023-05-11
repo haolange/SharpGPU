@@ -2,10 +2,11 @@
 using Infinity.Core;
 using Infinity.Mathmatics;
 using System.Runtime.InteropServices;
+using Silk.NET.Vulkan;
 
 namespace Infinity.Graphics
 {
-    public enum EAccelStructFlags : byte
+    public enum EAccelStructFlag
     {
         None = 0,
         AllowUpdate = 0x1,
@@ -16,14 +17,14 @@ namespace Infinity.Graphics
         AllowCompaction = 0x20
     }
 
-    public enum EAccelStructGeometryFlags : byte
+    public enum EAccelStructGeometryFlag
     {
-        None,
-        Opaque,
-        NoDuplicateAnyhitInverseOcation
+        None = 0,
+        Opaque = 0x1,
+        NoDuplicateAnyhitInverseOcation = 0x2
     }
 
-    public enum EAccelStructInstanceFlags : byte
+    public enum EAccelStructInstanceFlag : byte
     {
         None,
         ForceOpaque,
@@ -32,26 +33,27 @@ namespace Infinity.Graphics
         TriangleFrontCounterclockwise
     }
 
-    public interface RHIAccelStructGeometry
+    public enum EAccelStructGeometryType : byte
     {
-        public EAccelStructGeometryFlags GetGeometryFlags();
+        AABB,
+        Triangle
     }
 
-    public struct RHIAccelStructAABBs : RHIAccelStructGeometry
+    public class RHIAccelStructGeometry
+    {
+        public EAccelStructGeometryType GeometryType;
+        public EAccelStructGeometryFlag GeometryFlag;
+    }
+
+    public class RHIAccelStructAABBs : RHIAccelStructGeometry
     {
         public uint Count;
         public uint Stride;
         public uint Offset;
-        public RHIBuffer? AABBs;
-        public EAccelStructGeometryFlags GeometryFlags;
-
-        public EAccelStructGeometryFlags GetGeometryFlags()
-        { 
-            return GeometryFlags; 
-        }
+        public RHIBuffer? AABBBuffer;
     }
 
-    public struct RHIAccelStructTriangles : RHIAccelStructGeometry
+    public class RHIAccelStructTriangles : RHIAccelStructGeometry
     {
         public uint IndexCount;
         public uint IndexOffset;
@@ -62,12 +64,6 @@ namespace Infinity.Graphics
         public uint VertexOffset;
         public RHIBuffer? VertexBuffer;
         public EPixelFormat VertexFormat;
-        public EAccelStructGeometryFlags GeometryFlags;
-
-        public EAccelStructGeometryFlags GetGeometryFlags()
-        {
-            return GeometryFlags;
-        }
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -77,7 +73,7 @@ namespace Infinity.Graphics
         public byte InstanceMask;
         public uint HitGroupIndex;
         public float4x4 TransformMatrix;
-        public EAccelStructInstanceFlags Flags;
+        public EAccelStructInstanceFlag Flag;
         public RHIBottomLevelAccelStruct BottonLevelAccelStruct;
     }
 
@@ -85,14 +81,14 @@ namespace Infinity.Graphics
     public struct RHITopLevelAccelStructDescriptor
     {
         public uint Offset;
-        public EAccelStructFlags Flags;
+        public EAccelStructFlag Flag;
         public Memory<RHIAccelStructInstance> Instances;
     }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct RHIBottomLevelAccelStructDescriptor
     {
-        public Memory<RHIAccelStructGeometry> Geometries;
+        public RHIAccelStructGeometry[] Geometries;
     }
 
     public abstract class RHITopLevelAccelStruct : Disposal
@@ -109,7 +105,5 @@ namespace Infinity.Graphics
         public RHIBottomLevelAccelStructDescriptor Descriptor => m_Descriptor;
 
         protected RHIBottomLevelAccelStructDescriptor m_Descriptor;
-
-        public abstract void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
     }
 }
