@@ -53,8 +53,8 @@ namespace Infinity.Graphics
         public abstract void SetRayGenerationProgram(string exportName, RHIBindTable[]? bindTables = null);
         public abstract int AddMissProgram(string exportName, RHIBindTable[]? bindTables = null);
         public abstract int AddHitGroupProgram(string exportName, RHIBindTable[]? bindTables = null);
-        public abstract void SetMissProgram(in int index, RHIBindTable[]? bindTables = null);
-        public abstract void SetHitGroupProgram(in int index, RHIBindTable[]? bindTables = null);
+        public abstract void SetMissProgram(in int index, string exportName, RHIBindTable[]? bindTables = null);
+        public abstract void SetHitGroupProgram(in int index, string exportName, RHIBindTable[]? bindTables = null);
         public abstract void ClearMissPrograms();
         public abstract void ClearHitGroupPrograms();
         public abstract void Generate(RHIRaytracingPipeline rayTracingPipeline);

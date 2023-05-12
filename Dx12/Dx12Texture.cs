@@ -5,6 +5,7 @@ using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
 {
+#pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal unsafe class Dx12Texture : RHITexture
     {
         public Dx12Device Dx12Device
@@ -44,7 +45,9 @@ namespace Infinity.Graphics
 
             ID3D12Resource* dx12Resource;
             bool success = SUCCEEDED(m_Dx12Device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &textureDesc, Dx12Utility.ConvertToDx12TextureState(descriptor.State), null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource)); ;
+#if DEBUG
             Debug.Assert(success);
+#endif
             m_NativeResource = dx12Resource;
         }
 
@@ -65,4 +68,5 @@ namespace Infinity.Graphics
             m_NativeResource->Release();
         }
     }
+#pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416
 }

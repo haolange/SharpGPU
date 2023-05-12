@@ -110,14 +110,18 @@ namespace Infinity.Graphics
             return m_HitGroupPrograms.Add(hitGroupEntry);
         }
 
-        public override void SetMissProgram(in int index, RHIBindTable[]? bindTables = null)
+        public override void SetMissProgram(in int index, string exportName, RHIBindTable[]? bindTables = null)
         {
-            throw new NotImplementedException();
+            ref Dx12FunctionTableEntry missEntry = ref m_MissPrograms[index];
+            missEntry.BindTables = bindTables;
+            missEntry.ShaderIdentifier = exportName;
         }
 
-        public override void SetHitGroupProgram(in int index, RHIBindTable[]? bindTables = null)
+        public override void SetHitGroupProgram(in int index, string exportName, RHIBindTable[]? bindTables = null)
         {
-            throw new NotImplementedException();
+            ref Dx12FunctionTableEntry hitGroupEntry = ref m_HitGroupPrograms[index];
+            hitGroupEntry.BindTables = bindTables;
+            hitGroupEntry.ShaderIdentifier = exportName;
         }
 
         public override void ClearMissPrograms()
