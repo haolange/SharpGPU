@@ -34,7 +34,7 @@ namespace Infinity.Graphics
         private D3D12_DESCRIPTOR_HEAP_TYPE m_Type;
         private ID3D12DescriptorHeap* m_DescriptorHeap;
 
-        public Dx12DescriptorHeap(ID3D12Device9* device, in D3D12_DESCRIPTOR_HEAP_TYPE type, in D3D12_DESCRIPTOR_HEAP_FLAGS flag, in uint count)
+        public Dx12DescriptorHeap(ID3D12Device8* device, in D3D12_DESCRIPTOR_HEAP_TYPE type, in D3D12_DESCRIPTOR_HEAP_FLAGS flag, in uint count)
         {
             m_CacheMap = new TValueArray<int>((int)count);
             for (int i = 0; i < (int)count; ++i)

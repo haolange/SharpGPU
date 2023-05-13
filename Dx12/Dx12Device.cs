@@ -58,7 +58,7 @@ namespace Infinity.Graphics
                 return m_DXGIAdapter;
             }
         }
-        public ID3D12Device9* NativeDevice
+        public ID3D12Device8* NativeDevice
         {
             get
             {
@@ -102,7 +102,7 @@ namespace Infinity.Graphics
         private Dx12DescriptorHeap m_SamplerHeap;
         private Dx12DescriptorHeap m_CbvSrvUavHeap;
         private IDXGIAdapter1* m_DXGIAdapter;
-        private ID3D12Device9* m_NativeDevice;
+        private ID3D12Device8* m_NativeDevice;
         private ID3D12CommandSignature* m_DrawIndirectSignature;
         private ID3D12CommandSignature* m_DrawIndexedIndirectSignature;
         private ID3D12CommandSignature* m_DispatchRayIndirectSignature;
@@ -291,18 +291,20 @@ namespace Infinity.Graphics
 
         private void CreateDevice()
         {
-            ID3D12Device9* device;
-            bool success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_2, __uuidof<ID3D12Device9>(), (void**)&device));
+            ID3D12Device8* device;
+            bool success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_2, __uuidof<ID3D12Device8>(), (void**)&device));
             if (!success)
             {
-                success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1, __uuidof<ID3D12Device9>(), (void**)&device));
+                success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1, __uuidof<ID3D12Device8>(), (void**)&device));
 
                 if (!success)
                 {
-                    success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_0, __uuidof<ID3D12Device9>(), (void**)&device));
+                    success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_0, __uuidof<ID3D12Device8>(), (void**)&device));
                 }
             }
+#if DEBUG
             Debug.Assert(success);
+#endif
             m_NativeDevice = device;
         }
 
