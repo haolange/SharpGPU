@@ -6,7 +6,11 @@ namespace Infinity.Graphics
     public struct RHIBindlessDescriptor
     {
         public uint Count;
-        public EBindlessType Type;
+
+        public RHIBindlessDescriptor(in uint count)
+        {
+            Count = count;
+        }
     }
 
     public struct RHIBindTableLayoutElement

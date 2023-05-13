@@ -281,14 +281,6 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EBindlessType : byte
-    {
-        Buffer,
-        Texture,
-        Sampler,
-        Pending
-    }
-
     public enum EVertexStepMode : byte
     {
         PerVertex,
