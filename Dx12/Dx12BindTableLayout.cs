@@ -5,13 +5,13 @@ namespace Infinity.Graphics
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal struct Dx12BindInfo
     {
+        public uint Slot;
         public uint Index;
-        public uint BindSlot;
-        public EBindType BindType;
-        public EFunctionStage Visibility;
-        public RHIBindlessDescriptor? BindlessDescriptor;
+        public EBindType Type;
+        public EFunctionStage Visible;
+        public RHIBindlessDescriptor? Bindless;
 
-        internal bool IsBindless => BindlessDescriptor != null;
+        internal bool IsBindless => Bindless != null;
     }
 
     internal unsafe class Dx12BindTableLayout : RHIBindTableLayout
@@ -45,10 +45,10 @@ namespace Infinity.Graphics
                 ref RHIBindTableLayoutElement element = ref elements[i];
                 ref Dx12BindInfo bindInfo = ref m_BindInfos[i];
                 bindInfo.Index = descriptor.Index;
-                bindInfo.BindSlot = element.BindSlot;
-                bindInfo.BindType = element.BindType;
-                bindInfo.Visibility = element.Visibility;
-                bindInfo.BindlessDescriptor = element.BindlessDescriptor;
+                bindInfo.Slot = element.Slot;
+                bindInfo.Type = element.Type;
+                bindInfo.Visible = element.Visible;
+                bindInfo.Bindless = element.Bindless;
             }
         }
 

@@ -542,9 +542,9 @@ namespace Infinity.Graphics
 
     public enum EFunctionType : byte
     {
-        Compute,
         Vertex,
         Fragment,
+        Compute,
         Task,
         Mesh,
         RayTracing,
@@ -553,20 +553,14 @@ namespace Infinity.Graphics
 
     public enum EFunctionStage
     {
-        Compute = 0x0020,
-        Vertex = 0x0001,
-        Fragment = 0x0002,
-        Task = 0x0004,
-        Mesh = 0x0008,
-        //AllGraphics = 0x0010,
-        Miss = 0x0040,
-        AnyHit = 0x0080,
-        Callable = 0x00FE,
-        ClosestHit = 0x0100,
-        Intersection = 0x0200,
-        RayGeneration = 0x0400,
-        //AllRayTracing = 0x0800,
-        All = 0x1000,
+        Vertex = 0x1,
+        Fragment = 0x2,
+        Compute = 0x4,
+        Task = 0x8,
+        Mesh = 0x10,
+        AllGraphics = Vertex | Fragment,
+        RayTracing = 0x20,
+        All = Vertex | Fragment | Compute | Task | Mesh | RayTracing,
         Pending
     }
 

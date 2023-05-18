@@ -1283,7 +1283,7 @@ namespace Infinity.Graphics
                     element.Format = ConvertToDx12SemanticFormat(vertexElementDescriptor.Format);
                     element.InputSlot = (uint)slot;
                     element.SemanticName = (sbyte*)Unsafe.AsPointer(ref MemoryMarshal.GetReference(new ReadOnlySpan<byte>(semanticByte)));
-                    element.SemanticIndex = vertexElementDescriptor.Index;
+                    element.SemanticIndex = vertexElementDescriptor.Slot;
                     element.InputSlotClass = ConvertToDx12InputSlotClass(vertexLayoutDescriptor.StepMode);
                     element.AlignedByteOffset = (uint)vertexElementDescriptor.Offset;
                     element.InstanceDataStepRate = (uint)vertexLayoutDescriptor.StepRate;

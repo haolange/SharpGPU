@@ -14,14 +14,15 @@ namespace Infinity.Graphics
 
     public struct RHIVertexElementDescriptor
     {
+        public uint Slot;
         public uint Offset;
-        public uint Index;
         public ESemanticType Type;
         public ESemanticFormat Format;
     }
 
     public struct RHIVertexLayoutDescriptor
     {
+        public uint Index;
         public uint Stride;
         public uint StepRate;
         public EVertexStepMode StepMode;

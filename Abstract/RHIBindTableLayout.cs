@@ -15,10 +15,10 @@ namespace Infinity.Graphics
 
     public struct RHIBindTableLayoutElement
     {
-        public uint BindSlot;
-        public EBindType BindType;
-        public EFunctionStage Visibility;
-        public RHIBindlessDescriptor? BindlessDescriptor;
+        public uint Slot;
+        public EBindType Type;
+        public EFunctionStage Visible;
+        public RHIBindlessDescriptor? Bindless;
     }
     
     public struct RHIBindTableLayoutDescriptor

@@ -40,7 +40,7 @@ namespace Infinity.Graphics
                 ref RHIBindTableElement element = ref descriptor.Elements.Span[i];
 
                 ref D3D12_GPU_DESCRIPTOR_HANDLE nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[i];
-                switch (bindInfo.BindType)
+                switch (bindInfo.Type)
                 {
                     case EBindType.Buffer:
                     case EBindType.UniformBuffer:
