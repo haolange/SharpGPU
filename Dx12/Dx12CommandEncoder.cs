@@ -81,7 +81,7 @@ namespace Infinity.Graphics
                 case EBarrierType.UAV:
                     if (barrier.ResourceType == EResourceType.Buffer)
                     {
-                        Dx12Buffer buffer = barrier.BufferUAVBarrier.Handle as Dx12Buffer;
+                        Dx12Buffer buffer = barrier.BufferTransition.Handle as Dx12Buffer;
 #if DEBUG
                         Debug.Assert(buffer != null);
 #endif
@@ -89,7 +89,7 @@ namespace Infinity.Graphics
                     }
                     else
                     {
-                        Dx12Texture texture = barrier.TextureUAVBarrier.Handle as Dx12Texture;
+                        Dx12Texture texture = barrier.TextureTransition.Handle as Dx12Texture;
 #if DEBUG
                         Debug.Assert(texture != null);
 #endif
@@ -101,7 +101,7 @@ namespace Infinity.Graphics
                 case EBarrierType.Aliasing:
                     if (barrier.ResourceType == EResourceType.Buffer)
                     {
-                        Dx12Buffer buffer = barrier.BufferAliasingBarrier.Handle as Dx12Buffer;
+                        Dx12Buffer buffer = barrier.BufferAliasing.Handle as Dx12Buffer;
 #if DEBUG
                         Debug.Assert(buffer != null);
 #endif
@@ -109,7 +109,7 @@ namespace Infinity.Graphics
                     }
                     else
                     {
-                        Dx12Texture texture = barrier.TextureAliasingBarrier.Handle as Dx12Texture;
+                        Dx12Texture texture = barrier.TextureAliasing.Handle as Dx12Texture;
 #if DEBUG
                         Debug.Assert(texture != null);
 #endif
@@ -123,25 +123,25 @@ namespace Infinity.Graphics
                     D3D12_RESOURCE_STATES afterState;
                     if (barrier.ResourceType == EResourceType.Buffer)
                     {
-                        Dx12Buffer buffer = barrier.BufferTransitionBarrier.Handle as Dx12Buffer;
+                        Dx12Buffer buffer = barrier.BufferTransition.Handle as Dx12Buffer;
 #if DEBUG
                         Debug.Assert(buffer != null);
 #endif
 
                         resource = buffer.NativeResource;
-                        beforeState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferTransitionBarrier.Before);
-                        afterState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferTransitionBarrier.After);
+                        beforeState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferTransition.Before);
+                        afterState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferTransition.After);
                     }
                     else
                     {
-                        Dx12Texture texture = barrier.TextureTransitionBarrier.Handle as Dx12Texture;
+                        Dx12Texture texture = barrier.TextureTransition.Handle as Dx12Texture;
 #if DEBUG
                         Debug.Assert(texture != null);
 #endif
 
                         resource = texture.NativeResource;
-                        beforeState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureTransitionBarrier.Before);
-                        afterState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureTransitionBarrier.After);
+                        beforeState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureTransition.Before);
+                        afterState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureTransition.After);
                     }
                     resourceBarrier = D3D12_RESOURCE_BARRIER.InitTransition(resource, beforeState, afterState);
                     break;
@@ -167,7 +167,7 @@ namespace Infinity.Graphics
                     case EBarrierType.UAV:
                         if (barrier.ResourceType == EResourceType.Buffer)
                         {
-                            Dx12Buffer buffer = barrier.BufferUAVBarrier.Handle as Dx12Buffer;
+                            Dx12Buffer buffer = barrier.BufferTransition.Handle as Dx12Buffer;
 #if DEBUG
                             Debug.Assert(buffer != null);
 #endif
@@ -175,7 +175,7 @@ namespace Infinity.Graphics
                         }
                         else
                         {
-                            Dx12Texture texture = barrier.TextureUAVBarrier.Handle as Dx12Texture;
+                            Dx12Texture texture = barrier.TextureTransition.Handle as Dx12Texture;
 #if DEBUG
                             Debug.Assert(texture != null);
 #endif
@@ -187,7 +187,7 @@ namespace Infinity.Graphics
                     case EBarrierType.Aliasing:
                         if (barrier.ResourceType == EResourceType.Buffer)
                         {
-                            Dx12Buffer buffer = barrier.BufferAliasingBarrier.Handle as Dx12Buffer;
+                            Dx12Buffer buffer = barrier.BufferAliasing.Handle as Dx12Buffer;
 #if DEBUG
                             Debug.Assert(buffer != null);
 #endif
@@ -195,7 +195,7 @@ namespace Infinity.Graphics
                         }
                         else
                         {
-                            Dx12Texture texture = barrier.TextureAliasingBarrier.Handle as Dx12Texture;
+                            Dx12Texture texture = barrier.TextureAliasing.Handle as Dx12Texture;
 #if DEBUG
                             Debug.Assert(texture != null);
 #endif
@@ -207,27 +207,26 @@ namespace Infinity.Graphics
                     case EBarrierType.Triansition:
                         if (barrier.ResourceType == EResourceType.Buffer)
                         {
-                            Dx12Buffer buffer = barrier.BufferTransitionBarrier.Handle as Dx12Buffer;
+                            Dx12Buffer buffer = barrier.BufferTransition.Handle as Dx12Buffer;
 #if DEBUG
                             Debug.Assert(buffer != null);
 #endif
 
                             resource = buffer.NativeResource;
-                            beforeState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferTransitionBarrier.Before);
-                            afterState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferTransitionBarrier.After);
+                            beforeState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferTransition.Before);
+                            afterState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferTransition.After);
                         }
                         else
                         {
-                            Dx12Texture texture = barrier.TextureTransitionBarrier.Handle as Dx12Texture;
+                            Dx12Texture texture = barrier.TextureTransition.Handle as Dx12Texture;
 #if DEBUG
                             Debug.Assert(texture != null);
 #endif
 
                             resource = texture.NativeResource;
-                            beforeState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureTransitionBarrier.Before);
-                            afterState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureTransitionBarrier.After);
+                            beforeState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureTransition.Before);
+                            afterState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureTransition.After);
                         }
-
                         resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitTransition(resource, beforeState, afterState);
                         break;
                 }

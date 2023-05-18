@@ -96,6 +96,9 @@ namespace Infinity.Graphics
 
     public struct RHIColorAttachmentDescriptor
     {
+        public uint MipSlice;
+        public uint ArraySize;
+        public uint FirstArraySlice;
         public float4 ClearValue;
         public ELoadOp LoadOp;
         public EStoreOp StoreOp;
@@ -105,6 +108,9 @@ namespace Infinity.Graphics
 
     public struct RHIDepthStencilAttachmentDescriptor
     {
+        public uint MipSlice;
+        public uint ArraySize;
+        public uint FirstArraySlice;
         public bool DepthReadOnly;
         public float DepthClearValue;
         public ELoadOp DepthLoadOp;
@@ -121,7 +127,7 @@ namespace Infinity.Graphics
     {
         public string Name;
         public RHIShadingRateDescriptor? ShadingRateDescriptor;
-        internal Memory<RHISubpassDescriptor>? SubpassDescriptors;
+        //public Memory<RHISubpassDescriptor>? SubpassDescriptors;
         public Memory<RHIColorAttachmentDescriptor> ColorAttachmentDescriptors;
         public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachmentDescriptor;
     }
@@ -130,7 +136,7 @@ namespace Infinity.Graphics
     {
         public string Name;
         public RHIShadingRateDescriptor? ShadingRateDescriptor;
-        internal Memory<RHISubpassDescriptor>? SubpassDescriptors;
+        //public Memory<RHISubpassDescriptor>? SubpassDescriptors;
         public Memory<RHIColorAttachmentDescriptor> ColorAttachmentDescriptors;
         public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachmentDescriptor;
     }
