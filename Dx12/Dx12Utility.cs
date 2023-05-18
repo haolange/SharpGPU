@@ -410,10 +410,11 @@ namespace Infinity.Graphics
             if ((state & EBufferState.IndirectArgument) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
             if ((state & EBufferState.ShaderResource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
             if ((state & EBufferState.UnorderedAccess) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            if ((state & EBufferState.AccelStructRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+            if ((state & EBufferState.AccelStruct) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+            /*if ((state & EBufferState.AccelStructRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
             if ((state & EBufferState.AccelStructWrite) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
             if ((state & EBufferState.AccelStructBuildInput) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-            if ((state & EBufferState.AccelStructBuildBlast) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+            if ((state & EBufferState.AccelStructBuildBlast) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;*/
 
             return result;
         }
@@ -423,20 +424,18 @@ namespace Infinity.Graphics
             if (state == ETextureState.Common)
                 return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
 
-            D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON; // also 0
+            D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
 
             if ((state & ETextureState.Present) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
             if ((state & ETextureState.GenericRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
             if ((state & ETextureState.CopyDest) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
             if ((state & ETextureState.CopySource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
-            if ((state & ETextureState.ResolveDest) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RESOLVE_DEST;
-            if ((state & ETextureState.ResolveSource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RESOLVE_SOURCE;
             if ((state & ETextureState.DepthRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_READ;
             if ((state & ETextureState.DepthWrite) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_WRITE;
             if ((state & ETextureState.RenderTarget) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
             if ((state & ETextureState.ShaderResource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
             if ((state & ETextureState.UnorderedAccess) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            if ((state & ETextureState.ShadingRateSurface) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE;
+            if ((state & ETextureState.ShadingRateSorce) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE;
 
             return result;
         }
@@ -1207,6 +1206,10 @@ namespace Infinity.Graphics
 
             switch (type)
             {
+                case ESemanticType.Color:
+                    semanticName = "COLOR";
+                    break;
+
                 case ESemanticType.Position:
                     semanticName = "POSITION";
                     break;
@@ -1227,16 +1230,12 @@ namespace Infinity.Graphics
                     semanticName = "BINORMAL";
                     break;
 
-                case ESemanticType.Color:
-                    semanticName = "COLOR";
-                    break;
-
                 case ESemanticType.BlendIndices:
                     semanticName = "BLENDINDICES";
                     break;
 
-                case ESemanticType.BlendWeight:
-                    semanticName = "BLENDWEIGHT";
+                case ESemanticType.BlendWeights:
+                    semanticName = "BLENDWEIGHTS";
                     break;
             }
 
@@ -1390,12 +1389,12 @@ namespace Infinity.Graphics
         {
             D3D12_CLEAR_FLAGS result = new D3D12_CLEAR_FLAGS();
 
-            if (depthStencilAttachment.DepthLoadAction == ELoadAction.Clear)
+            if (depthStencilAttachment.DepthLoadOp == ELoadOp.Clear)
             {
                 result |= D3D12_CLEAR_FLAGS.D3D12_CLEAR_FLAG_DEPTH;
             }
 
-            if (depthStencilAttachment.StencilLoadAction == ELoadAction.Clear)
+            if (depthStencilAttachment.StencilLoadOp == ELoadOp.Clear)
             {
                 result |= D3D12_CLEAR_FLAGS.D3D12_CLEAR_FLAG_STENCIL;
             }

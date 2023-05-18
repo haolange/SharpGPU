@@ -152,6 +152,20 @@ namespace Infinity.Graphics
         Pending
     }
 
+    public enum ESemanticType : byte
+    {
+        Color = 0,
+        Position = 1,
+        TexCoord = 2,
+        Normal = 3,
+        Tangent = 4,
+        Binormal = 5,
+        BlendIndices = 6,
+        BlendWeights = 7,
+        ShadingRate = 8,
+        Pending
+    }
+
     public enum ESemanticFormat : byte
     {
         UByte,
@@ -202,20 +216,6 @@ namespace Infinity.Graphics
         Int2,
         Int3,
         Int4,
-        Pending
-    }
-
-    public enum ESemanticType : byte
-    {
-        Position = 0,
-        TexCoord = 1,
-        Normal = 2,
-        Tangent = 3,
-        Binormal = 4,
-        Color = 5,
-        BlendIndices = 6,
-        BlendWeight = 7,
-        ShadingRate = 8,
         Pending
     }
 
@@ -326,28 +326,6 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EBlendMode : byte
-    {
-        Zero = 1,
-        One = 2,
-        SourceColor = 3,
-        InverseSourceColor = 4,
-        SourceAlpha = 5,
-        InverseSourceAlpha = 6,
-        DestinationAlpha = 7,
-        InverseDestinationAlpha = 8,
-        DestinationColor = 9,
-        InverseDestinationColor = 10,
-        SourceAlphaSaturate = 11,
-        BlendFactor = 14,
-        InverseBlendFactor = 15,
-        SecondarySourceColor = 0x10,
-        InverseSecondarySourceColor = 0x11,
-        SecondarySourceAlpha = 0x12,
-        InverseSecondarySourceAlpha = 0x13,
-        Pending
-    }
-
     public enum EBlendOp : byte
     {
         Add = 1,
@@ -355,6 +333,22 @@ namespace Infinity.Graphics
         ReverseSubstract = 3,
         Min = 4,
         Max = 5,
+        Pending
+    }
+
+    public enum EBlendMode : byte
+    {
+        Zero = 1,
+        One = 2,
+        DstColor = 9,
+        SrcColor = 3,
+        OneMinusDstColor = 10,
+        SrcAlpha = 5,
+        OneMinusSrcColor = 4,
+        DstAlpha = 7,
+        OneMinusDstAlpha = 8,
+        SrcAlphaSaturate = 11,
+        OneMinusSrcAlpha = 6,
         Pending
     }
 
@@ -410,7 +404,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ELoadAction : byte
+    public enum ELoadOp : byte
     {
         Load,
         Clear,
@@ -418,7 +412,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EStoreAction : byte
+    public enum EStoreOp : byte
     {
         Store,
         Resolve,
@@ -483,10 +477,11 @@ namespace Infinity.Graphics
         IndirectArgument = 0x00000040,
         ShaderResource = 0x00000080,
         UnorderedAccess = 0x00000100,
-        AccelStructRead = 0x00000200,
+        AccelStruct = 0x00000200,
+        /*AccelStructRead = 0x00000200,
         AccelStructWrite = 0x00000400,
         AccelStructBuildInput = 0x00000800,
-        AccelStructBuildBlast = 0x00001000,
+        AccelStructBuildBlast = 0x00001000,*/
         Pending
     }
 
@@ -497,14 +492,12 @@ namespace Infinity.Graphics
         GenericRead = 0x00000002,
         CopyDest = 0x00000004,
         CopySource = 0x00000008,
-        ResolveDest = 0x00000010,
-        ResolveSource = 0x00000020,
         DepthRead = 0x00000040,
         DepthWrite = 0x00000080,
         RenderTarget = 0x00000100,
         ShaderResource = 0x00000200,
         UnorderedAccess = 0x00000400,
-        ShadingRateSurface = 0x00000800,
+        ShadingRateSorce = 0x00000800,
         Pending
     }
 

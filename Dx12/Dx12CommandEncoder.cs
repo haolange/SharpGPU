@@ -748,7 +748,7 @@ namespace Infinity.Graphics
             {
                 ref RHIColorAttachmentDescriptor colorAttachmentDescriptor = ref descriptor.ColorAttachmentDescriptors.Span[i];
 
-                if (colorAttachmentDescriptor.LoadAction != ELoadAction.Clear)
+                if (colorAttachmentDescriptor.LoadOp != ELoadOp.Clear)
                 {
                     continue;
                 }
@@ -761,7 +761,7 @@ namespace Infinity.Graphics
             if (dsvHandle.HasValue)
             {
                 RHIDepthStencilAttachmentDescriptor? depthStencilAttachmentDescriptor = descriptor.DepthStencilAttachmentDescriptor;
-                if (depthStencilAttachmentDescriptor?.DepthLoadAction != ELoadAction.Clear && depthStencilAttachmentDescriptor?.StencilLoadAction != ELoadAction.Clear)
+                if (depthStencilAttachmentDescriptor?.DepthLoadOp != ELoadOp.Clear && depthStencilAttachmentDescriptor?.StencilLoadOp != ELoadOp.Clear)
                 {
                     return;
                 }
@@ -1102,7 +1102,7 @@ namespace Infinity.Graphics
             {
                 ref RHIColorAttachmentDescriptor colorAttachmentDescriptor = ref descriptor.ColorAttachmentDescriptors.Span[i];
 
-                if (colorAttachmentDescriptor.LoadAction != ELoadAction.Clear)
+                if (colorAttachmentDescriptor.LoadOp != ELoadOp.Clear)
                 {
                     continue;
                 }
@@ -1115,7 +1115,7 @@ namespace Infinity.Graphics
             if (dsvHandle.HasValue)
             {
                 RHIDepthStencilAttachmentDescriptor? depthStencilAttachmentDescriptor = descriptor.DepthStencilAttachmentDescriptor;
-                if (depthStencilAttachmentDescriptor?.DepthLoadAction != ELoadAction.Clear && depthStencilAttachmentDescriptor?.StencilLoadAction != ELoadAction.Clear)
+                if (depthStencilAttachmentDescriptor?.DepthLoadOp != ELoadOp.Clear && depthStencilAttachmentDescriptor?.StencilLoadOp != ELoadOp.Clear)
                 {
                     return;
                 }

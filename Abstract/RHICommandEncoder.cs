@@ -97,8 +97,8 @@ namespace Infinity.Graphics
     public struct RHIColorAttachmentDescriptor
     {
         public float4 ClearValue;
-        public ELoadAction LoadAction;
-        public EStoreAction StoreAction;
+        public ELoadOp LoadOp;
+        public EStoreOp StoreOp;
         public RHITexture RenderTarget;
         public RHITexture ResolveTarget;
     }
@@ -107,12 +107,12 @@ namespace Infinity.Graphics
     {
         public bool DepthReadOnly;
         public float DepthClearValue;
-        public ELoadAction DepthLoadAction;
-        public EStoreAction DepthStoreAction;
+        public ELoadOp DepthLoadOp;
+        public EStoreOp DepthStoreOp;
         public bool StencilReadOnly;
         public int StencilClearValue;
-        public ELoadAction StencilLoadAction;
-        public EStoreAction StencilStoreAction;
+        public ELoadOp StencilLoadOp;
+        public EStoreOp StencilStoreOp;
         public RHITexture DepthStencilTarget;
         public RHITexture DepthStencilResolve;
     }
