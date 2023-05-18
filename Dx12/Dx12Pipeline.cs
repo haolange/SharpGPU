@@ -69,59 +69,59 @@ namespace Infinity.Graphics
             m_Descriptor = descriptor;
 
             m_MaxLocalRootParameters = 0;
-            Span<RHIRayHitGroupDescriptor> rayHitGroupSpan = descriptor.RayHitGroupDescriptors.Span;
-            Span<RHIRayGeneralGroupDescriptor> rayMissGroupSpan = descriptor.RayMissGroupDescriptors.Span;
-            D3D12_STATE_SUBOBJECT* stateSubObjects = stackalloc D3D12_STATE_SUBOBJECT[descriptor.RayMissGroupDescriptors.Length * 2 + descriptor.RayHitGroupDescriptors.Length * 3 + 6];
+            Span<RHIRayHitGroupDescriptor> rayHitGroupSpan = descriptor.RayHitGroups.Span;
+            Span<RHIRayGeneralGroupDescriptor> rayMissGroupSpan = descriptor.RayMissGroups.Span;
+            D3D12_STATE_SUBOBJECT* stateSubObjects = stackalloc D3D12_STATE_SUBOBJECT[descriptor.RayMissGroups.Length * 2 + descriptor.RayHitGroups.Length * 3 + 6];
 
             #region ExportDescriptors
-            D3D12_EXPORT_DESC* exports = stackalloc D3D12_EXPORT_DESC[descriptor.RayHitGroupDescriptors.Length * 3 + descriptor.RayMissGroupDescriptors.Length];
+            D3D12_EXPORT_DESC* exports = stackalloc D3D12_EXPORT_DESC[descriptor.RayHitGroups.Length * 3 + descriptor.RayMissGroups.Length];
 
             int exportCount = 0;
             ref D3D12_EXPORT_DESC rayGenerationExport = ref exports[exportCount];
             {
-                rayGenerationExport.Name = (ushort*)Marshal.StringToHGlobalUni(descriptor.RayGenerationDescriptor.GeneralDescriptor.EntryName).ToPointer();
+                rayGenerationExport.Name = (ushort*)Marshal.StringToHGlobalUni(descriptor.RayGeneration.General.EntryName).ToPointer();
                 rayGenerationExport.Flags = D3D12_EXPORT_FLAGS.D3D12_EXPORT_FLAG_NONE;
                 rayGenerationExport.ExportToRename = null;
             }
 
-            for (int i = 0; i < descriptor.RayMissGroupDescriptors.Length; ++i) 
+            for (int i = 0; i < descriptor.RayMissGroups.Length; ++i) 
             {
                 ref RHIRayGeneralGroupDescriptor rayMissGroupDescriptor = ref rayMissGroupSpan[i];
 
                 ++exportCount;
                 ref D3D12_EXPORT_DESC rayMissExport = ref exports[exportCount];
-                rayMissExport.Name = (ushort*)Marshal.StringToHGlobalUni(rayMissGroupDescriptor.GeneralDescriptor.EntryName).ToPointer();
+                rayMissExport.Name = (ushort*)Marshal.StringToHGlobalUni(rayMissGroupDescriptor.General.EntryName).ToPointer();
                 rayMissExport.Flags = D3D12_EXPORT_FLAGS.D3D12_EXPORT_FLAG_NONE;
                 rayMissExport.ExportToRename = null;
             }
 
-            for (int i = 0; i < descriptor.RayHitGroupDescriptors.Length; ++i)
+            for (int i = 0; i < descriptor.RayHitGroups.Length; ++i)
             {
                 ref RHIRayHitGroupDescriptor rayHitGroupDescriptor = ref rayHitGroupSpan[i];
 
-                if(rayHitGroupDescriptor.AnyHitDescriptor.HasValue)
+                if(rayHitGroupDescriptor.AnyHit.HasValue)
                 {
                     ++exportCount;
                     ref D3D12_EXPORT_DESC anyHitExport = ref exports[exportCount];
-                    anyHitExport.Name = (ushort*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.AnyHitDescriptor?.EntryName).ToPointer();
+                    anyHitExport.Name = (ushort*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.AnyHit?.EntryName).ToPointer();
                     anyHitExport.Flags = D3D12_EXPORT_FLAGS.D3D12_EXPORT_FLAG_NONE;
                     anyHitExport.ExportToRename = null;
                 }
 
-                if (rayHitGroupDescriptor.IntersectDescriptor.HasValue)
+                if (rayHitGroupDescriptor.Intersect.HasValue)
                 {
                     ++exportCount;
                     ref D3D12_EXPORT_DESC intersectExport = ref exports[exportCount];
-                    intersectExport.Name = (ushort*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.IntersectDescriptor?.EntryName).ToPointer();
+                    intersectExport.Name = (ushort*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.Intersect?.EntryName).ToPointer();
                     intersectExport.Flags = D3D12_EXPORT_FLAGS.D3D12_EXPORT_FLAG_NONE;
                     intersectExport.ExportToRename = null;
                 }
 
-                if (rayHitGroupDescriptor.ClosestHitDescriptor.HasValue)
+                if (rayHitGroupDescriptor.ClosestHit.HasValue)
                 {
                     ++exportCount;
                     ref D3D12_EXPORT_DESC closestHitExport = ref exports[exportCount];
-                    closestHitExport.Name = (ushort*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.ClosestHitDescriptor?.EntryName).ToPointer();
+                    closestHitExport.Name = (ushort*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.ClosestHit?.EntryName).ToPointer();
                     closestHitExport.Flags = D3D12_EXPORT_FLAGS.D3D12_EXPORT_FLAG_NONE;
                     closestHitExport.ExportToRename = null;
                 }
@@ -142,7 +142,7 @@ namespace Infinity.Graphics
             #endregion DxilLibrary
 
             #region RayGeneration
-            Dx12PipelineLayout rayGenPipelineLayout = descriptor.RayGenerationDescriptor.PipelineLayout as Dx12PipelineLayout;
+            Dx12PipelineLayout rayGenPipelineLayout = descriptor.RayGeneration.PipelineLayout as Dx12PipelineLayout;
             if (rayGenPipelineLayout != null)
             {
                 ++stateSubObjectCount;
@@ -158,7 +158,7 @@ namespace Infinity.Graphics
                 D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION rayGenGroupDescriptor;
                 {
                     rayGenGroupDescriptor.NumExports = 1;
-                    rayGenGroupDescriptor.pExports = (ushort**)Marshal.StringToHGlobalUni(descriptor.RayGenerationDescriptor.GeneralDescriptor.EntryName).ToPointer();
+                    rayGenGroupDescriptor.pExports = (ushort**)Marshal.StringToHGlobalUni(descriptor.RayGeneration.General.EntryName).ToPointer();
                     rayGenGroupDescriptor.pSubobjectToAssociate = &stateSubObjects[stateSubObjectCount - 1];
                 }
                 ref D3D12_STATE_SUBOBJECT rayGenGroupInfo = ref stateSubObjects[stateSubObjectCount];
@@ -173,7 +173,7 @@ namespace Infinity.Graphics
                 D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION rayGenGroupDescriptor;
                 {
                     rayGenGroupDescriptor.NumExports = 1;
-                    rayGenGroupDescriptor.pExports = (ushort**)Marshal.StringToHGlobalUni(descriptor.RayGenerationDescriptor.GeneralDescriptor.EntryName).ToPointer();
+                    rayGenGroupDescriptor.pExports = (ushort**)Marshal.StringToHGlobalUni(descriptor.RayGeneration.General.EntryName).ToPointer();
                     rayGenGroupDescriptor.pSubobjectToAssociate = null;
                 }
                 ref D3D12_STATE_SUBOBJECT rayGenGroupInfo = ref stateSubObjects[stateSubObjectCount];
@@ -183,7 +183,7 @@ namespace Infinity.Graphics
             #endregion RayGeneration
 
             #region MissGroup
-            for (int i = 0; i < descriptor.RayMissGroupDescriptors.Length; ++i)
+            for (int i = 0; i < descriptor.RayMissGroups.Length; ++i)
             {
                 ref RHIRayGeneralGroupDescriptor rayMissGroupDescriptor = ref rayMissGroupSpan[i];
                 Dx12PipelineLayout rayMissPipelineLayout = rayMissGroupDescriptor.PipelineLayout as Dx12PipelineLayout;
@@ -203,7 +203,7 @@ namespace Infinity.Graphics
                     D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION missGroupDescriptor;
                     {
                         missGroupDescriptor.NumExports = 1;
-                        missGroupDescriptor.pExports = (ushort**)Marshal.StringToHGlobalUni(rayMissGroupDescriptor.GeneralDescriptor.EntryName).ToPointer();
+                        missGroupDescriptor.pExports = (ushort**)Marshal.StringToHGlobalUni(rayMissGroupDescriptor.General.EntryName).ToPointer();
                         missGroupDescriptor.pSubobjectToAssociate = &stateSubObjects[stateSubObjectCount - 1];
                     }
                     ref D3D12_STATE_SUBOBJECT missGroupInfo = ref stateSubObjects[stateSubObjectCount];
@@ -216,7 +216,7 @@ namespace Infinity.Graphics
             #endregion MissGroup
 
             #region HitGroup
-            for (int i = 0; i < descriptor.RayHitGroupDescriptors.Length; ++i)
+            for (int i = 0; i < descriptor.RayHitGroups.Length; ++i)
             {
                 ref RHIRayHitGroupDescriptor rayHitGroupDescriptor = ref rayHitGroupSpan[i];
                 Dx12PipelineLayout rayHitPipelineLayout = rayHitGroupDescriptor.PipelineLayout as Dx12PipelineLayout;
@@ -228,9 +228,9 @@ namespace Infinity.Graphics
                 {
                     hitGroupDescriptor.Type = Dx12Utility.ConverteToDx12HitGroupType(rayHitGroupDescriptor.Type);
                     hitGroupDescriptor.HitGroupExport = exportName;
-                    hitGroupDescriptor.AnyHitShaderImport = rayHitGroupDescriptor.AnyHitDescriptor.HasValue ? (ushort*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.AnyHitDescriptor?.EntryName).ToPointer() : null;
-                    hitGroupDescriptor.ClosestHitShaderImport = rayHitGroupDescriptor.ClosestHitDescriptor.HasValue ? (ushort*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.ClosestHitDescriptor?.EntryName).ToPointer() : null;
-                    hitGroupDescriptor.IntersectionShaderImport = rayHitGroupDescriptor.IntersectDescriptor.HasValue ? (ushort*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.IntersectDescriptor?.EntryName).ToPointer() : null;
+                    hitGroupDescriptor.AnyHitShaderImport = rayHitGroupDescriptor.AnyHit.HasValue ? (ushort*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.AnyHit?.EntryName).ToPointer() : null;
+                    hitGroupDescriptor.ClosestHitShaderImport = rayHitGroupDescriptor.ClosestHit.HasValue ? (ushort*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.ClosestHit?.EntryName).ToPointer() : null;
+                    hitGroupDescriptor.IntersectionShaderImport = rayHitGroupDescriptor.Intersect.HasValue ? (ushort*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.Intersect?.EntryName).ToPointer() : null;
                 }
                 ref D3D12_STATE_SUBOBJECT hitGroupInfo = ref stateSubObjects[stateSubObjectCount];
                 hitGroupInfo.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP;
@@ -392,14 +392,14 @@ namespace Infinity.Graphics
             Dx12Function fragmentFunction = descriptor.FragmentFunction as Dx12Function;
             Dx12PipelineLayout pipelineLayout = descriptor.PipelineLayout as Dx12PipelineLayout;
 
-            Span<RHIVertexLayoutDescriptor> vertexLayoutDescriptors = descriptor.VertexLayoutDescriptors.Span;
+            Span<RHIVertexLayoutDescriptor> vertexLayouts = descriptor.VertexLayouts.Span;
 
             if ((vertexFunction != null))
             {
-                m_VertexStrides = new uint[vertexLayoutDescriptors.Length];
-                for (int j = 0; j < vertexLayoutDescriptors.Length; ++j)
+                m_VertexStrides = new uint[vertexLayouts.Length];
+                for (int j = 0; j < vertexLayouts.Length; ++j)
                 {
-                    m_VertexStrides[j] = vertexLayoutDescriptors[j].Stride;
+                    m_VertexStrides[j] = vertexLayouts[j].Stride;
                 }
             }
 
@@ -407,11 +407,11 @@ namespace Infinity.Graphics
 
             D3D12_PRIMITIVE_TOPOLOGY_TYPE primitiveTopologyType = Dx12Utility.ConvertToDx12PrimitiveTopologyType(descriptor.PrimitiveTopology);
 
-            int inputElementCount = Dx12Utility.GetDx12VertexLayoutCount(vertexLayoutDescriptors);
+            int inputElementCount = Dx12Utility.GetDx12VertexLayoutCount(vertexLayouts);
             D3D12_INPUT_ELEMENT_DESC* inputElementsPtr = stackalloc D3D12_INPUT_ELEMENT_DESC[inputElementCount];
             Span<D3D12_INPUT_ELEMENT_DESC> inputElementsView = new Span<D3D12_INPUT_ELEMENT_DESC>(inputElementsPtr, inputElementCount);
 
-            Dx12Utility.ConvertToDx12VertexLayout(vertexLayoutDescriptors, inputElementsView);
+            Dx12Utility.ConvertToDx12VertexLayout(vertexLayouts, inputElementsView);
 
             D3D12_INPUT_LAYOUT_DESC outputLayout;
             outputLayout.NumElements = (uint)inputElementCount;
@@ -423,27 +423,27 @@ namespace Infinity.Graphics
                 pRootSignature = pipelineLayout.NativeRootSignature,
                 PrimitiveTopologyType = primitiveTopologyType,
 
-                SampleMask = descriptor.RenderStateDescriptor.SampleMask.HasValue ? ((uint)descriptor.RenderStateDescriptor.SampleMask.Value) : uint.MaxValue,
-                BlendState = Dx12Utility.CreateDx12BlendState(descriptor.RenderStateDescriptor.BlendStateDescriptor),
-                RasterizerState = Dx12Utility.CreateDx12RasterizerState(descriptor.RenderStateDescriptor.RasterizerStateDescriptor, descriptor.OutputStateDescriptor.SampleCount != ESampleCount.None),
-                DepthStencilState = Dx12Utility.CreateDx12DepthStencilState(descriptor.RenderStateDescriptor.DepthStencilStateDescriptor)
+                SampleMask = descriptor.RenderState.SampleMask.HasValue ? ((uint)descriptor.RenderState.SampleMask.Value) : uint.MaxValue,
+                BlendState = Dx12Utility.CreateDx12BlendState(descriptor.RenderState.BlendState),
+                RasterizerState = Dx12Utility.CreateDx12RasterizerState(descriptor.RenderState.RasterizerState, descriptor.OutputState.SampleCount != ESampleCount.None),
+                DepthStencilState = Dx12Utility.CreateDx12DepthStencilState(descriptor.RenderState.DepthStencilState)
             };
 
-            if (descriptor.OutputStateDescriptor.DepthStencilFormat.HasValue)
+            if (descriptor.OutputState.DepthStencilFormat.HasValue)
             {
                 description.DSVFormat = DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
-                description.DSVFormat = Dx12Utility.ConvertToDx12Format(descriptor.OutputStateDescriptor.DepthStencilFormat.Value);
+                description.DSVFormat = Dx12Utility.ConvertToDx12Format(descriptor.OutputState.DepthStencilFormat.Value);
             }
 
-            for (int i = 0; i < descriptor.OutputStateDescriptor.ColorFormats.Length; ++i)
+            for (int i = 0; i < descriptor.OutputState.ColorFormats.Length; ++i)
             {
                 description.RTVFormats[i] = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
-                description.RTVFormats[i] = Dx12Utility.ConvertToDx12ViewFormat(descriptor.OutputStateDescriptor.ColorFormats.Span[i]);
+                description.RTVFormats[i] = Dx12Utility.ConvertToDx12ViewFormat(descriptor.OutputState.ColorFormats.Span[i]);
             }
 
             description.Flags = D3D12_PIPELINE_STATE_FLAGS.D3D12_PIPELINE_STATE_FLAG_NONE;
-            description.NumRenderTargets = (uint)descriptor.OutputStateDescriptor.ColorFormats.Length;
-            description.SampleDesc = Dx12Utility.ConvertToDx12SampleCount(descriptor.OutputStateDescriptor.SampleCount);
+            description.NumRenderTargets = (uint)descriptor.OutputState.ColorFormats.Length;
+            description.SampleDesc = Dx12Utility.ConvertToDx12SampleCount(descriptor.OutputState.SampleCount);
             //description.StreamOutput = new StreamOutputDescription();
 
             if (descriptor.VertexFunction != null)

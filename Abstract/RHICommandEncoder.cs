@@ -126,19 +126,19 @@ namespace Infinity.Graphics
     public struct RHIMeshletPassDescriptor
     {
         public string Name;
-        public RHIShadingRateDescriptor? ShadingRateDescriptor;
-        //public Memory<RHISubpassDescriptor>? SubpassDescriptors;
-        public Memory<RHIColorAttachmentDescriptor> ColorAttachmentDescriptors;
-        public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachmentDescriptor;
+        public RHIShadingRateDescriptor? ShadingRate;
+        //public Memory<RHISubpassDescriptor>? Subpass;
+        public Memory<RHIColorAttachmentDescriptor> ColorAttachments;
+        public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachment;
     }
 
     public struct RHIGraphicsPassDescriptor
     {
         public string Name;
-        public RHIShadingRateDescriptor? ShadingRateDescriptor;
-        //public Memory<RHISubpassDescriptor>? SubpassDescriptors;
-        public Memory<RHIColorAttachmentDescriptor> ColorAttachmentDescriptors;
-        public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachmentDescriptor;
+        public RHIShadingRateDescriptor? ShadingRate;
+        //public Memory<RHISubpassDescriptor>? Subpass;
+        public Memory<RHIColorAttachmentDescriptor> ColorAttachments;
+        public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachment;
     }
 
     public abstract class RHIBlitEncoder : Disposal

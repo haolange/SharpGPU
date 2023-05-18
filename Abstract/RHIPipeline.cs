@@ -26,7 +26,7 @@ namespace Infinity.Graphics
         public uint Stride;
         public uint StepRate;
         public EVertexStepMode StepMode;
-        public Memory<RHIVertexElementDescriptor> VertexElementDescriptors;
+        public Memory<RHIVertexElementDescriptor> VertexElements;
     }
 
     public struct RHIBlendDescriptor
@@ -84,16 +84,16 @@ namespace Infinity.Graphics
         public byte StencilReadMask;
         public byte StencilWriteMask;
         public EComparisonMode ComparisonMode;
-        public RHIStencilStateDescriptor BackFaceDescriptor;
-        public RHIStencilStateDescriptor FrontFaceDescriptor;
+        public RHIStencilStateDescriptor BackFace;
+        public RHIStencilStateDescriptor FrontFace;
     }
 
     public struct RHIRenderStateDescriptor
     {
         public uint? SampleMask;
-        public RHIBlendStateDescriptor BlendStateDescriptor;
-        public RHIRasterizerStateDescriptor RasterizerStateDescriptor;
-        public RHIDepthStencilStateDescriptor DepthStencilStateDescriptor;
+        public RHIBlendStateDescriptor BlendState;
+        public RHIRasterizerStateDescriptor RasterizerState;
+        public RHIDepthStencilStateDescriptor DepthStencilState;
     }
 
     public struct RHIComputePipelineDescriptor
@@ -108,16 +108,16 @@ namespace Infinity.Graphics
         public string Name;
         public EHitGroupType Type;
         internal RHIPipelineLayout PipelineLayout;
-        public RHIRayFunctionDescriptor? AnyHitDescriptor;
-        public RHIRayFunctionDescriptor? IntersectDescriptor;
-        public RHIRayFunctionDescriptor? ClosestHitDescriptor;
+        public RHIRayFunctionDescriptor? AnyHit;
+        public RHIRayFunctionDescriptor? Intersect;
+        public RHIRayFunctionDescriptor? ClosestHit;
     }
 
     public struct RHIRayGeneralGroupDescriptor
     {
         public string Name;
+        public RHIRayFunctionDescriptor General;
         internal RHIPipelineLayout PipelineLayout;
-        public RHIRayFunctionDescriptor GeneralDescriptor;
     }
 
     public struct RHIRaytracingPipelineDescriptor
@@ -127,9 +127,9 @@ namespace Infinity.Graphics
         public uint MaxRecursionDepth;
         public RHIPipelineLayout PipelineLayout;
         public RHIFunctionLibrary FunctionLibrary;
-        public RHIRayGeneralGroupDescriptor RayGenerationDescriptor;
-        public Memory<RHIRayHitGroupDescriptor> RayHitGroupDescriptors;
-        public Memory<RHIRayGeneralGroupDescriptor> RayMissGroupDescriptors;
+        public RHIRayGeneralGroupDescriptor RayGeneration;
+        public Memory<RHIRayHitGroupDescriptor> RayHitGroups;
+        public Memory<RHIRayGeneralGroupDescriptor> RayMissGroups;
     }
 
     public struct RHIMeshletPipelineDescriptor
@@ -139,8 +139,8 @@ namespace Infinity.Graphics
         public RHIFunction FragmentFunction;
         public RHIPipelineLayout PipelineLayout;
         public EPrimitiveTopology PrimitiveTopology;
-        public RHIOutputStateDescriptor OutputStateDescriptor;
-        public RHIRenderStateDescriptor RenderStateDescriptor;
+        public RHIOutputStateDescriptor OutputState;
+        public RHIRenderStateDescriptor RenderState;
     }
 
     public struct RHIGraphicsPipelineDescriptor
@@ -149,9 +149,9 @@ namespace Infinity.Graphics
         public RHIFunction FragmentFunction;
         public RHIPipelineLayout PipelineLayout;
         public EPrimitiveTopology PrimitiveTopology;
-        public RHIOutputStateDescriptor OutputStateDescriptor;
-        public RHIRenderStateDescriptor RenderStateDescriptor;
-        public Memory<RHIVertexLayoutDescriptor> VertexLayoutDescriptors;
+        public RHIOutputStateDescriptor OutputState;
+        public RHIRenderStateDescriptor RenderState;
+        public Memory<RHIVertexLayoutDescriptor> VertexLayouts;
     }
 
     public abstract class RHIComputePipeline : Disposal

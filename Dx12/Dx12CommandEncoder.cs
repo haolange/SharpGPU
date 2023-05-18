@@ -671,12 +671,12 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
             D3D12_CPU_DESCRIPTOR_HANDLE? dsvHandle = null;
-            D3D12_CPU_DESCRIPTOR_HANDLE* rtvHandles = stackalloc D3D12_CPU_DESCRIPTOR_HANDLE[descriptor.ColorAttachmentDescriptors.Length];
+            D3D12_CPU_DESCRIPTOR_HANDLE* rtvHandles = stackalloc D3D12_CPU_DESCRIPTOR_HANDLE[descriptor.ColorAttachments.Length];
 
             // create render target views
-            for (int i = 0; i < descriptor.ColorAttachmentDescriptors.Length; ++i)
+            for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
             {
-                Dx12Texture texture = descriptor.ColorAttachmentDescriptors.Span[i].RenderTarget as Dx12Texture;
+                Dx12Texture texture = descriptor.ColorAttachments.Span[i].RenderTarget as Dx12Texture;
                 Debug.Assert(texture != null);
 
                 /*RHITextureViewDescriptor viewDescriptor;
@@ -708,9 +708,9 @@ namespace Infinity.Graphics
             }
 
             // create depth stencil view
-            if (descriptor.DepthStencilAttachmentDescriptor.HasValue)
+            if (descriptor.DepthStencilAttachment.HasValue)
             {
-                Dx12Texture texture = descriptor.DepthStencilAttachmentDescriptor.Value.DepthStencilTarget as Dx12Texture;
+                Dx12Texture texture = descriptor.DepthStencilAttachment.Value.DepthStencilTarget as Dx12Texture;
                 Debug.Assert(texture != null);
 
                 /*RHITextureViewDescriptor viewDescriptor;
@@ -724,7 +724,7 @@ namespace Infinity.Graphics
                     viewDescriptor.Dimension = ETextureDimension.Texture2D;
                 }*/
                 D3D12_DEPTH_STENCIL_VIEW_DESC desc = new D3D12_DEPTH_STENCIL_VIEW_DESC();
-                desc.Flags = Dx12Utility.GetDx12DSVFlag(descriptor.DepthStencilAttachmentDescriptor.Value.DepthReadOnly, descriptor.DepthStencilAttachmentDescriptor.Value.StencilReadOnly);
+                desc.Flags = Dx12Utility.GetDx12DSVFlag(descriptor.DepthStencilAttachment.Value.DepthReadOnly, descriptor.DepthStencilAttachment.Value.StencilReadOnly);
                 desc.Format = Dx12Utility.ConvertToDx12Format(texture.Descriptor.Format);
                 desc.ViewDimension = Dx12Utility.ConvertToDx12TextureDSVDimension(texture.Descriptor.Dimension);
 
@@ -740,12 +740,12 @@ namespace Infinity.Graphics
             }
 
             // set render targets
-            dx12CommandBuffer.NativeCommandList->OMSetRenderTargets((uint)descriptor.ColorAttachmentDescriptors.Length, rtvHandles, false, dsvHandle.HasValue ? (D3D12_CPU_DESCRIPTOR_HANDLE*)&dsvHandle : null);
+            dx12CommandBuffer.NativeCommandList->OMSetRenderTargets((uint)descriptor.ColorAttachments.Length, rtvHandles, false, dsvHandle.HasValue ? (D3D12_CPU_DESCRIPTOR_HANDLE*)&dsvHandle : null);
 
             // clear render targets
-            for (int i = 0; i < descriptor.ColorAttachmentDescriptors.Length; ++i)
+            for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
             {
-                ref RHIColorAttachmentDescriptor colorAttachmentDescriptor = ref descriptor.ColorAttachmentDescriptors.Span[i];
+                ref RHIColorAttachmentDescriptor colorAttachmentDescriptor = ref descriptor.ColorAttachments.Span[i];
 
                 if (colorAttachmentDescriptor.LoadOp != ELoadOp.Clear)
                 {
@@ -759,7 +759,7 @@ namespace Infinity.Graphics
             // clear depth stencil target
             if (dsvHandle.HasValue)
             {
-                RHIDepthStencilAttachmentDescriptor? depthStencilAttachmentDescriptor = descriptor.DepthStencilAttachmentDescriptor;
+                RHIDepthStencilAttachmentDescriptor? depthStencilAttachmentDescriptor = descriptor.DepthStencilAttachment;
                 if (depthStencilAttachmentDescriptor?.DepthLoadOp != ELoadOp.Clear && depthStencilAttachmentDescriptor?.StencilLoadOp != ELoadOp.Clear)
                 {
                     return;
@@ -769,20 +769,20 @@ namespace Infinity.Graphics
             }
 
             // set shading rate
-            if (descriptor.ShadingRateDescriptor.HasValue)
+            if (descriptor.ShadingRate.HasValue)
             {
-                if (descriptor.ShadingRateDescriptor.Value.ShadingRateTexture != null)
+                if (descriptor.ShadingRate.Value.ShadingRateTexture != null)
                 {
-                    D3D12_SHADING_RATE_COMBINER shadingRateCombiner = Dx12Utility.ConvertToDx12ShadingRateCombiner(descriptor.ShadingRateDescriptor.Value.ShadingRateCombiner);
-                    Dx12Texture dx12Texture = descriptor.ShadingRateDescriptor.Value.ShadingRateTexture as Dx12Texture;
-                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRateDescriptor.Value.ShadingRate), &shadingRateCombiner);
+                    D3D12_SHADING_RATE_COMBINER shadingRateCombiner = Dx12Utility.ConvertToDx12ShadingRateCombiner(descriptor.ShadingRate.Value.ShadingRateCombiner);
+                    Dx12Texture dx12Texture = descriptor.ShadingRate.Value.ShadingRateTexture as Dx12Texture;
+                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRate.Value.ShadingRate), &shadingRateCombiner);
                     dx12CommandBuffer.NativeCommandList->RSSetShadingRateImage(dx12Texture.NativeResource);
                 }
                 else
                 {
                     D3D12_SHADING_RATE_COMBINER* shadingRateCombiners = stackalloc D3D12_SHADING_RATE_COMBINER[2] { D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MAX, D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MAX };
-                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRateDescriptor.Value.ShadingRate), shadingRateCombiners);
-                    //dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRateDescriptor.Value.ShadingRate), null);
+                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRate.Value.ShadingRate), shadingRateCombiners);
+                    //dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRate.Value.ShadingRate), null);
                 }
             }
         }
@@ -1022,12 +1022,12 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
             D3D12_CPU_DESCRIPTOR_HANDLE? dsvHandle = null;
-            D3D12_CPU_DESCRIPTOR_HANDLE* rtvHandles = stackalloc D3D12_CPU_DESCRIPTOR_HANDLE[descriptor.ColorAttachmentDescriptors.Length];
+            D3D12_CPU_DESCRIPTOR_HANDLE* rtvHandles = stackalloc D3D12_CPU_DESCRIPTOR_HANDLE[descriptor.ColorAttachments.Length];
 
             // create render target views
-            for (int i = 0; i < descriptor.ColorAttachmentDescriptors.Length; ++i)
+            for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
             {
-                Dx12Texture texture = descriptor.ColorAttachmentDescriptors.Span[i].RenderTarget as Dx12Texture;
+                Dx12Texture texture = descriptor.ColorAttachments.Span[i].RenderTarget as Dx12Texture;
                 Debug.Assert(texture != null);
 
                 RHITextureViewDescriptor viewDescriptor;
@@ -1059,9 +1059,9 @@ namespace Infinity.Graphics
             }
 
             // create depth stencil view
-            if (descriptor.DepthStencilAttachmentDescriptor.HasValue)
+            if (descriptor.DepthStencilAttachment.HasValue)
             {
-                Dx12Texture texture = descriptor.DepthStencilAttachmentDescriptor.Value.DepthStencilTarget as Dx12Texture;
+                Dx12Texture texture = descriptor.DepthStencilAttachment.Value.DepthStencilTarget as Dx12Texture;
                 Debug.Assert(texture != null);
 
                 RHITextureViewDescriptor viewDescriptor;
@@ -1075,7 +1075,7 @@ namespace Infinity.Graphics
                     viewDescriptor.Dimension = texture.Descriptor.Dimension;
                 }
                 D3D12_DEPTH_STENCIL_VIEW_DESC desc = new D3D12_DEPTH_STENCIL_VIEW_DESC();
-                desc.Flags = Dx12Utility.GetDx12DSVFlag(descriptor.DepthStencilAttachmentDescriptor.Value.DepthReadOnly, descriptor.DepthStencilAttachmentDescriptor.Value.StencilReadOnly);
+                desc.Flags = Dx12Utility.GetDx12DSVFlag(descriptor.DepthStencilAttachment.Value.DepthReadOnly, descriptor.DepthStencilAttachment.Value.StencilReadOnly);
                 desc.Format = Dx12Utility.ConvertToDx12Format(texture.Descriptor.Format);
                 desc.ViewDimension = Dx12Utility.ConvertToDx12TextureDSVDimension(texture.Descriptor.Dimension);
                 /*Dx12Utility.FillTexture2DDSV(ref desc.Texture2D, viewDescriptor);
@@ -1094,12 +1094,12 @@ namespace Infinity.Graphics
             }
 
             // set render targets
-            dx12CommandBuffer.NativeCommandList->OMSetRenderTargets((uint)descriptor.ColorAttachmentDescriptors.Length, rtvHandles, false, dsvHandle.HasValue ? (D3D12_CPU_DESCRIPTOR_HANDLE*)&dsvHandle : null);
+            dx12CommandBuffer.NativeCommandList->OMSetRenderTargets((uint)descriptor.ColorAttachments.Length, rtvHandles, false, dsvHandle.HasValue ? (D3D12_CPU_DESCRIPTOR_HANDLE*)&dsvHandle : null);
 
             // clear render targets
-            for (int i = 0; i < descriptor.ColorAttachmentDescriptors.Length; ++i)
+            for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
             {
-                ref RHIColorAttachmentDescriptor colorAttachmentDescriptor = ref descriptor.ColorAttachmentDescriptors.Span[i];
+                ref RHIColorAttachmentDescriptor colorAttachmentDescriptor = ref descriptor.ColorAttachments.Span[i];
 
                 if (colorAttachmentDescriptor.LoadOp != ELoadOp.Clear)
                 {
@@ -1113,7 +1113,7 @@ namespace Infinity.Graphics
             // clear depth stencil target
             if (dsvHandle.HasValue)
             {
-                RHIDepthStencilAttachmentDescriptor? depthStencilAttachmentDescriptor = descriptor.DepthStencilAttachmentDescriptor;
+                RHIDepthStencilAttachmentDescriptor? depthStencilAttachmentDescriptor = descriptor.DepthStencilAttachment;
                 if (depthStencilAttachmentDescriptor?.DepthLoadOp != ELoadOp.Clear && depthStencilAttachmentDescriptor?.StencilLoadOp != ELoadOp.Clear)
                 {
                     return;
@@ -1123,20 +1123,20 @@ namespace Infinity.Graphics
             }
 
             // set shading rate
-            if (descriptor.ShadingRateDescriptor.HasValue)
+            if (descriptor.ShadingRate.HasValue)
             {
-                if (descriptor.ShadingRateDescriptor.Value.ShadingRateTexture != null)
+                if (descriptor.ShadingRate.Value.ShadingRateTexture != null)
                 {
-                    D3D12_SHADING_RATE_COMBINER shadingRateCombiner = Dx12Utility.ConvertToDx12ShadingRateCombiner(descriptor.ShadingRateDescriptor.Value.ShadingRateCombiner);
-                    Dx12Texture dx12Texture = descriptor.ShadingRateDescriptor.Value.ShadingRateTexture as Dx12Texture;
-                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRateDescriptor.Value.ShadingRate), &shadingRateCombiner);
+                    D3D12_SHADING_RATE_COMBINER shadingRateCombiner = Dx12Utility.ConvertToDx12ShadingRateCombiner(descriptor.ShadingRate.Value.ShadingRateCombiner);
+                    Dx12Texture dx12Texture = descriptor.ShadingRate.Value.ShadingRateTexture as Dx12Texture;
+                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRate.Value.ShadingRate), &shadingRateCombiner);
                     dx12CommandBuffer.NativeCommandList->RSSetShadingRateImage(dx12Texture.NativeResource);
                 }
                 else
                 {
                     D3D12_SHADING_RATE_COMBINER* shadingRateCombiners = stackalloc D3D12_SHADING_RATE_COMBINER[2] { D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MAX, D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MAX };
-                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRateDescriptor.Value.ShadingRate), shadingRateCombiners);
-                    //dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRateDescriptor.Value.ShadingRate), null);
+                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRate.Value.ShadingRate), shadingRateCombiners);
+                    //dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRate.Value.ShadingRate), null);
                 }
             }
         }

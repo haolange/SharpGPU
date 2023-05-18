@@ -583,19 +583,19 @@ namespace Infinity.Graphics
             };
             D3D12_DEPTH_STENCILOP_DESC frontFaceDescription = new D3D12_DEPTH_STENCILOP_DESC
             {
-                StencilFunc = ConvertToDx12Comparison(depthStencilStateDescriptor.FrontFaceDescriptor.ComparisonMode),
-                StencilFailOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.FrontFaceDescriptor.StencilFailOp,
-                StencilPassOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.FrontFaceDescriptor.StencilPassOp,
-                StencilDepthFailOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.FrontFaceDescriptor.StencilDepthFailOp
+                StencilFunc = ConvertToDx12Comparison(depthStencilStateDescriptor.FrontFace.ComparisonMode),
+                StencilFailOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.FrontFace.StencilFailOp,
+                StencilPassOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.FrontFace.StencilPassOp,
+                StencilDepthFailOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.FrontFace.StencilDepthFailOp
             };
             depthStencilDescription.FrontFace = frontFaceDescription;
 
             D3D12_DEPTH_STENCILOP_DESC backFaceDescription = new D3D12_DEPTH_STENCILOP_DESC
             {
-                StencilFunc = ConvertToDx12Comparison(depthStencilStateDescriptor.BackFaceDescriptor.ComparisonMode),
-                StencilFailOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.BackFaceDescriptor.StencilFailOp,
-                StencilPassOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.BackFaceDescriptor.StencilPassOp,
-                StencilDepthFailOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.BackFaceDescriptor.StencilDepthFailOp
+                StencilFunc = ConvertToDx12Comparison(depthStencilStateDescriptor.BackFace.ComparisonMode),
+                StencilFailOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.BackFace.StencilFailOp,
+                StencilPassOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.BackFace.StencilPassOp,
+                StencilDepthFailOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.BackFace.StencilDepthFailOp
             };
             depthStencilDescription.BackFace = backFaceDescription;
             return depthStencilDescription;
@@ -1247,46 +1247,46 @@ namespace Infinity.Graphics
             return ((stepMode == EVertexStepMode.PerVertex) || (stepMode != EVertexStepMode.PerInstance)) ? D3D12_INPUT_CLASSIFICATION.D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA : D3D12_INPUT_CLASSIFICATION.D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA;
         }
 
-        internal static int GetDx12VertexLayoutCount(in Span<RHIVertexLayoutDescriptor> vertexLayoutDescriptors)
+        internal static int GetDx12VertexLayoutCount(in Span<RHIVertexLayoutDescriptor> vertexLayouts)
         {
             int num = 0;
-            for (int i = 0; i < vertexLayoutDescriptors.Length; ++i)
+            for (int i = 0; i < vertexLayouts.Length; ++i)
             {
-                num += vertexLayoutDescriptors[i].VertexElementDescriptors.Length;
+                num += vertexLayouts[i].VertexElements.Length;
             }
 
             return num;
         }
 
-        internal static void ConvertToDx12VertexLayout(in Span<RHIVertexLayoutDescriptor> vertexLayoutDescriptors, in Span<D3D12_INPUT_ELEMENT_DESC> inputElementsView)
+        internal static void ConvertToDx12VertexLayout(in Span<RHIVertexLayoutDescriptor> vertexLayouts, in Span<D3D12_INPUT_ELEMENT_DESC> inputElementsView)
         {
             int slot = 0;
             int index = 0;
 
-            while (slot < vertexLayoutDescriptors.Length)
+            while (slot < vertexLayouts.Length)
             {
-                ref RHIVertexLayoutDescriptor vertexLayoutDescriptor = ref vertexLayoutDescriptors[slot];
-                Span<RHIVertexElementDescriptor> vertexElementDescriptors = vertexLayoutDescriptor.VertexElementDescriptors.Span;
+                ref RHIVertexLayoutDescriptor vertexLayout = ref vertexLayouts[slot];
+                Span<RHIVertexElementDescriptor> vertexElements = vertexLayout.VertexElements.Span;
 
                 int num6 = 0;
 
                 while (true)
                 {
-                    if (num6 >= vertexElementDescriptors.Length)
+                    if (num6 >= vertexElements.Length)
                     {
                         slot++;
                         break;
                     }
-                    RHIVertexElementDescriptor vertexElementDescriptor = vertexElementDescriptors[num6];
-                    byte[] semanticByte = ConvertToDx12SemanticNameByte(vertexElementDescriptor.Type);
+                    ref RHIVertexElementDescriptor vertexElement = ref vertexElements[num6];
+                    byte[] semanticByte = ConvertToDx12SemanticNameByte(vertexElement.Type);
                     ref D3D12_INPUT_ELEMENT_DESC element = ref inputElementsView[index];
-                    element.Format = ConvertToDx12SemanticFormat(vertexElementDescriptor.Format);
+                    element.Format = ConvertToDx12SemanticFormat(vertexElement.Format);
                     element.InputSlot = (uint)slot;
                     element.SemanticName = (sbyte*)Unsafe.AsPointer(ref MemoryMarshal.GetReference(new ReadOnlySpan<byte>(semanticByte)));
-                    element.SemanticIndex = vertexElementDescriptor.Slot;
-                    element.InputSlotClass = ConvertToDx12InputSlotClass(vertexLayoutDescriptor.StepMode);
-                    element.AlignedByteOffset = (uint)vertexElementDescriptor.Offset;
-                    element.InstanceDataStepRate = (uint)vertexLayoutDescriptor.StepRate;
+                    element.SemanticIndex = vertexElement.Slot;
+                    element.InputSlotClass = ConvertToDx12InputSlotClass(vertexLayout.StepMode);
+                    element.AlignedByteOffset = vertexElement.Offset;
+                    element.InstanceDataStepRate = vertexLayout.StepRate;
 
                     ++num6;
                     ++index;
