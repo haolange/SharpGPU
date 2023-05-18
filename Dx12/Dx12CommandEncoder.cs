@@ -662,10 +662,10 @@ namespace Infinity.Graphics
             m_SubPassIndex = 0;
             PushDebugGroup(descriptor.Name);
 
-            if (descriptor.SubpassDescriptors != null)
+            /*if (descriptor.SubpassDescriptors != null)
             {
                 throw new NotImplementedException("Dx12 is not support subpass. Please do not use subpass descriptors");
-            }
+            }*/
 
             m_AttachmentInfos.Clear();
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1013,10 +1013,10 @@ namespace Infinity.Graphics
             m_SubPassIndex = 0;
             PushDebugGroup(descriptor.Name);
 
-            if (descriptor.SubpassDescriptors != null)
+            /*if (descriptor.SubpassDescriptors != null)
             {
                 throw new NotImplementedException("Dx12 is not support subpass. Please do not use subpass descriptors");
-            }
+            }*/
 
             m_AttachmentInfos.Clear();
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
