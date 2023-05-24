@@ -19,13 +19,13 @@ namespace Infinity.Graphics
 
             if (RuntimeInformation.ProcessArchitecture == Architecture.Arm64)
             {
-                MTLDevice defaultDevice = MTLDevice.MTLCreateSystemDefaultDevice();
+                MTLDevice defaultDevice = MTLDevice.CreateSystemDefaultDevice();
                 gpusPtr = defaultDevice.NativePtr;
                 gpuCount = 1;
             }
             else
             {
-                NSArray gpus = MTLDevice.MTLCopyAllDevices();
+                NSArray gpus = MTLDevice.CopyAllDevices();
                 gpusPtr = gpus.NativePtr;
                 gpuCount = (int)gpus.count;
             }
