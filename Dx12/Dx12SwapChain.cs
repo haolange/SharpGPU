@@ -107,7 +107,7 @@ namespace Infinity.Graphics
                 textureDescriptor.Format = RHIUtility.ConvertToPixelFormat(descriptor.Format);
                 textureDescriptor.Usage = ETextureUsage.RenderTarget;
                 textureDescriptor.Dimension = ETextureDimension.Texture2D;
-                textureDescriptor.StorageMode = EStorageMode.Default;
+                //textureDescriptor.StorageMode = EStorageMode.Default;
             }
 
             for (int i = 0; i < descriptor.Count; ++i)
@@ -115,7 +115,7 @@ namespace Infinity.Graphics
                 ID3D12Resource* dx12Resource = null;
                 bool success = SUCCEEDED(m_NativeSwapChain->GetBuffer((uint)i, __uuidof<ID3D12Resource>(), (void**)&dx12Resource));
                 Debug.Assert(success);
-                m_Textures[i] = new Dx12Texture(m_Dx12Device, ETextureState.Present, textureDescriptor, dx12Resource);
+                m_Textures[i] = new Dx12Texture(m_Dx12Device, textureDescriptor, dx12Resource);
             }
         }
 

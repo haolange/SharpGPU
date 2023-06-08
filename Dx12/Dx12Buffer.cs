@@ -29,7 +29,7 @@ namespace Infinity.Graphics
         public Dx12Buffer(Dx12Device device, in RHIBufferDescriptor descriptor)
         {
             m_Dx12Device = device;
-            m_State = RHIUtility.ConvertToBufferStateFormStorageMode(descriptor.StorageMode);
+            //m_State = RHIUtility.ConvertToBufferStateFormStorageMode(descriptor.StorageMode);
             m_Descriptor = descriptor;
             m_SizeInBytes = (uint)descriptor.Size;
 
@@ -46,7 +46,9 @@ namespace Infinity.Graphics
 
         public override IntPtr Map(in int length, in int offset)
         {
+#if DEBUG
             Debug.Assert(!(m_Descriptor.StorageMode == EStorageMode.Default));
+#endif
 
             void* data;
             D3D12_RANGE range = new D3D12_RANGE((uint)offset, (uint)(offset + length));

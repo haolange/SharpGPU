@@ -38,8 +38,6 @@ namespace Infinity.Graphics
 
         public static RHIBarrier Aliasing(RHIBuffer buffer, in EOwnerState ownerState, in EBufferState after)
         {
-            buffer.SetState(after);
-
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_BarrierType = EBarrierType.Aliasing;
             barrier.m_ResourceType = EResourceType.Buffer;
@@ -51,8 +49,6 @@ namespace Infinity.Graphics
 
         public static RHIBarrier Aliasing(RHITexture texture, in EOwnerState ownerState, in ETextureState after)
         {
-            texture.SetState(after);
-
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_BarrierType = EBarrierType.Aliasing;
             barrier.m_ResourceType = EResourceType.Texture;
@@ -62,25 +58,8 @@ namespace Infinity.Graphics
             return barrier;
         }
 
-        public static RHIBarrier Transition(RHIBuffer buffer, in EOwnerState ownerState, in EBufferState after)
-        {
-            buffer.SetState(after);
-            EBufferState before = buffer.State;
-
-            RHIBarrier barrier = new RHIBarrier();
-            barrier.m_BarrierType = ((before & EBufferState.UnorderedAccess) != 0) && ((after & EBufferState.UnorderedAccess) != 0) ? EBarrierType.UAV : EBarrierType.Triansition;
-            barrier.m_ResourceType = EResourceType.Buffer;
-            barrier.m_BufferTransition.Handle = buffer;
-            barrier.m_BufferTransition.Owner = ownerState;
-            barrier.m_BufferTransition.Before = before;
-            barrier.m_BufferTransition.After = after;
-            return barrier;
-        }
-
         public static RHIBarrier Transition(RHIBuffer buffer, in EOwnerState ownerState, in EBufferState before, in EBufferState after)
         {
-            buffer.SetState(after);
-
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_BarrierType = ((before & EBufferState.UnorderedAccess) != 0) && ((after & EBufferState.UnorderedAccess) != 0) ? EBarrierType.UAV : EBarrierType.Triansition;
             barrier.m_ResourceType = EResourceType.Buffer;
@@ -89,41 +68,10 @@ namespace Infinity.Graphics
             barrier.m_BufferTransition.Before = before;
             barrier.m_BufferTransition.After = after;
             return barrier;
-        }
-
-        public static RHIBarrier Transition(RHITexture texture, in EOwnerState ownerState, in ETextureState after)
-        {
-            texture.SetState(after);
-            ETextureState before = texture.State;
-
-            if (((before & ETextureState.UnorderedAccess) != 0) && ((after & ETextureState.UnorderedAccess) != 0))
-            {
-                RHIBarrier barrier = new RHIBarrier();
-                barrier.m_BarrierType = EBarrierType.UAV;
-                barrier.m_ResourceType = EResourceType.Texture;
-                barrier.m_TextureTransition.Handle = texture;
-                barrier.m_TextureTransition.Owner = ownerState;
-                barrier.m_TextureTransition.Before = before;
-                barrier.m_TextureTransition.After = after;
-                return barrier;
-            }
-            else
-            {
-                RHIBarrier barrier = new RHIBarrier();
-                barrier.m_BarrierType = EBarrierType.Triansition;
-                barrier.m_ResourceType = EResourceType.Texture;
-                barrier.m_TextureTransition.Handle = texture;
-                barrier.m_TextureTransition.Owner = ownerState;
-                barrier.m_TextureTransition.Before = before;
-                barrier.m_TextureTransition.After = after;
-                return barrier;
-            }
         }
 
         public static RHIBarrier Transition(RHITexture texture, in EOwnerState ownerState, in ETextureState before, in ETextureState after)
         {
-            texture.SetState(after);
-
             if (((before & ETextureState.UnorderedAccess) != 0) && ((after & ETextureState.UnorderedAccess) != 0))
             {
                 RHIBarrier barrier = new RHIBarrier();

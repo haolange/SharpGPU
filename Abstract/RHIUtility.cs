@@ -468,13 +468,17 @@ namespace Infinity.Graphics
     public enum EBufferState
     {
         Common = 0,
-        GenericRead = 0x00000001,
+        //GenericRead = 0x00000001,
         CopySrc = 0x00000002,
         CopyDst = 0x00000004,
-        IndexBuffer = 0x00000008,
+        /*IndexBuffer = 0x00000008,
         VertexBuffer = 0x00000010,
         ConstantBuffer = 0x00000020,
-        IndirectArgument = 0x00000040,
+        IndirectArgument = 0x00000040,*/
+        /*IndexBuffer = Common,
+        VertexBuffer = Common,
+        ConstantBuffer = Common,
+        IndirectArgument = Common,*/
         ShaderResource = 0x00000080,
         UnorderedAccess = 0x00000100,
         AccelStruct = 0x00000200,
@@ -489,7 +493,7 @@ namespace Infinity.Graphics
     {
         Common = 0,
         Present = 0x00000001,
-        GenericRead = 0x00000002,
+        //GenericRead = 0x00000002,
         CopySrc = 0x00000004,
         CopyDst = 0x00000008,
         DepthRead = 0x00000040,
@@ -589,7 +593,7 @@ namespace Infinity.Graphics
             return EPixelFormat.R8G8B8A8_UNorm_Srgb;
         }
 
-        internal static EBufferState ConvertToBufferStateFormStorageMode(in EStorageMode storageMode)
+        /*internal static EBufferState ConvertToBufferStateFormStorageMode(in EStorageMode storageMode)
         {
             switch (storageMode)
             {
@@ -623,6 +627,6 @@ namespace Infinity.Graphics
                 default:
                     return ETextureState.Common;
             }
-        }
+        }*/
     }
 }

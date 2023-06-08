@@ -29,10 +29,9 @@ namespace Infinity.Graphics
         public Dx12Texture(Dx12Device device, in RHITextureDescriptor descriptor)
         {
             m_Dx12Device = device;
-            m_State = RHIUtility.ConvertToTextureStateFormStorageMode(descriptor.StorageMode);
             m_Descriptor = descriptor;
 
-            D3D12_HEAP_PROPERTIES heapProperties = new D3D12_HEAP_PROPERTIES(Dx12Utility.ConvertToDx12ResourceFlagByUsage(descriptor.StorageMode));
+            D3D12_HEAP_PROPERTIES heapProperties = new D3D12_HEAP_PROPERTIES(D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT/*Dx12Utility.ConvertToDx12ResourceFlagByUsage(descriptor.StorageMode)*/);
             D3D12_RESOURCE_DESC textureDesc = new D3D12_RESOURCE_DESC();
             textureDesc.MipLevels = (ushort)descriptor.MipCount;
             textureDesc.Format = Dx12Utility.ConvertToDx12Format(descriptor.Format);
@@ -45,17 +44,16 @@ namespace Infinity.Graphics
             textureDesc.Dimension = Dx12Utility.ConvertToDx12TextureDimension(descriptor.Dimension);
 
             ID3D12Resource* dx12Resource;
-            bool success = SUCCEEDED(m_Dx12Device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &textureDesc, Dx12Utility.ConvertToDx12ResourceStateFormStorageMode(descriptor.StorageMode), null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource)); ;
+            bool success = SUCCEEDED(m_Dx12Device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON/*Dx12Utility.ConvertToDx12ResourceStateFormStorageMode(descriptor.StorageMode)*/, null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource));
 #if DEBUG
             Debug.Assert(success);
 #endif
             m_NativeResource = dx12Resource;
         }
 
-        public Dx12Texture(Dx12Device device, in ETextureState state, in RHITextureDescriptor Descriptor, in ID3D12Resource* nativeResource)
+        public Dx12Texture(Dx12Device device, in RHITextureDescriptor Descriptor, in ID3D12Resource* nativeResource)
         {
             m_Dx12Device = device;
-            m_State = state;
             m_Descriptor = Descriptor;
             m_NativeResource = nativeResource;
         }

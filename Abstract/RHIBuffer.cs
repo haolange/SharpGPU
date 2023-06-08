@@ -19,15 +19,6 @@ namespace Infinity.Graphics
                 return m_SizeInBytes;
             }
         }
-
-        public EBufferState State
-        {
-            get
-            {
-                return m_State;
-            }
-        }
-
         public RHIBufferDescriptor Descriptor
         {
             get
@@ -37,13 +28,7 @@ namespace Infinity.Graphics
         }
 
         protected uint m_SizeInBytes;
-        protected EBufferState m_State;
         protected RHIBufferDescriptor m_Descriptor;
-
-        public void SetState(in EBufferState state)
-        {
-            m_State = state;
-        }
 
         public abstract IntPtr Map(in int length, in int offset);
         public abstract void UnMap();
