@@ -227,22 +227,22 @@ namespace Infinity.Graphics
             return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER;
         }
 
-        internal static D3D12_HEAP_TYPE ConvertToDx12ResourceFlagByUsage(in EStorageMode resourceUsage)
+        internal static D3D12_HEAP_TYPE ConvertToDx12ResourceFlagByUsage(in EStorageMode storageMode)
         {
-            D3D12_HEAP_TYPE fallback = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT;
-            Dictionary<EStorageMode, D3D12_HEAP_TYPE> heapRules = new Dictionary<EStorageMode, D3D12_HEAP_TYPE>();
-            heapRules.Add(EStorageMode.Dynamic, D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD);
-            heapRules.Add(EStorageMode.Staging, D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK);
-
-            foreach (KeyValuePair<EStorageMode, D3D12_HEAP_TYPE> rule in heapRules)
+            switch (storageMode)
             {
-                if (resourceUsage == rule.Key)
-                {
-                    return rule.Value;
-                }
-            }
+                case EStorageMode.Static:
+                    return D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD;
 
-            return fallback;
+                case EStorageMode.Dynamic:
+                    return D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD;
+
+                case EStorageMode.Staging:
+                    return D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK;
+
+                default:
+                    return D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT;
+            }
         }
 
         internal static D3D12_SHADING_RATE ConvertToDx12ShadingRate(in EShadingRate shadingRate)
@@ -402,8 +402,8 @@ namespace Infinity.Graphics
             D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON; // also 0
 
             if ((state & EBufferState.GenericRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
-            if ((state & EBufferState.CopyDest) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
-            if ((state & EBufferState.CopySource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
+            if ((state & EBufferState.CopyDst) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
+            if ((state & EBufferState.CopySrc) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
             if ((state & EBufferState.IndexBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDEX_BUFFER;
             if ((state & EBufferState.VertexBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
             if ((state & EBufferState.ConstantBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
@@ -419,6 +419,24 @@ namespace Infinity.Graphics
             return result;
         }
 
+        internal static D3D12_RESOURCE_STATES ConvertToDx12ResourceStateFormStorageMode(in EStorageMode storageMode)
+        {
+            switch (storageMode)
+            {
+                case EStorageMode.Static:
+                    return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
+
+                case EStorageMode.Dynamic:
+                    return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
+
+                case EStorageMode.Staging:
+                    return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
+
+                default:
+                    return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
+            }
+        }
+
         internal static D3D12_RESOURCE_STATES ConvertToDx12TextureState(in ETextureState state)
         {
             if (state == ETextureState.Common)
@@ -428,8 +446,8 @@ namespace Infinity.Graphics
 
             if ((state & ETextureState.Present) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
             if ((state & ETextureState.GenericRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
-            if ((state & ETextureState.CopyDest) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
-            if ((state & ETextureState.CopySource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
+            if ((state & ETextureState.CopyDst) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
+            if ((state & ETextureState.CopySrc) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
             if ((state & ETextureState.DepthRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_READ;
             if ((state & ETextureState.DepthWrite) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_WRITE;
             if ((state & ETextureState.RenderTarget) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;

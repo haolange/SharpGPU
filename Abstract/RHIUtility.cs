@@ -469,8 +469,8 @@ namespace Infinity.Graphics
     {
         Common = 0,
         GenericRead = 0x00000001,
-        CopyDest = 0x00000002,
-        CopySource = 0x00000004,
+        CopySrc = 0x00000002,
+        CopyDst = 0x00000004,
         IndexBuffer = 0x00000008,
         VertexBuffer = 0x00000010,
         ConstantBuffer = 0x00000020,
@@ -490,8 +490,8 @@ namespace Infinity.Graphics
         Common = 0,
         Present = 0x00000001,
         GenericRead = 0x00000002,
-        CopyDest = 0x00000004,
-        CopySource = 0x00000008,
+        CopySrc = 0x00000004,
+        CopyDst = 0x00000008,
         DepthRead = 0x00000040,
         DepthWrite = 0x00000080,
         RenderTarget = 0x00000100,
@@ -587,6 +587,42 @@ namespace Infinity.Graphics
                     return EPixelFormat.R16G16B16A16_Float;
             }
             return EPixelFormat.R8G8B8A8_UNorm_Srgb;
+        }
+
+        internal static EBufferState ConvertToBufferStateFormStorageMode(in EStorageMode storageMode)
+        {
+            switch (storageMode)
+            {
+                case EStorageMode.Static:
+                    return EBufferState.GenericRead;
+
+                case EStorageMode.Dynamic:
+                    return EBufferState.GenericRead;
+
+                case EStorageMode.Staging:
+                    return EBufferState.CopyDst;
+
+                default:
+                    return EBufferState.Common;
+            }
+        }
+
+        internal static ETextureState ConvertToTextureStateFormStorageMode(in EStorageMode storageMode)
+        {
+            switch (storageMode)
+            {
+                case EStorageMode.Static:
+                    return ETextureState.GenericRead;
+
+                case EStorageMode.Dynamic:
+                    return ETextureState.GenericRead;
+
+                case EStorageMode.Staging:
+                    return ETextureState.CopyDst;
+
+                default:
+                    return ETextureState.Common;
+            }
         }
     }
 }

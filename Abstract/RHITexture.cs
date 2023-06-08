@@ -10,13 +10,19 @@ namespace Infinity.Graphics
         public uint3 Extent;
         public EPixelFormat Format;
         public EStorageMode StorageMode;
-        public ETextureState State;
         public ETextureUsage Usage;
         public ETextureDimension Dimension;
     }
 
     public abstract class RHITexture : Disposal
     {
+        public ETextureState State
+        {
+            get
+            {
+                return m_State;
+            }
+        }
         public RHITextureDescriptor Descriptor
         {
             get
@@ -25,7 +31,13 @@ namespace Infinity.Graphics
             }
         }
 
+        protected ETextureState m_State;
         protected RHITextureDescriptor m_Descriptor;
+
+        public void SetState(in ETextureState state)
+        {
+            m_State = state;
+        }
 
         public abstract RHITextureView CreateTextureView(in RHITextureViewDescriptor descriptor);
     }
