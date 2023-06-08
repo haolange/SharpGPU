@@ -115,7 +115,7 @@ namespace Infinity.Graphics
                 ID3D12Resource* dx12Resource = null;
                 bool success = SUCCEEDED(m_NativeSwapChain->GetBuffer((uint)i, __uuidof<ID3D12Resource>(), (void**)&dx12Resource));
                 Debug.Assert(success);
-                m_Textures[i] = new Dx12Texture(m_Dx12Device, ETextureState.Present, textureDescriptor, dx12Resource);
+                m_Textures[i] = new Dx12Texture(m_Dx12Device, ETextureState.Common, textureDescriptor, dx12Resource);
             }
         }
 
