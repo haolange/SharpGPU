@@ -102,7 +102,7 @@ namespace Infinity.Graphics
             RHITextureDescriptor textureDescriptor;
             {
                 textureDescriptor.Extent = new uint3(descriptor.Extent.xy, 1);
-                textureDescriptor.Samples = 1;
+                textureDescriptor.MSAA = ESampleCount.None;
                 textureDescriptor.MipCount = 1;
                 textureDescriptor.Format = RHIUtility.ConvertToPixelFormat(descriptor.Format);
                 textureDescriptor.Usage = ETextureUsage.RenderTarget;
