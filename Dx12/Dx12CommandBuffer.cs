@@ -72,68 +72,68 @@ namespace Infinity.Graphics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override RHIBlitEncoder BeginBlitPass(string name)
+        public override RHIBlitEncoder BeginBlitEncoding(string name)
         {
-            m_BlitEncoder.BeginPass(name);
+            m_BlitEncoder.BeginEncoding(name);
             return m_BlitEncoder;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void EndBlitPass()
+        public override void EndBlitEncoding()
         {
-            m_BlitEncoder.EndPass();
+            m_BlitEncoder.EndEncoding();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override RHIComputeEncoder BeginComputePass(string name)
+        public override RHIComputeEncoder BeginComputeEncoding(string name)
         {
-            m_ComputeEncoder.BeginPass(name);
+            m_ComputeEncoder.BeginEncoding(name);
             return m_ComputeEncoder;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void EndComputePass()
+        public override void EndComputeEncoding()
         {
-            m_ComputeEncoder.EndPass();
+            m_ComputeEncoder.EndEncoding();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override RHIRaytracingEncoder BeginRaytracingPass(string name)
+        public override RHIRaytracingEncoder BeginRaytracingEncoding(string name)
         {
-            m_RaytracingEncoder.BeginPass(name);
+            m_RaytracingEncoder.BeginEncoding(name);
             return m_RaytracingEncoder;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void EndRaytracingPass()
+        public override void EndRaytracingEncoding()
         {
-            m_RaytracingEncoder.EndPass();
+            m_RaytracingEncoder.EndEncoding();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override RHIMeshletEncoder BeginMeshletPass(in RHIMeshletPassDescriptor descriptor)
+        public override RHIMeshletEncoder BeginMeshletEncoding(in RHIMeshletPassDescriptor descriptor)
         {
-            m_MeshletEncoder.BeginPass(descriptor);
+            m_MeshletEncoder.BeginEncoding(descriptor);
             return m_MeshletEncoder;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void EndMeshletPass()
+        public override void EndMeshletEncoding()
         {
-            m_MeshletEncoder.EndPass();
+            m_MeshletEncoder.EndEncoding();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override RHIGraphicsEncoder BeginGraphicsPass(in RHIGraphicsPassDescriptor descriptor)
+        public override RHIGraphicsEncoder BeginGraphicsEncoding(in RHIGraphicsPassDescriptor descriptor)
         {
-            m_GraphicsEncoder.BeginPass(descriptor);
+            m_GraphicsEncoder.BeginEncoding(descriptor);
             return m_GraphicsEncoder;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void EndGraphicsPass()
+        public override void EndGraphicsEncoding()
         {
-            m_GraphicsEncoder.EndPass();
+            m_GraphicsEncoder.EndEncoding();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

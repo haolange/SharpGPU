@@ -31,7 +31,7 @@ namespace Infinity.Graphics
 
         public void Dispose()
         {
-            m_BlitEncoder.EndPass();
+            m_BlitEncoder.EndEncoding();
         }
     }
 
@@ -46,7 +46,7 @@ namespace Infinity.Graphics
 
         public void Dispose()
         {
-            m_ComputeEncoder.EndPass();
+            m_ComputeEncoder.EndEncoding();
         }
     }
 
@@ -61,7 +61,7 @@ namespace Infinity.Graphics
 
         public void Dispose()
         {
-            m_MeshletEncoder.EndPass();
+            m_MeshletEncoder.EndEncoding();
         }
     }
 
@@ -76,7 +76,7 @@ namespace Infinity.Graphics
 
         public void Dispose()
         {
-            m_GraphicsEncoder.EndPass();
+            m_GraphicsEncoder.EndEncoding();
         }
     }
 
@@ -91,7 +91,7 @@ namespace Infinity.Graphics
 
         public void Dispose()
         {
-            m_RaytracingEncoder.EndPass();
+            m_RaytracingEncoder.EndEncoding();
         }
     }
 
@@ -115,46 +115,46 @@ namespace Infinity.Graphics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RHIBlitPassScoper BeginScopedBlitPass(string name)
+        public RHIBlitPassScoper BeginScopedBlitEncoding(string name)
         {
-            return new RHIBlitPassScoper(BeginBlitPass(name));
+            return new RHIBlitPassScoper(BeginBlitEncoding(name));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RHIComputePassScoper BeginScopedComputePass(string name)
+        public RHIComputePassScoper BeginScopedComputeEncoding(string name)
         {
-            return new RHIComputePassScoper(BeginComputePass(name));
+            return new RHIComputePassScoper(BeginComputeEncoding(name));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RHIRaytracingPassScoper BeginScopedRaytracingPass(string name)
+        public RHIRaytracingPassScoper BeginScopedRaytracingEncoding(string name)
         {
-            return new RHIRaytracingPassScoper(BeginRaytracingPass(name));
+            return new RHIRaytracingPassScoper(BeginRaytracingEncoding(name));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RHIMeshletPassScoper BeginScopedMeshletPass(in RHIMeshletPassDescriptor descriptor)
+        public RHIMeshletPassScoper BeginScopedMeshletEncoding(in RHIMeshletPassDescriptor descriptor)
         {
-            return new RHIMeshletPassScoper(BeginMeshletPass(descriptor));
+            return new RHIMeshletPassScoper(BeginMeshletEncoding(descriptor));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RHIGraphicsPassScoper BeginScopedGraphicsPass(in RHIGraphicsPassDescriptor descriptor)
+        public RHIGraphicsPassScoper BeginScopedGraphicsEncoding(in RHIGraphicsPassDescriptor descriptor)
         {
-            return new RHIGraphicsPassScoper(BeginGraphicsPass(descriptor));
+            return new RHIGraphicsPassScoper(BeginGraphicsEncoding(descriptor));
         }
 
         public abstract void Begin(string name);
-        public abstract RHIBlitEncoder BeginBlitPass(string name);
-        public abstract void EndBlitPass();
-        public abstract RHIComputeEncoder BeginComputePass(string name);
-        public abstract void EndComputePass();
-        public abstract RHIRaytracingEncoder BeginRaytracingPass(string name);
-        public abstract void EndRaytracingPass();
-        public abstract RHIMeshletEncoder BeginMeshletPass(in RHIMeshletPassDescriptor descriptor);
-        public abstract void EndMeshletPass();
-        public abstract RHIGraphicsEncoder BeginGraphicsPass(in RHIGraphicsPassDescriptor descriptor);
-        public abstract void EndGraphicsPass();
+        public abstract RHIBlitEncoder BeginBlitEncoding(string name);
+        public abstract void EndBlitEncoding();
+        public abstract RHIComputeEncoder BeginComputeEncoding(string name);
+        public abstract void EndComputeEncoding();
+        public abstract RHIRaytracingEncoder BeginRaytracingEncoding(string name);
+        public abstract void EndRaytracingEncoding();
+        public abstract RHIMeshletEncoder BeginMeshletEncoding(in RHIMeshletPassDescriptor descriptor);
+        public abstract void EndMeshletEncoding();
+        public abstract RHIGraphicsEncoder BeginGraphicsEncoding(in RHIGraphicsPassDescriptor descriptor);
+        public abstract void EndGraphicsEncoding();
         public abstract void End();
         public abstract RHIBlitEncoder GetBlitEncoder();
         public abstract RHIComputeEncoder GetComputeEncoder();

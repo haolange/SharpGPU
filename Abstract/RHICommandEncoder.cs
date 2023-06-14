@@ -145,7 +145,7 @@ namespace Infinity.Graphics
     {
         protected RHICommandBuffer? m_CommandBuffer;
 
-        internal abstract void BeginPass(string name);
+        internal abstract void BeginEncoding(string name);
         public abstract void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size);
         public abstract void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size);
         public abstract void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size);
@@ -156,7 +156,7 @@ namespace Infinity.Graphics
         public abstract void EndQuery(RHIQuery query, in uint index);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        internal abstract void EndPass();
+        public abstract void EndEncoding();
     }
 
     public abstract class RHIComputeEncoder : Disposal
@@ -165,7 +165,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIComputePipeline? m_Pipeline;
 
-        internal abstract void BeginPass(string name);
+        internal abstract void BeginEncoding(string name);
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipeline(RHIComputePipeline pipeline);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
@@ -176,7 +176,7 @@ namespace Infinity.Graphics
         public abstract void EndQuery(RHIQuery query, in uint index);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        internal abstract void EndPass();
+        public abstract void EndEncoding();
     }
 
     public abstract class RHIRaytracingEncoder : Disposal
@@ -185,7 +185,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIRaytracingPipeline? m_Pipeline;
 
-        internal abstract void BeginPass(string name);
+        internal abstract void BeginEncoding(string name);
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipeline(RHIRaytracingPipeline pipeline);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
@@ -198,7 +198,7 @@ namespace Infinity.Graphics
         public abstract void EndQuery(RHIQuery query, in uint index);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        internal abstract void EndPass();
+        public abstract void EndEncoding();
     }
     
     public abstract class RHIMeshletEncoder : Disposal
@@ -207,7 +207,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIMeshletPipeline? m_Pipeline;
 
-        internal abstract void BeginPass(in RHIMeshletPassDescriptor descriptor);
+        internal abstract void BeginEncoding(in RHIMeshletPassDescriptor descriptor);
         public abstract void SetScissor(in Rect rect);
         public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
@@ -225,7 +225,7 @@ namespace Infinity.Graphics
         public abstract void EndQuery(RHIQuery query, in uint index);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        internal abstract void EndPass();
+        public abstract void EndEncoding();
     }
 
     public abstract class RHIGraphicsEncoder : Disposal
@@ -234,7 +234,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIGraphicsPipeline? m_Pipeline;
 
-        internal abstract void BeginPass(in RHIGraphicsPassDescriptor descriptor);
+        internal abstract void BeginEncoding(in RHIGraphicsPassDescriptor descriptor);
         public abstract void SetScissor(in Rect rect);
         public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
@@ -256,6 +256,6 @@ namespace Infinity.Graphics
         public abstract void EndQuery(RHIQuery query, in uint index);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        internal abstract void EndPass();
+        public abstract void EndEncoding();
     }
 }

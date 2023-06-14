@@ -23,7 +23,7 @@ namespace Infinity.Graphics
             m_CommandBuffer = cmdBuffer;
         }
 
-        internal override void BeginPass(string name)
+        internal override void BeginEncoding(string name)
         {
             PushDebugGroup(name);
         }
@@ -297,7 +297,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndEvent();
         }
 
-        internal override void EndPass()
+        public override void EndEncoding()
         {
             PopDebugGroup();
         }
@@ -315,7 +315,7 @@ namespace Infinity.Graphics
             m_CommandBuffer = cmdBuffer;
         }
 
-        internal override void BeginPass(string name)
+        internal override void BeginEncoding(string name)
         {
             PushDebugGroup(name);
         }
@@ -446,7 +446,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndEvent();
         }
 
-        internal override void EndPass()
+        public override void EndEncoding()
         {
             PopDebugGroup();
             m_Pipeline = null;
@@ -466,7 +466,7 @@ namespace Infinity.Graphics
             m_CommandBuffer = cmdBuffer;
         }
 
-        internal override void BeginPass(string name)
+        internal override void BeginEncoding(string name)
         {
             PushDebugGroup(name);
         }
@@ -630,7 +630,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndEvent();
         }
 
-        internal override void EndPass()
+        public override void EndEncoding()
         {
             PopDebugGroup();
             m_Pipeline = null;
@@ -654,7 +654,7 @@ namespace Infinity.Graphics
             m_AttachmentInfos = new TValueArray<Dx12AttachmentInfo>(5);
         }
 
-        internal override void BeginPass(in RHIMeshletPassDescriptor descriptor)
+        internal override void BeginEncoding(in RHIMeshletPassDescriptor descriptor)
         {
             m_SubPassIndex = 0;
             PushDebugGroup(descriptor.Name);
@@ -962,7 +962,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndEvent();
         }
 
-        internal override void EndPass()
+        public override void EndEncoding()
         {
             PopDebugGroup();
 
@@ -1004,7 +1004,7 @@ namespace Infinity.Graphics
             m_AttachmentInfos = new TValueArray<Dx12AttachmentInfo>(5);
         }
 
-        internal override void BeginPass(in RHIGraphicsPassDescriptor descriptor)
+        internal override void BeginEncoding(in RHIGraphicsPassDescriptor descriptor)
         {
             m_SubPassIndex = 0;
             PushDebugGroup(descriptor.Name);
@@ -1361,7 +1361,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndEvent();
         }
 
-        internal override void EndPass()
+        public override void EndEncoding()
         {
             PopDebugGroup();
 
