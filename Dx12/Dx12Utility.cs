@@ -396,7 +396,7 @@ namespace Infinity.Graphics
 
         internal static D3D12_RESOURCE_STATES ConvertToDx12BufferState(in EBufferState state)
         {
-            if (state == EBufferState.Common)
+            if (state == EBufferState.Undefine)
                 return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
 
             D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON; // also 0
@@ -439,7 +439,7 @@ namespace Infinity.Graphics
 
         internal static D3D12_RESOURCE_STATES ConvertToDx12TextureState(in ETextureState state)
         {
-            if (state == ETextureState.Common)
+            if (state == ETextureState.Undefine)
                 return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
 
             D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;

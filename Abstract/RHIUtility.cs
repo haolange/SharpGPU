@@ -467,7 +467,7 @@ namespace Infinity.Graphics
 
     public enum EBufferState
     {
-        Common = 0,
+        Undefine = 0,
         //GenericRead = 0x00000001,
         CopySrc = 0x00000002,
         CopyDst = 0x00000004,
@@ -491,7 +491,7 @@ namespace Infinity.Graphics
 
     public enum ETextureState
     {
-        Common = 0,
+        Undefine = 0,
         Present = 0x00000001,
         //GenericRead = 0x00000002,
         CopySrc = 0x00000004,
