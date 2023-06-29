@@ -456,15 +456,6 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EBarrierStage : byte
-    {
-        Vertex,
-        Fragment,
-        Compute,
-        All,
-        Pending
-    }
-
     public enum EBufferState
     {
         Undefine = 0x00,
