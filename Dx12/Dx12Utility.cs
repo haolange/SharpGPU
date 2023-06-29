@@ -227,7 +227,7 @@ namespace Infinity.Graphics
             return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER;
         }
 
-        internal static D3D12_HEAP_TYPE ConvertToDx12ResourceFlagByUsage(in EStorageMode storageMode)
+        internal static D3D12_HEAP_TYPE ConvertToDx12HeapTypeByStorage(in EStorageMode storageMode)
         {
             switch (storageMode)
             {
@@ -399,22 +399,20 @@ namespace Infinity.Graphics
             if (state == EBufferState.Undefine)
                 return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
 
-            D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON; // also 0
+            D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
 
-            //if ((state & EBufferState.GenericRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
             if ((state & EBufferState.CopyDst) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
             if ((state & EBufferState.CopySrc) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
-            //if ((state & EBufferState.IndexBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDEX_BUFFER;
-            //if ((state & EBufferState.VertexBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-            //if ((state & EBufferState.ConstantBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-            //if ((state & EBufferState.IndirectArgument) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
+            if ((state & EBufferState.IndexBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDEX_BUFFER;
+            if ((state & EBufferState.VertexBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+            if ((state & EBufferState.ConstantBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+            if ((state & EBufferState.IndirectArgument) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
             if ((state & EBufferState.ShaderResource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
             if ((state & EBufferState.UnorderedAccess) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            if ((state & EBufferState.AccelStruct) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
-            /*if ((state & EBufferState.AccelStructRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+            if ((state & EBufferState.AccelStructRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
             if ((state & EBufferState.AccelStructWrite) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
             if ((state & EBufferState.AccelStructBuildInput) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-            if ((state & EBufferState.AccelStructBuildBlast) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;*/
+            if ((state & EBufferState.AccelStructBuildBlast) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
 
             return result;
         }
@@ -453,7 +451,7 @@ namespace Infinity.Graphics
             if ((state & ETextureState.RenderTarget) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
             if ((state & ETextureState.ShaderResource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
             if ((state & ETextureState.UnorderedAccess) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            if ((state & ETextureState.ShadingRateSorce) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE;
+            if ((state & ETextureState.ShadingRateSurface) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE;
 
             return result;
         }
@@ -623,15 +621,6 @@ namespace Infinity.Graphics
         {
             switch (format)
             {
-                case ESemanticFormat.UByte:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8_UINT;
-
-                case ESemanticFormat.UByte2:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_UINT;
-
-                case ESemanticFormat.UByte4:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UINT;
-
                 case ESemanticFormat.Byte:
                     return DXGI_FORMAT.DXGI_FORMAT_R8_SINT;
 
@@ -641,14 +630,14 @@ namespace Infinity.Graphics
                 case ESemanticFormat.Byte4:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_SINT;
 
-                case ESemanticFormat.UByteNormalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8_UNORM;
+                case ESemanticFormat.UByte:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8_UINT;
 
-                case ESemanticFormat.UByte2Normalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_UNORM;
+                case ESemanticFormat.UByte2:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_UINT;
 
-                case ESemanticFormat.UByte4Normalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
+                case ESemanticFormat.UByte4:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UINT;
 
                 case ESemanticFormat.ByteNormalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R8_SNORM;
@@ -659,14 +648,14 @@ namespace Infinity.Graphics
                 case ESemanticFormat.Byte4Normalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_SNORM;
 
-                case ESemanticFormat.UShort:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16_UINT;
+                case ESemanticFormat.UByteNormalized:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8_UNORM;
 
-                case ESemanticFormat.UShort2:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_UINT;
+                case ESemanticFormat.UByte2Normalized:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_UNORM;
 
-                case ESemanticFormat.UShort4:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_UINT;
+                case ESemanticFormat.UByte4Normalized:
+                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
 
                 case ESemanticFormat.Short:
                     return DXGI_FORMAT.DXGI_FORMAT_R16_SINT;
@@ -677,14 +666,14 @@ namespace Infinity.Graphics
                 case ESemanticFormat.Short4:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_SINT;
 
-                case ESemanticFormat.UShortNormalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16_UNORM;
+                case ESemanticFormat.UShort:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16_UINT;
 
-                case ESemanticFormat.UShort2Normalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_UNORM;
+                case ESemanticFormat.UShort2:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_UINT;
 
-                case ESemanticFormat.UShort4Normalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_UNORM;
+                case ESemanticFormat.UShort4:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_UINT;
 
                 case ESemanticFormat.ShortNormalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R16_SNORM;
@@ -694,6 +683,39 @@ namespace Infinity.Graphics
 
                 case ESemanticFormat.Short4Normalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_SNORM;
+
+                case ESemanticFormat.UShortNormalized:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16_UNORM;
+
+                case ESemanticFormat.UShort2Normalized:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_UNORM;
+
+                case ESemanticFormat.UShort4Normalized:
+                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_UNORM;
+
+                case ESemanticFormat.Int:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32_SINT;
+
+                case ESemanticFormat.Int2:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_SINT;
+
+                case ESemanticFormat.Int3:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32_SINT;
+
+                case ESemanticFormat.Int4:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_SINT;
+
+                case ESemanticFormat.UInt:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32_UINT;
+
+                case ESemanticFormat.UInt2:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_UINT;
+
+                case ESemanticFormat.UInt3:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32_UINT;
+
+                case ESemanticFormat.UInt4:
+                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_UINT;
 
                 case ESemanticFormat.Half:
                     return DXGI_FORMAT.DXGI_FORMAT_R16_FLOAT;
@@ -715,30 +737,6 @@ namespace Infinity.Graphics
 
                 case ESemanticFormat.Float4:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT;
-
-                case ESemanticFormat.UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32_UINT;
-
-                case ESemanticFormat.UInt2:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_UINT;
-
-                case ESemanticFormat.UInt3:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32_UINT;
-
-                case ESemanticFormat.UInt4:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_UINT;
-
-                case ESemanticFormat.Int:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32_SINT;
-
-                case ESemanticFormat.Int2:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_SINT;
-
-                case ESemanticFormat.Int3:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32_SINT;
-
-                case ESemanticFormat.Int4:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_SINT;
             }
             return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
         }

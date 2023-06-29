@@ -34,7 +34,7 @@ namespace Infinity.Graphics
             m_SizeInBytes = (uint)descriptor.Size;
 
             D3D12_RESOURCE_DESC resourceDesc = D3D12_RESOURCE_DESC.Buffer((ulong)descriptor.Size, Dx12Utility.ConvertToDx12BufferFlag(descriptor.Usage));
-            D3D12_HEAP_PROPERTIES heapProperties = new D3D12_HEAP_PROPERTIES(Dx12Utility.ConvertToDx12ResourceFlagByUsage(descriptor.StorageMode));
+            D3D12_HEAP_PROPERTIES heapProperties = new D3D12_HEAP_PROPERTIES(Dx12Utility.ConvertToDx12HeapTypeByStorage(descriptor.StorageMode));
 
             ID3D12Resource* dx12Resource;
             bool success = SUCCEEDED(m_Dx12Device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &resourceDesc, Dx12Utility.ConvertToDx12ResourceStateFormStorageMode(descriptor.StorageMode), null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource));

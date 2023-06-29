@@ -146,14 +146,15 @@ namespace Infinity.Graphics
         protected RHICommandBuffer? m_CommandBuffer;
 
         internal abstract void BeginEncoding(string name);
+        public abstract void ResourceBarrier(in RHIBarrier barrier);
+        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size);
         public abstract void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size);
         public abstract void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size);
         public abstract void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size);
-        public abstract void ResourceBarrier(in RHIBarrier barrier);
-        public abstract void ResourceBarrier(in Memory<RHIBarrier> barriers);
         public abstract void BeginQuery(RHIQuery query, in uint index);
         public abstract void EndQuery(RHIQuery query, in uint index);
+        public abstract void ResolveQuery(RHIQuery query, in uint index, in uint count);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void EndEncoding();
@@ -166,6 +167,8 @@ namespace Infinity.Graphics
         protected RHIComputePipeline? m_Pipeline;
 
         internal abstract void BeginEncoding(string name);
+        public abstract void ResourceBarrier(in RHIBarrier barrier);
+        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipeline(RHIComputePipeline pipeline);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
@@ -186,6 +189,8 @@ namespace Infinity.Graphics
         protected RHIRaytracingPipeline? m_Pipeline;
 
         internal abstract void BeginEncoding(string name);
+        public abstract void ResourceBarrier(in RHIBarrier barrier);
+        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipeline(RHIRaytracingPipeline pipeline);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
@@ -208,6 +213,8 @@ namespace Infinity.Graphics
         protected RHIMeshletPipeline? m_Pipeline;
 
         internal abstract void BeginEncoding(in RHIMeshletPassDescriptor descriptor);
+        public abstract void ResourceBarrier(in RHIBarrier barrier);
+        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetScissor(in Rect rect);
         public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
@@ -235,6 +242,8 @@ namespace Infinity.Graphics
         protected RHIGraphicsPipeline? m_Pipeline;
 
         internal abstract void BeginEncoding(in RHIGraphicsPassDescriptor descriptor);
+        public abstract void ResourceBarrier(in RHIBarrier barrier);
+        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetScissor(in Rect rect);
         public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
