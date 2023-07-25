@@ -87,7 +87,7 @@ namespace Infinity.Graphics
                 if(Dx12Utility.IsShaderResourceTexture(texture.Descriptor.Usage))
                 {
                     D3D12_SHADER_RESOURCE_VIEW_DESC desc = new D3D12_SHADER_RESOURCE_VIEW_DESC();
-                    desc.Format = Dx12Utility.ConvertToDx12ViewFormat(descriptor.Format);
+                    desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
                     desc.ViewDimension = Dx12Utility.ConvertToDx12TextureSRVDimension(texture.Descriptor.Dimension);
                     desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
                     Dx12Utility.FillTexture2DSRV(ref desc.Texture2D, descriptor, texture.Descriptor.Dimension);
@@ -109,7 +109,7 @@ namespace Infinity.Graphics
                 if(Dx12Utility.IsUnorderedAccessTexture(texture.Descriptor.Usage))
                 {
                     D3D12_UNORDERED_ACCESS_VIEW_DESC desc = new D3D12_UNORDERED_ACCESS_VIEW_DESC();
-                    desc.Format = Dx12Utility.ConvertToDx12ViewFormat(descriptor.Format);
+                    desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
                     desc.ViewDimension = Dx12Utility.ConvertToDx12TextureUAVDimension(texture.Descriptor.Dimension);
                     Dx12Utility.FillTexture2DUAV(ref desc.Texture2D, descriptor, texture.Descriptor.Dimension);
                     Dx12Utility.FillTexture3DUAV(ref desc.Texture3D, descriptor, texture.Descriptor.Dimension);

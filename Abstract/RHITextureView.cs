@@ -8,7 +8,7 @@ namespace Infinity.Graphics
         public uint BaseMipLevel;
         public uint SliceCount;
         public uint BaseSliceLevel;
-        public EPixelFormat Format;
+        //public EPixelFormat Format;
         public ETextureViewType ViewType;
         //public ETextureDimension Dimension;
     }

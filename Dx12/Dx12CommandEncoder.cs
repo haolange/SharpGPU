@@ -1535,7 +1535,7 @@ namespace Infinity.Graphics
                     viewDescriptor.BaseMipLevel = 0;
                     viewDescriptor.SliceCount = texture.Descriptor.Extent.z;
                     viewDescriptor.BaseSliceLevel = 0;
-                    viewDescriptor.Format = texture.Descriptor.Format;
+                    //viewDescriptor.Format = texture.Descriptor.Format;
                     viewDescriptor.ViewType = ETextureViewType.Pending;
                     //viewDescriptor.Dimension = texture.Descriptor.Dimension;
                 }
@@ -1569,7 +1569,7 @@ namespace Infinity.Graphics
                     viewDescriptor.BaseMipLevel = 0;
                     viewDescriptor.SliceCount = texture.Descriptor.Extent.z;
                     viewDescriptor.BaseSliceLevel = 0;
-                    viewDescriptor.Format = texture.Descriptor.Format;
+                    //viewDescriptor.Format = texture.Descriptor.Format;
                     viewDescriptor.ViewType = ETextureViewType.Pending;
                     //viewDescriptor.Dimension = texture.Descriptor.Dimension;
                 }
