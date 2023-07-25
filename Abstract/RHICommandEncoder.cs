@@ -96,9 +96,8 @@ namespace Infinity.Graphics
 
     public struct RHIColorAttachmentDescriptor
     {
-        public uint MipSlice;
-        public uint ArraySize;
-        public uint FirstArraySlice;
+        public uint BaseMipLevel;
+        public uint BaseSliceLevel;
         public float4 ClearValue;
         public ELoadOp LoadOp;
         public EStoreOp StoreOp;
@@ -108,9 +107,8 @@ namespace Infinity.Graphics
 
     public struct RHIDepthStencilAttachmentDescriptor
     {
-        public uint MipSlice;
-        public uint ArraySize;
-        public uint FirstArraySlice;
+        public uint BaseMipLevel;
+        public uint BaseSliceLevel;
         public bool DepthReadOnly;
         public float DepthClearValue;
         public ELoadOp DepthLoadOp;
@@ -119,8 +117,8 @@ namespace Infinity.Graphics
         public int StencilClearValue;
         public ELoadOp StencilLoadOp;
         public EStoreOp StencilStoreOp;
-        public RHITexture DepthStencilTarget;
-        public RHITexture DepthStencilResolve;
+        public RHITexture RenderTarget;
+        public RHITexture ResolveTarget;
     }
 
     public struct RHIMeshletPassDescriptor
@@ -254,8 +252,8 @@ namespace Infinity.Graphics
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipeline(RHIGraphicsPipeline pipeline);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
-        public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset);
         public abstract void SetIndexBuffer(RHIBuffer buffer, in uint offset, in EIndexFormat format);
+        public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset);
         public abstract void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance);
         public abstract void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance);
         public abstract void DrawIndirect(RHIBuffer argsBuffer, in uint offset);

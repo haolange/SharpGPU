@@ -6,11 +6,11 @@ namespace Infinity.Graphics
     {
         public uint MipCount;
         public uint BaseMipLevel;
-        public uint BaseArrayLayer;
-        public uint ArrayLayerCount;
+        public uint SliceCount;
+        public uint BaseSliceLevel;
         public EPixelFormat Format;
         public ETextureViewType ViewType;
-        public ETextureDimension Dimension;
+        //public ETextureDimension Dimension;
     }
 
     public abstract class RHITextureView : Disposal

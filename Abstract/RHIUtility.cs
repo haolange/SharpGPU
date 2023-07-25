@@ -65,6 +65,7 @@ namespace Infinity.Graphics
 
     public enum EPixelFormat : byte
     {
+        Unknown,
         // 8-Bits
         R8_UInt,
         R8_SInt,
@@ -346,11 +347,11 @@ namespace Infinity.Graphics
     public enum EColorWriteChannel : byte
     {
         None = 0,
-        Red = 1,
-        Green = 2,
-        Blue = 4,
-        Alpha = 8,
-        All = 15,
+        Red = 0x1,
+        Green = 0x2,
+        Blue = 0x4,
+        Alpha = 0x8,
+        All = Red | Green | Blue | Alpha,
         Pending
     }
 
@@ -439,6 +440,7 @@ namespace Infinity.Graphics
         Static,
         Dynamic,
         Staging,
+        Memoryless,
         Pending
     }
 

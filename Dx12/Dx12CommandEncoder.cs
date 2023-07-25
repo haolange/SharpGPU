@@ -1049,7 +1049,7 @@ namespace Infinity.Graphics
             // create depth stencil view
             if (descriptor.DepthStencilAttachment.HasValue)
             {
-                Dx12Texture texture = descriptor.DepthStencilAttachment.Value.DepthStencilTarget as Dx12Texture;
+                Dx12Texture texture = descriptor.DepthStencilAttachment.Value.RenderTarget as Dx12Texture;
                 Debug.Assert(texture != null);
 
                 /*RHITextureViewDescriptor viewDescriptor;
@@ -1533,18 +1533,18 @@ namespace Infinity.Graphics
                 {
                     viewDescriptor.MipCount = texture.Descriptor.MipCount;
                     viewDescriptor.BaseMipLevel = 0;
-                    viewDescriptor.BaseArrayLayer = 0;
-                    viewDescriptor.ArrayLayerCount = texture.Descriptor.Extent.z;
+                    viewDescriptor.SliceCount = texture.Descriptor.Extent.z;
+                    viewDescriptor.BaseSliceLevel = 0;
                     viewDescriptor.Format = texture.Descriptor.Format;
                     viewDescriptor.ViewType = ETextureViewType.Pending;
-                    viewDescriptor.Dimension = texture.Descriptor.Dimension;
+                    //viewDescriptor.Dimension = texture.Descriptor.Dimension;
                 }
                 D3D12_RENDER_TARGET_VIEW_DESC desc = new D3D12_RENDER_TARGET_VIEW_DESC();
                 desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
                 desc.ViewDimension = Dx12Utility.ConvertToDx12TextureRTVDimension(texture.Descriptor.Dimension);
-                Dx12Utility.FillTexture2DRTV(ref desc.Texture2D, viewDescriptor);
-                Dx12Utility.FillTexture3DRTV(ref desc.Texture3D, viewDescriptor);
-                Dx12Utility.FillTexture2DArrayRTV(ref desc.Texture2DArray, viewDescriptor);
+                Dx12Utility.FillTexture2DRTV(ref desc.Texture2D, viewDescriptor, texture.Descriptor.Dimension);
+                Dx12Utility.FillTexture3DRTV(ref desc.Texture3D, viewDescriptor, texture.Descriptor.Dimension);
+                Dx12Utility.FillTexture2DArrayRTV(ref desc.Texture2DArray, viewDescriptor, texture.Descriptor.Dimension);
 
                 Dx12AttachmentInfo dx12AttachmentInfo = new Dx12AttachmentInfo();
                 {
@@ -1560,18 +1560,18 @@ namespace Infinity.Graphics
             // create depth stencil view
             if (descriptor.DepthStencilAttachment.HasValue)
             {
-                Dx12Texture texture = descriptor.DepthStencilAttachment.Value.DepthStencilTarget as Dx12Texture;
+                Dx12Texture texture = descriptor.DepthStencilAttachment.Value.RenderTarget as Dx12Texture;
                 Debug.Assert(texture != null);
 
                 RHITextureViewDescriptor viewDescriptor;
                 {
                     viewDescriptor.MipCount = texture.Descriptor.MipCount;
                     viewDescriptor.BaseMipLevel = 0;
-                    viewDescriptor.BaseArrayLayer = 0;
-                    viewDescriptor.ArrayLayerCount = texture.Descriptor.Extent.z;
+                    viewDescriptor.SliceCount = texture.Descriptor.Extent.z;
+                    viewDescriptor.BaseSliceLevel = 0;
                     viewDescriptor.Format = texture.Descriptor.Format;
                     viewDescriptor.ViewType = ETextureViewType.Pending;
-                    viewDescriptor.Dimension = texture.Descriptor.Dimension;
+                    //viewDescriptor.Dimension = texture.Descriptor.Dimension;
                 }
                 D3D12_DEPTH_STENCIL_VIEW_DESC desc = new D3D12_DEPTH_STENCIL_VIEW_DESC();
                 desc.Flags = Dx12Utility.GetDx12DSVFlag(descriptor.DepthStencilAttachment.Value.DepthReadOnly, descriptor.DepthStencilAttachment.Value.StencilReadOnly);
@@ -1805,7 +1805,6 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
 
-
         public override void SetScissor(in Rect rect)
         {
             RECT tempScissor = new RECT((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom);
@@ -1907,6 +1906,19 @@ namespace Infinity.Graphics
             }
         }
 
+        public override void SetIndexBuffer(RHIBuffer buffer, in uint offset, in EIndexFormat format)
+        {
+            Dx12Buffer dx12Buffer = buffer as Dx12Buffer;
+            D3D12_INDEX_BUFFER_VIEW indexBufferView = new D3D12_INDEX_BUFFER_VIEW
+            {
+                Format = Dx12Utility.ConvertToDx12IndexFormat(format),
+                SizeInBytes = buffer.SizeInBytes - offset,
+                BufferLocation = dx12Buffer.NativeResource->GetGPUVirtualAddress() + offset
+            };
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->IASetIndexBuffer(&indexBufferView);
+        }
+
         public override void SetVertexBuffer(RHIBuffer buffer, in uint slot = 0, in uint offset = 0)
         {
             Dx12Buffer dx12Buffer = buffer as Dx12Buffer;
@@ -1920,19 +1932,6 @@ namespace Infinity.Graphics
             };
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->IASetVertexBuffers(slot, 1, &vertexBufferView);
-        }
-
-        public override void SetIndexBuffer(RHIBuffer buffer, in uint offset, in EIndexFormat format)
-        {
-            Dx12Buffer dx12Buffer = buffer as Dx12Buffer;
-            D3D12_INDEX_BUFFER_VIEW indexBufferView = new D3D12_INDEX_BUFFER_VIEW
-            {
-                Format = Dx12Utility.ConvertToDx12IndexFormat(format),
-                SizeInBytes = buffer.SizeInBytes - offset,
-                BufferLocation = dx12Buffer.NativeResource->GetGPUVirtualAddress() + offset
-            };
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->IASetIndexBuffer(&indexBufferView);
         }
 
         public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)

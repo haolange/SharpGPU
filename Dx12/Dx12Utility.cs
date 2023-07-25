@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using static TerraFX.Interop.Windows.Windows;
+using TerraFX.Interop.Windows;
 
 namespace Infinity.Graphics
 {
@@ -52,7 +53,9 @@ namespace Infinity.Graphics
 
             ID3D12DescriptorHeap* descriptorHeap;
             bool success = SUCCEEDED(device->CreateDescriptorHeap(&descriptorInfo, __uuidof<ID3D12DescriptorHeap>(), (void**)&descriptorHeap));
+#if DEBUG
             Debug.Assert(success);
+#endif
             m_DescriptorHeap = descriptorHeap;
         }
 
@@ -291,6 +294,18 @@ namespace Infinity.Graphics
                 default:
                     return D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_PASSTHROUGH;
             }
+        }
+
+        internal static byte ConvertToDx12WriteChannel(in EColorWriteChannel writeChannel)
+        {
+            byte result = 0;
+
+            if ((writeChannel & EColorWriteChannel.Red) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_RED;
+            if ((writeChannel & EColorWriteChannel.Green) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_GREEN;
+            if ((writeChannel & EColorWriteChannel.Blue) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_BLUE;
+            if ((writeChannel & EColorWriteChannel.Alpha) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_ALPHA;
+
+            return result;
         }
 
         internal static D3D12_RESOURCE_STATES ConvertToDx12BufferStateByFlag(in EBufferUsage bufferFlag)
@@ -532,7 +547,7 @@ namespace Infinity.Graphics
                     blendDescription.RenderTarget[i].BlendOpAlpha = (D3D12_BLEND_OP)blendDescriptorPtr[i].BlendOpAlpha;
                     blendDescription.RenderTarget[i].SrcBlendAlpha = (D3D12_BLEND)blendDescriptorPtr[i].SrcBlendAlpha;
                     blendDescription.RenderTarget[i].DestBlendAlpha = (D3D12_BLEND)blendDescriptorPtr[i].DstBlendAlpha;
-                    blendDescription.RenderTarget[i].RenderTargetWriteMask = (byte)blendDescriptorPtr[i].ColorWriteChannel;
+                    blendDescription.RenderTarget[i].RenderTargetWriteMask = ConvertToDx12WriteChannel(blendDescriptorPtr[i].ColorWriteChannel);
                 }
             }
             return blendDescription;
@@ -1479,9 +1494,9 @@ namespace Infinity.Graphics
             return (textureFlag & ETextureUsage.UnorderedAccess) == ETextureUsage.UnorderedAccess;
         }
 
-        internal static void FillTexture2DSRV(ref D3D12_TEX2D_SRV srv, in RHITextureViewDescriptor descriptor)
+        internal static void FillTexture2DSRV(ref D3D12_TEX2D_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
         {
-            if (!((descriptor.Dimension & ETextureDimension.Texture2D) == ETextureDimension.Texture2D))
+            if (!((dimension & ETextureDimension.Texture2D) == ETextureDimension.Texture2D))
             {
                 return;
             }
@@ -1491,119 +1506,119 @@ namespace Infinity.Graphics
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTexture2DArraySRV(ref D3D12_TEX2D_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor)
+        internal static void FillTexture2DArraySRV(ref D3D12_TEX2D_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
         {
-            if (!((descriptor.Dimension & ETextureDimension.Texture2DArray) == ETextureDimension.Texture2DArray))
+            if (!((dimension & ETextureDimension.Texture2DArray) == ETextureDimension.Texture2DArray))
             {
                 return;
             }
-            srv.MostDetailedMip = (uint)descriptor.BaseMipLevel;
-            srv.MipLevels = (uint)descriptor.MipCount;
-            srv.FirstArraySlice = (uint)descriptor.BaseArrayLayer;
-            srv.ArraySize = (uint)descriptor.ArrayLayerCount;
+            srv.MostDetailedMip = descriptor.BaseMipLevel;
+            srv.MipLevels = descriptor.MipCount;
+            srv.FirstArraySlice = descriptor.BaseSliceLevel;
+            srv.ArraySize = descriptor.SliceCount;
             srv.PlaneSlice = 0;
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTextureCubeSRV(ref D3D12_TEXCUBE_SRV srv, in RHITextureViewDescriptor descriptor)
+        internal static void FillTextureCubeSRV(ref D3D12_TEXCUBE_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
         {
-            if (!((descriptor.Dimension & ETextureDimension.TextureCube) == ETextureDimension.TextureCube))
+            if (!((dimension & ETextureDimension.TextureCube) == ETextureDimension.TextureCube))
             {
                 return;
             }
-            srv.MipLevels = (uint)descriptor.MipCount;
-            srv.MostDetailedMip = (uint)descriptor.BaseMipLevel;
+            srv.MipLevels = descriptor.MipCount;
+            srv.MostDetailedMip = descriptor.BaseMipLevel;
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTextureCubeArraySRV(ref D3D12_TEXCUBE_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor)
+        internal static void FillTextureCubeArraySRV(ref D3D12_TEXCUBE_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
         {
-            if (!((descriptor.Dimension & ETextureDimension.TextureCubeArray) == ETextureDimension.TextureCubeArray))
+            if (!((dimension & ETextureDimension.TextureCubeArray) == ETextureDimension.TextureCubeArray))
             {
                 return;
             }
-            srv.MostDetailedMip = (uint)descriptor.BaseMipLevel;
-            srv.MipLevels = (uint)descriptor.MipCount;
-            srv.NumCubes = (uint)descriptor.ArrayLayerCount;
-            srv.First2DArrayFace = (uint)descriptor.BaseArrayLayer;
+            srv.MostDetailedMip = descriptor.BaseMipLevel;
+            srv.MipLevels = descriptor.MipCount;
+            srv.NumCubes = descriptor.SliceCount;
+            srv.First2DArrayFace = descriptor.BaseSliceLevel;
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTexture3DSRV(ref D3D12_TEX3D_SRV srv, in RHITextureViewDescriptor descriptor)
+        internal static void FillTexture3DSRV(ref D3D12_TEX3D_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
         {
-            if (!((descriptor.Dimension & ETextureDimension.Texture3D) == ETextureDimension.Texture3D))
+            if (!((dimension & ETextureDimension.Texture3D) == ETextureDimension.Texture3D))
             {
                 return;
             }
-            srv.MipLevels = (uint)descriptor.MipCount;
-            srv.MostDetailedMip = (uint)descriptor.BaseMipLevel;
+            srv.MipLevels = descriptor.MipCount;
+            srv.MostDetailedMip = descriptor.BaseMipLevel;
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTexture2DUAV(ref D3D12_TEX2D_UAV uav, in RHITextureViewDescriptor descriptor)
+        internal static void FillTexture2DUAV(ref D3D12_TEX2D_UAV uav, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
         {
-            if (!((descriptor.Dimension & ETextureDimension.Texture2D) == ETextureDimension.Texture2D))
+            if (!((dimension & ETextureDimension.Texture2D) == ETextureDimension.Texture2D))
             {
                 return;
             }
-            uav.MipSlice = (uint)descriptor.BaseMipLevel;
+            uav.MipSlice = descriptor.BaseMipLevel;
             uav.PlaneSlice = 0;
         }
 
-        internal static void FillTexture2DArrayUAV(ref D3D12_TEX2D_ARRAY_UAV uav, in RHITextureViewDescriptor descriptor)
+        internal static void FillTexture2DArrayUAV(ref D3D12_TEX2D_ARRAY_UAV uav, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
         {
-            if (!((descriptor.Dimension & ETextureDimension.Texture2DArray) == ETextureDimension.Texture2DArray))
+            if (!((dimension & ETextureDimension.Texture2DArray) == ETextureDimension.Texture2DArray))
             {
                 return;
             }
-            uav.MipSlice = (uint)descriptor.BaseMipLevel;
-            uav.FirstArraySlice = (uint)descriptor.BaseArrayLayer;
-            uav.ArraySize = (uint)descriptor.ArrayLayerCount;
+            uav.MipSlice = descriptor.BaseMipLevel;
+            uav.FirstArraySlice = descriptor.BaseSliceLevel;
+            uav.ArraySize = descriptor.SliceCount;
             uav.PlaneSlice = 0;
         }
 
-        internal static void FillTexture3DUAV(ref D3D12_TEX3D_UAV uav, in RHITextureViewDescriptor descriptor)
+        internal static void FillTexture3DUAV(ref D3D12_TEX3D_UAV uav, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
         {
-            if (!((descriptor.Dimension & ETextureDimension.Texture3D) == ETextureDimension.Texture3D))
+            if (!((dimension & ETextureDimension.Texture3D) == ETextureDimension.Texture3D))
             {
                 return;
             }
-            uav.WSize = (uint)descriptor.ArrayLayerCount;
-            uav.MipSlice = (uint)descriptor.BaseMipLevel;
-            uav.FirstWSlice = (uint)descriptor.BaseArrayLayer;
+            uav.WSize = descriptor.SliceCount;
+            uav.MipSlice = descriptor.BaseMipLevel;
+            uav.FirstWSlice = descriptor.BaseSliceLevel;
         }
 
-        internal static void FillTexture2DRTV(ref D3D12_TEX2D_RTV rtv, in RHITextureViewDescriptor descriptor)
+        internal static void FillTexture2DRTV(ref D3D12_TEX2D_RTV rtv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
         {
-            if (!((descriptor.Dimension & ETextureDimension.Texture2D) == ETextureDimension.Texture2D))
+            if (!((dimension & ETextureDimension.Texture2D) == ETextureDimension.Texture2D))
             {
                 return;
             }
-            rtv.MipSlice = (uint)descriptor.BaseMipLevel;
+            rtv.MipSlice = descriptor.BaseMipLevel;
             rtv.PlaneSlice = 0;
         }
 
-        internal static void FillTexture2DArrayRTV(ref D3D12_TEX2D_ARRAY_RTV rtv, in RHITextureViewDescriptor descriptor)
+        internal static void FillTexture2DArrayRTV(ref D3D12_TEX2D_ARRAY_RTV rtv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
         {
-            if (!((descriptor.Dimension & ETextureDimension.Texture2DArray) == ETextureDimension.Texture2DArray))
+            if (!((dimension & ETextureDimension.Texture2DArray) == ETextureDimension.Texture2DArray))
             {
                 return;
             }
-            rtv.MipSlice = (uint)descriptor.BaseMipLevel;
-            rtv.FirstArraySlice = (uint)descriptor.BaseArrayLayer;
-            rtv.ArraySize = (uint)descriptor.ArrayLayerCount;
+            rtv.MipSlice = descriptor.BaseMipLevel;
+            rtv.FirstArraySlice = descriptor.BaseSliceLevel;
+            rtv.ArraySize = descriptor.SliceCount;
             rtv.PlaneSlice = 0;
         }
 
-        internal static void FillTexture3DRTV(ref D3D12_TEX3D_RTV rtv, in RHITextureViewDescriptor descriptor)
+        internal static void FillTexture3DRTV(ref D3D12_TEX3D_RTV rtv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
         {
-            if (!((descriptor.Dimension & ETextureDimension.Texture3D) == ETextureDimension.Texture3D))
+            if (!((dimension & ETextureDimension.Texture3D) == ETextureDimension.Texture3D))
             {
                 return;
             }
-            rtv.WSize = (uint)descriptor.ArrayLayerCount;
-            rtv.MipSlice = (uint)descriptor.BaseMipLevel;
-            rtv.FirstWSlice = (uint)descriptor.BaseArrayLayer;
+            rtv.WSize = descriptor.SliceCount;
+            rtv.MipSlice = descriptor.BaseMipLevel;
+            rtv.FirstWSlice = descriptor.BaseSliceLevel;
         }
     }
 #pragma warning restore CS8600, CS8602, CA1416

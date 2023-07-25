@@ -6,10 +6,17 @@ namespace Infinity.Graphics
 {
     public struct RHIOutputStateDescriptor
     {
-        //public uint SliceCount;
+        public uint OutputCount;
         public ESampleCount SampleCount;
-        public EPixelFormat? DepthStencilFormat;
-        public Memory<EPixelFormat> ColorFormats;
+        public EPixelFormat ColorFormat0;
+        public EPixelFormat ColorFormat1;
+        public EPixelFormat ColorFormat2;
+        public EPixelFormat ColorFormat3;
+        public EPixelFormat ColorFormat4;
+        public EPixelFormat ColorFormat5;
+        public EPixelFormat ColorFormat6;
+        public EPixelFormat ColorFormat7;
+        public EPixelFormat DepthStencilFormat;
     }
 
     public struct RHIVertexElementDescriptor

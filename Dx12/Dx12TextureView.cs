@@ -1,5 +1,6 @@
 ﻿using Infinity.Mathmatics;
 using TerraFX.Interop.DirectX;
+using static TerraFX.Interop.DirectX.D3D12;
 
 namespace Infinity.Graphics
 {
@@ -28,7 +29,7 @@ namespace Infinity.Graphics
         }
 
         private int m_HeapIndex;
-        private bool4 m_LifeState;
+        //private bool2 m_LifeState;
         private Dx12Texture m_Dx12Texture;
         private ID3D12DescriptorHeap* m_NativeDescriptorHeap;
         private D3D12_CPU_DESCRIPTOR_HANDLE m_NativeCpuDescriptorHandle;
@@ -36,7 +37,7 @@ namespace Infinity.Graphics
 
         public Dx12TextureView(Dx12Texture texture, in RHITextureViewDescriptor descriptor)
         {
-            m_LifeState = false;
+            //m_LifeState = false;
             m_Dx12Texture = texture;
 
             /*if (descriptor.ViewType == ETextureViewType.DepthStencil)
@@ -85,16 +86,15 @@ namespace Infinity.Graphics
             {
                 if(Dx12Utility.IsShaderResourceTexture(texture.Descriptor.Usage))
                 {
-                    m_LifeState.z = true;
-
                     D3D12_SHADER_RESOURCE_VIEW_DESC desc = new D3D12_SHADER_RESOURCE_VIEW_DESC();
                     desc.Format = Dx12Utility.ConvertToDx12ViewFormat(descriptor.Format);
-                    desc.ViewDimension = Dx12Utility.ConvertToDx12TextureSRVDimension(descriptor.Dimension);
-                    Dx12Utility.FillTexture2DSRV(ref desc.Texture2D, descriptor);
-                    Dx12Utility.FillTexture2DArraySRV(ref desc.Texture2DArray, descriptor);
-                    Dx12Utility.FillTextureCubeSRV(ref desc.TextureCube, descriptor);
-                    Dx12Utility.FillTextureCubeArraySRV(ref desc.TextureCubeArray, descriptor);
-                    Dx12Utility.FillTexture3DSRV(ref desc.Texture3D, descriptor);
+                    desc.ViewDimension = Dx12Utility.ConvertToDx12TextureSRVDimension(texture.Descriptor.Dimension);
+                    desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                    Dx12Utility.FillTexture2DSRV(ref desc.Texture2D, descriptor, texture.Descriptor.Dimension);
+                    Dx12Utility.FillTexture2DArraySRV(ref desc.Texture2DArray, descriptor, texture.Descriptor.Dimension);
+                    Dx12Utility.FillTextureCubeSRV(ref desc.TextureCube, descriptor, texture.Descriptor.Dimension);
+                    Dx12Utility.FillTextureCubeArraySRV(ref desc.TextureCubeArray, descriptor, texture.Descriptor.Dimension);
+                    Dx12Utility.FillTexture3DSRV(ref desc.Texture3D, descriptor, texture.Descriptor.Dimension);
 
                     Dx12DescriptorInfo allocation = m_Dx12Texture.Dx12Device.AllocateCbvSrvUavDescriptor(1);
                     m_HeapIndex = allocation.Index;
@@ -108,14 +108,12 @@ namespace Infinity.Graphics
             {
                 if(Dx12Utility.IsUnorderedAccessTexture(texture.Descriptor.Usage))
                 {
-                    m_LifeState.w = true;
-
                     D3D12_UNORDERED_ACCESS_VIEW_DESC desc = new D3D12_UNORDERED_ACCESS_VIEW_DESC();
                     desc.Format = Dx12Utility.ConvertToDx12ViewFormat(descriptor.Format);
-                    desc.ViewDimension = Dx12Utility.ConvertToDx12TextureUAVDimension(descriptor.Dimension);
-                    Dx12Utility.FillTexture2DUAV(ref desc.Texture2D, descriptor);
-                    Dx12Utility.FillTexture3DUAV(ref desc.Texture3D, descriptor);
-                    Dx12Utility.FillTexture2DArrayUAV(ref desc.Texture2DArray, descriptor);
+                    desc.ViewDimension = Dx12Utility.ConvertToDx12TextureUAVDimension(texture.Descriptor.Dimension);
+                    Dx12Utility.FillTexture2DUAV(ref desc.Texture2D, descriptor, texture.Descriptor.Dimension);
+                    Dx12Utility.FillTexture3DUAV(ref desc.Texture3D, descriptor, texture.Descriptor.Dimension);
+                    Dx12Utility.FillTexture2DArrayUAV(ref desc.Texture2DArray, descriptor, texture.Descriptor.Dimension);
 
                     Dx12DescriptorInfo allocation = m_Dx12Texture.Dx12Device.AllocateCbvSrvUavDescriptor(1);
                     m_HeapIndex = allocation.Index;
@@ -129,18 +127,7 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            if (m_LifeState.x)
-            {
-                m_Dx12Texture.Dx12Device.FreeDsvDescriptor(m_HeapIndex);
-            }
-            if (m_LifeState.y)
-            {
-                m_Dx12Texture.Dx12Device.FreeRtvDescriptor(m_HeapIndex);
-            }
-            if (m_LifeState.z || m_LifeState.w)
-            {
-                m_Dx12Texture.Dx12Device.FreeCbvSrvUavDescriptor(m_HeapIndex);
-            }
+            m_Dx12Texture.Dx12Device.FreeCbvSrvUavDescriptor(m_HeapIndex);
         }
     }
 }
