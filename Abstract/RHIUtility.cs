@@ -550,9 +550,11 @@ namespace Infinity.Graphics
         Compute = 0x4,
         Task = 0x8,
         Mesh = 0x10,
-        AllGraphics = Vertex | Fragment,
-        RayTracing = 0x20,
-        All = Vertex | Fragment | Compute | Task | Mesh | RayTracing,
+        AllGraphics = 0x20,
+        //AllGraphics = Vertex | Fragment,
+        RayTracing = 0x40,
+        All = 0x80,
+        //All = Vertex | Fragment | Compute | Task | Mesh | RayTracing,
         Pending
     }
 

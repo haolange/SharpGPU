@@ -541,17 +541,12 @@ namespace Infinity.Graphics
                 Dx12BindTypeAndParameterSlot? parameter = null;
                 ref Dx12BindInfo bindInfo = ref dx12BindTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.All, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
-                if (parameter.HasValue)
-                {
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
-                    dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
-                }
-
                 parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.Compute, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
+#if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type);
+#endif
                     dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
             }
@@ -853,17 +848,12 @@ namespace Infinity.Graphics
                 Dx12BindTypeAndParameterSlot? parameter = null;
                 ref Dx12BindInfo bindInfo = ref dx12BindTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.All, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
-                if (parameter.HasValue)
-                {
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
-                    dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
-                }
-
                 parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.Compute, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
+#if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type);
+#endif
                     dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
             }
@@ -1016,8 +1006,9 @@ namespace Infinity.Graphics
             for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
             {
                 Dx12Texture texture = descriptor.ColorAttachments.Span[i].RenderTarget as Dx12Texture;
+#if DEBUG
                 Debug.Assert(texture != null);
-
+#endif
                 /*RHITextureViewDescriptor viewDescriptor;
                 {
                     viewDescriptor.MipCount = texture.Descriptor.MipCount;
@@ -1050,8 +1041,9 @@ namespace Infinity.Graphics
             if (descriptor.DepthStencilAttachment.HasValue)
             {
                 Dx12Texture texture = descriptor.DepthStencilAttachment.Value.RenderTarget as Dx12Texture;
+#if DEBUG
                 Debug.Assert(texture != null);
-
+#endif
                 /*RHITextureViewDescriptor viewDescriptor;
                 {
                     viewDescriptor.MipCount = texture.Descriptor.MipCount;
@@ -1373,21 +1365,27 @@ namespace Infinity.Graphics
                 parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.All, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
+#if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type);
+#endif
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
 
                 parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.Vertex, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
+#if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type);
+#endif
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
 
                 parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.Fragment, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
+#if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type);
+#endif
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
             }
@@ -1527,8 +1525,9 @@ namespace Infinity.Graphics
             for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
             {
                 Dx12Texture texture = descriptor.ColorAttachments.Span[i].RenderTarget as Dx12Texture;
+#if DEBUG
                 Debug.Assert(texture != null);
-
+#endif
                 RHITextureViewDescriptor viewDescriptor;
                 {
                     viewDescriptor.MipCount = texture.Descriptor.MipCount;
@@ -1561,8 +1560,9 @@ namespace Infinity.Graphics
             if (descriptor.DepthStencilAttachment.HasValue)
             {
                 Dx12Texture texture = descriptor.DepthStencilAttachment.Value.RenderTarget as Dx12Texture;
+#if DEBUG
                 Debug.Assert(texture != null);
-
+#endif
                 RHITextureViewDescriptor viewDescriptor;
                 {
                     viewDescriptor.MipCount = texture.Descriptor.MipCount;
@@ -1886,21 +1886,27 @@ namespace Infinity.Graphics
                 parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.All, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
+#if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type);
+#endif
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
 
                 parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.Vertex, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
+#if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type);
+#endif
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
 
                 parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(EFunctionStage.Fragment, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
+#if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type);
+#endif
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
             }

@@ -3,6 +3,7 @@ using Infinity.Mathmatics;
 using TerraFX.Interop.DirectX;
 using System.Collections.Generic;
 using static TerraFX.Interop.Windows.Windows;
+using System.Reflection.Metadata;
 
 namespace Infinity.Graphics
 {
@@ -121,37 +122,34 @@ namespace Infinity.Graphics
 
         public Dx12BindTypeAndParameterSlot? QueryRootDescriptorParameterIndex(in EFunctionStage shaderStage, in uint layoutIndex, in uint slot, in EBindType Type)
         {
-            bool hasValue = false;
-            Dx12BindTypeAndParameterSlot? outParameter = null;
-
-            if ((shaderStage & EFunctionStage.All) == EFunctionStage.All)
-            {
-                hasValue = m_AllParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                outParameter = parameter;
-            }
-
             if ((shaderStage & EFunctionStage.Vertex) == EFunctionStage.Vertex)
             {
                 //hasValue = m_VertexParameterMap.TryGetValue(new int2(slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                hasValue = m_VertexParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                outParameter = parameter;
+                bool hasValue = m_VertexParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
+                return hasValue ? parameter : null;
             }
 
             if ((shaderStage & EFunctionStage.Fragment) == EFunctionStage.Fragment)
             {
                 //hasValue = m_FragmentParameterMap.TryGetValue(new int2(slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                hasValue = m_FragmentParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                outParameter = parameter;
+                bool hasValue = m_FragmentParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
+                return hasValue ? parameter : null;
             }
 
             if ((shaderStage & EFunctionStage.Compute) == EFunctionStage.Compute)
             {
                 //hasValue = m_ComputeParameterMap.TryGetValue(new int2(slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                hasValue = m_ComputeParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                outParameter = parameter;
+                bool hasValue = m_ComputeParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
+                return hasValue ? parameter : null;
             }
 
-            return hasValue ? outParameter : null;
+            if ((shaderStage & EFunctionStage.All) == EFunctionStage.All)
+            {
+                bool hasValue = m_AllParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
+                return hasValue ? parameter : null;
+            }
+
+            return null;
         }
 
         protected override void Release()
