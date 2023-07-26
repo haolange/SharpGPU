@@ -234,13 +234,10 @@ namespace Infinity.Graphics
         {
             switch (storageMode)
             {
-                case EStorageMode.Static:
+                case EStorageMode.HostUpload:
                     return D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD;
 
-                case EStorageMode.Dynamic:
-                    return D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD;
-
-                case EStorageMode.Staging:
+                case EStorageMode.Readback:
                     return D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK;
 
                 default:
@@ -436,13 +433,10 @@ namespace Infinity.Graphics
         {
             switch (storageMode)
             {
-                case EStorageMode.Static:
+                case EStorageMode.HostUpload:
                     return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
 
-                case EStorageMode.Dynamic:
-                    return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
-
-                case EStorageMode.Staging:
+                case EStorageMode.Readback:
                     return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
 
                 default:

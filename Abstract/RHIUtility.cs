@@ -436,10 +436,10 @@ namespace Infinity.Graphics
 
     public enum EStorageMode : byte
     {
-        Default,
-        Static,
-        Dynamic,
-        Staging,
+        GPULocal,
+        Readback,
+        GPUUpload,
+        HostUpload,
         Memoryless,
         Pending
     }

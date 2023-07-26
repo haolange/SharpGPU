@@ -1918,7 +1918,7 @@ namespace Infinity.Graphics
             D3D12_INDEX_BUFFER_VIEW indexBufferView = new D3D12_INDEX_BUFFER_VIEW
             {
                 Format = Dx12Utility.ConvertToDx12IndexFormat(format),
-                SizeInBytes = buffer.SizeInBytes - offset,
+                SizeInBytes = (uint)buffer.Descriptor.ByteSize - offset,
                 BufferLocation = dx12Buffer.NativeResource->GetGPUVirtualAddress() + offset
             };
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1932,8 +1932,8 @@ namespace Infinity.Graphics
 
             D3D12_VERTEX_BUFFER_VIEW vertexBufferView = new D3D12_VERTEX_BUFFER_VIEW
             {
-                SizeInBytes = buffer.SizeInBytes - offset,
-                StrideInBytes = (uint)dx12Pipeline.VertexStrides[slot],
+                SizeInBytes = (uint)buffer.Descriptor.ByteSize - offset,
+                StrideInBytes = dx12Pipeline.VertexStrides[slot],
                 BufferLocation = dx12Buffer.NativeResource->GetGPUVirtualAddress() + offset
             };
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;

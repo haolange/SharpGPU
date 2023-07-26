@@ -41,7 +41,7 @@ namespace Infinity.Graphics
 
             if (descriptor.ViewType == EBufferViewType.UniformBuffer)
             {
-                if (Dx12Utility.IsConstantBuffer(buffer.Descriptor.Usage))
+                if (Dx12Utility.IsConstantBuffer(buffer.Descriptor.UsageFlag))
                 {
                     m_LifeState.x = true;
 
@@ -59,7 +59,7 @@ namespace Infinity.Graphics
             }
             else if (descriptor.ViewType == EBufferViewType.AccelStruct)
             {
-                if (Dx12Utility.IsAccelStruct(buffer.Descriptor.Usage))
+                if (Dx12Utility.IsAccelStruct(buffer.Descriptor.UsageFlag))
                 {
                     m_LifeState.y = true;
 
@@ -79,7 +79,7 @@ namespace Infinity.Graphics
             }
             else if (descriptor.ViewType == EBufferViewType.ShaderResource)
             {
-                if (Dx12Utility.IsShaderResourceBuffer(buffer.Descriptor.Usage))
+                if (Dx12Utility.IsShaderResourceBuffer(buffer.Descriptor.UsageFlag))
                 {
                     m_LifeState.z = true;
 
@@ -101,7 +101,7 @@ namespace Infinity.Graphics
             }
             else if (descriptor.ViewType == EBufferViewType.UnorderedAccess)
             {
-                if (Dx12Utility.IsUnorderedAccessBuffer(buffer.Descriptor.Usage))
+                if (Dx12Utility.IsUnorderedAccessBuffer(buffer.Descriptor.UsageFlag))
                 {
                     m_LifeState.w = true;
 

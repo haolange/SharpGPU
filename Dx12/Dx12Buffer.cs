@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Infinity.Mathmatics;
+using System;
 using System.Diagnostics;
 using TerraFX.Interop.DirectX;
 using static TerraFX.Interop.Windows.Windows;
@@ -31,9 +32,8 @@ namespace Infinity.Graphics
             m_Dx12Device = device;
             //m_State = RHIUtility.ConvertToBufferStateFormStorageMode(descriptor.StorageMode);
             m_Descriptor = descriptor;
-            m_SizeInBytes = (uint)descriptor.Size;
 
-            D3D12_RESOURCE_DESC resourceDesc = D3D12_RESOURCE_DESC.Buffer((ulong)descriptor.Size, Dx12Utility.ConvertToDx12BufferFlag(descriptor.Usage));
+            D3D12_RESOURCE_DESC resourceDesc = D3D12_RESOURCE_DESC.Buffer((ulong)descriptor.ByteSize, Dx12Utility.ConvertToDx12BufferFlag(descriptor.UsageFlag));
             D3D12_HEAP_PROPERTIES heapProperties = new D3D12_HEAP_PROPERTIES(Dx12Utility.ConvertToDx12HeapTypeByStorage(descriptor.StorageMode));
 
             ID3D12Resource* dx12Resource;
@@ -44,14 +44,14 @@ namespace Infinity.Graphics
             m_NativeResource = dx12Resource;
         }
 
-        public override IntPtr Map(in int length, in int offset)
+        public override IntPtr Map(in uint readBegin, in uint readEnd)
         {
 #if DEBUG
-            Debug.Assert(!(m_Descriptor.StorageMode == EStorageMode.Default));
+            Debug.Assert(m_Descriptor.StorageMode != EStorageMode.Local);
 #endif
 
             void* data;
-            D3D12_RANGE range = new D3D12_RANGE((uint)offset, (uint)(offset + length));
+            D3D12_RANGE range = new D3D12_RANGE(readBegin, math.min(readEnd, (uint)m_Descriptor.ByteSize));
             bool success = SUCCEEDED(m_NativeResource->Map(0, &range, &data));
 #if DEBUG
             Debug.Assert(success);
@@ -59,11 +59,13 @@ namespace Infinity.Graphics
             return new IntPtr(data);
         }
 
-        public override void UnMap()
+        public override void UnMap(in uint writeBegin, in uint writeEnd)
         {
-            Debug.Assert(!(m_Descriptor.StorageMode == EStorageMode.Default));
-
-            m_NativeResource->Unmap(0, null);
+#if DEBUG
+            Debug.Assert(m_Descriptor.StorageMode != EStorageMode.Local);
+#endif
+            D3D12_RANGE range = new D3D12_RANGE(writeBegin, math.min(writeEnd, (uint)m_Descriptor.ByteSize));
+            m_NativeResource->Unmap(0, &range);
         }
 
         public override RHIBufferView CreateBufferView(in RHIBufferViewDescriptor descriptor)

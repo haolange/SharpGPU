@@ -107,7 +107,7 @@ namespace Infinity.Graphics
                 textureDescriptor.Usage = ETextureUsage.RenderTarget;
                 textureDescriptor.SampleCount = ESampleCount.None;
                 textureDescriptor.Dimension = ETextureDimension.Texture2D;
-                textureDescriptor.StorageMode = EStorageMode.Default;
+                textureDescriptor.StorageMode = EStorageMode.GPULocal;
             }
 
             for (int i = 0; i < descriptor.Count; ++i)
