@@ -96,8 +96,8 @@ namespace Infinity.Graphics
 
     public struct RHIColorAttachmentDescriptor
     {
-        public uint BaseMipLevel;
-        public uint BaseSliceLevel;
+        public uint MipLevel;
+        public uint SliceLevel;
         public float4 ClearValue;
         public ELoadOp LoadOp;
         public EStoreOp StoreOp;
@@ -107,8 +107,8 @@ namespace Infinity.Graphics
 
     public struct RHIDepthStencilAttachmentDescriptor
     {
-        public uint BaseMipLevel;
-        public uint BaseSliceLevel;
+        public uint MipLevel;
+        public uint SliceLevel;
         public bool DepthReadOnly;
         public float DepthClearValue;
         public ELoadOp DepthLoadOp;

@@ -47,7 +47,7 @@ namespace Infinity.Graphics
         public override IntPtr Map(in uint readBegin, in uint readEnd)
         {
 #if DEBUG
-            Debug.Assert(m_Descriptor.StorageMode != EStorageMode.Local);
+            Debug.Assert(m_Descriptor.StorageMode != EStorageMode.GPULocal);
 #endif
 
             void* data;
@@ -62,7 +62,7 @@ namespace Infinity.Graphics
         public override void UnMap(in uint writeBegin, in uint writeEnd)
         {
 #if DEBUG
-            Debug.Assert(m_Descriptor.StorageMode != EStorageMode.Local);
+            Debug.Assert(m_Descriptor.StorageMode != EStorageMode.GPULocal);
 #endif
             D3D12_RANGE range = new D3D12_RANGE(writeBegin, math.min(writeEnd, (uint)m_Descriptor.ByteSize));
             m_NativeResource->Unmap(0, &range);
