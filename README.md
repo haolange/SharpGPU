@@ -283,7 +283,7 @@ MemoryUtility::MemCpy(&indices, indexData, indexBufferInfo.ByteSize);
 rhiIndexBufferCPU->Unmap(0, indexBufferInfo.ByteSize);
 
 vertexBufferInfo.StorageMode = EStorageMode.GPULocal;
-rhi::RHIBuffer* rhiIndexBufferGPU = rhiDevice.CreateBuffer(indexBufferInfo);
+rhi::RHIBuffer* rhiIndexBufferGPU = rhiDevice->CreateBuffer(indexBufferInfo);
 
 //vertex buffer
 Vertex vertices[3];
@@ -305,7 +305,7 @@ MemoryUtility::MemCpy(&vertices, vertexData, vertexBufferInfo.ByteSize);
 rhiVertexBufferCPU->Unmap();
 
 vertexBufferInfo.StorageMode = EStorageMode.GPULocal;
-rhi::RHIBuffer* rhiVertexBufferGPU = rhiDevice.CreateBuffer(vertexBufferInfo);
+rhi::RHIBuffer* rhiVertexBufferGPU = rhiDevice->CreateBuffer(vertexBufferInfo);
 ```
 
 
