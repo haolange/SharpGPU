@@ -258,7 +258,7 @@ uniformBufferViewInfo.Offset = 0;
 uniformBufferViewInfo.Type = EBufferViewType.UniformBuffer;
 uniformBufferViewInfo.Count = uniformArray.Length;
 uniformBufferViewInfo.Stride = (sizeof(UniformInfo) + 255) & ~255;
-rhi::RHIBufferView* rhiUniformBufferView = rhiUniformBuffer->CCreateBufferView(bufferViewDescriptor);
+rhi::RHIBufferView* rhiUniformBufferView = rhiUniformBuffer->CreateBufferView(bufferViewDescriptor);
 ```
 
 
