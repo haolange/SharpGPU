@@ -495,13 +495,15 @@ namespace Infinity.Graphics
 
     public enum EBufferUsage
     {
-        AccelStruct = 0x0010,
-        IndexBuffer = 0x0020,
-        VertexBuffer = 0x0001,
-        UniformBuffer = 0x0002,
-        IndirectBuffer = 0x0004,
-        ShaderResource = 0x0008,
-        UnorderedAccess = 0x0010,
+        CopySrc = 0x01,
+        CopyDst = 0x02,
+        AccelStruct = 0x04,
+        IndexBuffer = 0x08,
+        VertexBuffer = 0x10,
+        UniformBuffer = 0x20,
+        IndirectBuffer = 0x40,
+        ShaderResource = 0x80,
+        UnorderedAccess = 0x100,
         Pending
     }
 
@@ -516,10 +518,13 @@ namespace Infinity.Graphics
 
     public enum ETextureUsage
     {
-        DepthStencil = 0x0020,
-        RenderTarget = 0x0001,
-        ShaderResource = 0x0002,
-        UnorderedAccess = 0x0004,
+        CopySrc = 0x01,
+        CopyDst = 0x02,
+        DepthStencil = 0x04,
+        RenderTarget = 0x08,
+        ResolveTarget = 0x10,
+        ShaderResource = 0x20,
+        UnorderedAccess = 0x40,
         Pending
     }
 
