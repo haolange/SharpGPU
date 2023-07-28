@@ -103,9 +103,9 @@ namespace Infinity.Graphics
             {
                 textureDescriptor.Extent = new uint3(descriptor.Extent.xy, 1);
                 textureDescriptor.MipCount = 1;
+                textureDescriptor.Sample = ESampleCount.None;
                 textureDescriptor.Format = RHIUtility.ConvertToPixelFormat(descriptor.Format);
-                textureDescriptor.Usage = ETextureUsage.RenderTarget;
-                textureDescriptor.SampleCount = ESampleCount.None;
+                textureDescriptor.UsageFlag = ETextureUsage.RenderTarget;
                 textureDescriptor.Dimension = ETextureDimension.Texture2D;
                 textureDescriptor.StorageMode = EStorageMode.GPULocal;
             }

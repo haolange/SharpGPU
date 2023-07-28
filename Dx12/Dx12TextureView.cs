@@ -84,7 +84,7 @@ namespace Infinity.Graphics
             } 
             else*/ if (descriptor.ViewType == ETextureViewType.ShaderResource)
             {
-                if(Dx12Utility.IsShaderResourceTexture(texture.Descriptor.Usage))
+                if(Dx12Utility.IsShaderResourceTexture(texture.Descriptor.UsageFlag))
                 {
                     D3D12_SHADER_RESOURCE_VIEW_DESC desc = new D3D12_SHADER_RESOURCE_VIEW_DESC();
                     desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
@@ -106,7 +106,7 @@ namespace Infinity.Graphics
             }
             else if (descriptor.ViewType == ETextureViewType.UnorderedAccess)
             {
-                if(Dx12Utility.IsUnorderedAccessTexture(texture.Descriptor.Usage))
+                if(Dx12Utility.IsUnorderedAccessTexture(texture.Descriptor.UsageFlag))
                 {
                     D3D12_UNORDERED_ACCESS_VIEW_DESC desc = new D3D12_UNORDERED_ACCESS_VIEW_DESC();
                     desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);

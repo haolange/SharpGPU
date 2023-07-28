@@ -38,8 +38,8 @@ namespace Infinity.Graphics
             textureDesc.Width = descriptor.Extent.x;
             textureDesc.Height = descriptor.Extent.y;
             textureDesc.DepthOrArraySize = (ushort)descriptor.Extent.z;
-            textureDesc.Flags = Dx12Utility.ConvertToDx12TextureFlag(descriptor.Usage);
-            textureDesc.SampleDesc = Dx12Utility.ConvertToDx12SampleCount(descriptor.SampleCount);
+            textureDesc.Flags = Dx12Utility.ConvertToDx12TextureFlag(descriptor.UsageFlag);
+            textureDesc.SampleDesc = Dx12Utility.ConvertToDx12SampleCount(descriptor.Sample);
             textureDesc.Dimension = Dx12Utility.ConvertToDx12TextureDimension(descriptor.Dimension);
 
             ID3D12Resource* dx12Resource;
