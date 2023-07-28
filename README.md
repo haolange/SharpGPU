@@ -170,9 +170,7 @@ outputViewInfo.MipCount = 1;
 outputViewInfo.BaseMipLevel = 0;
 outputViewInfo.SliceCount = 1;
 outputViewInfo.BaseSliceLevel = 0;
-outputViewInfo.Format = EPixelFormat::R8G8B8A8_UNorm;
 outputViewInfo.ViewType = ETextureViewType::UnorderedAccess;
-outputViewInfo.Dimension = ETextureDimension::Texture2D;
 rhi::TextureView* rhiTextureSRV = rhiTexture->CreateTextureView(outputViewInfo);
 
 rhi::RHITextureViewDescriptor outputViewInfo;
@@ -180,9 +178,7 @@ outputViewInfo.MipCount = 1;
 outputViewInfo.BaseMipLevel = 0;
 outputViewInfo.SliceCount = 1;
 outputViewInfo.BaseSliceLevel = 0;
-outputViewInfo.Format = EPixelFormat::R8G8B8A8_UNorm;
 outputViewInfo.ViewType = ETextureViewType::UnorderedAccess;
-outputViewInfo.Dimension = ETextureDimension::Texture2D;
 rhi::TextureView* rhiTextureUAV = rhiTexture->CreateTextureView(outputViewInfo);
 ```
 
