@@ -2,6 +2,11 @@
 Hardware Abstract Layer for modern gpus based on Metal/Vulkan/DirectX12 backend.
 
 ## Basic Example
+
+### Shader context
+That is the example shader source
+
+```c++
 std::string computeHLSL
 {@"
 [[vk::binding(0, 0)]]
@@ -52,8 +57,11 @@ float4 FSMain(Varyings input) : SV_TARGET
 {
     return input.color * _DiffuseTexture[0].Sample(_DiffuseSampler[0], input.uv0);
 }"};
+```
 
-### Creating the Direct3D 12 Instance //Or Metal/Vulkan/OpenGL/Direct3D 11
+
+
+### Creating the Direct3D_12 Instance //Or Metal/Vulkan/OpenGL/Direct3D 11
 The first step after we include the RHI headers and libraries into your project is to create a instance wrapper.
 
 ```c++
@@ -127,7 +135,7 @@ rhi::SwapChain* rhiSwapChain = rhiDevice->CreateSwapChain(swapChainDescriptor);
 
 
 
-### Creating the Compute Render Pass
+### Creating the Compute Pass
 Create a compute bindTable and pipeline for compute gpgpu
 
 ```c++
@@ -297,7 +305,7 @@ rhi::RHIBuffer* rhiVertexBufferGPU = renderContext.CreateBuffer(vertexBufferInfo
 
 
 
-### Creating the Graphics Render Pass
+### Creating the Graphics Pass
 Create a render state and bindTable and pipeline for rasterization
 
 ```c++
