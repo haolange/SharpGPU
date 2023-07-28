@@ -135,8 +135,8 @@ rhi::SwapChain* rhiSwapChain = rhiDevice->CreateSwapChain(swapChainDescriptor);
 
 
 
-### Creating the Compute Pass
-Create a compute bindTable and pipeline for compute gpgpu
+### Creating the texture resource and view
+Create a texture and textureView for compute or graphics
 
 ```c++
 #include <rhi/d3d12.h>
@@ -184,7 +184,16 @@ outputViewInfo.Format = EPixelFormat::R8G8B8A8_UNorm;
 outputViewInfo.ViewType = ETextureViewType::UnorderedAccess;
 outputViewInfo.Dimension = ETextureDimension::Texture2D;
 rhi::TextureView* rhiTextureUAV = rhiTexture->CreateTextureView(outputViewInfo);
+```
 
+
+
+### Creating the Compute Pass
+Create a compute bindTable and pipeline for compute pass
+
+```c++
+#include <rhi/d3d12.h>
+...
 rhi::RHIBindTableLayoutElement computeBindTableLayoutElements[1];
 computeBindTableLayoutElements[0].Slot = 0;
 computeBindTableLayoutElements[0].Type = EBindType::StorageTexture;
@@ -453,14 +462,13 @@ rhi::RHIPipeline* rhiGraphicsPipeline = rhiDevice->CreateGraphicsPipeline(graphi
 
 
 
-### Creating the CommanBuffer
-Create commandbuffer for rendering
+### Frame begin logic
+Create commandbuffer and encoder for init
 
 ```c++
 #include <rhi/d3d12.h>
 ...
-rhi::RHICommandBuffer* rhiCmdBuffer = rhiGraphicsQueue->CreateCommandBuffer();
-
+rhi::RHICommandBuffer* rhiCmdBuffer = rhiGraphicsQueue->CreateCommandBuffer(); //if renderer use async upload it's sould be use BlitQueue to record upload command and use Fence to sync CPU event
 rhiCmdBuffer.Begin("FrameRendering");
 
 rhi::RHIBlitEncoder* rhiBlitEncoder = rhiCmdBuffer.BeginBlitEncoding("Upload VertexStream");
@@ -471,6 +479,21 @@ rhiBlitEncoder->CopyBufferToBuffer(rhiVertexBufferCPU, 0, rhiVertexBufferGPU, 0,
 rhiBlitEncoder->ResourceBarrier(RHIBarrier::Transition(rhiIndexBufferGPU, EOwnerState::GfxToGfx, ETextureState::CopyDst, ETextureState::IndexBuffer));
 rhiBlitEncoder->ResourceBarrier(RHIBarrier::Transition(rhiVertexBufferGPU, EOwnerState::GfxToGfx, ETextureState::CopyDst, ETextureState::VertexBuffer));
 rhiBlitEncoder->EndEncoding();
+
+rhiCmdBuffer.End("FrameRendering");
+rhiGraphicsQueue->Submit(rhiCmdBuffer, 1, rhiFence, nullptr, 0, nullptr, 0); //cmdBuffers, cmdBufferCount, fence, waitSemaphores, waitSemaphoreCount, signalSemaphores, signalSemaphoreCount
+```
+
+
+
+### Frame render loop logic
+Create commandbuffer and encoder for rendering
+
+```c++
+#include <rhi/d3d12.h>
+...
+rhi::RHICommandBuffer* rhiCmdBuffer = rhiGraphicsQueue->CreateCommandBuffer();
+rhiCmdBuffer.Begin("FrameRendering");
 
 // run compute pass
 rhi::RHIComputeEncoder* rhiComputeEncoder = rhiCmdBuffer.BeginComputeEncoding("ComputePass");
