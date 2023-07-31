@@ -135,8 +135,8 @@ rhi::SwapChain* rhiSwapChain = rhiDevice->CreateSwapChain(swapChainDescriptor);
 
 
 
-### Creating the texture resource and view
-Create a texture and textureView for compute or graphics
+### Creating the texture
+Create a texture and sampler
 
 ```c++
 #include <rhi/d3d12.h>
@@ -164,7 +164,16 @@ textureInfo.UsageFlag = ETextureUsage::ShaderResource | ETextureUsage::Unordered
 textureInfo.Dimension = ETextureDimension::Texture2D;
 textureInfo.StorageMode = EStorageMode::GPULocal;
 rhi::RHITexture* rhiTexture = rhiDevice->CreateTexture(textureInfo);
+```
 
+
+
+### Creating the texture view
+Create textureView for compute or graphics
+
+```c++
+#include <rhi/d3d12.h>
+...
 rhi::RHITextureViewDescriptor outputViewInfo;
 outputViewInfo.MipCount = 1;
 outputViewInfo.BaseMipLevel = 0;
@@ -184,8 +193,8 @@ rhi::TextureView* rhiTextureUAV = rhiTexture->CreateTextureView(outputViewInfo);
 
 
 
-### Creating the Compute Pass
-Create a compute bindTable and pipeline for compute pass
+### Creating the Compute bind table
+Create a compute bindTable
 
 ```c++
 #include <rhi/d3d12.h>
@@ -209,7 +218,16 @@ computeBindTableInfo.Layout = rhiComputeBindTableLayout;
 computeBindTableInfo.Elements = computeBindTableElements;
 computeBindTableInfo.ElementLength = 1;
 rhi::RHIBindTable* rhiComputeBindTable= rhiDevice->CreateBindTable(computeBindTableInfo);
+```
 
+
+
+### Creating the Compute Pass
+Create a compute pipeline for compute pass
+
+```c++
+#include <rhi/d3d12.h>
+...
 rhi::RHIFunctionDescriptor computeFunctionInfo;
 computeFunctionInfo.Type = EFunctionType::Compute;
 computeFunctionInfo.ByteSize = computeBlob.Size;
@@ -310,8 +328,41 @@ rhi::RHIBuffer* rhiVertexBufferGPU = rhiDevice->CreateBuffer(vertexBufferInfo);
 
 
 
+### Creating the Graphics bind table
+Create a bindTable graphics
+
+```c++
+#include <rhi/d3d12.h>
+...
+rhi::RHIBindTableLayoutElement graphicsBindTableLayoutElements[2];
+graphicsBindTableLayoutElements[0].Slot = 0;
+graphicsBindTableLayoutElements[0].Type = EBindType::Texture;
+graphicsBindTableLayoutElements[0].Visible = EFunctionStage::Fragment;
+graphicsBindTableLayoutElements[1].Slot = 1;
+graphicsBindTableLayoutElements[1].Type = EBindType::Sampler;
+graphicsBindTableLayoutElements[1].Visible = EFunctionStage::Fragment;
+
+rhi::RHIBindTableLayoutDescriptor graphicsBindTableLayoutInfo;
+graphicsBindTableLayoutInfo.Index = 0;
+graphicsBindTableLayoutInfo.Elements = &graphicsBindTableLayoutElements;
+graphicsBindTableLayoutInfo.ElementsLength = 2;
+rhi::RHIBindTableLayout* rhiGraphicsBindTableLayout = rhiDevice->CreateBindTableLayout(graphicsBindTableLayoutInfo);
+
+rhi::RHIBindTableElement graphicsBindTableElements[2];
+graphicsBindTableElements[0].TextureView = rhiTextureSRV;
+graphicsBindTableElements[1].Sampler = rhiSampler;
+
+rhi::RHIBindTableDescriptor graphicsBindTableInfo;
+graphicsBindTableInfo.Layout = rhiGraphicsBindTableLayout;
+graphicsBindTableInfo.Elements = &graphicsBindTableElements;
+graphicsBindTableInfo.ElementLength = 2;
+rhi::RHIBindTable* rhiGraphicsBindTable = rhiDevice->CreateBindTable(graphicsBindTableInfo);
+```
+
+
+
 ### Creating the Graphics Pass
-Create a render state and bindTable and pipeline for rasterization
+Create a graphics pipeline for graphics pass
 
 ```c++
 #include <rhi/d3d12.h>
@@ -397,30 +448,6 @@ vertexLayoutInfos[0].StepMode = EVertexStepMode::PerVertex;
 vertexLayoutInfos[0].VertexElements = &vertexElementInfos;
 vertexLayoutInfos[0].VertexElementLength = vertexElementInfos.length;
 
-rhi::RHIBindTableLayoutElement graphicsBindTableLayoutElements[2];
-graphicsBindTableLayoutElements[0].Slot = 0;
-graphicsBindTableLayoutElements[0].Type = EBindType::Texture;
-graphicsBindTableLayoutElements[0].Visible = EFunctionStage::Fragment;
-graphicsBindTableLayoutElements[1].Slot = 1;
-graphicsBindTableLayoutElements[1].Type = EBindType::Sampler;
-graphicsBindTableLayoutElements[1].Visible = EFunctionStage::Fragment;
-
-rhi::RHIBindTableLayoutDescriptor graphicsBindTableLayoutInfo;
-graphicsBindTableLayoutInfo.Index = 0;
-graphicsBindTableLayoutInfo.Elements = &graphicsBindTableLayoutElements;
-graphicsBindTableLayoutInfo.ElementsLength = 2;
-rhi::RHIBindTableLayout* rhiGraphicsBindTableLayout = rhiDevice->CreateBindTableLayout(graphicsBindTableLayoutInfo);
-
-rhi::RHIBindTableElement graphicsBindTableElements[2];
-graphicsBindTableElements[0].TextureView = rhiTextureSRV;
-graphicsBindTableElements[1].Sampler = rhiSampler;
-
-rhi::RHIBindTableDescriptor graphicsBindTableInfo;
-graphicsBindTableInfo.Layout = rhiGraphicsBindTableLayout;
-graphicsBindTableInfo.Elements = &graphicsBindTableElements;
-graphicsBindTableInfo.ElementLength = 2;
-rhi::RHIBindTable* rhiGraphicsBindTable = rhiDevice->CreateBindTable(graphicsBindTableInfo);
-
 rhi::RHIPipelineLayoutDescriptor graphicsPipelienLayoutInfo;
 graphicsPipelienLayoutInfo.bUseVertexLayout = true;
 graphicsPipelienLayoutInfo.bIsLocalSignature = false;
@@ -465,7 +492,7 @@ Create commandbuffer and encoder for init
 #include <rhi/d3d12.h>
 ...
 rhi::RHICommandBuffer* rhiCmdBuffer = rhiGraphicsQueue->CreateCommandBuffer(); //if renderer use async upload it's sould be use BlitQueue to record upload command and use Fence to sync CPU event
-rhiCmdBuffer.Begin("Upload");
+rhiCmdBuffer.Begin("FrameInit");
 
 rhi::RHIBlitEncoder* rhiBlitEncoder = rhiCmdBuffer.BeginBlitEncoding("Upload VertexStream");
 rhiBlitEncoder->ResourceBarrier(RHIBarrier::Transition(rhiIndexBufferGPU, EOwnerState::GfxToGfx, ETextureState::Undefine, ETextureState::CopyDst));
@@ -476,7 +503,7 @@ rhiBlitEncoder->ResourceBarrier(RHIBarrier::Transition(rhiIndexBufferGPU, EOwner
 rhiBlitEncoder->ResourceBarrier(RHIBarrier::Transition(rhiVertexBufferGPU, EOwnerState::GfxToGfx, ETextureState::CopyDst, ETextureState::VertexBuffer));
 rhiBlitEncoder->EndEncoding();
 
-rhiCmdBuffer.End("Upload");
+rhiCmdBuffer.End("FrameInit");
 rhiGraphicsQueue->Submit(rhiCmdBuffer, 1, rhiFence, nullptr, 0, nullptr, 0); //cmdBuffers, cmdBufferCount, fence, waitSemaphores, waitSemaphoreCount, signalSemaphores, signalSemaphoreCount
 ```
 
@@ -493,8 +520,8 @@ rhiCmdBuffer.Begin("FrameRendering");
 
 // run compute pass
 rhi::RHIComputeEncoder* rhiComputeEncoder = rhiCmdBuffer.BeginComputeEncoding("ComputePass");
-rhiComputeEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::Undefine, ETextureState::UnorderedAccess));
 rhiComputeEncoder->PushDebugGroup("GenereteIndex");
+rhiComputeEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::Undefine, ETextureState::UnorderedAccess));
 rhiComputeEncoder->SetPipelineLayout(rhiComputePipelineLayout);
 rhiComputeEncoder->SetPipeline(rhiComputePipeline);
 rhiComputeEncoder->SetBindTable(rhiComputeBindTable, 0);
@@ -519,21 +546,21 @@ graphicsPassInfo.ColorAttachments = colorAttachmentInfos;
 graphicsPassInfo.DepthStencilAttachment = nullptr;
 
 rhi::RHIGraphicsEncoder* rhiGraphicsEncoder = rhiCmdBuffer.BeginGraphicsEncoding(graphicsPassInfo);
-rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::UnorderedAccess, ETextureState::ShaderResource));
-rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackTexture(), EOwnerState::GfxToGfx, ETextureState::Present, ETextureState::RenderTarget));
 rhiGraphicsEncoder->SetScissor(Rect(0, 0, screenSize.x, screenSize.y));
 rhiGraphicsEncoder->SetViewport(Viewport(0, 0, screenSize.x, screenSize.y, 0, 1));
 rhiGraphicsEncoder->SetBlendFactor(1);
 rhiGraphicsEncoder->PushDebugGroup("DrawTriange");
+rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::UnorderedAccess, ETextureState::ShaderResource));
+rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackTexture(), EOwnerState::GfxToGfx, ETextureState::Present, ETextureState::RenderTarget));
 rhiGraphicsEncoder->SetPipelineLayout(rhiGraphicsPipelineLayout);
 rhiGraphicsEncoder->SetPipeline(rhiGraphicsPipeline);
 rhiGraphicsEncoder->SetBindTable(rhiGraphicsBindTable, 0);
 rhiGraphicsEncoder->SetIndexBuffer(rhiIndexBufferGPU, 0, EIndexFormat::UInt16);
 rhiGraphicsEncoder->SetVertexBuffer(rhiVertexBufferGPU, 0, 0);
 rhiGraphicsEncoder->DrawIndexed(3, 1, 0, 0, 0);
-rhiGraphicsEncoder->PopDebugGroup();
 rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::ShaderResource, ETextureState::Undefine));
 rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackTexture(), EOwnerState::GfxToGfx, ETextureState::RenderTarget, ETextureState::Present));
+rhiGraphicsEncoder->PopDebugGroup();
 rhiBlitEncoder->EndEncoding();
 
 rhiCmdBuffer.End("FrameRendering");
