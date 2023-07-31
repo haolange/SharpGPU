@@ -23,7 +23,7 @@ namespace Infinity.Graphics
             get;
         }
 
-        public abstract RHITexture AcquireBackTexture();
+        public abstract RHITexture AcquireBackBufferTexture();
         public abstract void Resize(in uint2 extent);
         public abstract void Present();
     }

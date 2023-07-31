@@ -5,8 +5,8 @@ namespace Infinity.Graphics
 {
     public struct RHIPipelineLayoutDescriptor
     {
+        public bool bLocalSignature;
         public bool bUseVertexLayout;
-        public bool bIsLocalSignature;
         public RHIBindTableLayout[] BindTableLayouts;
         //public RHIPipelineConstantLayout[] PipelineConstantLayouts;
         public Memory<RHIStaticSamplerDescriptor>? StaticSamplers;

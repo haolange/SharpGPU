@@ -26,7 +26,7 @@ namespace Infinity.Graphics
             FetchDx12Textures(descriptor);
         }
 
-        public override RHITexture AcquireBackTexture()
+        public override RHITexture AcquireBackBufferTexture()
         {
             return m_Textures[BackTextureIndex];
         }

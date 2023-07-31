@@ -101,7 +101,7 @@ namespace Infinity.Graphics
             }
 
             D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlag = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_NONE;
-            if (descriptor.bIsLocalSignature)
+            if (descriptor.bLocalSignature)
             {
                 rootSignatureFlag |= D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;
             }

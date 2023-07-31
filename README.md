@@ -449,8 +449,8 @@ vertexLayoutInfos[0].VertexElements = &vertexElementInfos;
 vertexLayoutInfos[0].VertexElementLength = vertexElementInfos.length;
 
 rhi::RHIPipelineLayoutDescriptor graphicsPipelienLayoutInfo;
+graphicsPipelienLayoutInfo.bLocalSignature = false;
 graphicsPipelienLayoutInfo.bUseVertexLayout = true;
-graphicsPipelienLayoutInfo.bIsLocalSignature = false;
 graphicsPipelienLayoutInfo.StaticSamplers = nullptr;
 graphicsPipelienLayoutInfo.StaticSamplerLength = 0;
 graphicsPipelienLayoutInfo.BindTableLayouts = rhigraphicsBindTableLayout;
@@ -536,7 +536,7 @@ colorAttachmentInfos[0].StoreOp = EStoreOp::Store;
 colorAttachmentInfos[0].MipLevel = 0;
 colorAttachmentInfos[0].SliceLevel = 0;
 colorAttachmentInfos[0].ClearValue = float4(0.5f, 0.5f, 1, 1);
-colorAttachmentInfos[0].RenderTarget = rhiSwapChain->AcquireBackTexture();
+colorAttachmentInfos[0].RenderTarget = rhiSwapChain->AcquireBackBufferTexture();
 colorAttachmentInfos[0].ResolveTarget = nullptr;
 
 rhi::RHIGraphicsPassDescriptor graphicsPassInfo;
@@ -551,7 +551,7 @@ rhiGraphicsEncoder->SetViewport(Viewport(0, 0, screenSize.x, screenSize.y, 0, 1)
 rhiGraphicsEncoder->SetBlendFactor(1);
 rhiGraphicsEncoder->PushDebugGroup("DrawTriange");
 rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::UnorderedAccess, ETextureState::ShaderResource));
-rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackTexture(), EOwnerState::GfxToGfx, ETextureState::Present, ETextureState::RenderTarget));
+rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), EOwnerState::GfxToGfx, ETextureState::Present, ETextureState::RenderTarget));
 rhiGraphicsEncoder->SetPipelineLayout(rhiGraphicsPipelineLayout);
 rhiGraphicsEncoder->SetPipeline(rhiGraphicsPipeline);
 rhiGraphicsEncoder->SetBindTable(rhiGraphicsBindTable, 0);
@@ -559,7 +559,7 @@ rhiGraphicsEncoder->SetIndexBuffer(rhiIndexBufferGPU, 0, EIndexFormat::UInt16);
 rhiGraphicsEncoder->SetVertexBuffer(rhiVertexBufferGPU, 0, 0);
 rhiGraphicsEncoder->DrawIndexed(3, 1, 0, 0, 0);
 rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::ShaderResource, ETextureState::Undefine));
-rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackTexture(), EOwnerState::GfxToGfx, ETextureState::RenderTarget, ETextureState::Present));
+rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), EOwnerState::GfxToGfx, ETextureState::RenderTarget, ETextureState::Present));
 rhiGraphicsEncoder->PopDebugGroup();
 rhiBlitEncoder->EndEncoding();
 
