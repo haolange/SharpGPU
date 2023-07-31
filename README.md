@@ -565,6 +565,9 @@ rhiBlitEncoder->EndEncoding();
 
 rhiCmdBuffer.End("FrameRendering");
 rhiGraphicsQueue->Submit(rhiCmdBuffer, 1, rhiFence, nullptr, 0, nullptr, 0); //cmdBuffers, cmdBufferCount, fence, waitSemaphores, waitSemaphoreCount, signalSemaphores, signalSemaphoreCount
+
+rhiSwapChain->Present();
+rhiFence->Wait();
 ```
 
 
