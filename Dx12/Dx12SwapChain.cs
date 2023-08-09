@@ -31,7 +31,6 @@ namespace Infinity.Graphics
             return m_Textures[BackTextureIndex];
         }
 
-
         public override void Resize(in uint2 extent)
         {
             for (int i = 0; i < m_Textures.Length; ++i)

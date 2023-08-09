@@ -377,7 +377,16 @@ namespace Infinity.Graphics
             Debug.Assert(success);
             m_DrawIndexedIndirectSignature = commandSignature;
 
-            if(IsRaytracingSupported)
+            indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
+            //commandSignatureDesc.NodeMask = nodeMask;
+            commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
+            commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DISPATCH_ARGUMENTS);
+            commandSignatureDesc.NumArgumentDescs = 1;
+            success = SUCCEEDED(m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature));
+            Debug.Assert(success);
+            m_DispatchComputeIndirectSignature = commandSignature;
+
+            if (IsRaytracingSupported)
             {
                 indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS;
                 //commandSignatureDesc.NodeMask = nodeMask;
@@ -388,15 +397,6 @@ namespace Infinity.Graphics
                 Debug.Assert(success);
                 m_DispatchRayIndirectSignature = commandSignature;
             }
-
-            indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
-            //commandSignatureDesc.NodeMask = nodeMask;
-            commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
-            commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DISPATCH_ARGUMENTS);
-            commandSignatureDesc.NumArgumentDescs = 1;
-            success = SUCCEEDED(m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature));
-            Debug.Assert(success);
-            m_DispatchComputeIndirectSignature = commandSignature;
         }
 
         protected override void Release()
