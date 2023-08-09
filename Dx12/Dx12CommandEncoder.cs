@@ -28,213 +28,18 @@ namespace Infinity.Graphics
             PushDebugGroup(name);
         }
 
-        public override void ResourceBarrier(in RHIBarrier barrier)
+        public override void PushDebugGroup(string name)
         {
-            ID3D12Resource* resource = null;
-            D3D12_RESOURCE_BARRIER resourceBarrier;
-
-            switch (barrier.BarrierType)
-            {
-                case EBarrierType.UAV:
-                    if (barrier.ResourceType == EResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null);
-#endif
-                        resource = buffer.NativeResource;
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null);
-#endif
-                        resource = texture.NativeResource;
-                    }
-                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitUAV(resource);
-                    break;
-
-                case EBarrierType.Aliasing:
-                    if (barrier.ResourceType == EResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null);
-#endif
-                        resource = buffer.NativeResource;
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null);
-#endif
-                        resource = texture.NativeResource;
-                    }
-                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitAliasing(null, resource);
-                    break;
-
-                case EBarrierType.Triansition:
-                    D3D12_RESOURCE_STATES beforeState;
-                    D3D12_RESOURCE_STATES afterState;
-                    if (barrier.ResourceType == EResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null);
-#endif
-
-                        resource = buffer.NativeResource;
-                        beforeState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.Before);
-                        afterState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.After);
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null);
-#endif
-
-                        resource = texture.NativeResource;
-                        beforeState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.Before);
-                        afterState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.After);
-                    }
-                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitTransition(resource, beforeState, afterState);
-                    break;
-            }
-
+            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->ResourceBarrier(1, &resourceBarrier);
+            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
+            Marshal.FreeHGlobal(namePtr);
         }
 
-        public override void ResourceBarriers(in Memory<RHIBarrier> barriers)
+        public override void PopDebugGroup()
         {
-            ID3D12Resource* resource;
-            D3D12_RESOURCE_STATES beforeState;
-            D3D12_RESOURCE_STATES afterState;
-            D3D12_RESOURCE_BARRIER* resourceBarriers = stackalloc D3D12_RESOURCE_BARRIER[barriers.Length];
-
-            for (int i = 0; i < barriers.Length; ++i)
-            {
-                ref RHIBarrier barrier = ref barriers.Span[i];
-
-                switch (barrier.BarrierType)
-                {
-                    case EBarrierType.UAV:
-                        if (barrier.ResourceType == EResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null);
-#endif
-                            resource = buffer.NativeResource;
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null);
-#endif
-                            resource = texture.NativeResource;
-                        }
-                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitUAV(resource);
-                        break;
-
-                    case EBarrierType.Aliasing:
-                        if (barrier.ResourceType == EResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null);
-#endif
-                            resource = buffer.NativeResource;
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null);
-#endif
-                            resource = texture.NativeResource;
-                        }
-                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitAliasing(null, resource);
-                        break;
-
-                    case EBarrierType.Triansition:
-                        if (barrier.ResourceType == EResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null);
-#endif
-
-                            resource = buffer.NativeResource;
-                            beforeState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.Before);
-                            afterState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.After);
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null);
-#endif
-
-                            resource = texture.NativeResource;
-                            beforeState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.Before);
-                            afterState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.After);
-                        }
-                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitTransition(resource, beforeState, afterState);
-                        break;
-                }
-            }
-
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
-        }
-
-
-        public override void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size)
-        {
-            Dx12Buffer dx12SrcBuffer = srcBuffer as Dx12Buffer;
-            Dx12Buffer dx12DstBuffer = dstBuffer as Dx12Buffer;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-            dx12CommandBuffer.NativeCommandList->CopyBufferRegion(dx12DstBuffer.NativeResource, (ulong)dstOffset, dx12SrcBuffer.NativeResource, (ulong)srcOffset, (ulong)size);
-        }
-
-        public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
-        {
-            /*Dx12Buffer srcBuffer = src.buffer as Dx12Buffer;
-            Dx12Texture dstTexture = dst.texture as Dx12Texture;
-
-            D3D12_TEXTURE_COPY_LOCATION textureLocation = new D3D12_TEXTURE_COPY_LOCATION();
-            textureLocation.pResource = dstTexture.NativeResource;
-            textureLocation.Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-            textureLocation.SubresourceIndex = (uint)(dstTexture.Descriptor.mipCount * dst.arrayLayer + dst.mipLevel);
-
-            dx12CommandBuffer.NativeCommandList->CopyTextureRegion(&textureLocation);*/
-
-            throw new NotImplementedException();
-        }
-
-        public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size)
-        {
-            //Dx12Texture srcTexture = src as Dx12Texture;
-            //Dx12Buffer dstBuffer = dst as Dx12Buffer;
-
-            throw new NotImplementedException();
-        }
-
-        public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
-        {
-            //Dx12Texture srcTexture = src as Dx12Texture;
-            //Dx12Texture dstTexture = dst as Dx12Texture;
-
-            //D3D12_TEXTURE_COPY_LOCATION srcLocation = new D3D12_TEXTURE_COPY_LOCATION(srcTexture.NativeResource, new D3D12_PLACED_SUBRESOURCE_FOOTPRINT());
-            //dx12CommandBuffer.NativeCommandList->CopyTextureRegion();
-
-            throw new NotImplementedException();
+            dx12CommandBuffer.NativeCommandList->EndEvent();
         }
 
         public override void BeginQuery(RHIQuery query, in uint index)
@@ -303,18 +108,212 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void PushDebugGroup(string name)
+        public override void ResourceBarrier(in RHIBarrier barrier)
         {
-            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
+            ID3D12Resource* resource = null;
+            D3D12_RESOURCE_BARRIER resourceBarrier;
+
+            switch (barrier.BarrierType)
+            {
+                case EBarrierType.UAV:
+                    if (barrier.ResourceType == EResourceType.Buffer)
+                    {
+                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                        Debug.Assert(buffer != null);
+#endif
+                        resource = buffer.NativeResource;
+                    }
+                    else
+                    {
+                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                        Debug.Assert(texture != null);
+#endif
+                        resource = texture.NativeResource;
+                    }
+                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitUAV(resource);
+                    break;
+
+                case EBarrierType.Aliasing:
+                    if (barrier.ResourceType == EResourceType.Buffer)
+                    {
+                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                        Debug.Assert(buffer != null);
+#endif
+                        resource = buffer.NativeResource;
+                    }
+                    else
+                    {
+                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                        Debug.Assert(texture != null);
+#endif
+                        resource = texture.NativeResource;
+                    }
+                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitAliasing(null, resource);
+                    break;
+
+                case EBarrierType.Triansition:
+                    D3D12_RESOURCE_STATES beforeState;
+                    D3D12_RESOURCE_STATES afterState;
+                    if (barrier.ResourceType == EResourceType.Buffer)
+                    {
+                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                        Debug.Assert(buffer != null);
+#endif
+
+                        resource = buffer.NativeResource;
+                        beforeState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.Before);
+                        afterState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.After);
+                    }
+                    else
+                    {
+                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                        Debug.Assert(texture != null);
+#endif
+
+                        resource = texture.NativeResource;
+                        beforeState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.Before);
+                        afterState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.After);
+                    }
+                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitTransition(resource, beforeState, afterState);
+                    break;
+            }
+
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
-            Marshal.FreeHGlobal(namePtr);
+            dx12CommandBuffer.NativeCommandList->ResourceBarrier(1, &resourceBarrier);
         }
 
-        public override void PopDebugGroup()
+        public override void ResourceBarriers(in Memory<RHIBarrier> barriers)
         {
+            ID3D12Resource* resource;
+            D3D12_RESOURCE_STATES beforeState;
+            D3D12_RESOURCE_STATES afterState;
+            D3D12_RESOURCE_BARRIER* resourceBarriers = stackalloc D3D12_RESOURCE_BARRIER[barriers.Length];
+
+            for (int i = 0; i < barriers.Length; ++i)
+            {
+                ref RHIBarrier barrier = ref barriers.Span[i];
+
+                switch (barrier.BarrierType)
+                {
+                    case EBarrierType.UAV:
+                        if (barrier.ResourceType == EResourceType.Buffer)
+                        {
+                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                            Debug.Assert(buffer != null);
+#endif
+                            resource = buffer.NativeResource;
+                        }
+                        else
+                        {
+                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                            Debug.Assert(texture != null);
+#endif
+                            resource = texture.NativeResource;
+                        }
+                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitUAV(resource);
+                        break;
+
+                    case EBarrierType.Aliasing:
+                        if (barrier.ResourceType == EResourceType.Buffer)
+                        {
+                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                            Debug.Assert(buffer != null);
+#endif
+                            resource = buffer.NativeResource;
+                        }
+                        else
+                        {
+                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                            Debug.Assert(texture != null);
+#endif
+                            resource = texture.NativeResource;
+                        }
+                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitAliasing(null, resource);
+                        break;
+
+                    case EBarrierType.Triansition:
+                        if (barrier.ResourceType == EResourceType.Buffer)
+                        {
+                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                            Debug.Assert(buffer != null);
+#endif
+
+                            resource = buffer.NativeResource;
+                            beforeState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.Before);
+                            afterState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.After);
+                        }
+                        else
+                        {
+                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                            Debug.Assert(texture != null);
+#endif
+
+                            resource = texture.NativeResource;
+                            beforeState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.Before);
+                            afterState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.After);
+                        }
+                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitTransition(resource, beforeState, afterState);
+                        break;
+                }
+            }
+
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->EndEvent();
+            dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
+        }
+
+        public override void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size)
+        {
+            Dx12Buffer dx12SrcBuffer = srcBuffer as Dx12Buffer;
+            Dx12Buffer dx12DstBuffer = dstBuffer as Dx12Buffer;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            dx12CommandBuffer.NativeCommandList->CopyBufferRegion(dx12DstBuffer.NativeResource, (ulong)dstOffset, dx12SrcBuffer.NativeResource, (ulong)srcOffset, (ulong)size);
+        }
+
+        public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
+        {
+            /*Dx12Buffer srcBuffer = src.buffer as Dx12Buffer;
+            Dx12Texture dstTexture = dst.texture as Dx12Texture;
+
+            D3D12_TEXTURE_COPY_LOCATION textureLocation = new D3D12_TEXTURE_COPY_LOCATION();
+            textureLocation.pResource = dstTexture.NativeResource;
+            textureLocation.Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            textureLocation.SubresourceIndex = (uint)(dstTexture.Descriptor.mipCount * dst.arrayLayer + dst.mipLevel);
+
+            dx12CommandBuffer.NativeCommandList->CopyTextureRegion(&textureLocation);*/
+
+            throw new NotImplementedException();
+        }
+
+        public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size)
+        {
+            //Dx12Texture srcTexture = src as Dx12Texture;
+            //Dx12Buffer dstBuffer = dst as Dx12Buffer;
+
+            throw new NotImplementedException();
+        }
+
+        public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
+        {
+            //Dx12Texture srcTexture = src as Dx12Texture;
+            //Dx12Texture dstTexture = dst as Dx12Texture;
+
+            //D3D12_TEXTURE_COPY_LOCATION srcLocation = new D3D12_TEXTURE_COPY_LOCATION(srcTexture.NativeResource, new D3D12_PLACED_SUBRESOURCE_FOOTPRINT());
+            //dx12CommandBuffer.NativeCommandList->CopyTextureRegion();
+
+            throw new NotImplementedException();
         }
 
         public override void EndEncoding()
@@ -338,6 +337,62 @@ namespace Infinity.Graphics
         internal override void BeginEncoding(string name)
         {
             PushDebugGroup(name);
+        }
+
+        public override void PushDebugGroup(string name)
+        {
+            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
+            Marshal.FreeHGlobal(namePtr);
+        }
+
+        public override void PopDebugGroup()
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->EndEvent();
+        }
+
+        public override void BeginQuery(RHIQuery query, in uint index)
+        {
+            Dx12Query dx12Query = query as Dx12Query;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            switch (query.QueryDescriptor.Type)
+            {
+                case EQueryType.Occlusion:
+                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
+                    break;
+
+                case EQueryType.BinaryOcclusion:
+                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
+                    break;
+
+                default:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+            }
+        }
+
+        public override void EndQuery(RHIQuery query, in uint index)
+        {
+            Dx12Query dx12Query = query as Dx12Query;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            switch (query.QueryDescriptor.Type)
+            {
+                case EQueryType.Occlusion:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
+                    break;
+
+                case EQueryType.BinaryOcclusion:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
+                    break;
+
+                default:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+            }
         }
 
         public override void ResourceBarrier(in RHIBarrier barrier)
@@ -504,7 +559,6 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
-
 
         public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
         {
@@ -566,6 +620,45 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchComputeIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
         }
 
+        public override void EndEncoding()
+        {
+            PopDebugGroup();
+            m_Pipeline = null;
+            m_PipelineLayout = null;
+        }
+
+        protected override void Release()
+        {
+
+        }
+    }
+
+    internal unsafe class Dx12RaytracingEncoder : RHIRaytracingEncoder
+    {
+        public Dx12RaytracingEncoder(Dx12CommandBuffer cmdBuffer)
+        {
+            m_CommandBuffer = cmdBuffer;
+        }
+
+        internal override void BeginEncoding(string name)
+        {
+            PushDebugGroup(name);
+        }
+
+        public override void PushDebugGroup(string name)
+        {
+            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
+            Marshal.FreeHGlobal(namePtr);
+        }
+
+        public override void PopDebugGroup()
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->EndEvent();
+        }
+
         public override void BeginQuery(RHIQuery query, in uint index)
         {
             Dx12Query dx12Query = query as Dx12Query;
@@ -606,45 +699,6 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
                     break;
             }
-        }
-
-        public override void PushDebugGroup(string name)
-        {
-            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
-            Marshal.FreeHGlobal(namePtr);
-        }
-
-        public override void PopDebugGroup()
-        {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->EndEvent();
-        }
-
-        public override void EndEncoding()
-        {
-            PopDebugGroup();
-            m_Pipeline = null;
-            m_PipelineLayout = null;
-        }
-
-        protected override void Release()
-        {
-
-        }
-    }
-
-    internal unsafe class Dx12RaytracingEncoder : RHIRaytracingEncoder
-    {
-        public Dx12RaytracingEncoder(Dx12CommandBuffer cmdBuffer)
-        {
-            m_CommandBuffer = cmdBuffer;
-        }
-
-        internal override void BeginEncoding(string name)
-        {
-            PushDebugGroup(name);
         }
 
         public override void ResourceBarrier(in RHIBarrier barrier)
@@ -811,7 +865,6 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
-
 
         public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
         {
@@ -904,62 +957,6 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchRayIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
             throw new NotImplementedException();
-        }
-
-        public override void BeginQuery(RHIQuery query, in uint index)
-        {
-            Dx12Query dx12Query = query as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-            switch (query.QueryDescriptor.Type)
-            {
-                case EQueryType.Occlusion:
-                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
-                    break;
-
-                case EQueryType.BinaryOcclusion:
-                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
-                    break;
-
-                default:
-                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
-                    break;
-            }
-        }
-
-        public override void EndQuery(RHIQuery query, in uint index)
-        {
-            Dx12Query dx12Query = query as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-            switch (query.QueryDescriptor.Type)
-            {
-                case EQueryType.Occlusion:
-                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
-                    break;
-
-                case EQueryType.BinaryOcclusion:
-                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
-                    break;
-
-                default:
-                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
-                    break;
-            }
-        }
-
-        public override void PushDebugGroup(string name)
-        {
-            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
-            Marshal.FreeHGlobal(namePtr);
-        }
-
-        public override void PopDebugGroup()
-        {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->EndEvent();
         }
 
         public override void EndEncoding()
@@ -1100,24 +1097,69 @@ namespace Infinity.Graphics
             }
 
             // set shading rate
-            if (descriptor.ShadingRate.HasValue)
+            if (descriptor.ShadingRateTexture != null)
             {
-                if (descriptor.ShadingRate.Value.ShadingRateTexture != null)
-                {
-                    D3D12_SHADING_RATE_COMBINER shadingRateCombiner = Dx12Utility.ConvertToDx12ShadingRateCombiner(descriptor.ShadingRate.Value.ShadingRateCombiner);
-                    Dx12Texture dx12Texture = descriptor.ShadingRate.Value.ShadingRateTexture as Dx12Texture;
-                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRate.Value.ShadingRate), &shadingRateCombiner);
-                    dx12CommandBuffer.NativeCommandList->RSSetShadingRateImage(dx12Texture.NativeResource);
-                }
-                else
-                {
-                    D3D12_SHADING_RATE_COMBINER* shadingRateCombiners = stackalloc D3D12_SHADING_RATE_COMBINER[2] { D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MAX, D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MAX };
-                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRate.Value.ShadingRate), shadingRateCombiners);
-                    //dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRate.Value.ShadingRate), null);
-                }
+                Dx12Texture dx12Texture = descriptor.ShadingRateTexture as Dx12Texture;
+                dx12CommandBuffer.NativeCommandList->RSSetShadingRateImage(dx12Texture.NativeResource);
             }
         }
 
+        public override void PushDebugGroup(string name)
+        {
+            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
+            Marshal.FreeHGlobal(namePtr);
+        }
+
+        public override void PopDebugGroup()
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->EndEvent();
+        }
+
+        public override void BeginQuery(RHIQuery query, in uint index)
+        {
+            Dx12Query dx12Query = query as Dx12Query;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            switch (query.QueryDescriptor.Type)
+            {
+                case EQueryType.Occlusion:
+                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
+                    break;
+
+                case EQueryType.BinaryOcclusion:
+                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
+                    break;
+
+                default:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+            }
+        }
+
+        public override void EndQuery(RHIQuery query, in uint index)
+        {
+            Dx12Query dx12Query = query as Dx12Query;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            switch (query.QueryDescriptor.Type)
+            {
+                case EQueryType.Occlusion:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
+                    break;
+
+                case EQueryType.BinaryOcclusion:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
+                    break;
+
+                default:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+            }
+        }
+        
         public override void ResourceBarrier(in RHIBarrier barrier)
         {
             ID3D12Resource* resource = null;
@@ -1283,7 +1325,6 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
 
-
         public override void SetScissor(in Rect rect)
         {
             RECT tempScissor = new RECT((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom);
@@ -1321,10 +1362,10 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->OMSetBlendFactor((float*)&tempValue);
         }
 
-        public override void NextSubpass()
+        /*public override void NextSubpass()
         {
             throw new NotImplementedException("Dx12 is not support subpass. Please do not use NextSubpass command in graphics encoder");
-        }
+        }*/
 
         public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
         {
@@ -1391,6 +1432,14 @@ namespace Infinity.Graphics
             }
         }
 
+        public override void SetShadingRate(in EShadingRate shadingRate, in EShadingRateCombiner shadingRateCombiner)
+        {
+            D3D12_SHADING_RATE_COMBINER nativeShadingRateCombiner = Dx12Utility.ConvertToDx12ShadingRateCombiner(shadingRateCombiner);
+            D3D12_SHADING_RATE_COMBINER* shadingRateCombiners = stackalloc D3D12_SHADING_RATE_COMBINER[2] { nativeShadingRateCombiner, nativeShadingRateCombiner };
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(shadingRate), shadingRateCombiners);
+        }
+
         public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
             throw new NotImplementedException();
@@ -1406,62 +1455,6 @@ namespace Infinity.Graphics
             //Dx12IndirectCommandBuffer dx12IndirectCommandBuffer = indirectCommandBuffer as Dx12IndirectCommandBuffer;
             //dx12CommandBuffer.NativeCommandList->ExecuteIndirect(null, indirectCommandBuffer.Count, dx12IndirectCommandBuffer.NativeResource, indirectCommandBuffer.Offset, null, 0);
         }*/
-
-        public override void BeginQuery(RHIQuery query, in uint index)
-        {
-            Dx12Query dx12Query = query as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-            switch (query.QueryDescriptor.Type)
-            {
-                case EQueryType.Occlusion:
-                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
-                    break;
-
-                case EQueryType.BinaryOcclusion:
-                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
-                    break;
-
-                default:
-                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
-                    break;
-            }
-        }
-
-        public override void EndQuery(RHIQuery query, in uint index)
-        {
-            Dx12Query dx12Query = query as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-            switch (query.QueryDescriptor.Type)
-            {
-                case EQueryType.Occlusion:
-                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
-                    break;
-
-                case EQueryType.BinaryOcclusion:
-                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
-                    break;
-
-                default:
-                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
-                    break;
-            }
-        }
-
-        public override void PushDebugGroup(string name)
-        {
-            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
-            Marshal.FreeHGlobal(namePtr);
-        }
-
-        public override void PopDebugGroup()
-        {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->EndEvent();
-        }
 
         public override void EndEncoding()
         {
@@ -1503,6 +1496,62 @@ namespace Infinity.Graphics
             m_SubPassIndex = 0;
             m_CommandBuffer = cmdBuffer;
             m_AttachmentInfos = new TValueArray<Dx12AttachmentInfo>(5);
+        }
+
+        public override void PushDebugGroup(string name)
+        {
+            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
+            Marshal.FreeHGlobal(namePtr);
+        }
+
+        public override void PopDebugGroup()
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->EndEvent();
+        }
+
+        public override void BeginQuery(RHIQuery query, in uint index)
+        {
+            Dx12Query dx12Query = query as Dx12Query;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            switch (query.QueryDescriptor.Type)
+            {
+                case EQueryType.Occlusion:
+                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
+                    break;
+
+                case EQueryType.BinaryOcclusion:
+                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
+                    break;
+
+                default:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+            }
+        }
+
+        public override void EndQuery(RHIQuery query, in uint index)
+        {
+            Dx12Query dx12Query = query as Dx12Query;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            switch (query.QueryDescriptor.Type)
+            {
+                case EQueryType.Occlusion:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
+                    break;
+
+                case EQueryType.BinaryOcclusion:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
+                    break;
+
+                default:
+                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+            }
         }
 
         internal override void BeginEncoding(in RHIGraphicsPassDescriptor descriptor)
@@ -1622,21 +1671,10 @@ namespace Infinity.Graphics
             }
 
             // set shading rate
-            if (descriptor.ShadingRate.HasValue)
+            if (descriptor.ShadingRateTexture != null)
             {
-                if (descriptor.ShadingRate.Value.ShadingRateTexture != null)
-                {
-                    D3D12_SHADING_RATE_COMBINER shadingRateCombiner = Dx12Utility.ConvertToDx12ShadingRateCombiner(descriptor.ShadingRate.Value.ShadingRateCombiner);
-                    Dx12Texture dx12Texture = descriptor.ShadingRate.Value.ShadingRateTexture as Dx12Texture;
-                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRate.Value.ShadingRate), &shadingRateCombiner);
-                    dx12CommandBuffer.NativeCommandList->RSSetShadingRateImage(dx12Texture.NativeResource);
-                }
-                else
-                {
-                    D3D12_SHADING_RATE_COMBINER* shadingRateCombiners = stackalloc D3D12_SHADING_RATE_COMBINER[2] { D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MAX, D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MAX };
-                    dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRate.Value.ShadingRate), shadingRateCombiners);
-                    //dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(descriptor.ShadingRate.Value.ShadingRate), null);
-                }
+                Dx12Texture dx12Texture = descriptor.ShadingRateTexture as Dx12Texture;
+                dx12CommandBuffer.NativeCommandList->RSSetShadingRateImage(dx12Texture.NativeResource);
             }
         }
 
@@ -1842,10 +1880,10 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->OMSetBlendFactor((float*)&tempValue);
         }
 
-        public override void NextSubpass()
+        /*public override void NextSubpass()
         {
             throw new NotImplementedException("Dx12 is not support subpass. Please do not use NextSubpass command in graphics encoder");
-        }
+        }*/
 
         public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
         {
@@ -1940,6 +1978,14 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->IASetVertexBuffers(slot, 1, &vertexBufferView);
         }
 
+        public override void SetShadingRate(in EShadingRate shadingRate, in EShadingRateCombiner shadingRateCombiner)
+        {
+            D3D12_SHADING_RATE_COMBINER nativeShadingRateCombiner = Dx12Utility.ConvertToDx12ShadingRateCombiner(shadingRateCombiner);
+            D3D12_SHADING_RATE_COMBINER* shadingRateCombiners = stackalloc D3D12_SHADING_RATE_COMBINER[2] { nativeShadingRateCombiner, nativeShadingRateCombiner };
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(shadingRate), shadingRateCombiners);
+        }
+
         public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1973,62 +2019,6 @@ namespace Infinity.Graphics
             //Dx12IndirectCommandBuffer dx12IndirectCommandBuffer = indirectCommandBuffer as Dx12IndirectCommandBuffer;
             //dx12CommandBuffer.NativeCommandList->ExecuteIndirect(null, indirectCommandBuffer.Count, dx12IndirectCommandBuffer.NativeResource, indirectCommandBuffer.Offset, null, 0);
         }*/
-
-        public override void BeginQuery(RHIQuery query, in uint index)
-        {
-            Dx12Query dx12Query = query as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-            switch (query.QueryDescriptor.Type)
-            {
-                case EQueryType.Occlusion:
-                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
-                    break;
-
-                case EQueryType.BinaryOcclusion:
-                    dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
-                    break;
-
-                default:
-                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
-                    break;
-            }
-        }
-
-        public override void EndQuery(RHIQuery query, in uint index)
-        {
-            Dx12Query dx12Query = query as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-            switch (query.QueryDescriptor.Type)
-            {
-                case EQueryType.Occlusion:
-                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
-                    break;
-
-                case EQueryType.BinaryOcclusion:
-                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
-                    break;
-
-                default:
-                    dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
-                    break;
-            }
-        }
-
-        public override void PushDebugGroup(string name)
-        {
-            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
-            Marshal.FreeHGlobal(namePtr);
-        }
-
-        public override void PopDebugGroup()
-        {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->EndEvent();
-        }
 
         public override void EndEncoding()
         {
