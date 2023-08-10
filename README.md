@@ -533,15 +533,18 @@ rhiBlitEncoder->EndEncoding();
 rhi::RHIColorAttachmentDescriptor colorAttachmentInfos[1];
 colorAttachmentInfos[0].LoadOp = ELoadOp::Clear;
 colorAttachmentInfos[0].StoreOp = EStoreOp::Store;
-colorAttachmentInfos[0].MipLevel = 0;
-colorAttachmentInfos[0].SliceLevel = 0;
+colorAttachmentInfos[0].MipIndex = 0;
+colorAttachmentInfos[0].ArraySlice = 0;
 colorAttachmentInfos[0].ClearValue = float4(0.5f, 0.5f, 1, 1);
 colorAttachmentInfos[0].RenderTarget = rhiSwapChain->AcquireBackBufferTexture();
 colorAttachmentInfos[0].ResolveTarget = nullptr;
 
 rhi::RHIGraphicsPassDescriptor graphicsPassInfo;
 graphicsPassInfo.Name = "GraphicsPass";
-graphicsPassInfo.ShadingRate = RHIShadingRateDescriptor(EShadingRate::Rate1x2); //RHIShadingRateDescriptor(RateSurfaceTexture)
+graphicsPassInfo.MultiViewCount = 0;
+graphicsPassInfo.bOcclusionQueries = false;
+graphicsPassInfo.NumOcclusionQueries = 0;
+graphicsPassInfo.ShadingRateTexture = nullptr;
 graphicsPassInfo.ColorAttachments = colorAttachmentInfos;
 graphicsPassInfo.DepthStencilAttachment = nullptr;
 
@@ -557,6 +560,7 @@ rhiGraphicsEncoder->SetPipeline(rhiGraphicsPipeline);
 rhiGraphicsEncoder->SetBindTable(rhiGraphicsBindTable, 0);
 rhiGraphicsEncoder->SetIndexBuffer(rhiIndexBufferGPU, 0, EIndexFormat::UInt16);
 rhiGraphicsEncoder->SetVertexBuffer(rhiVertexBufferGPU, 0, 0);
+rhiGraphicsEncoder->SetShadingRate(EShadingRate.Rate2x1, EShadingRateCombiner.Passthrough);
 rhiGraphicsEncoder->DrawIndexed(3, 1, 0, 0, 0);
 rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::ShaderResource, ETextureState::Undefine));
 rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), EOwnerState::GfxToGfx, ETextureState::RenderTarget, ETextureState::Present));
