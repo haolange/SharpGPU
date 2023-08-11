@@ -207,7 +207,7 @@ computeBindTableLayoutElements[0].Visible = EFunctionStage::Compute;
 rhi::RHIBindTableLayoutDescriptor computeBindTableLayoutInfo;
 computeBindTableLayoutInfo.Index = 0;
 computeBindTableLayoutInfo.Elements = computeBindTableLayoutElements;
-computeBindTableLayoutInfo.ElementsLength = 1;
+computeBindTableLayoutInfo.NumElements = 1;
 rhi::RHIBindTableLayout* rhiComputeBindTableLayout = rhiDevice->CreateBindTableLayout(computeBindTableLayoutInfo);
 
 rhi::RHIBindTableElement computeBindTableElements[1];
@@ -216,7 +216,7 @@ computeBindTableElements[0].TextureView = rhiTextureUAV;
 rhi::RHIBindTableDescriptor computeBindTableInfo;
 computeBindTableInfo.Layout = rhiComputeBindTableLayout;
 computeBindTableInfo.Elements = computeBindTableElements;
-computeBindTableInfo.ElementLength = 1;
+computeBindTableInfo.NumElements = 1;
 rhi::RHIBindTable* rhiComputeBindTable= rhiDevice->CreateBindTable(computeBindTableInfo);
 ```
 
@@ -236,12 +236,12 @@ computeFunctionInfo.EntryName = "CSMain";
 rhi::RHIFunction* rhiComputeFunction = rhiDevice->CreateFunction(computeFunctionInfo);
 
 rhi::RHIPipelineLayoutDescriptor computePipelienLayoutInfo;
+computePipelienLayoutInfo.bLocalSignature = false;
 computePipelienLayoutInfo.bUseVertexLayout = false;
-computePipelienLayoutInfo.bIsLocalSignature = false;
 computePipelienLayoutInfo.StaticSamplers = nullptr;
-computePipelienLayoutInfo.StaticSamplerLength = 0;
+computePipelienLayoutInfo.NumStaticSampler = 0;
 computePipelienLayoutInfo.BindTableLayouts = rhiComputeBindTableLayout;
-computePipelienLayoutInfo.BindTableLayoutLength = 1;
+computePipelienLayoutInfo.NumBindTableLayouts = 1;
 rhi::RHIPipelineLayout* rhiComputePipelineLayout = rhiDevice->CreatePipelineLayout(computePipelienLayoutInfo);
 
 rhi::RHIComputePipelineDescriptor computePipelineInfo;
@@ -345,7 +345,7 @@ graphicsBindTableLayoutElements[1].Visible = EFunctionStage::Fragment;
 rhi::RHIBindTableLayoutDescriptor graphicsBindTableLayoutInfo;
 graphicsBindTableLayoutInfo.Index = 0;
 graphicsBindTableLayoutInfo.Elements = &graphicsBindTableLayoutElements;
-graphicsBindTableLayoutInfo.ElementsLength = 2;
+graphicsBindTableLayoutInfo.NumElements = 2;
 rhi::RHIBindTableLayout* rhiGraphicsBindTableLayout = rhiDevice->CreateBindTableLayout(graphicsBindTableLayoutInfo);
 
 rhi::RHIBindTableElement graphicsBindTableElements[2];
@@ -355,7 +355,7 @@ graphicsBindTableElements[1].Sampler = rhiSampler;
 rhi::RHIBindTableDescriptor graphicsBindTableInfo;
 graphicsBindTableInfo.Layout = rhiGraphicsBindTableLayout;
 graphicsBindTableInfo.Elements = &graphicsBindTableElements;
-graphicsBindTableInfo.ElementLength = 2;
+graphicsBindTableInfo.NumElements = 2;
 rhi::RHIBindTable* rhiGraphicsBindTable = rhiDevice->CreateBindTable(graphicsBindTableInfo);
 ```
 
@@ -452,9 +452,9 @@ rhi::RHIPipelineLayoutDescriptor graphicsPipelienLayoutInfo;
 graphicsPipelienLayoutInfo.bLocalSignature = false;
 graphicsPipelienLayoutInfo.bUseVertexLayout = true;
 graphicsPipelienLayoutInfo.StaticSamplers = nullptr;
-graphicsPipelienLayoutInfo.StaticSamplerLength = 0;
+graphicsPipelienLayoutInfo.NumStaticSamplers = 0;
 graphicsPipelienLayoutInfo.BindTableLayouts = rhigraphicsBindTableLayout;
-graphicsPipelienLayoutInfo.BindTableLayoutLength = 1;
+graphicsPipelienLayoutInfo.NumBindTableLayouts = 1;
 rhi::RHIPipelineLayout* rhiGraphicsPipelineLayout = rhiDevice->CreatePipelineLayout(graphicsPipelienLayoutInfo);
 
 rhi::RHIFunctionDescriptor vertexFunctionInfo;
@@ -475,7 +475,7 @@ rhi::RHIGraphicsPipelineDescriptor graphicsPipelineInfo;
 graphicsPipelineInfo.OutputState = outputStateInfo;
 graphicsPipelineInfo.RenderState = renderStateInfo;
 graphicsPipelineInfo.VertexLayouts = &vertexLayoutInfos;
-graphicsPipelineInfo.VertexLayoutLength = vertexLayoutInfos.length;
+graphicsPipelineInfo.NumVertexLayouts = vertexLayoutInfos.length;
 graphicsPipelineInfo.VertexFunction = rhiVertexFunction;
 graphicsPipelineInfo.FragmentFunction = rhiVertexFunction;
 graphicsPipelineInfo.PipelineLayout = rhiGraphicsPipelineLayout;

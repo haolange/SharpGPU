@@ -1496,10 +1496,10 @@ namespace Infinity.Graphics
             {
                 return;
             }
-            srv.MostDetailedMip = (uint)descriptor.BaseMipLevel;
+            srv.MostDetailedMip = (uint)descriptor.BaseMipIndex;
             srv.MipLevels = (uint)descriptor.MipCount;
             srv.PlaneSlice = 0;
-            srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
+            srv.ResourceMinLODClamp = descriptor.BaseMipIndex;
         }
 
         internal static void FillTexture2DArraySRV(ref D3D12_TEX2D_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
@@ -1508,12 +1508,12 @@ namespace Infinity.Graphics
             {
                 return;
             }
-            srv.MostDetailedMip = descriptor.BaseMipLevel;
+            srv.MostDetailedMip = descriptor.BaseMipIndex;
             srv.MipLevels = descriptor.MipCount;
-            srv.FirstArraySlice = descriptor.BaseSliceLevel;
-            srv.ArraySize = descriptor.SliceCount;
+            srv.FirstArraySlice = descriptor.BaseArraySlice;
+            srv.ArraySize = descriptor.ArrayCount;
             srv.PlaneSlice = 0;
-            srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
+            srv.ResourceMinLODClamp = descriptor.BaseMipIndex;
         }
 
         internal static void FillTextureCubeSRV(ref D3D12_TEXCUBE_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
@@ -1523,8 +1523,8 @@ namespace Infinity.Graphics
                 return;
             }
             srv.MipLevels = descriptor.MipCount;
-            srv.MostDetailedMip = descriptor.BaseMipLevel;
-            srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
+            srv.MostDetailedMip = descriptor.BaseMipIndex;
+            srv.ResourceMinLODClamp = descriptor.BaseMipIndex;
         }
 
         internal static void FillTextureCubeArraySRV(ref D3D12_TEXCUBE_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
@@ -1533,11 +1533,11 @@ namespace Infinity.Graphics
             {
                 return;
             }
-            srv.MostDetailedMip = descriptor.BaseMipLevel;
+            srv.MostDetailedMip = descriptor.BaseMipIndex;
             srv.MipLevels = descriptor.MipCount;
-            srv.NumCubes = descriptor.SliceCount;
-            srv.First2DArrayFace = descriptor.BaseSliceLevel;
-            srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
+            srv.NumCubes = descriptor.ArrayCount;
+            srv.First2DArrayFace = descriptor.BaseArraySlice;
+            srv.ResourceMinLODClamp = descriptor.BaseMipIndex;
         }
 
         internal static void FillTexture3DSRV(ref D3D12_TEX3D_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
@@ -1547,8 +1547,8 @@ namespace Infinity.Graphics
                 return;
             }
             srv.MipLevels = descriptor.MipCount;
-            srv.MostDetailedMip = descriptor.BaseMipLevel;
-            srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
+            srv.MostDetailedMip = descriptor.BaseMipIndex;
+            srv.ResourceMinLODClamp = descriptor.BaseMipIndex;
         }
 
         internal static void FillTexture2DUAV(ref D3D12_TEX2D_UAV uav, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
@@ -1557,7 +1557,7 @@ namespace Infinity.Graphics
             {
                 return;
             }
-            uav.MipSlice = descriptor.BaseMipLevel;
+            uav.MipSlice = descriptor.BaseMipIndex;
             uav.PlaneSlice = 0;
         }
 
@@ -1567,9 +1567,9 @@ namespace Infinity.Graphics
             {
                 return;
             }
-            uav.MipSlice = descriptor.BaseMipLevel;
-            uav.FirstArraySlice = descriptor.BaseSliceLevel;
-            uav.ArraySize = descriptor.SliceCount;
+            uav.ArraySize = descriptor.ArrayCount;
+            uav.MipSlice = descriptor.BaseMipIndex;
+            uav.FirstArraySlice = descriptor.BaseArraySlice;
             uav.PlaneSlice = 0;
         }
 
@@ -1579,9 +1579,9 @@ namespace Infinity.Graphics
             {
                 return;
             }
-            uav.WSize = descriptor.SliceCount;
-            uav.MipSlice = descriptor.BaseMipLevel;
-            uav.FirstWSlice = descriptor.BaseSliceLevel;
+            uav.WSize = descriptor.ArrayCount;
+            uav.MipSlice = descriptor.BaseMipIndex;
+            uav.FirstWSlice = descriptor.BaseArraySlice;
         }
 
         internal static void FillTexture2DRTV(ref D3D12_TEX2D_RTV rtv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
@@ -1590,7 +1590,7 @@ namespace Infinity.Graphics
             {
                 return;
             }
-            rtv.MipSlice = descriptor.BaseMipLevel;
+            rtv.MipSlice = descriptor.BaseMipIndex;
             rtv.PlaneSlice = 0;
         }
 
@@ -1600,9 +1600,9 @@ namespace Infinity.Graphics
             {
                 return;
             }
-            rtv.MipSlice = descriptor.BaseMipLevel;
-            rtv.FirstArraySlice = descriptor.BaseSliceLevel;
-            rtv.ArraySize = descriptor.SliceCount;
+            rtv.ArraySize = descriptor.ArrayCount;
+            rtv.MipSlice = descriptor.MipCount;
+            rtv.FirstArraySlice = descriptor.BaseArraySlice;
             rtv.PlaneSlice = 0;
         }
 
@@ -1612,9 +1612,9 @@ namespace Infinity.Graphics
             {
                 return;
             }
-            rtv.WSize = descriptor.SliceCount;
-            rtv.MipSlice = descriptor.BaseMipLevel;
-            rtv.FirstWSlice = descriptor.BaseSliceLevel;
+            rtv.WSize = descriptor.ArrayCount;
+            rtv.MipSlice = descriptor.BaseMipIndex;
+            rtv.FirstWSlice = descriptor.BaseArraySlice;
         }
     }
 #pragma warning restore CS8600, CS8602, CA1416
