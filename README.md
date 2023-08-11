@@ -176,17 +176,17 @@ Create textureView for compute or graphics
 ...
 rhi::RHITextureViewDescriptor outputViewInfo;
 outputViewInfo.MipCount = 1;
-outputViewInfo.BaseMipLevel = 0;
-outputViewInfo.SliceCount = 1;
-outputViewInfo.BaseSliceLevel = 0;
+outputViewInfo.BaseMipIndex = 0;
+outputViewInfo.ArraySliceCount = 1;
+outputViewInfo.BaseArraySliceIndex = 0;
 outputViewInfo.ViewType = ETextureViewType::UnorderedAccess;
 rhi::TextureView* rhiTextureSRV = rhiTexture->CreateTextureView(outputViewInfo);
 
 rhi::RHITextureViewDescriptor outputViewInfo;
 outputViewInfo.MipCount = 1;
-outputViewInfo.BaseMipLevel = 0;
-outputViewInfo.SliceCount = 1;
-outputViewInfo.BaseSliceLevel = 0;
+outputViewInfo.BaseMipIndex = 0;
+outputViewInfo.ArraySliceCount = 1;
+outputViewInfo.BaseArraySliceIndex = 0;
 outputViewInfo.ViewType = ETextureViewType::UnorderedAccess;
 rhi::TextureView* rhiTextureUAV = rhiTexture->CreateTextureView(outputViewInfo);
 ```
@@ -264,7 +264,7 @@ UniformInfo uniformArray[1] = // ......;
 rhi::RHIBufferDescriptor uniformBufferInfo;
 uniformBufferInfo.ByteSize = uniformArray.Length * ((sizeof(UniformInfo) + 255) & ~255);
 uniformBufferInfo.UsageFlag = EBufferUsage::UniformBuffer;
-uniformBufferInfo.StorageMode = EStorageMode::Dynamic;
+uniformBufferInfo.StorageMode = EStorageMode::HostUpload;
 rhi::RHIBuffer* rhiUniformBuffer = rhiDevice->CreateBuffer(uniformBufferInfo);
 
 void* uniformData = rhiUniformBuffer->Map(0, uniformBufferInfo.ByteSize);
