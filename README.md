@@ -174,21 +174,21 @@ Create textureView for compute or graphics
 ```c++
 #include <rhi/d3d12.h>
 ...
-rhi::RHITextureViewDescriptor outputViewInfo;
-outputViewInfo.MipCount = 1;
-outputViewInfo.BaseMipIndex = 0;
-outputViewInfo.ArraySliceCount = 1;
-outputViewInfo.BaseArraySliceIndex = 0;
-outputViewInfo.ViewType = ETextureViewType::UnorderedAccess;
-rhi::TextureView* rhiTextureSRV = rhiTexture->CreateTextureView(outputViewInfo);
-
-rhi::RHITextureViewDescriptor outputViewInfo;
-outputViewInfo.MipCount = 1;
-outputViewInfo.BaseMipIndex = 0;
-outputViewInfo.ArraySliceCount = 1;
-outputViewInfo.BaseArraySliceIndex = 0;
-outputViewInfo.ViewType = ETextureViewType::UnorderedAccess;
+rhi::RHITextureViewDescriptor computeOutputViewInfo;
+computeOutputViewInfo.MipCount = 1;
+computeOutputViewInfo.BaseMipIndex = 0;
+computeOutputViewInfo.ArrayCount = 1;
+computeOutputViewInfo.BaseArraySlice = 0;
+computeOutputViewInfo.ViewType = ETextureViewType::UnorderedAccess;
 rhi::TextureView* rhiTextureUAV = rhiTexture->CreateTextureView(outputViewInfo);
+
+rhi::RHITextureViewDescriptor graphicsInputViewInfo;
+graphicsInputViewInfo.MipCount = 1;
+graphicsInputViewInfo.BaseMipIndex = 0;
+graphicsInputViewInfo.ArrayCount = 1;
+graphicsInputViewInfo.BaseArraySlice = 0;
+graphicsInputViewInfo.ViewType = ETextureViewType::ShaderResource;
+rhi::TextureView* rhiTextureSRV = rhiTexture->CreateTextureView(outputViewInfo);
 ```
 
 
