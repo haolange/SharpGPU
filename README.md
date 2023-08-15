@@ -239,7 +239,7 @@ rhi::RHIPipelineLayoutDescriptor computePipelienLayoutInfo;
 computePipelienLayoutInfo.bLocalSignature = false;
 computePipelienLayoutInfo.bUseVertexLayout = false;
 computePipelienLayoutInfo.StaticSamplers = nullptr;
-computePipelienLayoutInfo.NumStaticSampler = 0;
+computePipelienLayoutInfo.NumStaticSamplers = 0;
 computePipelienLayoutInfo.BindTableLayouts = rhiComputeBindTableLayout;
 computePipelienLayoutInfo.NumBindTableLayouts = 1;
 rhi::RHIPipelineLayout* rhiComputePipelineLayout = rhiDevice->CreatePipelineLayout(computePipelienLayoutInfo);
