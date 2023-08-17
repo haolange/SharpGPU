@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
@@ -38,13 +39,17 @@ namespace Infinity.Graphics
             m_CommandQueue = commandQueue;
 
             ID3D12CommandAllocator* commandAllocator;
-            bool success = SUCCEEDED(commandQueue.Dx12Device.NativeDevice->CreateCommandAllocator(Dx12Utility.ConvertToDx12QueueType(commandQueue.Type), __uuidof<ID3D12CommandAllocator>(), (void**)&commandAllocator));
-            Debug.Assert(success);
+            HRESULT hResult = commandQueue.Dx12Device.NativeDevice->CreateCommandAllocator(Dx12Utility.ConvertToDx12QueueType(commandQueue.Type), __uuidof<ID3D12CommandAllocator>(), (void**)&commandAllocator);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
             m_NativeCommandAllocator = commandAllocator;
 
             ID3D12GraphicsCommandList5* commandList;
-            success = SUCCEEDED(commandQueue.Dx12Device.NativeDevice->CreateCommandList(0, Dx12Utility.ConvertToDx12QueueType(commandQueue.Type), m_NativeCommandAllocator, null, __uuidof<ID3D12GraphicsCommandList5>(), (void**)&commandList));
-            Debug.Assert(success);
+            hResult = commandQueue.Dx12Device.NativeDevice->CreateCommandList(0, Dx12Utility.ConvertToDx12QueueType(commandQueue.Type), m_NativeCommandAllocator, null, __uuidof<ID3D12GraphicsCommandList5>(), (void**)&commandList);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
             m_NativeCommandList = commandList;
 
             m_BlitEncoder = new Dx12BlitEncoder(this);

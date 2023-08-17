@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using TerraFX.Interop.DirectX;
+using TerraFX.Interop.Windows;
 using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
@@ -43,9 +44,9 @@ namespace Infinity.Graphics
             };
 
             ID3D12Resource* dx12Resource;
-            bool success = SUCCEEDED(pDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ALL_BUFFERS_AND_TEXTURES, &description, initState, null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource));
+            HRESULT hResult = pDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ALL_BUFFERS_AND_TEXTURES, &description, initState, null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource);
 #if DEBUG
-            Debug.Assert(success);
+            Dx12Utility.CHECK_HR(hResult);
 #endif
             return dx12Resource;
         }

@@ -3,6 +3,8 @@ using System.Diagnostics;
 using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using static TerraFX.Interop.Windows.Windows;
+using Silk.NET.Core.Native;
+using IUnknown = TerraFX.Interop.Windows.IUnknown;
 
 namespace Infinity.Graphics
 {
@@ -292,18 +294,18 @@ namespace Infinity.Graphics
         private void CreateDevice()
         {
             ID3D12Device8* device;
-            bool success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_2, __uuidof<ID3D12Device8>(), (void**)&device));
-            if (!success)
+            HRESULT hResult = DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_2, __uuidof<ID3D12Device8>(), (void**)&device);
+            if (FAILED(hResult))
             {
-                success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1, __uuidof<ID3D12Device8>(), (void**)&device));
+                hResult = DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1, __uuidof<ID3D12Device8>(), (void**)&device);
 
-                if (!success)
+                if (FAILED(hResult))
                 {
-                    success = SUCCEEDED(DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_0, __uuidof<ID3D12Device8>(), (void**)&device));
+                    hResult = DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_0, __uuidof<ID3D12Device8>(), (void**)&device);
                 }
             }
 #if DEBUG
-            Debug.Assert(success);
+            Dx12Utility.CHECK_HR(hResult);
 #endif
             m_NativeDevice = device;
         }
@@ -364,8 +366,10 @@ namespace Infinity.Graphics
             commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
             commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DRAW_ARGUMENTS);
             commandSignatureDesc.NumArgumentDescs = 1;
-            success = SUCCEEDED(m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature));
-            Debug.Assert(success);
+            HRESULT hResult = m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
             m_DrawIndirectSignature = commandSignature;
 
             indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
@@ -373,8 +377,10 @@ namespace Infinity.Graphics
             commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
             commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DRAW_INDEXED_ARGUMENTS);
             commandSignatureDesc.NumArgumentDescs = 1;
-            success = SUCCEEDED(m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature));
-            Debug.Assert(success);
+            hResult = m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
             m_DrawIndexedIndirectSignature = commandSignature;
 
             indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
@@ -382,8 +388,10 @@ namespace Infinity.Graphics
             commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
             commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DISPATCH_ARGUMENTS);
             commandSignatureDesc.NumArgumentDescs = 1;
-            success = SUCCEEDED(m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature));
-            Debug.Assert(success);
+            hResult = m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
             m_DispatchComputeIndirectSignature = commandSignature;
 
             if (IsRaytracingSupported)
@@ -393,8 +401,10 @@ namespace Infinity.Graphics
                 commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
                 commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DISPATCH_RAYS_DESC);
                 commandSignatureDesc.NumArgumentDescs = 1;
-                success = SUCCEEDED(m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature));
-                Debug.Assert(success);
+                hResult = m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature);
+#if DEBUG
+                Dx12Utility.CHECK_HR(hResult);
+#endif
                 m_DispatchRayIndirectSignature = commandSignature;
             }
         }

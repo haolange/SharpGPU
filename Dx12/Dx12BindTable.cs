@@ -29,8 +29,9 @@ namespace Infinity.Graphics
         public Dx12BindTable(in RHIBindTableDescriptor descriptor)
         {
             Dx12BindTableLayout bindTableLayout = descriptor.Layout as Dx12BindTableLayout;
+#if DEBUG
             Debug.Assert(bindTableLayout != null);
-
+#endif
             m_BindTableLayout = bindTableLayout;
             m_NativeGpuDescriptorHandles = new D3D12_GPU_DESCRIPTOR_HANDLE[descriptor.Elements.Length];
 

@@ -7,6 +7,7 @@ using TerraFX.Interop.DirectX;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using static TerraFX.Interop.Windows.Windows;
+using Silk.NET.Core.Native;
 
 namespace Infinity.Graphics
 {
@@ -50,8 +51,10 @@ namespace Infinity.Graphics
             queueDesc.Type = Dx12Utility.ConvertToDx12QueueType(queueType);
 
             ID3D12CommandQueue* commandQueue;
-            bool success = SUCCEEDED(m_Dx12Device.NativeDevice->CreateCommandQueue(&queueDesc, __uuidof<ID3D12CommandQueue>(), (void**)&commandQueue));
-            Debug.Assert(success);
+            HRESULT hResult = m_Dx12Device.NativeDevice->CreateCommandQueue(&queueDesc, __uuidof<ID3D12CommandQueue>(), (void**)&commandQueue);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
 
             m_NativeCommandQueue = commandQueue;
         }

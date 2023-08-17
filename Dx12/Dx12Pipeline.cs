@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using Infinity.Mathmatics;
+using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using static TerraFX.Interop.Windows.Windows;
@@ -33,8 +34,10 @@ namespace Infinity.Graphics
             description.CS.pShaderBytecode = computeFunction.NativeShaderBytecode.pShaderBytecode;
 
             ID3D12PipelineState* pipelineState;
-            bool success = SUCCEEDED(device.NativeDevice->CreateComputePipelineState(&description, __uuidof<ID3D12PipelineState>(), (void**)&pipelineState));
-            Debug.Assert(success);
+            HRESULT hResult = device.NativeDevice->CreateComputePipelineState(&description, __uuidof<ID3D12PipelineState>(), (void**)&pipelineState);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
             m_NativePipelineState = pipelineState;
         }
 
@@ -306,8 +309,10 @@ namespace Infinity.Graphics
                 stateObjectDescriptor.Type = D3D12_STATE_OBJECT_TYPE.D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE;
             }
             ID3D12StateObject* pipelineState;
-            bool success = SUCCEEDED(device.NativeDevice->CreateStateObject(&stateObjectDescriptor, __uuidof<ID3D12StateObject>(), (void**)&pipelineState));
-            Debug.Assert(success);
+            HRESULT hResult = device.NativeDevice->CreateStateObject(&stateObjectDescriptor, __uuidof<ID3D12StateObject>(), (void**)&pipelineState);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
             m_NativePipelineState = pipelineState;
             #endregion PipelineState
         }
@@ -462,8 +467,10 @@ namespace Infinity.Graphics
             }
 
             ID3D12PipelineState* pipelineState;
-            bool success = SUCCEEDED(device.NativeDevice->CreateGraphicsPipelineState(&description, __uuidof<ID3D12PipelineState>(), (void**)&pipelineState));
-            Debug.Assert(success);
+            HRESULT hResult = device.NativeDevice->CreateGraphicsPipelineState(&description, __uuidof<ID3D12PipelineState>(), (void**)&pipelineState);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
             m_NativePipelineState = pipelineState;
         }
 

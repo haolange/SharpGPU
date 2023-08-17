@@ -4,6 +4,7 @@ using System.Diagnostics;
 using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using static TerraFX.Interop.Windows.Windows;
+using Silk.NET.Core.Native;
 
 namespace Infinity.Graphics
 {
@@ -38,12 +39,16 @@ namespace Infinity.Graphics
         public Dx12Fence(Dx12Device device)
         {
             ID3D12Fence* fence;
-            bool success = SUCCEEDED(device.NativeDevice->CreateFence(0, D3D12_FENCE_FLAGS.D3D12_FENCE_FLAG_NONE, __uuidof<ID3D12Fence>(), (void**)&fence));
-            Debug.Assert(success);
+            HRESULT hResult = device.NativeDevice->CreateFence(0, D3D12_FENCE_FLAGS.D3D12_FENCE_FLAG_NONE, __uuidof<ID3D12Fence>(), (void**)&fence);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
             m_NativeFence = fence;
 
             m_FenceEvent = new AutoResetEvent(false);
+#if DEBUG
             Debug.Assert(m_FenceEvent != null);
+#endif
         }
 
         internal override void Reset()

@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using Infinity.Collections;
 using TerraFX.Interop.DirectX;
+using TerraFX.Interop.Windows;
 using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
@@ -145,16 +146,16 @@ namespace Infinity.Graphics
             D3D12_HEAP_PROPERTIES heapProperties = new D3D12_HEAP_PROPERTIES(D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD, 0, 0);
 
             ID3D12Resource* dx12Resource;
-            bool success = SUCCEEDED(m_Dx12Device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &resourceDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ, null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource));
+            HRESULT hResult = m_Dx12Device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &resourceDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ, null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource);
 #if DEBUG
-            Debug.Assert(success);
+            Dx12Utility.CHECK_HR(hResult);
 #endif
             m_NativeResource = dx12Resource;
 
             ID3D12StateObjectProperties* objectProperties;
-            success = SUCCEEDED(dx12RaytracingPipeline.NativePipelineState->QueryInterface(__uuidof<ID3D12StateObjectProperties>(), (void**)&objectProperties));
+            hResult = dx12RaytracingPipeline.NativePipelineState->QueryInterface(__uuidof<ID3D12StateObjectProperties>(), (void**)&objectProperties);
 #if DEBUG
-            Debug.Assert(success);
+            Dx12Utility.CHECK_HR(hResult);
 #endif
         }
 

@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Collections.Generic;
 using static TerraFX.Interop.Windows.Windows;
@@ -52,8 +53,10 @@ namespace Infinity.Graphics
             }
 
             IDXGIFactory7* factory;
-            bool success =  SUCCEEDED(DirectX.CreateDXGIFactory2(factoryFlags, __uuidof<IDXGIFactory7>(), (void**)&factory));
-            Debug.Assert(success);
+            HRESULT hResult = DirectX.CreateDXGIFactory2(factoryFlags, __uuidof<IDXGIFactory7>(), (void**)&factory);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
             m_DXGIFactory = factory;
         }
 

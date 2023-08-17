@@ -1,7 +1,8 @@
-﻿using Infinity.Mathmatics;
-using System;
+﻿using System;
 using System.Diagnostics;
+using Infinity.Mathmatics;
 using TerraFX.Interop.DirectX;
+using TerraFX.Interop.Windows;
 using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
@@ -37,9 +38,9 @@ namespace Infinity.Graphics
             D3D12_HEAP_PROPERTIES heapProperties = new D3D12_HEAP_PROPERTIES(Dx12Utility.ConvertToDx12HeapTypeByStorage(descriptor.StorageMode));
 
             ID3D12Resource* dx12Resource;
-            bool success = SUCCEEDED(m_Dx12Device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &resourceDesc, Dx12Utility.ConvertToDx12ResourceStateFormStorageMode(descriptor.StorageMode), null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource));
+            HRESULT hResult = m_Dx12Device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &resourceDesc, Dx12Utility.ConvertToDx12ResourceStateFormStorageMode(descriptor.StorageMode), null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource);
 #if DEBUG
-            Debug.Assert(success);
+            Dx12Utility.CHECK_HR(hResult);
 #endif
             m_NativeResource = dx12Resource;
         }

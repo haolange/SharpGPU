@@ -4,6 +4,8 @@ using Infinity.Mathmatics;
 using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using static TerraFX.Interop.Windows.Windows;
+using Silk.NET.Core.Native;
+using IUnknown = TerraFX.Interop.Windows.IUnknown;
 
 namespace Infinity.Graphics
 {
@@ -40,8 +42,10 @@ namespace Infinity.Graphics
                     m_Textures[i].NativeResource->Release();
                 }
             }
-            bool success = SUCCEEDED(m_NativeSwapChain->ResizeBuffers(m_Descriptor.Count, extent.x, extent.y, Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(m_Descriptor.Format)), (uint)DXGI_SWAP_CHAIN_FLAG.DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
-            Debug.Assert(success);
+            HRESULT hResult = m_NativeSwapChain->ResizeBuffers(m_Descriptor.Count, extent.x, extent.y, Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(m_Descriptor.Format)), (uint)DXGI_SWAP_CHAIN_FLAG.DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
             m_Descriptor.Extent = extent;
             FetchDx12Textures(m_Descriptor);
         }
@@ -69,8 +73,10 @@ namespace Infinity.Graphics
             desc.BufferUsage = descriptor.FrameBufferOnly ? DXGI.DXGI_USAGE_RENDER_TARGET_OUTPUT : (DXGI.DXGI_USAGE_SHADER_INPUT | DXGI.DXGI_USAGE_RENDER_TARGET_OUTPUT);
 
             IDXGISwapChain1* dx12SwapChain1;
-            bool success = SUCCEEDED(dx12Instance.DXGIFactory->CreateSwapChainForHwnd((IUnknown*)dx12Queue.NativeCommandQueue, new HWND(descriptor.Surface.ToPointer()), &desc, null, null, &dx12SwapChain1));
-            Debug.Assert(success);
+            HRESULT hResult = dx12Instance.DXGIFactory->CreateSwapChainForHwnd((IUnknown*)dx12Queue.NativeCommandQueue, new HWND(descriptor.Surface.ToPointer()), &desc, null, null, &dx12SwapChain1);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
             m_NativeSwapChain = (IDXGISwapChain4*)dx12SwapChain1;
 #else
             DXGI_SWAP_CHAIN_DESC desc = new DXGI_SWAP_CHAIN_DESC();
@@ -90,8 +96,10 @@ namespace Infinity.Graphics
             desc.BufferUsage = descriptor.FrameBufferOnly ? DXGI.DXGI_USAGE_RENDER_TARGET_OUTPUT : (DXGI.DXGI_USAGE_SHADER_INPUT | DXGI.DXGI_USAGE_RENDER_TARGET_OUTPUT);
 
             IDXGISwapChain* dx12SwapChain1;
-            bool success = SUCCEEDED(dx12Instance.DXGIFactory->CreateSwapChain((IUnknown*)dx12Queue.NativeCommandQueue, &desc, &dx12SwapChain1));
-            Debug.Assert(success);
+            HRESULT hResult = dx12Instance.DXGIFactory->CreateSwapChain((IUnknown*)dx12Queue.NativeCommandQueue, &desc, &dx12SwapChain1);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
             m_NativeSwapChain = (IDXGISwapChain4*)dx12SwapChain1;
 #endif
         }
@@ -112,8 +120,10 @@ namespace Infinity.Graphics
             for (int i = 0; i < descriptor.Count; ++i)
             {
                 ID3D12Resource* dx12Resource = null;
-                bool success = SUCCEEDED(m_NativeSwapChain->GetBuffer((uint)i, __uuidof<ID3D12Resource>(), (void**)&dx12Resource));
-                Debug.Assert(success);
+                HRESULT hResult = m_NativeSwapChain->GetBuffer((uint)i, __uuidof<ID3D12Resource>(), (void**)&dx12Resource);
+#if DEBUG
+                Dx12Utility.CHECK_HR(hResult);
+#endif
                 m_Textures[i] = new Dx12Texture(m_Dx12Device, textureDescriptor, dx12Resource);
             }
         }
