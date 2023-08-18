@@ -142,7 +142,7 @@ namespace Infinity.Graphics
         private void CreateDevice(in IntPtr devicePtr)
         {
 #if DEBUG
-            Debug.Assert(devicePtr.ToPointer() != null);
+            Debug.Assert(devicePtr.ToPointer() != null, "System device is null");
 #endif
             m_NativeDevice = new MTLDevice(devicePtr);
         }

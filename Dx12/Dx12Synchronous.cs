@@ -8,6 +8,7 @@ using Silk.NET.Core.Native;
 
 namespace Infinity.Graphics
 {
+#pragma warning disable CA1416 // Validate platform compatibility
     internal unsafe class Dx12Fence : RHIFence
     {
         public ID3D12Fence* NativeFence
@@ -47,7 +48,7 @@ namespace Infinity.Graphics
 
             m_FenceEvent = new AutoResetEvent(false);
 #if DEBUG
-            Debug.Assert(m_FenceEvent != null);
+            Debug.Assert(m_FenceEvent != null, "SystemEvent is null");
 #endif
         }
 
@@ -69,4 +70,5 @@ namespace Infinity.Graphics
             m_NativeFence->Release();
         }
     }
+#pragma warning restore CA1416 // Validate platform compatibility
 }

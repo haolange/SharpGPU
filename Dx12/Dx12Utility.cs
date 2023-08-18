@@ -10,6 +10,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using static TerraFX.Interop.Windows.Windows;
 using TerraFX.Interop.Windows;
+using Silk.NET.Core.Native;
 
 namespace Infinity.Graphics
 {
@@ -52,9 +53,9 @@ namespace Infinity.Graphics
             descriptorInfo.NumDescriptors = count;
 
             ID3D12DescriptorHeap* descriptorHeap;
-            bool success = SUCCEEDED(device->CreateDescriptorHeap(&descriptorInfo, __uuidof<ID3D12DescriptorHeap>(), (void**)&descriptorHeap));
+            HRESULT hResult = device->CreateDescriptorHeap(&descriptorInfo, __uuidof<ID3D12DescriptorHeap>(), (void**)&descriptorHeap);
 #if DEBUG
-            Debug.Assert(success);
+            Dx12Utility.CHECK_HR(hResult);
 #endif
             m_DescriptorHeap = descriptorHeap;
         }
@@ -104,8 +105,12 @@ namespace Infinity.Graphics
                 case EQueryType.BinaryOcclusion:
                     return D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION;
 
-                default:
+                case EQueryType.TimestampTransfer:
+                case EQueryType.TimestampGenerice:
                     return D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP;
+
+                default:
+                    return 0;
             }
         }
 
@@ -119,8 +124,14 @@ namespace Infinity.Graphics
                 case EQueryType.BinaryOcclusion:
                     return D3D12_QUERY_HEAP_TYPE.D3D12_QUERY_HEAP_TYPE_OCCLUSION;
 
-                default:
+                case EQueryType.TimestampTransfer:
+                    return D3D12_QUERY_HEAP_TYPE.D3D12_QUERY_HEAP_TYPE_COPY_QUEUE_TIMESTAMP;
+
+                case EQueryType.TimestampGenerice:
                     return D3D12_QUERY_HEAP_TYPE.D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
+
+                default:
+                    return 0;
             }
         }
 

@@ -25,7 +25,9 @@ namespace Infinity.Graphics
 
         internal override void BeginEncoding(string name)
         {
+#if DEBUG
             PushDebugGroup(name);
+#endif
         }
 
         public override void PushDebugGroup(string name)
@@ -57,8 +59,12 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
                     break;
 
-                default:
+                case EQueryType.TimestampTransfer:
+                case EQueryType.TimestampGenerice:
                     dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+
+                default:
                     break;
             }
         }
@@ -78,8 +84,12 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
                     break;
 
-                default:
+                case EQueryType.TimestampTransfer:
+                case EQueryType.TimestampGenerice:
                     dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+
+                default:
                     break;
             }
         }
@@ -120,7 +130,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
                         resource = buffer.NativeResource;
                     }
@@ -128,7 +138,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
                         resource = texture.NativeResource;
                     }
@@ -140,7 +150,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
                         resource = buffer.NativeResource;
                     }
@@ -148,7 +158,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
                         resource = texture.NativeResource;
                     }
@@ -162,7 +172,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
 
                         resource = buffer.NativeResource;
@@ -173,7 +183,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
 
                         resource = texture.NativeResource;
@@ -206,7 +216,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
                             resource = buffer.NativeResource;
                         }
@@ -214,7 +224,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
                             resource = texture.NativeResource;
                         }
@@ -226,7 +236,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
                             resource = buffer.NativeResource;
                         }
@@ -234,7 +244,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
                             resource = texture.NativeResource;
                         }
@@ -246,7 +256,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
 
                             resource = buffer.NativeResource;
@@ -257,7 +267,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
 
                             resource = texture.NativeResource;
@@ -318,7 +328,9 @@ namespace Infinity.Graphics
 
         public override void EndEncoding()
         {
+#if DEBUG
             PopDebugGroup();
+#endif
         }
 
         protected override void Release()
@@ -336,7 +348,9 @@ namespace Infinity.Graphics
 
         internal override void BeginEncoding(string name)
         {
+#if DEBUG
             PushDebugGroup(name);
+#endif
         }
 
         public override void PushDebugGroup(string name)
@@ -368,8 +382,12 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
                     break;
 
-                default:
+                case EQueryType.TimestampTransfer:
+                case EQueryType.TimestampGenerice:
                     dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+
+                default:
                     break;
             }
         }
@@ -389,8 +407,12 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
                     break;
 
-                default:
+                case EQueryType.TimestampTransfer:
+                case EQueryType.TimestampGenerice:
                     dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+
+                default:
                     break;
             }
         }
@@ -407,7 +429,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
                         resource = buffer.NativeResource;
                     }
@@ -415,7 +437,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
                         resource = texture.NativeResource;
                     }
@@ -427,7 +449,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
                         resource = buffer.NativeResource;
                     }
@@ -435,7 +457,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
                         resource = texture.NativeResource;
                     }
@@ -449,7 +471,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
 
                         resource = buffer.NativeResource;
@@ -460,7 +482,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
 
                         resource = texture.NativeResource;
@@ -493,7 +515,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
                             resource = buffer.NativeResource;
                         }
@@ -501,7 +523,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
                             resource = texture.NativeResource;
                         }
@@ -513,7 +535,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
                             resource = buffer.NativeResource;
                         }
@@ -521,7 +543,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
                             resource = texture.NativeResource;
                         }
@@ -533,7 +555,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
 
                             resource = buffer.NativeResource;
@@ -544,7 +566,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
 
                             resource = texture.NativeResource;
@@ -622,7 +644,9 @@ namespace Infinity.Graphics
 
         public override void EndEncoding()
         {
+#if DEBUG
             PopDebugGroup();
+#endif
             m_Pipeline = null;
             m_PipelineLayout = null;
         }
@@ -642,7 +666,9 @@ namespace Infinity.Graphics
 
         internal override void BeginEncoding(string name)
         {
+#if DEBUG
             PushDebugGroup(name);
+#endif
         }
 
         public override void PushDebugGroup(string name)
@@ -674,8 +700,12 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
                     break;
 
-                default:
+                case EQueryType.TimestampTransfer:
+                case EQueryType.TimestampGenerice:
                     dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+
+                default:
                     break;
             }
         }
@@ -713,7 +743,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
                         resource = buffer.NativeResource;
                     }
@@ -721,7 +751,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
                         resource = texture.NativeResource;
                     }
@@ -733,7 +763,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
                         resource = buffer.NativeResource;
                     }
@@ -741,7 +771,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
                         resource = texture.NativeResource;
                     }
@@ -755,7 +785,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
 
                         resource = buffer.NativeResource;
@@ -766,7 +796,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
 
                         resource = texture.NativeResource;
@@ -799,7 +829,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
                             resource = buffer.NativeResource;
                         }
@@ -807,7 +837,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
                             resource = texture.NativeResource;
                         }
@@ -819,7 +849,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
                             resource = buffer.NativeResource;
                         }
@@ -827,7 +857,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
                             resource = texture.NativeResource;
                         }
@@ -839,7 +869,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
 
                             resource = buffer.NativeResource;
@@ -850,7 +880,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
 
                             resource = texture.NativeResource;
@@ -894,7 +924,7 @@ namespace Infinity.Graphics
             Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
 #endif
 
-            for (int i = 0; i < dx12BindTable.NativeGpuDescriptorHandles.Length; ++i)
+            /*for (int i = 0; i < dx12BindTable.NativeGpuDescriptorHandles.Length; ++i)
             {
                 Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
 
@@ -905,11 +935,11 @@ namespace Infinity.Graphics
                 if (parameter.HasValue)
                 {
 #if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
+                    Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in ray tracing at index {0}.", i));
 #endif
                     dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
-            }
+            }*/
         }
 
         public override void BuildAccelerationStructure(RHITopLevelAccelStruct tlas)
@@ -961,7 +991,9 @@ namespace Infinity.Graphics
 
         public override void EndEncoding()
         {
+#if DEBUG
             PopDebugGroup();
+#endif
             m_Pipeline = null;
             m_PipelineLayout = null;
         }
@@ -986,7 +1018,9 @@ namespace Infinity.Graphics
         internal override void BeginEncoding(in RHIMeshletPassDescriptor descriptor)
         {
             m_SubPassIndex = 0;
+#if DEBUG
             PushDebugGroup(descriptor.Name);
+#endif
 
             /*if (descriptor.SubpassDescriptors != null)
             {
@@ -1004,7 +1038,7 @@ namespace Infinity.Graphics
             {
                 Dx12Texture texture = descriptor.ColorAttachments.Span[i].RenderTarget as Dx12Texture;
 #if DEBUG
-                Debug.Assert(texture != null);
+                Debug.Assert(texture != null, "ColorRenderTarget Texture is null");
 #endif
                 /*RHITextureViewDescriptor viewDescriptor;
                 {
@@ -1039,7 +1073,7 @@ namespace Infinity.Graphics
             {
                 Dx12Texture texture = descriptor.DepthStencilAttachment.Value.RenderTarget as Dx12Texture;
 #if DEBUG
-                Debug.Assert(texture != null);
+                Debug.Assert(texture != null, "DepthStencil target texture is null");
 #endif
                 /*RHITextureViewDescriptor viewDescriptor;
                 {
@@ -1133,8 +1167,12 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
                     break;
 
-                default:
+                case EQueryType.TimestampTransfer:
+                case EQueryType.TimestampGenerice:
                     dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+
+                default:
                     break;
             }
         }
@@ -1172,7 +1210,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
                         resource = buffer.NativeResource;
                     }
@@ -1180,7 +1218,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
                         resource = texture.NativeResource;
                     }
@@ -1192,7 +1230,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
                         resource = buffer.NativeResource;
                     }
@@ -1200,7 +1238,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
                         resource = texture.NativeResource;
                     }
@@ -1214,7 +1252,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
 
                         resource = buffer.NativeResource;
@@ -1225,7 +1263,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
 
                         resource = texture.NativeResource;
@@ -1258,7 +1296,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
                             resource = buffer.NativeResource;
                         }
@@ -1266,7 +1304,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
                             resource = texture.NativeResource;
                         }
@@ -1278,7 +1316,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
                             resource = buffer.NativeResource;
                         }
@@ -1286,7 +1324,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
                             resource = texture.NativeResource;
                         }
@@ -1298,7 +1336,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
 
                             resource = buffer.NativeResource;
@@ -1309,7 +1347,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
 
                             resource = texture.NativeResource;
@@ -1396,7 +1434,7 @@ namespace Infinity.Graphics
             Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
 #endif
 
-            for (int i = 0; i < dx12BindTable.NativeGpuDescriptorHandles.Length; ++i)
+            /*for (int i = 0; i < dx12BindTable.NativeGpuDescriptorHandles.Length; ++i)
             {
                 Dx12PipelineLayout dx12PipelineLayout = m_PipelineLayout as Dx12PipelineLayout;
 
@@ -1407,7 +1445,7 @@ namespace Infinity.Graphics
                 if (parameter.HasValue)
                 {
 #if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
+                    Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in graphics at index {0}.", i));
 #endif
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
@@ -1416,7 +1454,7 @@ namespace Infinity.Graphics
                 if (parameter.HasValue)
                 {
 #if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
+                    Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in vertex at index {0}.", i));
 #endif
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
@@ -1425,11 +1463,11 @@ namespace Infinity.Graphics
                 if (parameter.HasValue)
                 {
 #if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
+                    Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in fragment at index {0}.", i));
 #endif
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
-            }
+            }*/
         }
 
         public override void SetShadingRate(in EShadingRate shadingRate, in EShadingRateCombiner shadingRateCombiner)
@@ -1458,8 +1496,9 @@ namespace Infinity.Graphics
 
         public override void EndEncoding()
         {
+#if DEBUG
             PopDebugGroup();
-
+#endif
             m_Pipeline = null;
             m_PipelineLayout = null;
 
@@ -1527,8 +1566,12 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
                     break;
 
-                default:
+                case EQueryType.TimestampTransfer:
+                case EQueryType.TimestampGenerice:
                     dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+
+                default:
                     break;
             }
         }
@@ -1548,8 +1591,12 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION, index);
                     break;
 
-                default:
+                case EQueryType.TimestampTransfer:
+                case EQueryType.TimestampGenerice:
                     dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+                    break;
+
+                default:
                     break;
             }
         }
@@ -1557,7 +1604,9 @@ namespace Infinity.Graphics
         internal override void BeginEncoding(in RHIGraphicsPassDescriptor descriptor)
         {
             m_SubPassIndex = 0;
+#if DEBUG
             PushDebugGroup(descriptor.Name);
+#endif
 
             /*if (descriptor.SubpassDescriptors != null)
             {
@@ -1575,7 +1624,7 @@ namespace Infinity.Graphics
             {
                 Dx12Texture texture = descriptor.ColorAttachments.Span[i].RenderTarget as Dx12Texture;
 #if DEBUG
-                Debug.Assert(texture != null);
+                Debug.Assert(texture != null, "ColorRenderTarget Texture is null");
 #endif
                 RHITextureViewDescriptor viewDescriptor;
                 {
@@ -1610,7 +1659,7 @@ namespace Infinity.Graphics
             {
                 Dx12Texture texture = descriptor.DepthStencilAttachment.Value.RenderTarget as Dx12Texture;
 #if DEBUG
-                Debug.Assert(texture != null);
+                Debug.Assert(texture != null, "DepthStencilTarget texture is null");
 #endif
                 RHITextureViewDescriptor viewDescriptor;
                 {
@@ -1690,7 +1739,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
                         resource = buffer.NativeResource;
                     }
@@ -1698,7 +1747,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
                         resource = texture.NativeResource;
                     }
@@ -1710,7 +1759,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
                         resource = buffer.NativeResource;
                     }
@@ -1718,7 +1767,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
                         resource = texture.NativeResource;
                     }
@@ -1732,7 +1781,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                        Debug.Assert(buffer != null);
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
 #endif
 
                         resource = buffer.NativeResource;
@@ -1743,7 +1792,7 @@ namespace Infinity.Graphics
                     {
                         Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                        Debug.Assert(texture != null);
+                        Debug.Assert(texture != null, "Barrier Texture is null");
 #endif
 
                         resource = texture.NativeResource;
@@ -1776,7 +1825,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
                             resource = buffer.NativeResource;
                         }
@@ -1784,7 +1833,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
                             resource = texture.NativeResource;
                         }
@@ -1796,7 +1845,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
                             resource = buffer.NativeResource;
                         }
@@ -1804,7 +1853,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
                             resource = texture.NativeResource;
                         }
@@ -1816,7 +1865,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
 #if DEBUG
-                            Debug.Assert(buffer != null);
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
 #endif
 
                             resource = buffer.NativeResource;
@@ -1827,7 +1876,7 @@ namespace Infinity.Graphics
                         {
                             Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
 #if DEBUG
-                            Debug.Assert(texture != null);
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
 #endif
 
                             resource = texture.NativeResource;
@@ -1925,7 +1974,7 @@ namespace Infinity.Graphics
                 if (parameter.HasValue)
                 {
 #if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
+                    Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in graphics at index {0}.", i));
 #endif
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
@@ -1934,7 +1983,7 @@ namespace Infinity.Graphics
                 if (parameter.HasValue)
                 {
 #if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
+                    Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in vertex at index {0}.", i));
 #endif
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
@@ -1943,7 +1992,7 @@ namespace Infinity.Graphics
                 if (parameter.HasValue)
                 {
 #if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
+                    Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in fragment at index {0}.", i));
 #endif
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
@@ -2022,8 +2071,9 @@ namespace Infinity.Graphics
 
         public override void EndEncoding()
         {
+#if DEBUG
             PopDebugGroup();
-
+#endif
             m_Pipeline = null;
             m_PipelineLayout = null;
 

@@ -67,9 +67,28 @@ namespace Infinity.Graphics
         public RHITexture Texture;
     }
 
+    public struct RHITimestampDescriptor
+    {
+        public RHIQuery Query;
+        public uint BeginIndex;
+        public uint EndIndex;
+    }
+
+    public struct RHIOcclusionDescriptor
+    {
+        public RHIQuery Query;
+        public uint WriteIndex;
+    }
+
+    public struct RHIStatisticsDescriptor
+    {
+        public RHIQuery Query;
+        public uint WriteIndex;
+    }
+
     public struct RHISubpassDescriptor
     {
-        public bool bUaseDepthStencil;
+        public bool bUseDepthStencil;
         public ReadOnlyMemory<byte>? InputAttachmentIndex;
         public ReadOnlyMemory<byte>? OutputAttachmentIndex;
     }
@@ -101,14 +120,37 @@ namespace Infinity.Graphics
         public RHITexture ResolveTarget;
     }
 
+    public struct RHIBlitPassDescriptor
+    {
+        public string Name;
+        public RHITimestampDescriptor? TimestampDescriptor;
+    }
+
+    public struct RHIComputePassDescriptor
+    {
+        public string Name;
+        public RHITimestampDescriptor? TimestampDescriptor;
+        public RHIStatisticsDescriptor? StatisticsDescriptor;
+    }
+
+    public struct RHIRayTracingPassDescriptor
+    {
+        public string Name;
+        public RHITimestampDescriptor? TimestampDescriptor;
+        public RHIStatisticsDescriptor? StatisticsDescriptor;
+    }
+
     public struct RHIMeshletPassDescriptor
     {
         public string Name;
+        //public uint MipIndex;
+        //public uint ArraySlice;
+        public uint SampleCount;
         public uint MultiViewCount;
-        public bool bOcclusionQueries;
-        public uint NumOcclusionQueries;
+        public RHITimestampDescriptor? TimestampDescriptor;
+        public RHIStatisticsDescriptor? StatisticsDescriptor;
         public RHITexture ShadingRateTexture;
-        //public Memory<RHISubpassDescriptor>? Subpass;
+        //public Memory<RHISubpassDescriptor>? SubpassDescriptors;
         public Memory<RHIColorAttachmentDescriptor> ColorAttachments;
         public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachment;
     }
@@ -116,11 +158,15 @@ namespace Infinity.Graphics
     public struct RHIGraphicsPassDescriptor
     {
         public string Name;
+        //public uint MipIndex;
+        //public uint ArraySlice;
+        public uint SampleCount;
         public uint MultiViewCount;
-        public bool bOcclusionQueries;
-        public uint NumOcclusionQueries;
+        public RHITimestampDescriptor? TimestampDescriptor;
+        public RHIOcclusionDescriptor? OcclusionDescriptor;
+        public RHIStatisticsDescriptor? StatisticsDescriptor;
         public RHITexture ShadingRateTexture;
-        //public Memory<RHISubpassDescriptor>? Subpass;
+        //public Memory<RHISubpassDescriptor>? SubpassDescriptors;
         public Memory<RHIColorAttachmentDescriptor> ColorAttachments;
         public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachment;
     }

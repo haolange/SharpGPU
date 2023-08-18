@@ -41,7 +41,7 @@ namespace Infinity.Graphics
 
     public enum EQueueType : byte
     {
-        Blit,
+        Transfer,
         Compute,
         Graphics,
         Pending
@@ -49,9 +49,11 @@ namespace Infinity.Graphics
 
     public enum EQueryType : byte
     {
-        Timestamp,
         Occlusion,
         BinaryOcclusion,
+        TimestampTransfer,
+        TimestampGenerice,
+        PipelineStatistics,
         Pending
     }
 

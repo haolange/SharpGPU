@@ -43,9 +43,9 @@ namespace Infinity.Graphics
             textureDesc.Dimension = Dx12Utility.ConvertToDx12TextureDimension(descriptor.Dimension);
 
             ID3D12Resource* dx12Resource;
-            bool success = SUCCEEDED(m_Dx12Device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON/*Dx12Utility.ConvertToDx12ResourceStateFormStorageMode(descriptor.StorageMode)*/, null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource));
+            HRESULT hResult = m_Dx12Device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON/*Dx12Utility.ConvertToDx12ResourceStateFormStorageMode(descriptor.StorageMode)*/, null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource);
 #if DEBUG
-            Debug.Assert(success);
+            Dx12Utility.CHECK_HR(hResult);
 #endif
             m_NativeResource = dx12Resource;
         }
