@@ -98,8 +98,8 @@ namespace Infinity.Graphics
         public uint MipIndex;
         public uint ArraySlice;
         public float4 ClearValue;
-        public ELoadOp LoadOp;
-        public EStoreOp StoreOp;
+        public ELoadAction LoadAction;
+        public EStoreAction StoreAction;
         public RHITexture RenderTarget;
         public RHITexture ResolveTarget;
     }
@@ -110,17 +110,17 @@ namespace Infinity.Graphics
         public uint ArraySlice;
         public bool DepthReadOnly;
         public float DepthClearValue;
-        public ELoadOp DepthLoadOp;
-        public EStoreOp DepthStoreOp;
+        public ELoadAction DepthLoadOp;
+        public EStoreAction DepthStoreOp;
         public bool StencilReadOnly;
         public int StencilClearValue;
-        public ELoadOp StencilLoadOp;
-        public EStoreOp StencilStoreOp;
+        public ELoadAction StencilLoadOp;
+        public EStoreAction StencilStoreOp;
         public RHITexture RenderTarget;
         public RHITexture ResolveTarget;
     }
 
-    public struct RHIBlitPassDescriptor
+    public struct RHITransferPassDescriptor
     {
         public string Name;
         public RHITimestampDescriptor? TimestampDescriptor;
@@ -143,10 +143,9 @@ namespace Infinity.Graphics
     public struct RHIMeshletPassDescriptor
     {
         public string Name;
-        //public uint MipIndex;
-        //public uint ArraySlice;
-        public uint SampleCount;
+        public uint ArrayLength;
         public uint MultiViewCount;
+        public ESampleCount SampleCount;
         public RHITimestampDescriptor? TimestampDescriptor;
         public RHIStatisticsDescriptor? StatisticsDescriptor;
         public RHITexture ShadingRateTexture;
@@ -158,10 +157,9 @@ namespace Infinity.Graphics
     public struct RHIGraphicsPassDescriptor
     {
         public string Name;
-        //public uint MipIndex;
-        //public uint ArraySlice;
-        public uint SampleCount;
+        public uint ArrayLength;
         public uint MultiViewCount;
+        public ESampleCount SampleCount;
         public RHITimestampDescriptor? TimestampDescriptor;
         public RHIOcclusionDescriptor? OcclusionDescriptor;
         public RHIStatisticsDescriptor? StatisticsDescriptor;
@@ -171,11 +169,11 @@ namespace Infinity.Graphics
         public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachment;
     }
 
-    public abstract class RHIBlitEncoder : Disposal
+    public abstract class RHITransferEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;
 
-        internal abstract void BeginEncoding(string name);
+        internal abstract void BeginEncoding(in RHITransferPassDescriptor descriptor);
         public abstract void BeginQuery(RHIQuery query, in uint index);
         public abstract void EndQuery(RHIQuery query, in uint index);
         public abstract void ResolveQuery(RHIQuery query, in uint index, in uint count);
@@ -196,7 +194,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIComputePipeline? m_Pipeline;
 
-        internal abstract void BeginEncoding(string name);
+        internal abstract void BeginEncoding(in RHIComputePassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void BeginQuery(RHIQuery query, in uint index);
@@ -218,7 +216,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIRaytracingPipeline? m_Pipeline;
 
-        internal abstract void BeginEncoding(string name);
+        internal abstract void BeginEncoding(in RHIRayTracingPassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void BeginQuery(RHIQuery query, in uint index);

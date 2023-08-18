@@ -8,7 +8,7 @@ namespace Infinity.Graphics
         public uint MipCount;
         public uint3 Extent;
         public EPixelFormat Format;
-        public ESampleCount Sample;
+        public ESampleCount SampleCount;
         public EStorageMode StorageMode;
         public ETextureUsage UsageFlag;
         public ETextureDimension Dimension;

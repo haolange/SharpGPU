@@ -16,17 +16,17 @@ namespace Infinity.Graphics
         public Dx12DescriptorInfo AttachmentInfo;
     };
 
-    internal unsafe class Dx12BlitEncoder : RHIBlitEncoder
+    internal unsafe class Dx12TransferEncoder : RHITransferEncoder
     {
-        public Dx12BlitEncoder(Dx12CommandBuffer cmdBuffer)
+        public Dx12TransferEncoder(Dx12CommandBuffer cmdBuffer)
         {
             m_CommandBuffer = cmdBuffer;
         }
 
-        internal override void BeginEncoding(string name)
+        internal override void BeginEncoding(in RHITransferPassDescriptor descriptor)
         {
 #if DEBUG
-            PushDebugGroup(name);
+            PushDebugGroup(descriptor.Name);
 #endif
         }
 
@@ -346,10 +346,10 @@ namespace Infinity.Graphics
             m_CommandBuffer = cmdBuffer;
         }
 
-        internal override void BeginEncoding(string name)
+        internal override void BeginEncoding(in RHIComputePassDescriptor descriptor)
         {
 #if DEBUG
-            PushDebugGroup(name);
+            PushDebugGroup(descriptor.Name);
 #endif
         }
 
@@ -664,10 +664,10 @@ namespace Infinity.Graphics
             m_CommandBuffer = cmdBuffer;
         }
 
-        internal override void BeginEncoding(string name)
+        internal override void BeginEncoding(in RHIRayTracingPassDescriptor descriptor)
         {
 #if DEBUG
-            PushDebugGroup(name);
+            PushDebugGroup(descriptor.Name);
 #endif
         }
 
@@ -1109,7 +1109,7 @@ namespace Infinity.Graphics
             {
                 ref RHIColorAttachmentDescriptor colorAttachmentDescriptor = ref descriptor.ColorAttachments.Span[i];
 
-                if (colorAttachmentDescriptor.LoadOp != ELoadOp.Clear)
+                if (colorAttachmentDescriptor.LoadAction != ELoadAction.Clear)
                 {
                     continue;
                 }
@@ -1122,7 +1122,7 @@ namespace Infinity.Graphics
             if (dsvHandle.HasValue)
             {
                 RHIDepthStencilAttachmentDescriptor? depthStencilAttachmentDescriptor = descriptor.DepthStencilAttachment;
-                if (depthStencilAttachmentDescriptor?.DepthLoadOp != ELoadOp.Clear && depthStencilAttachmentDescriptor?.StencilLoadOp != ELoadOp.Clear)
+                if (depthStencilAttachmentDescriptor?.DepthLoadOp != ELoadAction.Clear && depthStencilAttachmentDescriptor?.StencilLoadOp != ELoadAction.Clear)
                 {
                     return;
                 }
@@ -1698,7 +1698,7 @@ namespace Infinity.Graphics
             {
                 ref RHIColorAttachmentDescriptor colorAttachmentDescriptor = ref descriptor.ColorAttachments.Span[i];
 
-                if (colorAttachmentDescriptor.LoadOp != ELoadOp.Clear)
+                if (colorAttachmentDescriptor.LoadAction != ELoadAction.Clear)
                 {
                     continue;
                 }
@@ -1711,7 +1711,7 @@ namespace Infinity.Graphics
             if (dsvHandle.HasValue)
             {
                 RHIDepthStencilAttachmentDescriptor? depthStencilAttachmentDescriptor = descriptor.DepthStencilAttachment;
-                if (depthStencilAttachmentDescriptor?.DepthLoadOp != ELoadOp.Clear && depthStencilAttachmentDescriptor?.StencilLoadOp != ELoadOp.Clear)
+                if (depthStencilAttachmentDescriptor?.DepthLoadOp != ELoadAction.Clear && depthStencilAttachmentDescriptor?.StencilLoadOp != ELoadAction.Clear)
                 {
                     return;
                 }

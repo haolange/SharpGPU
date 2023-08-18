@@ -398,7 +398,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ELoadOp : byte
+    public enum ELoadAction : byte
     {
         Load,
         Clear,
@@ -406,7 +406,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EStoreOp : byte
+    public enum EStoreAction : byte
     {
         Store,
         Resolve,

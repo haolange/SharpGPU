@@ -1427,12 +1427,12 @@ namespace Infinity.Graphics
         {
             D3D12_CLEAR_FLAGS result = new D3D12_CLEAR_FLAGS();
 
-            if (depthStencilAttachment.DepthLoadOp == ELoadOp.Clear)
+            if (depthStencilAttachment.DepthLoadOp == ELoadAction.Clear)
             {
                 result |= D3D12_CLEAR_FLAGS.D3D12_CLEAR_FLAG_DEPTH;
             }
 
-            if (depthStencilAttachment.StencilLoadOp == ELoadOp.Clear)
+            if (depthStencilAttachment.StencilLoadOp == ELoadAction.Clear)
             {
                 result |= D3D12_CLEAR_FLAGS.D3D12_CLEAR_FLAG_STENCIL;
             }

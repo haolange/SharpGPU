@@ -26,7 +26,7 @@ namespace Infinity.Graphics
             }
         }
 
-        private Dx12BlitEncoder m_BlitEncoder;
+        private Dx12TransferEncoder m_TransferEncoder;
         private Dx12ComputeEncoder m_ComputeEncoder;
         private Dx12MeshletEncoder m_MeshletEncoder;
         private Dx12GraphicsEncoder m_GraphicsEncoder;
@@ -52,7 +52,7 @@ namespace Infinity.Graphics
 #endif
             m_NativeCommandList = commandList;
 
-            m_BlitEncoder = new Dx12BlitEncoder(this);
+            m_TransferEncoder = new Dx12TransferEncoder(this);
             m_ComputeEncoder = new Dx12ComputeEncoder(this);
             m_MeshletEncoder = new Dx12MeshletEncoder(this);
             m_GraphicsEncoder = new Dx12GraphicsEncoder(this);
@@ -65,9 +65,11 @@ namespace Infinity.Graphics
             m_NativeCommandAllocator->Reset();
             m_NativeCommandList->Reset(m_NativeCommandAllocator, null);
 
+#if DEBUG
             IntPtr namePtr = Marshal.StringToHGlobalUni(name);
             m_NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
             Marshal.FreeHGlobal(namePtr);
+#endif
 
             Dx12CommandQueue commandQueue = m_CommandQueue as Dx12CommandQueue;
             ID3D12DescriptorHeap** resourceBarriers = stackalloc ID3D12DescriptorHeap*[2];
@@ -77,22 +79,22 @@ namespace Infinity.Graphics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override RHIBlitEncoder BeginBlitEncoding(string name)
+        public override RHITransferEncoder BeginTransferEncoding(in RHITransferPassDescriptor descriptor)
         {
-            m_BlitEncoder.BeginEncoding(name);
-            return m_BlitEncoder;
+            m_TransferEncoder.BeginEncoding(descriptor);
+            return m_TransferEncoder;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void EndBlitEncoding()
+        public override void EndTransferEncoding()
         {
-            m_BlitEncoder.EndEncoding();
+            m_TransferEncoder.EndEncoding();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override RHIComputeEncoder BeginComputeEncoding(string name)
+        public override RHIComputeEncoder BeginComputeEncoding(in RHIComputePassDescriptor descriptor)
         {
-            m_ComputeEncoder.BeginEncoding(name);
+            m_ComputeEncoder.BeginEncoding(descriptor);
             return m_ComputeEncoder;
         }
 
@@ -103,9 +105,9 @@ namespace Infinity.Graphics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override RHIRaytracingEncoder BeginRaytracingEncoding(string name)
+        public override RHIRaytracingEncoder BeginRaytracingEncoding(in RHIRayTracingPassDescriptor descriptor)
         {
-            m_RaytracingEncoder.BeginEncoding(name);
+            m_RaytracingEncoder.BeginEncoding(descriptor);
             return m_RaytracingEncoder;
         }
 
@@ -149,9 +151,9 @@ namespace Infinity.Graphics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override RHIBlitEncoder GetBlitEncoder()
+        public override RHITransferEncoder GetTransferEncoder()
         {
-            return m_BlitEncoder;
+            return m_TransferEncoder;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

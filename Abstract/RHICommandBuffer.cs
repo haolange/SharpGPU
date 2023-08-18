@@ -20,18 +20,18 @@ namespace Infinity.Graphics
         }
     }
 
-    public struct RHIBlitPassScoper : IDisposable
+    public struct RHITransferPassScoper : IDisposable
     {
-        RHIBlitEncoder m_BlitEncoder;
+        RHITransferEncoder m_TransferEncoder;
 
-        internal RHIBlitPassScoper(RHIBlitEncoder blitEncoder)
+        internal RHITransferPassScoper(RHITransferEncoder transferEncoder)
         {
-            m_BlitEncoder = blitEncoder;
+            m_TransferEncoder = transferEncoder;
         }
 
         public void Dispose()
         {
-            m_BlitEncoder.EndEncoding();
+            m_TransferEncoder.EndEncoding();
         }
     }
 
@@ -95,6 +95,46 @@ namespace Infinity.Graphics
         }
     }
 
+    public static class RHICommandBufferUtility
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static RHICommandBufferScoper BeginScoped(this RHICommandBuffer cmdBuffer, string name)
+        {
+            cmdBuffer.Begin(name);
+            return new RHICommandBufferScoper(cmdBuffer);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static RHITransferPassScoper BeginScopedTransferEncoding(this RHICommandBuffer cmdBuffer, in RHITransferPassDescriptor descriptor)
+        {
+            return new RHITransferPassScoper(cmdBuffer.BeginTransferEncoding(descriptor));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static RHIComputePassScoper BeginScopedComputeEncoding(this RHICommandBuffer cmdBuffer, in RHIComputePassDescriptor descriptor)
+        {
+            return new RHIComputePassScoper(cmdBuffer.BeginComputeEncoding(descriptor));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static RHIRaytracingPassScoper BeginScopedRaytracingEncoding(this RHICommandBuffer cmdBuffer, in RHIRayTracingPassDescriptor descriptor)
+        {
+            return new RHIRaytracingPassScoper(cmdBuffer.BeginRaytracingEncoding(descriptor));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static RHIMeshletPassScoper BeginScopedMeshletEncoding(this RHICommandBuffer cmdBuffer, in RHIMeshletPassDescriptor descriptor)
+        {
+            return new RHIMeshletPassScoper(cmdBuffer.BeginMeshletEncoding(descriptor));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static RHIGraphicsPassScoper BeginScopedGraphicsEncoding(this RHICommandBuffer cmdBuffer, in RHIGraphicsPassDescriptor descriptor)
+        {
+            return new RHIGraphicsPassScoper(cmdBuffer.BeginGraphicsEncoding(descriptor));
+        }
+    }
+
     public abstract class RHICommandBuffer : Disposal
     {
         public RHICommandQueue CommandQueue
@@ -107,56 +147,19 @@ namespace Infinity.Graphics
 
         protected RHICommandQueue m_CommandQueue;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RHICommandBufferScoper BeginScoped(string name)
-        {
-            Begin(name);
-            return new RHICommandBufferScoper(this);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RHIBlitPassScoper BeginScopedBlitEncoding(string name)
-        {
-            return new RHIBlitPassScoper(BeginBlitEncoding(name));
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RHIComputePassScoper BeginScopedComputeEncoding(string name)
-        {
-            return new RHIComputePassScoper(BeginComputeEncoding(name));
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RHIRaytracingPassScoper BeginScopedRaytracingEncoding(string name)
-        {
-            return new RHIRaytracingPassScoper(BeginRaytracingEncoding(name));
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RHIMeshletPassScoper BeginScopedMeshletEncoding(in RHIMeshletPassDescriptor descriptor)
-        {
-            return new RHIMeshletPassScoper(BeginMeshletEncoding(descriptor));
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public RHIGraphicsPassScoper BeginScopedGraphicsEncoding(in RHIGraphicsPassDescriptor descriptor)
-        {
-            return new RHIGraphicsPassScoper(BeginGraphicsEncoding(descriptor));
-        }
-
         public abstract void Begin(string name);
-        public abstract RHIBlitEncoder BeginBlitEncoding(string name);
-        public abstract void EndBlitEncoding();
-        public abstract RHIComputeEncoder BeginComputeEncoding(string name);
+        public abstract RHITransferEncoder BeginTransferEncoding(in RHITransferPassDescriptor descriptor);
+        public abstract void EndTransferEncoding();
+        public abstract RHIComputeEncoder BeginComputeEncoding(in RHIComputePassDescriptor descriptor);
         public abstract void EndComputeEncoding();
-        public abstract RHIRaytracingEncoder BeginRaytracingEncoding(string name);
+        public abstract RHIRaytracingEncoder BeginRaytracingEncoding(in RHIRayTracingPassDescriptor descriptor);
         public abstract void EndRaytracingEncoding();
         public abstract RHIMeshletEncoder BeginMeshletEncoding(in RHIMeshletPassDescriptor descriptor);
         public abstract void EndMeshletEncoding();
         public abstract RHIGraphicsEncoder BeginGraphicsEncoding(in RHIGraphicsPassDescriptor descriptor);
         public abstract void EndGraphicsEncoding();
         public abstract void End();
-        public abstract RHIBlitEncoder GetBlitEncoder();
+        public abstract RHITransferEncoder GetTransferEncoder();
         public abstract RHIComputeEncoder GetComputeEncoder();
         public abstract RHIRaytracingEncoder GetRaytracingEncoder();
         public abstract RHIMeshletEncoder GetMeshletEncoder();
