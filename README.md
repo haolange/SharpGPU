@@ -528,7 +528,7 @@ computePassInfo.Name = "ComputePass";
 computePassInfo.TimestampDescriptor = nullptr;
 computePassInfo.StatisticsDescriptor = nullptr;
 
-rhi::RHIComputeEncoder* rhiComputeEncoder = rhiCmdBuffer.BeginComputeEncoding(computePassInfo);
+rhi::RHIComputeEncoder* rhiComputeEncoder = rhiCmdBuffer->BeginComputeEncoding(computePassInfo);
 rhiComputeEncoder->PushDebugGroup("GenereteIndex");
 rhiComputeEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::Undefine, ETextureState::UnorderedAccess));
 rhiComputeEncoder->SetPipelineLayout(rhiComputePipelineLayout);
@@ -560,7 +560,7 @@ graphicsPassInfo.ShadingRateTexture = nullptr;
 graphicsPassInfo.ColorAttachments = colorAttachmentInfos;
 graphicsPassInfo.DepthStencilAttachment = nullptr;
 
-rhi::RHIGraphicsEncoder* rhiGraphicsEncoder = rhiCmdBuffer.BeginGraphicsEncoding(graphicsPassInfo);
+rhi::RHIGraphicsEncoder* rhiGraphicsEncoder = rhiCmdBuffer->BeginGraphicsEncoding(graphicsPassInfo);
 rhiGraphicsEncoder->SetScissor(Rect(0, 0, screenSize.x, screenSize.y));
 rhiGraphicsEncoder->SetViewport(Viewport(0, 0, screenSize.x, screenSize.y, 0, 1));
 rhiGraphicsEncoder->SetBlendFactor(1);
