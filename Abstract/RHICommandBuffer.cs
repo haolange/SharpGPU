@@ -31,7 +31,7 @@ namespace Infinity.Graphics
 
         public void Dispose()
         {
-            m_TransferEncoder.EndEncoding();
+            m_TransferEncoder.EndPass();
         }
     }
 
@@ -46,7 +46,7 @@ namespace Infinity.Graphics
 
         public void Dispose()
         {
-            m_ComputeEncoder.EndEncoding();
+            m_ComputeEncoder.EndPass();
         }
     }
 
@@ -61,7 +61,7 @@ namespace Infinity.Graphics
 
         public void Dispose()
         {
-            m_MeshletEncoder.EndEncoding();
+            m_MeshletEncoder.EndPass();
         }
     }
 
@@ -76,7 +76,7 @@ namespace Infinity.Graphics
 
         public void Dispose()
         {
-            m_GraphicsEncoder.EndEncoding();
+            m_GraphicsEncoder.EndPass();
         }
     }
 
@@ -91,7 +91,7 @@ namespace Infinity.Graphics
 
         public void Dispose()
         {
-            m_RaytracingEncoder.EndEncoding();
+            m_RaytracingEncoder.EndPass();
         }
     }
 
@@ -105,33 +105,33 @@ namespace Infinity.Graphics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static RHITransferPassScoper BeginScopedTransferEncoding(this RHICommandBuffer cmdBuffer, in RHITransferPassDescriptor descriptor)
+        public static RHITransferPassScoper BeginScopedTransferPass(this RHICommandBuffer cmdBuffer, in RHITransferPassDescriptor descriptor)
         {
-            return new RHITransferPassScoper(cmdBuffer.BeginTransferEncoding(descriptor));
+            return new RHITransferPassScoper(cmdBuffer.BeginTransferPass(descriptor));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static RHIComputePassScoper BeginScopedComputeEncoding(this RHICommandBuffer cmdBuffer, in RHIComputePassDescriptor descriptor)
+        public static RHIComputePassScoper BeginScopedComputePass(this RHICommandBuffer cmdBuffer, in RHIComputePassDescriptor descriptor)
         {
-            return new RHIComputePassScoper(cmdBuffer.BeginComputeEncoding(descriptor));
+            return new RHIComputePassScoper(cmdBuffer.BeginComputePass(descriptor));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static RHIRaytracingPassScoper BeginScopedRaytracingEncoding(this RHICommandBuffer cmdBuffer, in RHIRayTracingPassDescriptor descriptor)
+        public static RHIRaytracingPassScoper BeginScopedRaytracingPass(this RHICommandBuffer cmdBuffer, in RHIRayTracingPassDescriptor descriptor)
         {
-            return new RHIRaytracingPassScoper(cmdBuffer.BeginRaytracingEncoding(descriptor));
+            return new RHIRaytracingPassScoper(cmdBuffer.BeginRaytracingPass(descriptor));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static RHIMeshletPassScoper BeginScopedMeshletEncoding(this RHICommandBuffer cmdBuffer, in RHIMeshletPassDescriptor descriptor)
+        public static RHIMeshletPassScoper BeginScopedMeshletPass(this RHICommandBuffer cmdBuffer, in RHIMeshletPassDescriptor descriptor)
         {
-            return new RHIMeshletPassScoper(cmdBuffer.BeginMeshletEncoding(descriptor));
+            return new RHIMeshletPassScoper(cmdBuffer.BeginMeshletPass(descriptor));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static RHIGraphicsPassScoper BeginScopedGraphicsEncoding(this RHICommandBuffer cmdBuffer, in RHIGraphicsPassDescriptor descriptor)
+        public static RHIGraphicsPassScoper BeginScopedGraphicsPass(this RHICommandBuffer cmdBuffer, in RHIGraphicsPassDescriptor descriptor)
         {
-            return new RHIGraphicsPassScoper(cmdBuffer.BeginGraphicsEncoding(descriptor));
+            return new RHIGraphicsPassScoper(cmdBuffer.BeginGraphicsPass(descriptor));
         }
     }
 
@@ -148,16 +148,16 @@ namespace Infinity.Graphics
         protected RHICommandQueue m_CommandQueue;
 
         public abstract void Begin(string name);
-        public abstract RHITransferEncoder BeginTransferEncoding(in RHITransferPassDescriptor descriptor);
-        public abstract void EndTransferEncoding();
-        public abstract RHIComputeEncoder BeginComputeEncoding(in RHIComputePassDescriptor descriptor);
-        public abstract void EndComputeEncoding();
-        public abstract RHIRaytracingEncoder BeginRaytracingEncoding(in RHIRayTracingPassDescriptor descriptor);
-        public abstract void EndRaytracingEncoding();
-        public abstract RHIMeshletEncoder BeginMeshletEncoding(in RHIMeshletPassDescriptor descriptor);
-        public abstract void EndMeshletEncoding();
-        public abstract RHIGraphicsEncoder BeginGraphicsEncoding(in RHIGraphicsPassDescriptor descriptor);
-        public abstract void EndGraphicsEncoding();
+        public abstract RHITransferEncoder BeginTransferPass(in RHITransferPassDescriptor descriptor);
+        public abstract void EndTransferPass();
+        public abstract RHIComputeEncoder BeginComputePass(in RHIComputePassDescriptor descriptor);
+        public abstract void EndComputePass();
+        public abstract RHIRaytracingEncoder BeginRaytracingPass(in RHIRayTracingPassDescriptor descriptor);
+        public abstract void EndRaytracingPass();
+        public abstract RHIMeshletEncoder BeginMeshletPass(in RHIMeshletPassDescriptor descriptor);
+        public abstract void EndMeshletPass();
+        public abstract RHIGraphicsEncoder BeginGraphicsPass(in RHIGraphicsPassDescriptor descriptor);
+        public abstract void EndGraphicsPass();
         public abstract void End();
         public abstract RHITransferEncoder GetTransferEncoder();
         public abstract RHIComputeEncoder GetComputeEncoder();

@@ -498,14 +498,14 @@ rhi::RHIGraphicsPassDescriptor transferPassInfo;
 transferPassInfo.Name = "Upload VertexStream";
 transferPassInfo.TimestampDescriptor = nullptr;
 
-rhi::RHITransferEncoder* rhiTransferEncoder = rhiCmdBuffer.BeginTransferEncoding(transferPassInfo);
+rhi::RHITransferEncoder* rhiTransferEncoder = rhiCmdBuffer.BeginTransferPass(transferPassInfo);
 rhiTransferEncoder->ResourceBarrier(RHIBarrier::Transition(rhiIndexBufferGPU, EOwnerState::GfxToGfx, ETextureState::Undefine, ETextureState::CopyDst));
 rhiTransferEncoder->ResourceBarrier(RHIBarrier::Transition(rhiVertexBufferGPU, EOwnerState::GfxToGfx, ETextureState::Undefine, ETextureState::CopyDst));
 rhiTransferEncoder->CopyBufferToBuffer(rhiIndexBufferCPU, 0, rhiIndexBufferGPU, 0, indexBufferInfo.ByteSize);
 rhiTransferEncoder->CopyBufferToBuffer(rhiVertexBufferCPU, 0, rhiVertexBufferGPU, 0, vertexBufferInfo.ByteSize);
 rhiTransferEncoder->ResourceBarrier(RHIBarrier::Transition(rhiIndexBufferGPU, EOwnerState::GfxToGfx, ETextureState::CopyDst, ETextureState::IndexBuffer));
 rhiTransferEncoder->ResourceBarrier(RHIBarrier::Transition(rhiVertexBufferGPU, EOwnerState::GfxToGfx, ETextureState::CopyDst, ETextureState::VertexBuffer));
-rhiTransferEncoder->EndEncoding();
+rhiTransferEncoder->EndPass();
 
 rhiCmdBuffer.End("FrameInit");
 rhiGraphicsQueue->Submit(rhiCmdBuffer, 1, rhiFence, nullptr, 0, nullptr, 0); //cmdBuffers, cmdBufferCount, fence, waitSemaphores, waitSemaphoreCount, signalSemaphores, signalSemaphoreCount
@@ -528,7 +528,7 @@ computePassInfo.Name = "ComputePass";
 computePassInfo.TimestampDescriptor = nullptr;
 computePassInfo.StatisticsDescriptor = nullptr;
 
-rhi::RHIComputeEncoder* rhiComputeEncoder = rhiCmdBuffer->BeginComputeEncoding(computePassInfo);
+rhi::RHIComputeEncoder* rhiComputeEncoder = rhiCmdBuffer->BeginComputePass(computePassInfo);
 rhiComputeEncoder->PushDebugGroup("GenereteIndex");
 rhiComputeEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::Undefine, ETextureState::UnorderedAccess));
 rhiComputeEncoder->SetPipelineLayout(rhiComputePipelineLayout);
@@ -536,7 +536,7 @@ rhiComputeEncoder->SetPipeline(rhiComputePipeline);
 rhiComputeEncoder->SetBindTable(rhiComputeBindTable, 0);
 rhiComputeEncoder->Dispatch(math::ceil(screenSize.x / 8), math::ceil(screenSize.y / 8), 1);
 rhiComputeEncoder->PopDebugGroup();
-rhiComputeEncoder->EndEncoding();
+rhiComputeEncoder->EndPass();
 
 //run graphics pass
 rhi::RHIColorAttachmentDescriptor colorAttachmentInfos[1];
@@ -560,7 +560,7 @@ graphicsPassInfo.ShadingRateTexture = nullptr;
 graphicsPassInfo.ColorAttachments = colorAttachmentInfos;
 graphicsPassInfo.DepthStencilAttachment = nullptr;
 
-rhi::RHIGraphicsEncoder* rhiGraphicsEncoder = rhiCmdBuffer->BeginGraphicsEncoding(graphicsPassInfo);
+rhi::RHIGraphicsEncoder* rhiGraphicsEncoder = rhiCmdBuffer->BeginGraphicsPass(graphicsPassInfo);
 rhiGraphicsEncoder->SetScissor(Rect(0, 0, screenSize.x, screenSize.y));
 rhiGraphicsEncoder->SetViewport(Viewport(0, 0, screenSize.x, screenSize.y, 0, 1));
 rhiGraphicsEncoder->SetBlendFactor(1);
@@ -577,7 +577,7 @@ rhiGraphicsEncoder->DrawIndexed(3, 1, 0, 0, 0);
 rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::ShaderResource, ETextureState::Undefine));
 rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), EOwnerState::GfxToGfx, ETextureState::RenderTarget, ETextureState::Present));
 rhiGraphicsEncoder->PopDebugGroup();
-rhiGraphicsEncoder->EndEncoding();
+rhiGraphicsEncoder->EndPass();
 
 rhiCmdBuffer.End("FrameRendering");
 rhiGraphicsQueue->Submit(rhiCmdBuffer, 1, rhiFence, nullptr, 0, nullptr, 0); //cmdBuffers, cmdBufferCount, fence, waitSemaphores, waitSemaphoreCount, signalSemaphores, signalSemaphoreCount

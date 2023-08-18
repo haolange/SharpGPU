@@ -173,7 +173,7 @@ namespace Infinity.Graphics
     {
         protected RHICommandBuffer? m_CommandBuffer;
 
-        internal abstract void BeginEncoding(in RHITransferPassDescriptor descriptor);
+        internal abstract void BeginPass(in RHITransferPassDescriptor descriptor);
         public abstract void BeginQuery(RHIQuery query, in uint index);
         public abstract void EndQuery(RHIQuery query, in uint index);
         public abstract void ResolveQuery(RHIQuery query, in uint index, in uint count);
@@ -185,7 +185,7 @@ namespace Infinity.Graphics
         public abstract void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size);
         public abstract void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size);
         public abstract void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size);
-        public abstract void EndEncoding();
+        public abstract void EndPass();
     }
 
     public abstract class RHIComputeEncoder : Disposal
@@ -194,7 +194,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIComputePipeline? m_Pipeline;
 
-        internal abstract void BeginEncoding(in RHIComputePassDescriptor descriptor);
+        internal abstract void BeginPass(in RHIComputePassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void BeginQuery(RHIQuery query, in uint index);
@@ -207,7 +207,7 @@ namespace Infinity.Graphics
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
         // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
-        public abstract void EndEncoding();
+        public abstract void EndPass();
     }
 
     public abstract class RHIRaytracingEncoder : Disposal
@@ -216,7 +216,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIRaytracingPipeline? m_Pipeline;
 
-        internal abstract void BeginEncoding(in RHIRayTracingPassDescriptor descriptor);
+        internal abstract void BeginPass(in RHIRayTracingPassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void BeginQuery(RHIQuery query, in uint index);
@@ -231,7 +231,7 @@ namespace Infinity.Graphics
         public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable);
         // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
-        public abstract void EndEncoding();
+        public abstract void EndPass();
     }
     
     public abstract class RHIMeshletEncoder : Disposal
@@ -240,7 +240,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIMeshletPipeline? m_Pipeline;
 
-        internal abstract void BeginEncoding(in RHIMeshletPassDescriptor descriptor);
+        internal abstract void BeginPass(in RHIMeshletPassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void BeginQuery(RHIQuery query, in uint index);
@@ -261,7 +261,7 @@ namespace Infinity.Graphics
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
         // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
-        public abstract void EndEncoding();
+        public abstract void EndPass();
     }
 
     public abstract class RHIGraphicsEncoder : Disposal
@@ -270,7 +270,7 @@ namespace Infinity.Graphics
         protected RHIPipelineLayout? m_PipelineLayout;
         protected RHIGraphicsPipeline? m_Pipeline;
 
-        internal abstract void BeginEncoding(in RHIGraphicsPassDescriptor descriptor);
+        internal abstract void BeginPass(in RHIGraphicsPassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void BeginQuery(RHIQuery query, in uint index);
@@ -295,6 +295,6 @@ namespace Infinity.Graphics
         public abstract void DrawIndirect(RHIBuffer argsBuffer, in uint offset);
         public abstract void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset);
         // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
-        public abstract void EndEncoding();
+        public abstract void EndPass();
     }
 }
