@@ -77,7 +77,6 @@ namespace Infinity.Graphics
     public struct RHIOcclusionDescriptor
     {
         public RHIQuery Query;
-        public uint WriteIndex;
     }
 
     public struct RHIStatisticsDescriptor
@@ -123,21 +122,21 @@ namespace Infinity.Graphics
     public struct RHITransferPassDescriptor
     {
         public string Name;
-        public RHITimestampDescriptor? TimestampDescriptor;
+        public RHITimestampDescriptor? Timestamp;
     }
 
     public struct RHIComputePassDescriptor
     {
         public string Name;
-        public RHITimestampDescriptor? TimestampDescriptor;
-        public RHIStatisticsDescriptor? StatisticsDescriptor;
+        public RHITimestampDescriptor? Timestamp;
+        public RHIStatisticsDescriptor? Statistics;
     }
 
     public struct RHIRayTracingPassDescriptor
     {
         public string Name;
-        public RHITimestampDescriptor? TimestampDescriptor;
-        public RHIStatisticsDescriptor? StatisticsDescriptor;
+        public RHITimestampDescriptor? Timestamp;
+        public RHIStatisticsDescriptor? Statistics;
     }
 
     public struct RHIMeshletPassDescriptor
@@ -146,8 +145,8 @@ namespace Infinity.Graphics
         public uint ArrayLength;
         public uint MultiViewCount;
         public ESampleCount SampleCount;
-        public RHITimestampDescriptor? TimestampDescriptor;
-        public RHIStatisticsDescriptor? StatisticsDescriptor;
+        public RHITimestampDescriptor? Timestamp;
+        public RHIStatisticsDescriptor? Statistics;
         public RHITexture ShadingRateTexture;
         //public Memory<RHISubpassDescriptor>? SubpassDescriptors;
         public Memory<RHIColorAttachmentDescriptor> ColorAttachments;
@@ -160,9 +159,9 @@ namespace Infinity.Graphics
         public uint ArrayLength;
         public uint MultiViewCount;
         public ESampleCount SampleCount;
-        public RHITimestampDescriptor? TimestampDescriptor;
-        public RHIOcclusionDescriptor? OcclusionDescriptor;
-        public RHIStatisticsDescriptor? StatisticsDescriptor;
+        public RHITimestampDescriptor? Timestamp;
+        public RHIOcclusionDescriptor? Occlusion;
+        public RHIStatisticsDescriptor? Statistics;
         public RHITexture ShadingRateTexture;
         //public Memory<RHISubpassDescriptor>? SubpassDescriptors;
         public Memory<RHIColorAttachmentDescriptor> ColorAttachments;
