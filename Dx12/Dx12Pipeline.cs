@@ -9,7 +9,7 @@ using static TerraFX.Interop.Windows.Windows;
 namespace Infinity.Graphics
 {
 #pragma warning disable CS0169, CS0649, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
-    internal unsafe class Dx12ComputePipeline : RHIComputePipeline
+    internal unsafe class Dx12ComputePipelineState : RHIComputePipelineState
     {
         public ID3D12PipelineState* NativePipelineState
         {
@@ -21,7 +21,7 @@ namespace Infinity.Graphics
 
         private ID3D12PipelineState* m_NativePipelineState;
 
-        public Dx12ComputePipeline(Dx12Device device, in RHIComputePipelineDescriptor descriptor)
+        public Dx12ComputePipelineState(Dx12Device device, in RHIComputePipelineStateDescriptor descriptor)
         {
             m_Descriptor = descriptor;
             Dx12Function computeFunction = descriptor.ComputeFunction as Dx12Function;
@@ -47,7 +47,7 @@ namespace Infinity.Graphics
         }
     }
 
-    internal unsafe class Dx12RaytracingPipeline : RHIRaytracingPipeline
+    internal unsafe class Dx12RaytracingPipelineState : RHIRaytracingPipelineState
     {
         public uint MaxLocalRootParameters
         {
@@ -67,7 +67,7 @@ namespace Infinity.Graphics
         private uint m_MaxLocalRootParameters;
         private ID3D12StateObject* m_NativePipelineState;
 
-        public Dx12RaytracingPipeline(Dx12Device device, in RHIRaytracingPipelineDescriptor descriptor)
+        public Dx12RaytracingPipelineState(Dx12Device device, in RHIRaytracingPipelineStateDescriptor descriptor)
         {
             m_Descriptor = descriptor;
 
@@ -323,7 +323,7 @@ namespace Infinity.Graphics
         }
     }
 
-    internal unsafe class Dx12MeshletPipeline : RHIMeshletPipeline
+    internal unsafe class Dx12MeshletPipelineState : RHIMeshletPipelineState
     {
         public int StencilRef
         {
@@ -351,7 +351,7 @@ namespace Infinity.Graphics
         private ID3D12PipelineState* m_NativePipelineState;
         private D3D_PRIMITIVE_TOPOLOGY m_PrimitiveTopology;
 
-        public Dx12MeshletPipeline(Dx12Device device, in RHIMeshletPipelineDescriptor descriptor)
+        public Dx12MeshletPipelineState(Dx12Device device, in RHIMeshletPipelineStateDescriptor descriptor)
         {
             m_Descriptor = descriptor;
         }
@@ -362,7 +362,7 @@ namespace Infinity.Graphics
         }
     }
 
-    internal unsafe class Dx12GraphicsPipeline : RHIGraphicsPipeline
+    internal unsafe class Dx12GraphicsPipelineState : RHIGraphicsPipelineState
     {
         public uint[] VertexStrides
         {
@@ -390,7 +390,7 @@ namespace Infinity.Graphics
         private ID3D12PipelineState* m_NativePipelineState;
         private D3D_PRIMITIVE_TOPOLOGY m_PrimitiveTopology;
 
-        public Dx12GraphicsPipeline(Dx12Device device, in RHIGraphicsPipelineDescriptor descriptor)
+        public Dx12GraphicsPipelineState(Dx12Device device, in RHIGraphicsPipelineStateDescriptor descriptor)
         {
             m_Descriptor = descriptor;
             Dx12Function vertexFunction = descriptor.VertexFunction as Dx12Function;

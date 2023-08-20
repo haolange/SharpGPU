@@ -103,7 +103,7 @@ namespace Infinity.Graphics
         public RHIDepthStencilStateDescriptor DepthStencilState;
     }
 
-    public struct RHIComputePipelineDescriptor
+    public struct RHIComputePipelineStateDescriptor
     {
         public uint3 ThreadSize;
         public RHIFunction ComputeFunction;
@@ -127,7 +127,7 @@ namespace Infinity.Graphics
         internal RHIPipelineLayout PipelineLayout;
     }
 
-    public struct RHIRaytracingPipelineDescriptor
+    public struct RHIRaytracingPipelineStateDescriptor
     {
         public uint MaxPayloadSize;
         public uint MaxAttributeSize;
@@ -139,7 +139,7 @@ namespace Infinity.Graphics
         public Memory<RHIRayGeneralGroupDescriptor> RayMissGroups;
     }
 
-    public struct RHIMeshletPipelineDescriptor
+    public struct RHIMeshletPipelineStateDescriptor
     {
         public RHIFunction TaskFunction;
         public RHIFunction MeshFunction;
@@ -150,7 +150,7 @@ namespace Infinity.Graphics
         public RHIRenderStateDescriptor RenderState;
     }
 
-    public struct RHIGraphicsPipelineDescriptor
+    public struct RHIGraphicsPipelineStateDescriptor
     {
         public RHIFunction VertexFunction;
         public RHIFunction FragmentFunction;
@@ -161,31 +161,31 @@ namespace Infinity.Graphics
         public Memory<RHIVertexLayoutDescriptor> VertexLayouts;
     }
 
-    public abstract class RHIComputePipeline : Disposal
+    public abstract class RHIComputePipelineState : Disposal
     {
-        public RHIComputePipelineDescriptor Descriptor => m_Descriptor;
+        public RHIComputePipelineStateDescriptor Descriptor => m_Descriptor;
 
-        protected RHIComputePipelineDescriptor m_Descriptor;
+        protected RHIComputePipelineStateDescriptor m_Descriptor;
     }
 
-    public abstract class RHIRaytracingPipeline : Disposal
+    public abstract class RHIRaytracingPipelineState : Disposal
     {
-        public RHIRaytracingPipelineDescriptor Descriptor => m_Descriptor;
+        public RHIRaytracingPipelineStateDescriptor Descriptor => m_Descriptor;
 
-        protected RHIRaytracingPipelineDescriptor m_Descriptor;
+        protected RHIRaytracingPipelineStateDescriptor m_Descriptor;
     }
 
-    public abstract class RHIMeshletPipeline : Disposal
+    public abstract class RHIMeshletPipelineState : Disposal
     {
-        public RHIMeshletPipelineDescriptor Descriptor => m_Descriptor;
+        public RHIMeshletPipelineStateDescriptor Descriptor => m_Descriptor;
 
-        protected RHIMeshletPipelineDescriptor m_Descriptor;
+        protected RHIMeshletPipelineStateDescriptor m_Descriptor;
     }
 
-    public abstract class RHIGraphicsPipeline : Disposal
+    public abstract class RHIGraphicsPipelineState : Disposal
     {
-        public RHIGraphicsPipelineDescriptor Descriptor => m_Descriptor;
+        public RHIGraphicsPipelineStateDescriptor Descriptor => m_Descriptor;
 
-        protected RHIGraphicsPipelineDescriptor m_Descriptor;
+        protected RHIGraphicsPipelineStateDescriptor m_Descriptor;
     }
 }

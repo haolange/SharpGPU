@@ -173,8 +173,7 @@ namespace Infinity.Graphics
         protected RHICommandBuffer? m_CommandBuffer;
 
         internal abstract void BeginPass(in RHITransferPassDescriptor descriptor);
-        public abstract void BeginQuery(RHIQuery query, in uint index);
-        public abstract void EndQuery(RHIQuery query, in uint index);
+        public abstract void WriteTimestampQuery(RHIQuery query, in uint index);
         public abstract void ResolveQuery(RHIQuery query, in uint index, in uint count);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
@@ -190,18 +189,18 @@ namespace Infinity.Graphics
     public abstract class RHIComputeEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;
-        protected RHIPipelineLayout? m_PipelineLayout;
-        protected RHIComputePipeline? m_Pipeline;
+        protected RHIComputePipelineState? m_PipelineState;
 
         internal abstract void BeginPass(in RHIComputePassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        public abstract void BeginQuery(RHIQuery query, in uint index);
-        public abstract void EndQuery(RHIQuery query, in uint index);
+        public abstract void WriteTimestampQuery(RHIQuery query, in uint index);
+        public abstract void BeginStatisticsQuery(RHIQuery query, in uint index);
+        public abstract void EndStatisticsQuery(RHIQuery query, in uint index);
         public abstract void ResourceBarrier(in RHIBarrier barrier);
         public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipeline(RHIComputePipeline pipeline);
+        public abstract void SetPipelineState(RHIComputePipelineState pipelineState);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
@@ -212,18 +211,18 @@ namespace Infinity.Graphics
     public abstract class RHIRaytracingEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;
-        protected RHIPipelineLayout? m_PipelineLayout;
-        protected RHIRaytracingPipeline? m_Pipeline;
+        protected RHIRaytracingPipelineState? m_PipelineState;
 
         internal abstract void BeginPass(in RHIRayTracingPassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        public abstract void BeginQuery(RHIQuery query, in uint index);
-        public abstract void EndQuery(RHIQuery query, in uint index);
+        public abstract void WriteTimestampQuery(RHIQuery query, in uint index);
+        public abstract void BeginStatisticsQuery(RHIQuery query, in uint index);
+        public abstract void EndStatisticsQuery(RHIQuery query, in uint index);
         public abstract void ResourceBarrier(in RHIBarrier barrier);
         public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipeline(RHIRaytracingPipeline pipeline);
+        public abstract void SetPipelineState(RHIRaytracingPipelineState pipelineState);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
         public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct tlas);
         public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct blas);
@@ -236,14 +235,14 @@ namespace Infinity.Graphics
     public abstract class RHIMeshletEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;
-        protected RHIPipelineLayout? m_PipelineLayout;
-        protected RHIMeshletPipeline? m_Pipeline;
+        protected RHIMeshletPipelineState? m_PipelineState;
 
         internal abstract void BeginPass(in RHIMeshletPassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        public abstract void BeginQuery(RHIQuery query, in uint index);
-        public abstract void EndQuery(RHIQuery query, in uint index);
+        public abstract void WriteTimestampQuery(RHIQuery query, in uint index);
+        public abstract void BeginStatisticsQuery(RHIQuery query, in uint index);
+        public abstract void EndStatisticsQuery(RHIQuery query, in uint index);
         public abstract void ResourceBarrier(in RHIBarrier barrier);
         public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetScissor(in Rect rect);
@@ -254,7 +253,7 @@ namespace Infinity.Graphics
         public abstract void SetBlendFactor(in float4 value);
         //public abstract void NextSubpass();
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipeline(RHIMeshletPipeline pipeline);
+        public abstract void SetPipelineState(RHIMeshletPipelineState pipelineState);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
         public abstract void SetShadingRate(in EShadingRate shadingRate, in EShadingRateCombiner shadingRateCombiner);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
@@ -266,14 +265,16 @@ namespace Infinity.Graphics
     public abstract class RHIGraphicsEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;
-        protected RHIPipelineLayout? m_PipelineLayout;
-        protected RHIGraphicsPipeline? m_Pipeline;
+        protected RHIGraphicsPipelineState? m_PipelineState;
 
         internal abstract void BeginPass(in RHIGraphicsPassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
-        public abstract void BeginQuery(RHIQuery query, in uint index);
-        public abstract void EndQuery(RHIQuery query, in uint index);
+        public abstract void WriteTimestampQuery(RHIQuery query, in uint index);
+        public abstract void BeginOcclusionQuery(in uint index);
+        public abstract void EndOcclusionQuery(in uint index);
+        public abstract void BeginStatisticsQuery(RHIQuery query, in uint index);
+        public abstract void EndStatisticsQuery(RHIQuery query, in uint index);
         public abstract void ResourceBarrier(in RHIBarrier barrier);
         public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetScissor(in Rect rect);
@@ -284,7 +285,7 @@ namespace Infinity.Graphics
         public abstract void SetBlendFactor(in float4 value);
         //public abstract void NextSubpass();
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipeline(RHIGraphicsPipeline pipeline);
+        public abstract void SetPipelineState(RHIGraphicsPipelineState pipelineState);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
         public abstract void SetIndexBuffer(RHIBuffer buffer, in uint offset, in EIndexFormat format);
         public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset);

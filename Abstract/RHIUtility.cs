@@ -50,10 +50,9 @@ namespace Infinity.Graphics
     public enum EQueryType : byte
     {
         Occlusion,
-        BinaryOcclusion,
+        Statistics,
         TimestampTransfer,
         TimestampGenerice,
-        PipelineStatistics,
         Pending
     }
 

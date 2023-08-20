@@ -102,9 +102,6 @@ namespace Infinity.Graphics
                 case EQueryType.Occlusion:
                     return D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION;
 
-                case EQueryType.BinaryOcclusion:
-                    return D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_BINARY_OCCLUSION;
-
                 case EQueryType.TimestampTransfer:
                 case EQueryType.TimestampGenerice:
                     return D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP;
@@ -119,9 +116,6 @@ namespace Infinity.Graphics
             switch (queryType)
             {
                 case EQueryType.Occlusion:
-                    return D3D12_QUERY_HEAP_TYPE.D3D12_QUERY_HEAP_TYPE_OCCLUSION;
-
-                case EQueryType.BinaryOcclusion:
                     return D3D12_QUERY_HEAP_TYPE.D3D12_QUERY_HEAP_TYPE_OCCLUSION;
 
                 case EQueryType.TimestampTransfer:

@@ -112,22 +112,22 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor)
+        public override RHIComputePipelineState CreateComputePipelineState(in RHIComputePipelineStateDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
 
-        public override RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor)
+        public override RHIRaytracingPipelineState CreateRaytracingPipelineState(in RHIRaytracingPipelineStateDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
 
-        public override RHIMeshletPipeline CreateMeshletPipeline(in RHIMeshletPipelineDescriptor descriptor)
+        public override RHIMeshletPipelineState CreateMeshletPipelineState(in RHIMeshletPipelineStateDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
 
-        public override RHIGraphicsPipeline CreateGraphicsPipeline(in RHIGraphicsPipelineDescriptor descriptor)
+        public override RHIGraphicsPipelineState CreateGraphicsPipelineState(in RHIGraphicsPipelineStateDescriptor descriptor)
         {
             throw new NotImplementedException();
         }

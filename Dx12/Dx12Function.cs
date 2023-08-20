@@ -135,11 +135,11 @@ namespace Infinity.Graphics
             m_HitGroupPrograms.Clear();
         }
 
-        public override void Generate(RHIRaytracingPipeline rayTracingPipeline)
+        public override void Generate(RHIRaytracingPipelineState pipelineState)
         {
-            Dx12RaytracingPipeline dx12RaytracingPipeline = rayTracingPipeline as Dx12RaytracingPipeline;
+            Dx12RaytracingPipelineState dx12RaytracingPipelineState = pipelineState as Dx12RaytracingPipelineState;
 
-            m_EntryStride = (uint)(D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + (sizeof(ulong) * (int)dx12RaytracingPipeline.MaxLocalRootParameters));
+            m_EntryStride = (uint)(D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + (sizeof(ulong) * (int)dx12RaytracingPipelineState.MaxLocalRootParameters));
             m_ProgramCount = (uint)(1 + m_MissPrograms.length + m_HitGroupPrograms.length);
 
             D3D12_RESOURCE_DESC resourceDesc = D3D12_RESOURCE_DESC.Buffer(m_EntryStride * m_ProgramCount, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE);
@@ -153,13 +153,13 @@ namespace Infinity.Graphics
             m_NativeResource = dx12Resource;
 
             ID3D12StateObjectProperties* objectProperties;
-            hResult = dx12RaytracingPipeline.NativePipelineState->QueryInterface(__uuidof<ID3D12StateObjectProperties>(), (void**)&objectProperties);
+            hResult = dx12RaytracingPipelineState.NativePipelineState->QueryInterface(__uuidof<ID3D12StateObjectProperties>(), (void**)&objectProperties);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
         }
 
-        public override void Update(RHIRaytracingPipeline rayTracingPipeline)
+        public override void Update(RHIRaytracingPipelineState pipelineState)
         {
             throw new NotImplementedException("To Do .....");
         }

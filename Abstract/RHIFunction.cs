@@ -57,7 +57,7 @@ namespace Infinity.Graphics
         public abstract void SetHitGroupProgram(in int index, string exportName, RHIBindTable[]? bindTables = null);
         public abstract void ClearMissPrograms();
         public abstract void ClearHitGroupPrograms();
-        public abstract void Generate(RHIRaytracingPipeline rayTracingPipeline);
-        public abstract void Update(RHIRaytracingPipeline rayTracingPipeline);
+        public abstract void Generate(RHIRaytracingPipelineState pipelineState);
+        public abstract void Update(RHIRaytracingPipelineState pipelineState);
     }
 }

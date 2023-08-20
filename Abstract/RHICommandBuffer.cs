@@ -145,6 +145,14 @@ namespace Infinity.Graphics
             }
         }
 
+        internal uint OcclusionQueryIndex;
+        internal uint TimestampQueryIndex;
+        internal uint StatisticsQueryIndex;
+        internal RHIQuery? OcclusionQueryHeap;
+        internal RHIQuery? TimestampQueryHeap;
+        internal RHIQuery? StatisticsQueryHeap;
+        internal RHIPipelineLayout? PipelineLayout;
+
         protected RHICommandQueue m_CommandQueue;
 
         public abstract void Begin(string name);
