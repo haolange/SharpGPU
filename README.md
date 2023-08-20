@@ -223,7 +223,7 @@ rhi::RHIBindTable* rhiComputeBindTable= rhiDevice->CreateBindTable(computeBindTa
 
 
 ### Creating the Compute Pass
-Create a compute pipeline for compute pass
+Create a compute pipelineState for compute pass
 
 ```c++
 #include <rhi/d3d12.h>
@@ -244,17 +244,17 @@ computePipelienLayoutInfo.BindTableLayouts = rhiComputeBindTableLayout;
 computePipelienLayoutInfo.NumBindTableLayouts = 1;
 rhi::RHIPipelineLayout* rhiComputePipelineLayout = rhiDevice->CreatePipelineLayout(computePipelienLayoutInfo);
 
-rhi::RHIComputePipelineDescriptor computePipelineInfo;
-computePipelineInfo.ThreadSize = uint3(8, 8, 1);
-computePipelineInfo.ComputeFunction = rhiComputeFunction;
-computePipelineInfo.PipelineLayout = rhiComputePipelineLayout;
-rhi::RHIPipeline* rhiComputePipeline = rhiDevice->CreateComputePipeline(computePipelineInfo);
+rhi::RHIComputePipelineStateDescriptor computePipelineStateInfo;
+computePipelineStateInfo.ThreadSize = uint3(8, 8, 1);
+computePipelineStateInfo.ComputeFunction = rhiComputeFunction;
+computePipelineStateInfo.PipelineLayout = rhiComputePipelineLayout;
+rhi::RHIPipelineState* rhiComputePipelineState = rhiDevice->CreateComputePipelineState(computePipelineStateInfo);
 ```
 
 
 
 ### Creating the UniformBuffer
-Create a uniform buffer for any pipeline to read constant data
+Create a uniform buffer for any pipelineState to read constant data
 
 ```c++
 #include <rhi/d3d12.h>
@@ -362,7 +362,7 @@ rhi::RHIBindTable* rhiGraphicsBindTable = rhiDevice->CreateBindTable(graphicsBin
 
 
 ### Creating the Graphics Pass
-Create a graphics pipeline for graphics pass
+Create a graphics pipelineState for graphics pass
 
 ```c++
 #include <rhi/d3d12.h>
@@ -471,16 +471,16 @@ fragmentFunctionInfo.ByteCode = fragmentBlob.Data;
 fragmentFunctionInfo.EntryName = "FSMain";
 rhi::RHIFunction* rhiVertexFunction = rhiDevice->CreateFunction(fragmentFunctionInfo);
 
-rhi::RHIGraphicsPipelineDescriptor graphicsPipelineInfo;
-graphicsPipelineInfo.OutputState = outputStateInfo;
-graphicsPipelineInfo.RenderState = renderStateInfo;
-graphicsPipelineInfo.VertexLayouts = &vertexLayoutInfos;
-graphicsPipelineInfo.NumVertexLayouts = vertexLayoutInfos.length;
-graphicsPipelineInfo.VertexFunction = rhiVertexFunction;
-graphicsPipelineInfo.FragmentFunction = rhiVertexFunction;
-graphicsPipelineInfo.PipelineLayout = rhiGraphicsPipelineLayout;
-graphicsPipelineInfo.PrimitiveTopology = EPrimitiveTopology::TriangleList;
-rhi::RHIPipeline* rhiGraphicsPipeline = rhiDevice->CreateGraphicsPipeline(graphicsPipelineInfo);
+rhi::RHIGraphicsPipelineStateDescriptor graphicsPipelineStateInfo;
+graphicsPipelineStateInfo.OutputState = outputStateInfo;
+graphicsPipelineStateInfo.RenderState = renderStateInfo;
+graphicsPipelineStateInfo.VertexLayouts = &vertexLayoutInfos;
+graphicsPipelineStateInfo.NumVertexLayouts = vertexLayoutInfos.length;
+graphicsPipelineStateInfo.VertexFunction = rhiVertexFunction;
+graphicsPipelineStateInfo.FragmentFunction = rhiVertexFunction;
+graphicsPipelineStateInfo.PipelineLayout = rhiGraphicsPipelineLayout;
+graphicsPipelineStateInfo.PrimitiveTopology = EPrimitiveTopology::TriangleList;
+rhi::RHIPipeline* rhiGraphicsPipelineState = rhiDevice->CreateGraphicsPipelineState(graphicsPipelineStateInfo);
 ```
 
 
@@ -532,7 +532,7 @@ rhi::RHIComputeEncoder* rhiComputeEncoder = rhiCmdBuffer->BeginComputePass(compu
 rhiComputeEncoder->PushDebugGroup("GenereteIndex");
 rhiComputeEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::Undefine, ETextureState::UnorderedAccess));
 rhiComputeEncoder->SetPipelineLayout(rhiComputePipelineLayout);
-rhiComputeEncoder->SetPipeline(rhiComputePipeline);
+rhiComputeEncoder->SetPipelineState(rhiComputePipelineState);
 rhiComputeEncoder->SetBindTable(rhiComputeBindTable, 0);
 rhiComputeEncoder->Dispatch(math::ceil(screenSize.x / 8), math::ceil(screenSize.y / 8), 1);
 rhiComputeEncoder->PopDebugGroup();
@@ -568,7 +568,7 @@ rhiGraphicsEncoder->PushDebugGroup("DrawTriange");
 rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::UnorderedAccess, ETextureState::ShaderResource));
 rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), EOwnerState::GfxToGfx, ETextureState::Present, ETextureState::RenderTarget));
 rhiGraphicsEncoder->SetPipelineLayout(rhiGraphicsPipelineLayout);
-rhiGraphicsEncoder->SetPipeline(rhiGraphicsPipeline);
+rhiGraphicsEncoder->SetPipelineState(rhiGraphicsPipelineState);
 rhiGraphicsEncoder->SetBindTable(rhiGraphicsBindTable, 0);
 rhiGraphicsEncoder->SetIndexBuffer(rhiIndexBufferGPU, 0, EIndexFormat::UInt16);
 rhiGraphicsEncoder->SetVertexBuffer(rhiVertexBufferGPU, 0, 0);
@@ -605,13 +605,13 @@ rhiTextureUAV->Release();
 rhiComputeFunction->Release();
 rhiComputeBindTable->Release();
 rhiComputeBindTableLayout->Release();
-rhiComputePipeline->Release();
+rhiComputePipelineState->Release();
 rhiComputePipelineLayout->Release();
 rhiVertexFunction->Release();
 rhiFragmentFunction->Release();
 rhiGraphicsBindTable->Release();
 rhiGraphicsBindTableLayout->Release();
-rhiGraphicsPipeline->Release();
+rhiGraphicsPipelineState->Release();
 rhiGraphicsPipelineLayout->Release();
 rhiCmdBuffer->Release();
 rhiTransferQueue->Release();
