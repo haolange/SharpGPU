@@ -496,7 +496,7 @@ rhiCmdBuffer.Begin("FrameInit");
 
 rhi::RHIGraphicsPassDescriptor transferPassInfo;
 transferPassInfo.Name = "Upload VertexStream";
-transferPassInfo.TimestampDescriptor = nullptr;
+transferPassInfo.Timestamp = nullptr;
 
 rhi::RHITransferEncoder* rhiTransferEncoder = rhiCmdBuffer.BeginTransferPass(transferPassInfo);
 rhiTransferEncoder->ResourceBarrier(RHIBarrier::Transition(rhiIndexBufferGPU, EOwnerState::GfxToGfx, ETextureState::Undefine, ETextureState::CopyDst));
@@ -525,8 +525,8 @@ rhiCmdBuffer.Begin("FrameRendering");
 // run compute pass
 rhi::RHIGraphicsPassDescriptor computePassInfo;
 computePassInfo.Name = "ComputePass";
-computePassInfo.TimestampDescriptor = nullptr;
-computePassInfo.StatisticsDescriptor = nullptr;
+computePassInfo.Timestamp = nullptr;
+computePassInfo.Statistics = nullptr;
 
 rhi::RHIComputeEncoder* rhiComputeEncoder = rhiCmdBuffer->BeginComputePass(computePassInfo);
 rhiComputeEncoder->PushDebugGroup("GenereteIndex");
@@ -553,9 +553,9 @@ graphicsPassInfo.Name = "GraphicsPass";
 graphicsPassInfo.ArrayLength = 1;
 graphicsPassInfo.SampleCount = 1;
 graphicsPassInfo.MultiViewCount = 0;
-graphicsPassInfo.OcclusionDescriptor = nullptr;
-graphicsPassInfo.TimestampDescriptor = nullptr;
-graphicsPassInfo.StatisticsDescriptor = nullptr;
+graphicsPassInfo.Occlusion = nullptr;
+graphicsPassInfo.Timestamp = nullptr;
+graphicsPassInfo.Statistics = nullptr;
 graphicsPassInfo.ShadingRateTexture = nullptr;
 graphicsPassInfo.ColorAttachments = colorAttachmentInfos;
 graphicsPassInfo.DepthStencilAttachment = nullptr;
