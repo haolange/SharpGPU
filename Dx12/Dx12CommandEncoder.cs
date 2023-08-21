@@ -1440,7 +1440,7 @@ namespace Infinity.Graphics
                 RHITextureViewDescriptor viewDescriptor;
                 {
                     viewDescriptor.MipCount = texture.Descriptor.MipCount;
-                    viewDescriptor.BaseMipIndex = 0;
+                    viewDescriptor.BaseMipLevel = 0;
                     viewDescriptor.ArrayCount = texture.Descriptor.Extent.z;
                     viewDescriptor.BaseArraySlice = 0;
                     //viewDescriptor.Format = texture.Descriptor.Format;
@@ -1475,7 +1475,7 @@ namespace Infinity.Graphics
                 RHITextureViewDescriptor viewDescriptor;
                 {
                     viewDescriptor.MipCount = texture.Descriptor.MipCount;
-                    viewDescriptor.BaseMipIndex = 0;
+                    viewDescriptor.BaseMipLevel = 0;
                     viewDescriptor.ArrayCount = texture.Descriptor.Extent.z;
                     viewDescriptor.BaseArraySlice = 0;
                     //viewDescriptor.Format = texture.Descriptor.Format;

@@ -176,7 +176,7 @@ Create textureView for compute or graphics
 ...
 rhi::RHITextureViewDescriptor computeOutputViewInfo;
 computeOutputViewInfo.MipCount = 1;
-computeOutputViewInfo.BaseMipIndex = 0;
+computeOutputViewInfo.BaseMipLevel = 0;
 computeOutputViewInfo.ArrayCount = 1;
 computeOutputViewInfo.BaseArraySlice = 0;
 computeOutputViewInfo.ViewType = ETextureViewType::UnorderedAccess;
@@ -184,7 +184,7 @@ rhi::TextureView* rhiTextureUAV = rhiTexture->CreateTextureView(outputViewInfo);
 
 rhi::RHITextureViewDescriptor graphicsInputViewInfo;
 graphicsInputViewInfo.MipCount = 1;
-graphicsInputViewInfo.BaseMipIndex = 0;
+graphicsInputViewInfo.BaseMipLevel = 0;
 graphicsInputViewInfo.ArrayCount = 1;
 graphicsInputViewInfo.BaseArraySlice = 0;
 graphicsInputViewInfo.ViewType = ETextureViewType::ShaderResource;
@@ -540,7 +540,7 @@ rhiComputeEncoder->EndPass();
 
 //run graphics pass
 rhi::RHIColorAttachmentDescriptor colorAttachmentInfos[1];
-colorAttachmentInfos[0].MipIndex = 0;
+colorAttachmentInfos[0].MipLevel = 0;
 colorAttachmentInfos[0].ArraySlice = 0;
 colorAttachmentInfos[0].ClearValue = float4(0.5f, 0.5f, 1, 1);
 colorAttachmentInfos[0].LoadAction = ELoadAction::Clear;

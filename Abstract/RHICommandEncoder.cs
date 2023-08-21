@@ -94,18 +94,20 @@ namespace Infinity.Graphics
 
     public struct RHIColorAttachmentDescriptor
     {
-        public uint MipIndex;
+        public uint MipLevel;
         public uint ArraySlice;
         public float4 ClearValue;
         public ELoadAction LoadAction;
         public EStoreAction StoreAction;
         public RHITexture RenderTarget;
+        public uint ResolveLevel;
+        public uint ResolveSlice;
         public RHITexture ResolveTarget;
     }
 
     public struct RHIDepthStencilAttachmentDescriptor
     {
-        public uint MipIndex;
+        public uint MipLevel;
         public uint ArraySlice;
         public bool DepthReadOnly;
         public float DepthClearValue;
@@ -116,6 +118,8 @@ namespace Infinity.Graphics
         public ELoadAction StencilLoadOp;
         public EStoreAction StencilStoreOp;
         public RHITexture RenderTarget;
+        public uint ResolveLevel;
+        public uint ResolveSlice;
         public RHITexture ResolveTarget;
     }
 
@@ -143,7 +147,6 @@ namespace Infinity.Graphics
     {
         public string Name;
         public uint ArrayLength;
-        public uint MultiViewCount;
         public ESampleCount SampleCount;
         public RHITimestampDescriptor? Timestamp;
         public RHIStatisticsDescriptor? Statistics;
@@ -157,7 +160,6 @@ namespace Infinity.Graphics
     {
         public string Name;
         public uint ArrayLength;
-        public uint MultiViewCount;
         public ESampleCount SampleCount;
         public RHITimestampDescriptor? Timestamp;
         public RHIOcclusionDescriptor? Occlusion;

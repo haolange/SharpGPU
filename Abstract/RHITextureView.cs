@@ -5,7 +5,7 @@ namespace Infinity.Graphics
     public struct RHITextureViewDescriptor
     {
         public uint MipCount;
-        public uint BaseMipIndex;
+        public uint BaseMipLevel;
         public uint ArrayCount;
         public uint BaseArraySlice;
         //public EPixelFormat Format;
