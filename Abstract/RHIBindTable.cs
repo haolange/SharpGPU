@@ -22,6 +22,5 @@ namespace Infinity.Graphics
     public abstract class RHIBindTable : Disposal
     {
         public abstract void SetBindElement(in RHIBindTableElement element, in EBindType bindType, in int slot);
-        public abstract void SetBindElement(in RHIBindTableElement element, in RHIBindlessDescriptor BindlessDescriptor, in int slot);
     }
 }

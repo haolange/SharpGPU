@@ -7,11 +7,11 @@ namespace Infinity.Graphics
     {
         public uint Slot;
         public uint Index;
+        public uint Count;
         public EBindType Type;
         public EFunctionStage Visible;
-        public RHIBindlessDescriptor? Bindless;
 
-        internal bool IsBindless => Bindless != null;
+        internal bool IsBindless => Count > 1;
     }
 
     internal unsafe class Dx12BindTableLayout : RHIBindTableLayout
@@ -47,8 +47,8 @@ namespace Infinity.Graphics
                 bindInfo.Index = descriptor.Index;
                 bindInfo.Slot = element.Slot;
                 bindInfo.Type = element.Type;
+                bindInfo.Count = element.Count;
                 bindInfo.Visible = element.Visible;
-                bindInfo.Bindless = element.Bindless;
             }
         }
 
