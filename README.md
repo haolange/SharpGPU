@@ -499,12 +499,12 @@ transferPassInfo.Name = "Upload VertexStream";
 transferPassInfo.Timestamp = nullptr;
 
 rhi::RHITransferEncoder* rhiTransferEncoder = rhiCmdBuffer.BeginTransferPass(transferPassInfo);
-rhiTransferEncoder->ResourceBarrier(RHIBarrier::Transition(rhiIndexBufferGPU, EOwnerState::GfxToGfx, ETextureState::Undefine, ETextureState::CopyDst));
-rhiTransferEncoder->ResourceBarrier(RHIBarrier::Transition(rhiVertexBufferGPU, EOwnerState::GfxToGfx, ETextureState::Undefine, ETextureState::CopyDst));
+rhiTransferEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics, RHIBarrier::Transition(rhiIndexBufferGPU, ETextureState::Undefine, ETextureState::CopyDst));
+rhiTransferEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiVertexBufferGPU, ETextureState::Undefine, ETextureState::CopyDst));
 rhiTransferEncoder->CopyBufferToBuffer(rhiIndexBufferCPU, 0, rhiIndexBufferGPU, 0, indexBufferInfo.ByteSize);
 rhiTransferEncoder->CopyBufferToBuffer(rhiVertexBufferCPU, 0, rhiVertexBufferGPU, 0, vertexBufferInfo.ByteSize);
-rhiTransferEncoder->ResourceBarrier(RHIBarrier::Transition(rhiIndexBufferGPU, EOwnerState::GfxToGfx, ETextureState::CopyDst, ETextureState::IndexBuffer));
-rhiTransferEncoder->ResourceBarrier(RHIBarrier::Transition(rhiVertexBufferGPU, EOwnerState::GfxToGfx, ETextureState::CopyDst, ETextureState::VertexBuffer));
+rhiTransferEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiIndexBufferGPU, ETextureState::CopyDst, ETextureState::IndexBuffer));
+rhiTransferEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiVertexBufferGPU, ETextureState::CopyDst, ETextureState::VertexBuffer));
 rhiTransferEncoder->EndPass();
 
 rhiCmdBuffer.End("FrameInit");
@@ -530,7 +530,7 @@ computePassInfo.Statistics = nullptr;
 
 rhi::RHIComputeEncoder* rhiComputeEncoder = rhiCmdBuffer->BeginComputePass(computePassInfo);
 rhiComputeEncoder->PushDebugGroup("GenereteIndex");
-rhiComputeEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::Undefine, ETextureState::UnorderedAccess));
+rhiComputeEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiTexture, ETextureState::Undefine, ETextureState::UnorderedAccess));
 rhiComputeEncoder->SetPipelineLayout(rhiComputePipelineLayout);
 rhiComputeEncoder->SetPipelineState(rhiComputePipelineState);
 rhiComputeEncoder->SetBindTable(rhiComputeBindTable, 0);
@@ -565,8 +565,8 @@ rhiGraphicsEncoder->SetScissor(Rect(0, 0, screenSize.x, screenSize.y));
 rhiGraphicsEncoder->SetViewport(Viewport(0, 0, screenSize.x, screenSize.y, 0, 1));
 rhiGraphicsEncoder->SetBlendFactor(1);
 rhiGraphicsEncoder->PushDebugGroup("DrawTriange");
-rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::UnorderedAccess, ETextureState::ShaderResource));
-rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), EOwnerState::GfxToGfx, ETextureState::Present, ETextureState::RenderTarget));
+rhiGraphicsEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiTexture, ETextureState::UnorderedAccess, ETextureState::ShaderResource));
+rhiGraphicsEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), ETextureState::Present, ETextureState::RenderTarget));
 rhiGraphicsEncoder->SetPipelineLayout(rhiGraphicsPipelineLayout);
 rhiGraphicsEncoder->SetPipelineState(rhiGraphicsPipelineState);
 rhiGraphicsEncoder->SetBindTable(rhiGraphicsBindTable, 0);
@@ -574,8 +574,8 @@ rhiGraphicsEncoder->SetIndexBuffer(rhiIndexBufferGPU, 0, EIndexFormat::UInt16);
 rhiGraphicsEncoder->SetVertexBuffer(rhiVertexBufferGPU, 0, 0);
 rhiGraphicsEncoder->SetShadingRate(EShadingRate.Rate2x1, EShadingRateCombiner.Passthrough);
 rhiGraphicsEncoder->DrawIndexed(3, 1, 0, 0, 0);
-rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiTexture, EOwnerState::GfxToGfx, ETextureState::ShaderResource, ETextureState::Undefine));
-rhiGraphicsEncoder->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), EOwnerState::GfxToGfx, ETextureState::RenderTarget, ETextureState::Present));
+rhiGraphicsEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiTexture, ETextureState::ShaderResource, ETextureState::Undefine));
+rhiGraphicsEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), ETextureState::RenderTarget, ETextureState::Present));
 rhiGraphicsEncoder->PopDebugGroup();
 rhiGraphicsEncoder->EndPass();
 

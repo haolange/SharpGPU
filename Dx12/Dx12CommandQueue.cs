@@ -64,6 +64,26 @@ namespace Infinity.Graphics
             return new Dx12CommandBuffer(this);
         }
 
+        public override void MapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void UnMapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void MapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void UnMapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
+        {
+            throw new NotImplementedException();
+        }
+
         public override void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore)
         {
             if (cmdBuffer != null)

@@ -445,20 +445,6 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EOwnerState : byte
-    {
-        BlitToBlit,
-        BlitToCompute,
-        BlitToGfx,
-        ComputeToBlit,
-        ComputeToCompute,
-        ComputeToGfx,
-        GfxToBlit,
-        GfxToCompute,
-        GfxToGfx,
-        Pending
-    }
-
     public enum EBufferState
     {
         Undefine = 0x00,

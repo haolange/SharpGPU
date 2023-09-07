@@ -6,6 +6,7 @@ using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using Viewport = Infinity.Mathmatics.Viewport;
+using TerraFX.Interop.Gdiplus;
 
 namespace Infinity.Graphics
 {
@@ -44,14 +45,17 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndEvent();
         }
 
-        public override void WriteTimestampQuery(RHIQuery query, in uint index)
+        public override void WriteTimestamp(in uint index)
         {
-            Dx12Query dx12Query = query as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current GraphicsPass TimestampQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
         }
 
-        public override void ResolveQuery(RHIQuery query, in uint index, in uint count)
+        public override void ResolveQuery(RHIQuery query, in uint startIndex, in uint queriesCount)
         {
             Dx12Query dx12Query = query as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -59,20 +63,20 @@ namespace Infinity.Graphics
             switch (query.QueryDescriptor.Type)
             {
                 case EQueryType.Occlusion:
-                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index, count, dx12Query.QueryResult, index * 8);
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, startIndex, queriesCount, dx12Query.QueryResult, startIndex * 8);
                     break;
 
                 case EQueryType.Statistics:
-                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index, count, dx12Query.QueryResult, index * (uint)sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS));
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, startIndex, queriesCount, dx12Query.QueryResult, startIndex * (uint)sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS));
                     break;
 
                 default:
-                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index, count, dx12Query.QueryResult, index * 8);
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, startIndex, queriesCount, dx12Query.QueryResult, startIndex * 8);
                     break;
             }
         }
 
-        public override void ResourceBarrier(in RHIBarrier barrier)
+        public override void ResourceBarrier(in EQueueType srcPipeline, in EQueueType dstPipeline, in RHIBarrier barrier)
         {
             ID3D12Resource* resource = null;
             D3D12_RESOURCE_BARRIER resourceBarrier;
@@ -152,7 +156,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->ResourceBarrier(1, &resourceBarrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIBarrier> barriers)
+        public override void ResourceBarriers(in EQueueType srcPipeline, in EQueueType dstPipeline, in Memory<RHIBarrier> barriers)
         {
             ID3D12Resource* resource;
             D3D12_RESOURCE_STATES beforeState;
@@ -321,28 +325,37 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndEvent();
         }
 
-        public override void WriteTimestampQuery(RHIQuery query, in uint index)
+        public override void WriteTimestamp(in uint index)
         {
-            Dx12Query dx12Query = query as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current GraphicsPass TimestampQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
         }
 
-        public override void BeginStatisticsQuery(RHIQuery query, in uint index)
+        public override void BeginStatistics(in uint index)
         {
-            Dx12Query dx12Query = query as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
-        public override void EndStatisticsQuery(RHIQuery query, in uint index)
+        public override void EndStatistics(in uint index)
         {
-            Dx12Query dx12Query = query as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
-        public override void ResourceBarrier(in RHIBarrier barrier)
+        public override void ResourceBarrier(in EQueueType srcPipeline, in EQueueType dstPipeline, in RHIBarrier barrier)
         {
             ID3D12Resource* resource = null;
             D3D12_RESOURCE_BARRIER resourceBarrier;
@@ -422,7 +435,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->ResourceBarrier(1, &resourceBarrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIBarrier> barriers)
+        public override void ResourceBarriers(in EQueueType srcPipeline, in EQueueType dstPipeline, in Memory<RHIBarrier> barriers)
         {
             ID3D12Resource* resource;
             D3D12_RESOURCE_STATES beforeState;
@@ -610,28 +623,37 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndEvent();
         }
 
-        public override void WriteTimestampQuery(RHIQuery query, in uint index)
+        public override void WriteTimestamp(in uint index)
         {
-            Dx12Query dx12Query = query as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current GraphicsPass TimestampQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
         }
 
-        public override void BeginStatisticsQuery(RHIQuery query, in uint index)
+        public override void BeginStatistics(in uint index)
         {
-            Dx12Query dx12Query = query as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
-        public override void EndStatisticsQuery(RHIQuery query, in uint index)
+        public override void EndStatistics(in uint index)
         {
-            Dx12Query dx12Query = query as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
-        public override void ResourceBarrier(in RHIBarrier barrier)
+        public override void ResourceBarrier(in EQueueType srcPipeline, in EQueueType dstPipeline, in RHIBarrier barrier)
         {
             ID3D12Resource* resource = null;
             D3D12_RESOURCE_BARRIER resourceBarrier;
@@ -711,7 +733,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->ResourceBarrier(1, &resourceBarrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIBarrier> barriers)
+        public override void ResourceBarriers(in EQueueType srcPipeline, in EQueueType dstPipeline, in Memory<RHIBarrier> barriers)
         {
             ID3D12Resource* resource;
             D3D12_RESOURCE_STATES beforeState;
@@ -1052,28 +1074,37 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndEvent();
         }
 
-        public override void WriteTimestampQuery(RHIQuery query, in uint index)
+        public override void WriteTimestamp(in uint index)
         {
-            Dx12Query dx12Query = query as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current GraphicsPass TimestampQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
         }
 
-        public override void BeginStatisticsQuery(RHIQuery query, in uint index)
+        public override void BeginStatistics(in uint index)
         {
-            Dx12Query dx12Query = query as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
-        public override void EndStatisticsQuery(RHIQuery query, in uint index)
+        public override void EndStatistics(in uint index)
         {
-            Dx12Query dx12Query = query as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
-        public override void ResourceBarrier(in RHIBarrier barrier)
+        public override void ResourceBarrier(in EQueueType srcPipeline, in EQueueType dstPipeline, in RHIBarrier barrier)
         {
             ID3D12Resource* resource = null;
             D3D12_RESOURCE_BARRIER resourceBarrier;
@@ -1153,7 +1184,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->ResourceBarrier(1, &resourceBarrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIBarrier> barriers)
+        public override void ResourceBarriers(in EQueueType srcPipeline, in EQueueType dstPipeline, in Memory<RHIBarrier> barriers)
         {
             ID3D12Resource* resource;
             D3D12_RESOURCE_STATES beforeState;
@@ -1552,42 +1583,57 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndEvent();
         }
 
-        public override void WriteTimestampQuery(RHIQuery query, in uint index)
+        public override void WriteTimestamp(in uint index)
         {
-            Dx12Query dx12Query = query as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current GraphicsPass TimestampQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
         }
 
-        public override void BeginOcclusionQuery(in uint index)
+        public override void BeginOcclusion(in uint index)
         {
-            Dx12Query dx12Query = m_CommandBuffer.OcclusionQueryHeap as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.OcclusionQueryHeap != null, "Current GraphicsPass OcclusionQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
         }
 
-        public override void EndOcclusionQuery(in uint index)
+        public override void EndOcclusion(in uint index)
         {
-            Dx12Query dx12Query = m_CommandBuffer.OcclusionQueryHeap as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.OcclusionQueryHeap != null, "Current GraphicsPass OcclusionQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
         }
 
-        public override void BeginStatisticsQuery(RHIQuery query, in uint index)
+        public override void BeginStatistics(in uint index)
         {
-            Dx12Query dx12Query = query as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
-        public override void EndStatisticsQuery(RHIQuery query, in uint index)
+        public override void EndStatistics(in uint index)
         {
-            Dx12Query dx12Query = query as Dx12Query;
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
-        public override void ResourceBarrier(in RHIBarrier barrier)
+        public override void ResourceBarrier(in EQueueType srcPipeline, in EQueueType dstPipeline, in RHIBarrier barrier)
         {
             ID3D12Resource* resource = null;
             D3D12_RESOURCE_BARRIER resourceBarrier;
@@ -1667,7 +1713,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->ResourceBarrier(1, &resourceBarrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIBarrier> barriers)
+        public override void ResourceBarriers(in EQueueType srcPipeline, in EQueueType dstPipeline, in Memory<RHIBarrier> barriers)
         {
             ID3D12Resource* resource;
             D3D12_RESOURCE_STATES beforeState;

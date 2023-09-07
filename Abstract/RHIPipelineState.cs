@@ -161,6 +161,12 @@ namespace Infinity.Graphics
         public Memory<RHIVertexLayoutDescriptor> VertexLayouts;
     }
 
+    public struct RHIPipelineStateLibraryResult
+    {
+        public uint ByteSize;
+        public IntPtr ByteCode;
+    }
+
     public abstract class RHIComputePipelineState : Disposal
     {
         public RHIComputePipelineStateDescriptor Descriptor => m_Descriptor;
@@ -187,5 +193,23 @@ namespace Infinity.Graphics
         public RHIGraphicsPipelineStateDescriptor Descriptor => m_Descriptor;
 
         protected RHIGraphicsPipelineStateDescriptor m_Descriptor;
+    }
+
+    public abstract class RHIPipelineStateLibrary : Disposal
+    {
+        public RHIPipelineStateLibrary(in RHIPipelineStateLibraryResult PipelineStateCache)
+        {
+
+        }
+
+        public abstract void StoreComputePipelineState(string name, RHIComputePipelineState computePipelineState);
+        public abstract void StoreRaytracingPipelineState(string name, RHIRaytracingPipelineState raytracingPipelineState);
+        public abstract void StoreMeshletPipelineState(string name, RHIMeshletPipelineState meshletPipelineState);
+        public abstract void StoreGraphicsPipelineState(string name, RHIGraphicsPipelineState graphicsPipelineState);
+        public abstract RHIComputePipelineState LoadComputePipelineState(RHIComputePipelineStateDescriptor computePipelineDescriptor);
+        public abstract RHIRaytracingPipelineState LoadRaytracingPipelineState(RHIRaytracingPipelineStateDescriptor raytracingPipelineDescriptor);
+        public abstract RHIMeshletPipelineState LoadMeshletPipelineState(RHIMeshletPipelineStateDescriptor meshletPipelineDescriptor);
+        public abstract RHIGraphicsPipelineState LoadGraphicsPipelineState(RHIGraphicsPipelineStateDescriptor graphicsPipelineDescriptor);
+        public abstract RHIPipelineStateLibraryResult Serialize();
     }
 }

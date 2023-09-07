@@ -27,6 +27,7 @@ namespace Infinity.Graphics
         public abstract RHIBuffer CreateBuffer(in RHIBufferDescriptor descriptor);
         public abstract RHITexture CreateTexture(in RHITextureDescriptor descriptor);
         public abstract RHISampler CreateSampler(in RHISamplerDescriptor descriptor);
+        public abstract RHIStorageQueue CreateStorageQueue();
         public abstract RHICommandQueue CreateCommandQueue(in EQueueType type);
         public abstract RHITopLevelAccelStruct CreateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
         public abstract RHIBottomLevelAccelStruct CreateAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor);

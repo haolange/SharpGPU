@@ -167,6 +167,11 @@ namespace Infinity.Graphics
             return new Dx12Sampler(this, descriptor);
         }
 
+        public override RHIStorageQueue CreateStorageQueue()
+        {
+            throw new NotImplementedException();
+        }
+
         public override RHICommandQueue CreateCommandQueue(in EQueueType type)
         {
             return new Dx12CommandQueue(this, type);
@@ -356,7 +361,6 @@ namespace Infinity.Graphics
 
         private void CreateCommandSignatures()
         {
-            bool success = false;
             ID3D12CommandSignature* commandSignature;
             D3D12_INDIRECT_ARGUMENT_DESC indirectArgDesc;
             D3D12_COMMAND_SIGNATURE_DESC commandSignatureDesc;
