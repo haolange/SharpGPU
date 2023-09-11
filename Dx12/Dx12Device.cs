@@ -14,9 +14,9 @@ namespace Infinity.Graphics
         public override bool IsRaytracingSupported => bRaytracingSupported;
         public override bool IsRaytracingQuerySupported => bRaytracingQuerySupported;
         public override bool IsFlipProjectionRequired => false;
-        public override EClipDepth ClipDepth => EClipDepth.ZeroToOne;
-        public override EMatrixMajorness MatrixMajorness => EMatrixMajorness.RowMajor;
-        public override EMultiviewStrategy MultiviewStrategy => EMultiviewStrategy.Unsupported;
+        public override ERHIClipDepth ClipDepth => ERHIClipDepth.ZeroToOne;
+        public override ERHIMatrixMajorness MatrixMajorness => ERHIMatrixMajorness.RowMajor;
+        public override ERHIMultiviewStrategy MultiviewStrategy => ERHIMultiviewStrategy.Unsupported;
 
         public Dx12Instance Dx12Instance
         {
@@ -128,7 +128,7 @@ namespace Infinity.Graphics
             RHIDeviceProperty deviceProperty;
             deviceProperty.VendorId = desc.VendorId;
             deviceProperty.DeviceId = desc.DeviceId;
-            deviceProperty.Type = (desc.Flags & (uint)DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE) == 1 ? EDeviceType.Software : EDeviceType.Hardware;
+            deviceProperty.Type = (desc.Flags & (uint)DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE) == 1 ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
             return deviceProperty;
         }
 
@@ -172,9 +172,9 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHICommandQueue CreateCommandQueue(in EQueueType type)
+        public override RHICommandQueue CreateCommandQueue(in ERHIPipeline pipeline)
         {
-            return new Dx12CommandQueue(this, type);
+            return new Dx12CommandQueue(this, pipeline);
         }
 
         public override RHITopLevelAccelStruct CreateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)

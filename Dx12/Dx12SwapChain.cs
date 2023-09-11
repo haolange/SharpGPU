@@ -110,11 +110,11 @@ namespace Infinity.Graphics
             {
                 textureDescriptor.Extent = new uint3(descriptor.Extent.xy, 1);
                 textureDescriptor.MipCount = 1;
-                textureDescriptor.SampleCount = ESampleCount.None;
+                textureDescriptor.SampleCount = ERHISampleCount.None;
                 textureDescriptor.Format = RHIUtility.ConvertToPixelFormat(descriptor.Format);
-                textureDescriptor.UsageFlag = ETextureUsage.RenderTarget;
-                textureDescriptor.Dimension = ETextureDimension.Texture2D;
-                textureDescriptor.StorageMode = EStorageMode.GPULocal;
+                textureDescriptor.UsageFlag = ERHITextureUsage.RenderTarget;
+                textureDescriptor.Dimension = ERHITextureDimension.Texture2D;
+                textureDescriptor.StorageMode = ERHIStorageMode.GPULocal;
             }
 
             for (int i = 0; i < descriptor.Count; ++i)

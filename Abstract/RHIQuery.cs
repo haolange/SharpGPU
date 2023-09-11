@@ -7,7 +7,7 @@ namespace Infinity.Graphics
     public struct RHIQueryDescriptor : IEquatable<RHIQueryDescriptor>
     {
         public uint Count;
-        public EQueryType Type;
+        public ERHIQueryType Type;
 
         public bool Equals(RHIQueryDescriptor other) => (Type == other.Type) && (Count == other.Count);
 

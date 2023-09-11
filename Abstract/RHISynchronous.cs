@@ -7,86 +7,88 @@ namespace Infinity.Graphics
     public struct RHIBufferBarrierDescriptor
     {
         public RHIBuffer Handle;
-        public EBufferState Before;
-        public EBufferState After;
+        public ERHIBufferState SrcState;
+        public ERHIBufferState DstState;
+        public ERHIPipeline SrcPipeline;
+        public ERHIPipeline DstPipeline;
     }
 
     public struct RHITextureBarrierDescriptor
     {
         public RHITexture Handle;
-        public ETextureState Before;
-        public ETextureState After;
+        public ERHITextureState SrcState;
+        public ERHITextureState DstState;
+        public ERHIPipeline SrcPipeline;
+        public ERHIPipeline DstPipeline;
     }
 
     public struct RHIBarrier
     {
-        internal EBarrierType BarrierType => m_BarrierType;
-        internal EResourceType ResourceType => m_ResourceType;
+        internal ERHIBarrierType BarrierType => m_BarrierType;
+        internal ERHIResourceType ResourceType => m_ResourceType;
         internal RHIBufferBarrierDescriptor BufferBarrierInfo => m_BufferBarrierInfo;
         internal RHITextureBarrierDescriptor TextureBarrierInfo => m_TextureBarrierInfo;
 
-        private EBarrierType m_BarrierType;
-        private EResourceType m_ResourceType;
+        private ERHIBarrierType m_BarrierType;
+        private ERHIResourceType m_ResourceType;
         private RHIBufferBarrierDescriptor m_BufferBarrierInfo;
         private RHITextureBarrierDescriptor m_TextureBarrierInfo;
 
-        public static RHIBarrier SyncUAV(RHIBuffer buffer)
+        public static RHIBarrier SyncUAV(RHIBuffer buffer, in ERHIPipeline srcPipeline = ERHIPipeline.Graphics, in ERHIPipeline dstPipeline = ERHIPipeline.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
-            barrier.m_BarrierType = EBarrierType.UAV;
-            barrier.m_ResourceType = EResourceType.Buffer;
+            barrier.m_BarrierType = ERHIBarrierType.UAV;
+            barrier.m_ResourceType = ERHIResourceType.Buffer;
             barrier.m_BufferBarrierInfo.Handle = buffer;
             return barrier;
         }
 
-        public static RHIBarrier SyncUAV(RHITexture texture)
+        public static RHIBarrier SyncUAV(RHITexture texture, in ERHIPipeline srcPipeline = ERHIPipeline.Graphics, in ERHIPipeline dstPipeline = ERHIPipeline.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
-            barrier.m_BarrierType = EBarrierType.UAV;
-            barrier.m_ResourceType = EResourceType.Texture;
+            barrier.m_BarrierType = ERHIBarrierType.UAV;
+            barrier.m_ResourceType = ERHIResourceType.Texture;
             barrier.m_TextureBarrierInfo.Handle = texture;
             return barrier;
         }
 
-        public static RHIBarrier Aliasing(RHIBuffer buffer, in EBufferState after)
+        public static RHIBarrier Aliasing(RHIBuffer buffer, in ERHIPipeline srcPipeline = ERHIPipeline.Graphics, in ERHIPipeline dstPipeline = ERHIPipeline.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
-            barrier.m_BarrierType = EBarrierType.Aliasing;
-            barrier.m_ResourceType = EResourceType.Buffer;
+            barrier.m_BarrierType = ERHIBarrierType.Aliasing;
+            barrier.m_ResourceType = ERHIResourceType.Buffer;
             barrier.m_BufferBarrierInfo.Handle = buffer;
-            barrier.m_BufferBarrierInfo.After = after;
             return barrier;
         }
 
-        public static RHIBarrier Aliasing(RHITexture texture, in ETextureState after)
+        public static RHIBarrier Aliasing(RHITexture texture, in ERHIPipeline srcPipeline = ERHIPipeline.Graphics, in ERHIPipeline dstPipeline = ERHIPipeline.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
-            barrier.m_BarrierType = EBarrierType.Aliasing;
-            barrier.m_ResourceType = EResourceType.Texture;
+            barrier.m_BarrierType = ERHIBarrierType.Aliasing;
+            barrier.m_ResourceType = ERHIResourceType.Texture;
             barrier.m_TextureBarrierInfo.Handle = texture;
-            barrier.m_TextureBarrierInfo.After = after;
             return barrier;
         }
 
-        public static RHIBarrier Transition(RHIBuffer buffer, in EBufferState before, in EBufferState after)
+        public static RHIBarrier Transition(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState, in ERHIPipeline srcPipeline = ERHIPipeline.Graphics, in ERHIPipeline dstPipeline = ERHIPipeline.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
-            barrier.m_BarrierType = EBarrierType.Triansition;
-            barrier.m_ResourceType = EResourceType.Buffer;
+            barrier.m_BarrierType = ERHIBarrierType.Triansition;
+            barrier.m_ResourceType = ERHIResourceType.Buffer;
             barrier.m_BufferBarrierInfo.Handle = buffer;
-            barrier.m_BufferBarrierInfo.Before = before;
-            barrier.m_BufferBarrierInfo.After = after;
+            barrier.m_BufferBarrierInfo.SrcState = srcState;
+            barrier.m_BufferBarrierInfo.DstState = dstState;
             return barrier;
         }
 
-        public static RHIBarrier Transition(RHITexture texture, in ETextureState before, in ETextureState after)
+        public static RHIBarrier Transition(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState, in ERHIPipeline srcPipeline = ERHIPipeline.Graphics, in ERHIPipeline dstPipeline = ERHIPipeline.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
-            barrier.m_BarrierType = EBarrierType.Triansition;
-            barrier.m_ResourceType = EResourceType.Texture;
+            barrier.m_BarrierType = ERHIBarrierType.Triansition;
+            barrier.m_ResourceType = ERHIResourceType.Texture;
             barrier.m_TextureBarrierInfo.Handle = texture;
-            barrier.m_TextureBarrierInfo.Before = before;
-            barrier.m_TextureBarrierInfo.After = after;
+            barrier.m_TextureBarrierInfo.SrcState = srcState;
+            barrier.m_TextureBarrierInfo.DstState = dstState;
             return barrier;
         }
     }

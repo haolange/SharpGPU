@@ -39,7 +39,7 @@ namespace Infinity.Graphics
             m_LifeState = false;
             m_Dx12Buffer = buffer;
 
-            if (descriptor.ViewType == EBufferViewType.UniformBuffer)
+            if (descriptor.ViewType == ERHIBufferViewType.UniformBuffer)
             {
                 if (Dx12Utility.IsConstantBuffer(buffer.Descriptor.UsageFlag))
                 {
@@ -57,7 +57,7 @@ namespace Infinity.Graphics
                     m_Dx12Buffer.Dx12Device.NativeDevice->CreateConstantBufferView(&desc, m_NativeCpuDescriptorHandle);
                 }
             }
-            else if (descriptor.ViewType == EBufferViewType.AccelStruct)
+            else if (descriptor.ViewType == ERHIBufferViewType.AccelStruct)
             {
                 if (Dx12Utility.IsAccelStruct(buffer.Descriptor.UsageFlag))
                 {
@@ -77,7 +77,7 @@ namespace Infinity.Graphics
                     m_Dx12Buffer.Dx12Device.NativeDevice->CreateShaderResourceView(m_Dx12Buffer.NativeResource, &desc, m_NativeCpuDescriptorHandle);
                 }
             }
-            else if (descriptor.ViewType == EBufferViewType.ShaderResource)
+            else if (descriptor.ViewType == ERHIBufferViewType.ShaderResource)
             {
                 if (Dx12Utility.IsShaderResourceBuffer(buffer.Descriptor.UsageFlag))
                 {
@@ -99,7 +99,7 @@ namespace Infinity.Graphics
                     m_Dx12Buffer.Dx12Device.NativeDevice->CreateShaderResourceView(m_Dx12Buffer.NativeResource, &desc, m_NativeCpuDescriptorHandle);
                 }
             }
-            else if (descriptor.ViewType == EBufferViewType.UnorderedAccess)
+            else if (descriptor.ViewType == ERHIBufferViewType.UnorderedAccess)
             {
                 if (Dx12Utility.IsUnorderedAccessBuffer(buffer.Descriptor.UsageFlag))
                 {

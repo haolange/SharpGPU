@@ -430,17 +430,17 @@ namespace Infinity.Graphics
 
                 SampleMask = descriptor.RenderState.SampleMask.HasValue ? ((uint)descriptor.RenderState.SampleMask.Value) : uint.MaxValue,
                 BlendState = Dx12Utility.CreateDx12BlendState(descriptor.RenderState.BlendState),
-                RasterizerState = Dx12Utility.CreateDx12RasterizerState(descriptor.RenderState.RasterizerState, descriptor.OutputState.SampleCount != ESampleCount.None),
+                RasterizerState = Dx12Utility.CreateDx12RasterizerState(descriptor.RenderState.RasterizerState, descriptor.OutputState.SampleCount != ERHISampleCount.None),
                 DepthStencilState = Dx12Utility.CreateDx12DepthStencilState(descriptor.RenderState.DepthStencilState)
             };
 
-            if (descriptor.OutputState.DepthStencilFormat != EPixelFormat.Unknown)
+            if (descriptor.OutputState.DepthStencilFormat != ERHIPixelFormat.Unknown)
             {
                 description.DSVFormat = DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
                 description.DSVFormat = Dx12Utility.ConvertToDx12Format(descriptor.OutputState.DepthStencilFormat);
             }
 
-            fixed (EPixelFormat* formatPtr = &descriptor.OutputState.ColorFormat0)
+            fixed (ERHIPixelFormat* formatPtr = &descriptor.OutputState.ColorFormat0)
             {
                 for (int i = 0; i < descriptor.OutputState.OutputCount; ++i)
                 {

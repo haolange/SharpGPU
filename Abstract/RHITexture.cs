@@ -7,11 +7,11 @@ namespace Infinity.Graphics
     {
         public uint MipCount;
         public uint3 Extent;
-        public EPixelFormat Format;
-        public ESampleCount SampleCount;
-        public EStorageMode StorageMode;
-        public ETextureUsage UsageFlag;
-        public ETextureDimension Dimension;
+        public ERHIPixelFormat Format;
+        public ERHISampleCount SampleCount;
+        public ERHIStorageMode StorageMode;
+        public ERHITextureUsage UsageFlag;
+        public ERHITextureDimension Dimension;
     }
 
     public abstract class RHITexture : Disposal

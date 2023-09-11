@@ -41,14 +41,14 @@ namespace Infinity.Graphics
         private Dx12Device m_Dx12Device;
         private ID3D12CommandQueue* m_NativeCommandQueue;
 
-        public Dx12CommandQueue(Dx12Device device, in EQueueType queueType)
+        public Dx12CommandQueue(Dx12Device device, in ERHIPipeline pipeline)
         {
-            m_Type = queueType;
             m_Dx12Device = device;
+            m_PipelineType = pipeline;
 
             D3D12_COMMAND_QUEUE_DESC queueDesc = new D3D12_COMMAND_QUEUE_DESC();
             queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAGS.D3D12_COMMAND_QUEUE_FLAG_NONE;
-            queueDesc.Type = Dx12Utility.ConvertToDx12QueueType(queueType);
+            queueDesc.Type = Dx12Utility.ConvertToDx12QueueType(pipeline);
 
             ID3D12CommandQueue* commandQueue;
             HRESULT hResult = m_Dx12Device.NativeDevice->CreateCommandQueue(&queueDesc, __uuidof<ID3D12CommandQueue>(), (void**)&commandQueue);

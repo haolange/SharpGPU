@@ -93,13 +93,13 @@ Create command queue for execution gpu task
 ```c++
 #include <rhi/d3d12.h>
 ...
-uint32 queueCount = rhiDevice->GetMaxQueueCount(EQueueType.Transfer);
-//queueCount = rhiDevice->GetMaxQueueCount(EQueueType.Compute);
-//queueCount = rhiDevice->GetMaxQueueCount(EQueueType.Graphics);
+uint32 queueCount = rhiDevice->GetMaxQueueCount(ERHIPipeline.Transfer);
+//queueCount = rhiDevice->GetMaxQueueCount(ERHIPipeline.Compute);
+//queueCount = rhiDevice->GetMaxQueueCount(ERHIPipeline.Graphics);
 
-rhi::RHICommandQueue* rhiTransferQueue = rhiDevice->CreateCommandQueue(EQueueType.Transfer);
-rhi::RHICommandQueue* rhiComputeQueue = rhiDevice->CreateCommandQueue(EQueueType.Compute);
-rhi::RHICommandQueue* rhiGraphicsQueue = rhiDevice->CreateCommandQueue(EQueueType.Graphics);
+rhi::RHICommandQueue* rhiTransferQueue = rhiDevice->CreateCommandQueue(ERHIPipeline.Transfer);
+rhi::RHICommandQueue* rhiComputeQueue = rhiDevice->CreateCommandQueue(ERHIPipeline.Compute);
+rhi::RHICommandQueue* rhiGraphicsQueue = rhiDevice->CreateCommandQueue(ERHIPipeline.Graphics);
 ```
 
 
@@ -125,9 +125,9 @@ rhi::RHISwapChainDescriptor swapChainDescriptor;
 swapChainDescriptor.FPS = 60;
 swapChainDescriptor.Count = 3;
 swapChainDescriptor.Extent = screenSize;
-swapChainDescriptor.Format = ESwapChainFormat::R8G8B8A8_UNorm;
+swapChainDescriptor.Format = ERHISwapChainFormat::R8G8B8A8_UNorm;
 swapChainDescriptor.Surface = hwdnPtr;
-swapChainDescriptor.PresentMode = EPresentMode.VSync;
+swapChainDescriptor.PresentMode = ERHIPresentMode.VSync;
 swapChainDescriptor.PresentQueue = rhiGraphicsQueue;
 swapChainDescriptor.FrameBufferOnly = true;
 rhi::SwapChain* rhiSwapChain = rhiDevice->CreateSwapChain(swapChainDescriptor);
@@ -146,23 +146,23 @@ samplerInfo.LodMin = -1000;
 samplerInfo.LodMax = 1000;
 samplerInfo.MipLODBias = 0;
 samplerInfo.Anisotropy = 8;
-samplerInfo.MinFilter = EFilterMode::Linear;
-samplerInfo.MagFilter = EFilterMode::Linear;
-samplerInfo.MipFilter = EFilterMode::Linear;
-samplerInfo.AddressModeU = EAddressMode::Repeat;
-samplerInfo.AddressModeV = EAddressMode::Repeat;
-samplerInfo.AddressModeW = EAddressMode::Repeat;
-samplerInfo.ComparisonMode = EComparisonMode::Never;
+samplerInfo.MinFilter = ERHIFilterMode::Linear;
+samplerInfo.MagFilter = ERHIFilterMode::Linear;
+samplerInfo.MipFilter = ERHIFilterMode::Linear;
+samplerInfo.AddressModeU = ERHIAddressMode::Repeat;
+samplerInfo.AddressModeV = ERHIAddressMode::Repeat;
+samplerInfo.AddressModeW = ERHIAddressMode::Repeat;
+samplerInfo.ComparisonMode = ERHIComparisonMode::Never;
 rhi::RHISampler* rhiSampler = rhiDevice->CreateSampler(samplerInfo);
 
 rhi::RHITextureDescriptor textureInfo;
 textureInfo.Extent = uint3(screenSize.xy, 1);
 textureInfo.MipCount = 1;
-textureInfo.SampleCount = ESampleCount::None;
-textureInfo.Format = EPixelFormat::R8G8B8A8_UNorm;
-textureInfo.UsageFlag = ETextureUsage::ShaderResource | ETextureUsage::UnorderedAccess;
-textureInfo.Dimension = ETextureDimension::Texture2D;
-textureInfo.StorageMode = EStorageMode::GPULocal;
+textureInfo.SampleCount = ERHISampleCount::None;
+textureInfo.Format = ERHIPixelFormat::R8G8B8A8_UNorm;
+textureInfo.UsageFlag = ERHITextureUsage::ShaderResource | ERHITextureUsage::UnorderedAccess;
+textureInfo.Dimension = ERHITextureDimension::Texture2D;
+textureInfo.StorageMode = ERHIStorageMode::GPULocal;
 rhi::RHITexture* rhiTexture = rhiDevice->CreateTexture(textureInfo);
 ```
 
@@ -179,7 +179,7 @@ computeOutputViewInfo.MipCount = 1;
 computeOutputViewInfo.BaseMipLevel = 0;
 computeOutputViewInfo.ArrayCount = 1;
 computeOutputViewInfo.BaseArraySlice = 0;
-computeOutputViewInfo.ViewType = ETextureViewType::UnorderedAccess;
+computeOutputViewInfo.ViewType = ERHITextureViewType::UnorderedAccess;
 rhi::TextureView* rhiTextureUAV = rhiTexture->CreateTextureView(outputViewInfo);
 
 rhi::RHITextureViewDescriptor graphicsInputViewInfo;
@@ -187,7 +187,7 @@ graphicsInputViewInfo.MipCount = 1;
 graphicsInputViewInfo.BaseMipLevel = 0;
 graphicsInputViewInfo.ArrayCount = 1;
 graphicsInputViewInfo.BaseArraySlice = 0;
-graphicsInputViewInfo.ViewType = ETextureViewType::ShaderResource;
+graphicsInputViewInfo.ViewType = ERHITextureViewType::ShaderResource;
 rhi::TextureView* rhiTextureSRV = rhiTexture->CreateTextureView(outputViewInfo);
 ```
 
@@ -201,8 +201,8 @@ Create a compute bindTable
 ...
 rhi::RHIBindTableLayoutElement computeBindTableLayoutElements[1];
 computeBindTableLayoutElements[0].Slot = 0;
-computeBindTableLayoutElements[0].Type = EBindType::StorageTexture;
-computeBindTableLayoutElements[0].Visible = EFunctionStage::Compute;
+computeBindTableLayoutElements[0].Type = ERHIBindType::StorageTexture;
+computeBindTableLayoutElements[0].Visible = ERHIFunctionStage::Compute;
 
 rhi::RHIBindTableLayoutDescriptor computeBindTableLayoutInfo;
 computeBindTableLayoutInfo.Index = 0;
@@ -229,7 +229,7 @@ Create a compute pipelineState for compute pass
 #include <rhi/d3d12.h>
 ...
 rhi::RHIFunctionDescriptor computeFunctionInfo;
-computeFunctionInfo.Type = EFunctionType::Compute;
+computeFunctionInfo.Type = ERHIFunctionType::Compute;
 computeFunctionInfo.ByteSize = computeBlob.Size;
 computeFunctionInfo.ByteCode = computeBlob.Data;
 computeFunctionInfo.EntryName = "CSMain";
@@ -263,8 +263,8 @@ UniformInfo uniformArray[1] = // ......;
 
 rhi::RHIBufferDescriptor uniformBufferInfo;
 uniformBufferInfo.ByteSize = uniformArray.Length * ((sizeof(UniformInfo) + 255) & ~255);
-uniformBufferInfo.UsageFlag = EBufferUsage::UniformBuffer;
-uniformBufferInfo.StorageMode = EStorageMode::HostUpload;
+uniformBufferInfo.UsageFlag = ERHIBufferUsage::UniformBuffer;
+uniformBufferInfo.StorageMode = ERHIStorageMode::HostUpload;
 rhi::RHIBuffer* rhiUniformBuffer = rhiDevice->CreateBuffer(uniformBufferInfo);
 
 void* uniformData = rhiUniformBuffer->Map(0, uniformBufferInfo.ByteSize);
@@ -273,7 +273,7 @@ rhiIndexBuffer->Unmap(0, uniformBufferInfo.ByteSize);
 
 rhi::RHIBufferViewDescriptor uniformBufferViewInfo;
 uniformBufferViewInfo.Offset = 0;
-uniformBufferViewInfo.Type = EBufferViewType.UniformBuffer;
+uniformBufferViewInfo.Type = ERHIBufferViewType.UniformBuffer;
 uniformBufferViewInfo.Count = uniformArray.Length;
 uniformBufferViewInfo.Stride = (sizeof(UniformInfo) + 255) & ~255;
 rhi::RHIBufferView* rhiUniformBufferView = rhiUniformBuffer->CreateBufferView(bufferViewDescriptor);
@@ -292,15 +292,15 @@ uint16 indices[3] = {0, 1, 2};
 
 rhi::RHIBufferDescriptor indexBufferInfo;
 indexBufferInfo.ByteSize = indices.Length * sizeof(uint16);
-indexBufferInfo.UsageFlag = EBufferUsage::IndexBuffer;
-indexBufferInfo.StorageMode = EStorageMode::HostUpload;
+indexBufferInfo.UsageFlag = ERHIBufferUsage::IndexBuffer;
+indexBufferInfo.StorageMode = ERHIStorageMode::HostUpload;
 rhi::RHIBuffer* rhiIndexBufferCPU = rhiDevice->CreateBuffer(indexBufferInfo);
 
 void* indexData = rhiIndexBufferCPU->Map(0, indexBufferInfo.ByteSize);
 MemoryUtility::MemCpy(&indices, indexData, indexBufferInfo.ByteSize);
 rhiIndexBufferCPU->Unmap(0, indexBufferInfo.ByteSize);
 
-vertexBufferInfo.StorageMode = EStorageMode.GPULocal;
+vertexBufferInfo.StorageMode = ERHIStorageMode.GPULocal;
 rhi::RHIBuffer* rhiIndexBufferGPU = rhiDevice->CreateBuffer(indexBufferInfo);
 
 //vertex buffer
@@ -314,15 +314,15 @@ vertices[2].position = float4(0.5f, -0.5f, 0, 1);
 
 rhi::RHIBufferDescriptor vertexBufferInfo;
 vertexBufferInfo.ByteSize = vertices.Length * sizeof(Vertex);
-vertexBufferInfo.UsageFlag = EBufferUsage::VertexBuffer;
-vertexBufferInfo.StorageMode = EStorageMode::HostUpload;
+vertexBufferInfo.UsageFlag = ERHIBufferUsage::VertexBuffer;
+vertexBufferInfo.StorageMode = ERHIStorageMode::HostUpload;
 rhi::RHIBuffer* rhiVertexBufferCPU = rhiDevice->CreateBuffer(vertexBufferInfo);
 
 void* vertexData = rhiVertexBufferCPU->Map(vertexBufferInfo.ByteSize, 0);
 MemoryUtility::MemCpy(&vertices, vertexData, vertexBufferInfo.ByteSize);
 rhiVertexBufferCPU->Unmap();
 
-vertexBufferInfo.StorageMode = EStorageMode.GPULocal;
+vertexBufferInfo.StorageMode = ERHIStorageMode.GPULocal;
 rhi::RHIBuffer* rhiVertexBufferGPU = rhiDevice->CreateBuffer(vertexBufferInfo);
 ```
 
@@ -336,11 +336,11 @@ Create a bindTable graphics
 ...
 rhi::RHIBindTableLayoutElement graphicsBindTableLayoutElements[2];
 graphicsBindTableLayoutElements[0].Slot = 0;
-graphicsBindTableLayoutElements[0].Type = EBindType::Texture;
-graphicsBindTableLayoutElements[0].Visible = EFunctionStage::Fragment;
+graphicsBindTableLayoutElements[0].Type = ERHIBindType::Texture;
+graphicsBindTableLayoutElements[0].Visible = ERHIFunctionStage::Fragment;
 graphicsBindTableLayoutElements[1].Slot = 1;
-graphicsBindTableLayoutElements[1].Type = EBindType::Sampler;
-graphicsBindTableLayoutElements[1].Visible = EFunctionStage::Fragment;
+graphicsBindTableLayoutElements[1].Type = ERHIBindType::Sampler;
+graphicsBindTableLayoutElements[1].Visible = ERHIFunctionStage::Fragment;
 
 rhi::RHIBindTableLayoutDescriptor graphicsBindTableLayoutInfo;
 graphicsBindTableLayoutInfo.Index = 0;
@@ -368,9 +368,9 @@ Create a graphics pipelineState for graphics pass
 #include <rhi/d3d12.h>
 ...
 rhi::RHIOutputStateDescriptor outputStateInfo;
-outputStateInfo.SampleCount = ESampleCount::None;
-outputStateInfo.DepthFormat = EPixelFormat::D32_Float_S8_UInt;
-outputStateInfo.ColorFormat0 = EPixelFormat::R8G8B8A8_UNorm;
+outputStateInfo.SampleCount = ERHISampleCount::None;
+outputStateInfo.DepthFormat = ERHIPixelFormat::D32_Float_S8_UInt;
+outputStateInfo.ColorFormat0 = ERHIPixelFormat::R8G8B8A8_UNorm;
 outputStateInfo.ColorFormat1 = outputStateInfo.ColorFormat0;
 outputStateInfo.ColorFormat2 = outputStateInfo.ColorFormat0;
 outputStateInfo.ColorFormat3 = outputStateInfo.ColorFormat0;
@@ -383,13 +383,13 @@ rhi::RHIBlendStateDescriptor blendStateInfo;
 blendStateInfo.AlphaToCoverage = false;
 blendStateInfo.IndependentBlend = false;
 blendStateInfo.BlendDescriptor0.BlendEnable = false;
-blendStateInfo.BlendDescriptor0.BlendOpColor = EBlendOp::Add;
-blendStateInfo.BlendDescriptor0.BlendOpAlpha = EBlendOp::Add;
-blendStateInfo.BlendDescriptor0.SrcBlendColor = EBlendMode::One;
-blendStateInfo.BlendDescriptor0.SrcBlendAlpha = EBlendMode::One;
-blendStateInfo.BlendDescriptor0.DstBlendColor = EBlendMode::Zero;
-blendStateInfo.BlendDescriptor0.DstBlendAlpha = EBlendMode::Zero;
-blendStateInfo.BlendDescriptor0.ColorWriteChannel = EColorWriteChannel::All;
+blendStateInfo.BlendDescriptor0.BlendOpColor = ERHIBlendOp::Add;
+blendStateInfo.BlendDescriptor0.BlendOpAlpha = ERHIBlendOp::Add;
+blendStateInfo.BlendDescriptor0.SrcBlendColor = ERHIBlendMode::One;
+blendStateInfo.BlendDescriptor0.SrcBlendAlpha = ERHIBlendMode::One;
+blendStateInfo.BlendDescriptor0.DstBlendColor = ERHIBlendMode::Zero;
+blendStateInfo.BlendDescriptor0.DstBlendAlpha = ERHIBlendMode::Zero;
+blendStateInfo.BlendDescriptor0.ColorWriteChannel = ERHIColorWriteChannel::All;
 blendStateInfo.BlendDescriptor1 = blendStateInfo.BlendDescriptor0;
 blendStateInfo.BlendDescriptor2 = blendStateInfo.BlendDescriptor0;
 blendStateInfo.BlendDescriptor3 = blendStateInfo.BlendDescriptor0;
@@ -399,8 +399,8 @@ blendStateInfo.BlendDescriptor6 = blendStateInfo.BlendDescriptor0;
 blendStateInfo.BlendDescriptor7 = blendStateInfo.BlendDescriptor0;
 
 rhi::RHIRasterizerStateDescriptor rasterizerStateInfo;
-rasterizerStateInfo.CullMode = ECullMode::Back;
-rasterizerStateInfo.FillMode = EFillMode::Solid;
+rasterizerStateInfo.CullMode = ERHICullMode::Back;
+rasterizerStateInfo.FillMode = ERHIFillMode::Solid;
 rasterizerStateInfo.DepthBias = 0;
 rasterizerStateInfo.DepthBiasClamp = 0;
 rasterizerStateInfo.SlopeScaledDepthBias = 0;
@@ -412,18 +412,18 @@ rasterizerStateInfo.FrontCounterClockwise = false;
 rhi::RHIDepthStencilStateDescriptor depthStencilStateInfo;
 depthStencilStateInfo.DepthEnable = true;
 depthStencilStateInfo.DepthWriteMask = true;
-depthStencilStateInfo.ComparisonMode = EComparisonMode::LessEqual;
+depthStencilStateInfo.ComparisonMode = ERHIComparisonMode::LessEqual;
 depthStencilStateInfo.StencilEnable = false;
 depthStencilStateInfo.StencilReadMask = 255;
 depthStencilStateInfo.StencilWriteMask = 255;
-depthStencilStateInfo.BackFace.ComparisonMode = EComparisonMode::Always;
-depthStencilStateInfo.BackFace.StencilPassOp = EStencilOp::Keep;
-depthStencilStateInfo.BackFace.StencilFailOp = EStencilOp::Keep;
-depthStencilStateInfo.BackFace.StencilDepthFailOp = EStencilOp::Keep;
-depthStencilStateInfo.FrontFace.ComparisonMode = EComparisonMode::Always;
-depthStencilStateInfo.FrontFace.StencilPassOp = EStencilOp::Keep;
-depthStencilStateInfo.FrontFace.StencilFailOp = EStencilOp::Keep;
-depthStencilStateInfo.FrontFace.StencilDepthFailOp = EStencilOp::Keep;
+depthStencilStateInfo.BackFace.ComparisonMode = ERHIComparisonMode::Always;
+depthStencilStateInfo.BackFace.StencilPassOp = ERHIStencilOp::Keep;
+depthStencilStateInfo.BackFace.StencilFailOp = ERHIStencilOp::Keep;
+depthStencilStateInfo.BackFace.StencilDepthFailOp = ERHIStencilOp::Keep;
+depthStencilStateInfo.FrontFace.ComparisonMode = ERHIComparisonMode::Always;
+depthStencilStateInfo.FrontFace.StencilPassOp = ERHIStencilOp::Keep;
+depthStencilStateInfo.FrontFace.StencilFailOp = ERHIStencilOp::Keep;
+depthStencilStateInfo.FrontFace.StencilDepthFailOp = ERHIStencilOp::Keep;
 
 rhi::RHIRenderStateDescriptor renderStateInfo;
 renderStateInfo.SampleMask = 0;
@@ -434,17 +434,17 @@ renderStateInfo.DepthStencilState = depthStencilStateInfo;
 rhi::RHIVertexElementDescriptor vertexElementInfos[2];
 vertexElementInfos[0].Slot = 1;
 vertexElementInfos[0].Offset = 0;
-vertexElementInfos[0].Type = ESemanticType::Color;
-vertexElementInfos[0].Format = ESemanticFormat::Float4;
+vertexElementInfos[0].Type = ERHISemanticType::Color;
+vertexElementInfos[0].Format = ERHISemanticFormat::Float4;
 vertexElementInfos[1].Slot = 0;
 vertexElementInfos[1].Offset = 16;
-vertexElementInfos[1].Type = ESemanticType::Position;
-vertexElementInfos[1].Format = ESemanticFormat::Float4;
+vertexElementInfos[1].Type = ERHISemanticType::Position;
+vertexElementInfos[1].Format = ERHISemanticFormat::Float4;
 
 rhi::RHIVertexLayoutDescriptor vertexLayoutInfos[1];
 vertexLayoutInfos[0].Index = 0;
 vertexLayoutInfos[0].Stride = sizeOf(Vertex);
-vertexLayoutInfos[0].StepMode = EVertexStepMode::PerVertex;
+vertexLayoutInfos[0].StepMode = ERHIVertexStepMode::PerVertex;
 vertexLayoutInfos[0].VertexElements = &vertexElementInfos;
 vertexLayoutInfos[0].VertexElementLength = vertexElementInfos.length;
 
@@ -458,14 +458,14 @@ graphicsPipelienLayoutInfo.NumBindTableLayouts = 1;
 rhi::RHIPipelineLayout* rhiGraphicsPipelineLayout = rhiDevice->CreatePipelineLayout(graphicsPipelienLayoutInfo);
 
 rhi::RHIFunctionDescriptor vertexFunctionInfo;
-vertexFunctionInfo.Type = EFunctionType::Vertex;
+vertexFunctionInfo.Type = ERHIFunctionType::Vertex;
 vertexFunctionInfo.ByteSize = vertexBlob.Size;
 vertexFunctionInfo.ByteCode = vertexBlob.Data;
 vertexFunctionInfo.EntryName = "VSMain";
 rhi::RHIFunction* rhiVertexFunction = rhiDevice->CreateFunction(vertexFunctionInfo);
 
 rhi::RHIFunctionDescriptor fragmentFunctionInfo;
-fragmentFunctionInfo.Type = EFunctionType::Fragment;
+fragmentFunctionInfo.Type = ERHIFunctionType::Fragment;
 fragmentFunctionInfo.ByteSize = fragmentBlob.Size;
 fragmentFunctionInfo.ByteCode = fragmentBlob.Data;
 fragmentFunctionInfo.EntryName = "FSMain";
@@ -479,7 +479,7 @@ graphicsPipelineStateInfo.NumVertexLayouts = vertexLayoutInfos.length;
 graphicsPipelineStateInfo.VertexFunction = rhiVertexFunction;
 graphicsPipelineStateInfo.FragmentFunction = rhiVertexFunction;
 graphicsPipelineStateInfo.PipelineLayout = rhiGraphicsPipelineLayout;
-graphicsPipelineStateInfo.PrimitiveTopology = EPrimitiveTopology::TriangleList;
+graphicsPipelineStateInfo.PrimitiveTopology = ERHIPrimitiveTopology::TriangleList;
 rhi::RHIPipeline* rhiGraphicsPipelineState = rhiDevice->CreateGraphicsPipelineState(graphicsPipelineStateInfo);
 ```
 
@@ -499,12 +499,12 @@ transferPassInfo.Name = "Upload VertexStream";
 transferPassInfo.Timestamp = nullptr;
 
 rhi::RHITransferEncoder* rhiTransferEncoder = rhiCmdBuffer.BeginTransferPass(transferPassInfo);
-rhiTransferEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics, RHIBarrier::Transition(rhiIndexBufferGPU, ETextureState::Undefine, ETextureState::CopyDst));
-rhiTransferEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiVertexBufferGPU, ETextureState::Undefine, ETextureState::CopyDst));
+rhiTransferEncoder->ResourceBarrier(ERHIPipeline::Graphics, ERHIPipeline::Graphics, RHIBarrier::Transition(rhiIndexBufferGPU, ERHITextureState::Undefine, ERHITextureState::CopyDst));
+rhiTransferEncoder->ResourceBarrier(ERHIPipeline::Graphics, ERHIPipeline::Graphics,RHIBarrier::Transition(rhiVertexBufferGPU, ERHITextureState::Undefine, ERHITextureState::CopyDst));
 rhiTransferEncoder->CopyBufferToBuffer(rhiIndexBufferCPU, 0, rhiIndexBufferGPU, 0, indexBufferInfo.ByteSize);
 rhiTransferEncoder->CopyBufferToBuffer(rhiVertexBufferCPU, 0, rhiVertexBufferGPU, 0, vertexBufferInfo.ByteSize);
-rhiTransferEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiIndexBufferGPU, ETextureState::CopyDst, ETextureState::IndexBuffer));
-rhiTransferEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiVertexBufferGPU, ETextureState::CopyDst, ETextureState::VertexBuffer));
+rhiTransferEncoder->ResourceBarrier(ERHIPipeline::Graphics, ERHIPipeline::Graphics,RHIBarrier::Transition(rhiIndexBufferGPU, ERHITextureState::CopyDst, ERHITextureState::IndexBuffer));
+rhiTransferEncoder->ResourceBarrier(ERHIPipeline::Graphics, ERHIPipeline::Graphics,RHIBarrier::Transition(rhiVertexBufferGPU, ERHITextureState::CopyDst, ERHITextureState::VertexBuffer));
 rhiTransferEncoder->EndPass();
 
 rhiCmdBuffer.End("FrameInit");
@@ -530,7 +530,7 @@ computePassInfo.Statistics = nullptr;
 
 rhi::RHIComputeEncoder* rhiComputeEncoder = rhiCmdBuffer->BeginComputePass(computePassInfo);
 rhiComputeEncoder->PushDebugGroup("GenereteIndex");
-rhiComputeEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiTexture, ETextureState::Undefine, ETextureState::UnorderedAccess));
+rhiComputeEncoder->ResourceBarrier(ERHIPipeline::Graphics, ERHIPipeline::Graphics,RHIBarrier::Transition(rhiTexture, ERHITextureState::Undefine, ERHITextureState::UnorderedAccess));
 rhiComputeEncoder->SetPipelineLayout(rhiComputePipelineLayout);
 rhiComputeEncoder->SetPipelineState(rhiComputePipelineState);
 rhiComputeEncoder->SetBindTable(rhiComputeBindTable, 0);
@@ -543,8 +543,8 @@ rhi::RHIColorAttachmentDescriptor colorAttachmentInfos[1];
 colorAttachmentInfos[0].MipLevel = 0;
 colorAttachmentInfos[0].ArraySlice = 0;
 colorAttachmentInfos[0].ClearValue = float4(0.5f, 0.5f, 1, 1);
-colorAttachmentInfos[0].LoadAction = ELoadAction::Clear;
-colorAttachmentInfos[0].StoreAction = EStoreAction::Store;
+colorAttachmentInfos[0].LoadAction = ERHILoadAction::Clear;
+colorAttachmentInfos[0].StoreAction = ERHIStoreAction::Store;
 colorAttachmentInfos[0].RenderTarget = rhiSwapChain->AcquireBackBufferTexture();
 colorAttachmentInfos[0].ResolveTarget = nullptr;
 
@@ -565,17 +565,17 @@ rhiGraphicsEncoder->SetScissor(Rect(0, 0, screenSize.x, screenSize.y));
 rhiGraphicsEncoder->SetViewport(Viewport(0, 0, screenSize.x, screenSize.y, 0, 1));
 rhiGraphicsEncoder->SetBlendFactor(1);
 rhiGraphicsEncoder->PushDebugGroup("DrawTriange");
-rhiGraphicsEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiTexture, ETextureState::UnorderedAccess, ETextureState::ShaderResource));
-rhiGraphicsEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), ETextureState::Present, ETextureState::RenderTarget));
+rhiGraphicsEncoder->ResourceBarrier(ERHIPipeline::Graphics, ERHIPipeline::Graphics,RHIBarrier::Transition(rhiTexture, ERHITextureState::UnorderedAccess, ERHITextureState::ShaderResource));
+rhiGraphicsEncoder->ResourceBarrier(ERHIPipeline::Graphics, ERHIPipeline::Graphics,RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), ERHITextureState::Present, ERHITextureState::RenderTarget));
 rhiGraphicsEncoder->SetPipelineLayout(rhiGraphicsPipelineLayout);
 rhiGraphicsEncoder->SetPipelineState(rhiGraphicsPipelineState);
 rhiGraphicsEncoder->SetBindTable(rhiGraphicsBindTable, 0);
-rhiGraphicsEncoder->SetIndexBuffer(rhiIndexBufferGPU, 0, EIndexFormat::UInt16);
+rhiGraphicsEncoder->SetIndexBuffer(rhiIndexBufferGPU, 0, ERHIIndexFormat::UInt16);
 rhiGraphicsEncoder->SetVertexBuffer(rhiVertexBufferGPU, 0, 0);
-rhiGraphicsEncoder->SetShadingRate(EShadingRate.Rate2x1, EShadingRateCombiner.Passthrough);
+rhiGraphicsEncoder->SetShadingRate(ERHIShadingRate.Rate2x1, ERHIShadingRateCombiner.Passthrough);
 rhiGraphicsEncoder->DrawIndexed(3, 1, 0, 0, 0);
-rhiGraphicsEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiTexture, ETextureState::ShaderResource, ETextureState::Undefine));
-rhiGraphicsEncoder->ResourceBarrier(EQueueType::Graphics, EQueueType::Graphics,RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), ETextureState::RenderTarget, ETextureState::Present));
+rhiGraphicsEncoder->ResourceBarrier(ERHIPipeline::Graphics, ERHIPipeline::Graphics,RHIBarrier::Transition(rhiTexture, ERHITextureState::ShaderResource, ERHITextureState::Undefine));
+rhiGraphicsEncoder->ResourceBarrier(ERHIPipeline::Graphics, ERHIPipeline::Graphics,RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), ERHITextureState::RenderTarget, ERHITextureState::Present));
 rhiGraphicsEncoder->PopDebugGroup();
 rhiGraphicsEncoder->EndPass();
 

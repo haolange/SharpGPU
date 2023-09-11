@@ -10,21 +10,21 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EClipDepth : byte
+    public enum ERHIClipDepth : byte
     {
         ZeroToOne,
         NegativeOneToOne,
         Pending
     }
 
-    public enum EMatrixMajorness : byte
+    public enum ERHIMatrixMajorness : byte
     {
         RowMajor,
         ColumnMajor,
         Pending
     }
 
-    public enum EMultiviewStrategy : byte
+    public enum ERHIMultiviewStrategy : byte
     {
         ViewIndex,
         Unsupported,
@@ -32,14 +32,14 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EDeviceType : byte
+    public enum ERHIDeviceType : byte
     {
         Hardware,
         Software,
         Pending
     }
 
-    public enum EQueueType : byte
+    public enum ERHIPipeline : byte
     {
         Transfer,
         Compute,
@@ -47,7 +47,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EQueryType : byte
+    public enum ERHIQueryType : byte
     {
         Occlusion,
         Statistics,
@@ -56,7 +56,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ESwapChainFormat : byte
+    public enum ERHISwapChainFormat : byte
     {
         R8G8B8A8_UNorm,
         R10G10B10A2_UNorm,
@@ -64,7 +64,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EPixelFormat : byte
+    public enum ERHIPixelFormat : byte
     {
         Unknown,
         // 8-Bits
@@ -154,7 +154,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ESemanticType : byte
+    public enum ERHISemanticType : byte
     {
         Color = 0,
         Position = 1,
@@ -168,7 +168,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ESemanticFormat : byte
+    public enum ERHISemanticFormat : byte
     {
         Byte,
         Byte2,
@@ -212,7 +212,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EShadingRate : byte
+    public enum ERHIShadingRate : byte
     {
         Rate1x1 = 0,
         Rate1x2 = 1,
@@ -224,7 +224,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EShadingRateCombiner : byte
+    public enum ERHIShadingRateCombiner : byte
     {
         Min = 0,
         Max = 1,
@@ -234,7 +234,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ETextureDimension : byte
+    public enum ERHITextureDimension : byte
     {
         Texture2D,
         Texture2DMS,
@@ -246,7 +246,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EAddressMode : byte
+    public enum ERHIAddressMode : byte
     {
         Repeat,
         ClampToEdge,
@@ -254,7 +254,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EFilterMode : byte
+    public enum ERHIFilterMode : byte
     {
         Point,
         Linear,
@@ -262,7 +262,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EBindType : byte
+    public enum ERHIBindType : byte
     {
         Buffer,
         Texture,
@@ -274,14 +274,14 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EVertexStepMode : byte
+    public enum ERHIVertexStepMode : byte
     {
         PerVertex,
         PerInstance,
         Pending
     }
 
-    public enum EPrimitiveTopology : byte
+    public enum ERHIPrimitiveTopology : byte
     {
         PointList,
         LineList,
@@ -295,7 +295,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EPrimitiveTopologyType : byte
+    public enum ERHIPrimitiveTopologyType : byte
     {
         Point,
         Line,
@@ -303,14 +303,14 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EIndexFormat : byte
+    public enum ERHIIndexFormat : byte
     {
         UInt16,
         UInt32,
         Pending
     }
 
-    public enum ESampleCount : byte
+    public enum ERHISampleCount : byte
     {
         None = 1,
         Count2 = 2,
@@ -319,7 +319,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EBlendOp : byte
+    public enum ERHIBlendOp : byte
     {
         Add = 1,
         Substract = 2,
@@ -329,7 +329,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EBlendMode : byte
+    public enum ERHIBlendMode : byte
     {
         Zero = 1,
         One = 2,
@@ -345,7 +345,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EColorWriteChannel : byte
+    public enum ERHIColorWriteChannel : byte
     {
         None = 0,
         Red = 0x1,
@@ -356,7 +356,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EComparisonMode : byte
+    public enum ERHIComparisonMode : byte
     {
         Never = 0,
         Less = 1,
@@ -369,7 +369,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EStencilOp : byte
+    public enum ERHIStencilOp : byte
     {
         Keep = 1,
         Zero = 2,
@@ -382,14 +382,14 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EFillMode : byte
+    public enum ERHIFillMode : byte
     {
         Solid = 3,
         Wireframe = 2,
         Pending
     }
 
-    public enum ECullMode : byte
+    public enum ERHICullMode : byte
     {
         None = 1,
         Back = 3,
@@ -397,7 +397,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ELoadAction : byte
+    public enum ERHILoadAction : byte
     {
         Load,
         Clear,
@@ -405,7 +405,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EStoreAction : byte
+    public enum ERHIStoreAction : byte
     {
         Store,
         Resolve,
@@ -414,28 +414,28 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EPresentMode : byte
+    public enum ERHIPresentMode : byte
     {
         VSync,
         Immediately,
         Pending
     }
 
-    public enum EBarrierType : byte
+    public enum ERHIBarrierType : byte
     {
         UAV,
         Aliasing,
         Triansition
     }
 
-    public enum EResourceType : byte
+    public enum ERHIResourceType : byte
     {
         Buffer,
         Texture,
         Pending
     }
 
-    public enum EStorageMode : byte
+    public enum ERHIStorageMode : byte
     {
         GPULocal,
         Readback,
@@ -445,7 +445,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EBufferState
+    public enum ERHIBufferState
     {
         Undefine = 0x00,
         CopySrc = 0x01,
@@ -463,7 +463,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ETextureState
+    public enum ERHITextureState
     {
         Undefine = 0x00,
         Present = 0x01,
@@ -480,7 +480,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EBufferUsage
+    public enum ERHIBufferUsage
     {
         CopySrc = 0x01,
         CopyDst = 0x02,
@@ -494,7 +494,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EBufferViewType : byte
+    public enum ERHIBufferViewType : byte
     {
         AccelStruct,
         UniformBuffer,
@@ -503,7 +503,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ETextureUsage
+    public enum ERHITextureUsage
     {
         CopySrc = 0x01,
         CopyDst = 0x02,
@@ -515,7 +515,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ETextureViewType : byte
+    public enum ERHITextureViewType : byte
     {
         //DepthStencil,
         //RenderTarget,
@@ -524,7 +524,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EFunctionType : byte
+    public enum ERHIFunctionType : byte
     {
         Vertex,
         Fragment,
@@ -535,7 +535,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EFunctionStage
+    public enum ERHIFunctionStage
     {
         Vertex = 0x1,
         Fragment = 0x2,
@@ -550,7 +550,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum EHitGroupType : byte
+    public enum ERHIHitGroupType : byte
     {
         Triangles,
         Procedural,
@@ -559,55 +559,55 @@ namespace Infinity.Graphics
 
     internal static unsafe class RHIUtility
     {
-        internal static EPixelFormat ConvertToPixelFormat(in ESwapChainFormat swapChainFormat)
+        internal static ERHIPixelFormat ConvertToPixelFormat(in ERHISwapChainFormat swapChainFormat)
         {
             switch (swapChainFormat)
             {
-                case ESwapChainFormat.R8G8B8A8_UNorm:
-                    return EPixelFormat.R8G8B8A8_UNorm;
+                case ERHISwapChainFormat.R8G8B8A8_UNorm:
+                    return ERHIPixelFormat.R8G8B8A8_UNorm;
 
-                case ESwapChainFormat.R10G10B10A2_UNorm:
-                    return EPixelFormat.R10G10B10A2_UNorm;
+                case ERHISwapChainFormat.R10G10B10A2_UNorm:
+                    return ERHIPixelFormat.R10G10B10A2_UNorm;
 
-                case ESwapChainFormat.R16G16B16A16_Float:
-                    return EPixelFormat.R16G16B16A16_Float;
+                case ERHISwapChainFormat.R16G16B16A16_Float:
+                    return ERHIPixelFormat.R16G16B16A16_Float;
             }
-            return EPixelFormat.R8G8B8A8_UNorm_Srgb;
+            return ERHIPixelFormat.R8G8B8A8_UNorm_Srgb;
         }
 
-        /*internal static EBufferState ConvertToBufferStateFormStorageMode(in EStorageMode storageMode)
+        /*internal static ERHIBufferState ConvertToBufferStateFormStorageMode(in ERHIStorageMode storageMode)
         {
             switch (storageMode)
             {
-                case EStorageMode.Static:
-                    return EBufferState.GenericRead;
+                case ERHIStorageMode.Static:
+                    return ERHIBufferState.GenericRead;
 
-                case EStorageMode.Dynamic:
-                    return EBufferState.GenericRead;
+                case ERHIStorageMode.Dynamic:
+                    return ERHIBufferState.GenericRead;
 
-                case EStorageMode.Staging:
-                    return EBufferState.CopyDst;
+                case ERHIStorageMode.Staging:
+                    return ERHIBufferState.CopyDst;
 
                 default:
-                    return EBufferState.Common;
+                    return ERHIBufferState.Common;
             }
         }
 
-        internal static ETextureState ConvertToTextureStateFormStorageMode(in EStorageMode storageMode)
+        internal static ERHITextureState ConvertToTextureStateFormStorageMode(in ERHIStorageMode storageMode)
         {
             switch (storageMode)
             {
-                case EStorageMode.Static:
-                    return ETextureState.GenericRead;
+                case ERHIStorageMode.Static:
+                    return ERHITextureState.GenericRead;
 
-                case EStorageMode.Dynamic:
-                    return ETextureState.GenericRead;
+                case ERHIStorageMode.Dynamic:
+                    return ERHITextureState.GenericRead;
 
-                case EStorageMode.Staging:
-                    return ETextureState.CopyDst;
+                case ERHIStorageMode.Staging:
+                    return ERHITextureState.CopyDst;
 
                 default:
-                    return ETextureState.Common;
+                    return ERHITextureState.Common;
             }
         }*/
     }

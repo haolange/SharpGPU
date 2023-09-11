@@ -58,12 +58,12 @@ namespace Infinity.Graphics
         public uint IndexCount;
         public uint IndexOffset;
         public RHIBuffer? IndexBuffer;
-        public EIndexFormat IndexFormat;
+        public ERHIIndexFormat IndexFormat;
         public uint VertexCount;
         public uint VertexStride;
         public uint VertexOffset;
         public RHIBuffer? VertexBuffer;
-        public EPixelFormat VertexFormat;
+        public ERHIPixelFormat VertexFormat;
     }
 
     [StructLayout(LayoutKind.Sequential)]

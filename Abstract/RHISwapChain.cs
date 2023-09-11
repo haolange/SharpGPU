@@ -11,8 +11,8 @@ namespace Infinity.Graphics
         public uint Count;
         public uint2 Extent;
         public IntPtr Surface;
-        public EPresentMode PresentMode;
-        public ESwapChainFormat Format;
+        public ERHIPresentMode PresentMode;
+        public ERHISwapChainFormat Format;
         public RHICommandQueue PresentQueue;
     }
 

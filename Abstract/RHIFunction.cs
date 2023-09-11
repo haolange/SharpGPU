@@ -8,7 +8,7 @@ namespace Infinity.Graphics
         public uint ByteSize;
         public IntPtr ByteCode;
         public string EntryName;
-        public EFunctionType Type;
+        public ERHIFunctionType Type;
     }
 
     public struct RHIRayFunctionDescriptor

@@ -4,12 +4,6 @@ using Apple.Metal;
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602
-    internal unsafe struct MtlCommandQueueDescriptor
-    {
-        public EQueueType queueType;
-        public MTLCommandQueue cmdQueue;
-    }
-
     internal unsafe class MtlCommandQueue : RHICommandQueue
     {
         public MTLCommandQueue NativeQueue
@@ -28,14 +22,12 @@ namespace Infinity.Graphics
         }
 
         private MtlDevice m_MtlDevice;
-        private EQueueType m_QueueType;
         private MTLCommandQueue m_NativeQueue;
 
-        public MtlCommandQueue(MtlDevice device, in MtlCommandQueueDescriptor descriptor)
+        public MtlCommandQueue(MtlDevice device, in ERHIPipeline pipeline)
         {
             m_MtlDevice = device;
-            m_QueueType = descriptor.queueType;
-            m_NativeQueue = descriptor.cmdQueue;
+            m_PipelineType = pipeline;
         }
 
         public override RHICommandBuffer CreateCommandBuffer()

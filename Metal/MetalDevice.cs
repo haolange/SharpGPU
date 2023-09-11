@@ -11,9 +11,9 @@ namespace Infinity.Graphics
         public override bool IsRaytracingSupported => true;
         public override bool IsRaytracingQuerySupported => true;
         public override bool IsFlipProjectionRequired => false;
-        public override EClipDepth ClipDepth => EClipDepth.ZeroToOne;
-        public override EMatrixMajorness MatrixMajorness => EMatrixMajorness.RowMajor;
-        public override EMultiviewStrategy MultiviewStrategy => EMultiviewStrategy.Unsupported;
+        public override ERHIClipDepth ClipDepth => ERHIClipDepth.ZeroToOne;
+        public override ERHIMatrixMajorness MatrixMajorness => ERHIMatrixMajorness.RowMajor;
+        public override ERHIMultiviewStrategy MultiviewStrategy => ERHIMultiviewStrategy.Unsupported;
 
         public MTLDevice NativeDevice
         {
@@ -84,7 +84,7 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHICommandQueue CreateCommandQueue(in EQueueType type)
+        public override RHICommandQueue CreateCommandQueue(in ERHIPipeline pipeline)
         {
             throw new NotImplementedException();
         }

@@ -7,7 +7,7 @@ namespace Infinity.Graphics
         public int Count;
         public int Offset;
         public int Stride;
-        public EBufferViewType ViewType;
+        public ERHIBufferViewType ViewType;
     }
 
     public abstract class RHIBufferView : Disposal

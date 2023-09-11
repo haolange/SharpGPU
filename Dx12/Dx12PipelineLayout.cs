@@ -11,7 +11,7 @@ namespace Infinity.Graphics
     internal struct Dx12BindTypeAndParameterSlot
     {
         public int Slot;
-        public EBindType Type;
+        public ERHIBindType Type;
     }
 
     internal unsafe class Dx12PipelineLayout : RHIPipelineLayout
@@ -78,22 +78,22 @@ namespace Infinity.Graphics
                         parameter.Type = bindInfo.Type;
                     }
 
-                    if ((bindInfo.Visible & EFunctionStage.All) == EFunctionStage.All)
+                    if ((bindInfo.Visible & ERHIFunctionStage.All) == ERHIFunctionStage.All)
                     {
                         m_AllParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.Slot, Dx12Utility.GetDx12BindKey(bindInfo.Type)).GetHashCode(), parameter);
                     }
 
-                    if ((bindInfo.Visible & EFunctionStage.Vertex) == EFunctionStage.Vertex)
+                    if ((bindInfo.Visible & ERHIFunctionStage.Vertex) == ERHIFunctionStage.Vertex)
                     {
                         m_VertexParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.Slot, Dx12Utility.GetDx12BindKey(bindInfo.Type)).GetHashCode(), parameter);
                     }
 
-                    if ((bindInfo.Visible & EFunctionStage.Fragment) == EFunctionStage.Fragment)
+                    if ((bindInfo.Visible & ERHIFunctionStage.Fragment) == ERHIFunctionStage.Fragment)
                     {
                         m_FragmentParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.Slot, Dx12Utility.GetDx12BindKey(bindInfo.Type)).GetHashCode(), parameter);
                     }
 
-                    if ((bindInfo.Visible & EFunctionStage.Compute) == EFunctionStage.Compute)
+                    if ((bindInfo.Visible & ERHIFunctionStage.Compute) == ERHIFunctionStage.Compute)
                     {
                         m_ComputeParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.Slot, Dx12Utility.GetDx12BindKey(bindInfo.Type)).GetHashCode(), parameter);
                     }
@@ -120,30 +120,30 @@ namespace Infinity.Graphics
             m_NativeRootSignature = rootSignature;
         }
 
-        public Dx12BindTypeAndParameterSlot? QueryRootDescriptorParameterIndex(in EFunctionStage shaderStage, in uint layoutIndex, in uint slot, in EBindType Type)
+        public Dx12BindTypeAndParameterSlot? QueryRootDescriptorParameterIndex(in ERHIFunctionStage shaderStage, in uint layoutIndex, in uint slot, in ERHIBindType Type)
         {
-            if ((shaderStage & EFunctionStage.Vertex) == EFunctionStage.Vertex)
+            if ((shaderStage & ERHIFunctionStage.Vertex) == ERHIFunctionStage.Vertex)
             {
                 //hasValue = m_VertexParameterMap.TryGetValue(new int2(slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
                 bool hasValue = m_VertexParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
                 return hasValue ? parameter : null;
             }
 
-            if ((shaderStage & EFunctionStage.Fragment) == EFunctionStage.Fragment)
+            if ((shaderStage & ERHIFunctionStage.Fragment) == ERHIFunctionStage.Fragment)
             {
                 //hasValue = m_FragmentParameterMap.TryGetValue(new int2(slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
                 bool hasValue = m_FragmentParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
                 return hasValue ? parameter : null;
             }
 
-            if ((shaderStage & EFunctionStage.Compute) == EFunctionStage.Compute)
+            if ((shaderStage & ERHIFunctionStage.Compute) == ERHIFunctionStage.Compute)
             {
                 //hasValue = m_ComputeParameterMap.TryGetValue(new int2(slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
                 bool hasValue = m_ComputeParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
                 return hasValue ? parameter : null;
             }
 
-            if ((shaderStage & EFunctionStage.All) == EFunctionStage.All)
+            if ((shaderStage & ERHIFunctionStage.All) == ERHIFunctionStage.All)
             {
                 bool hasValue = m_AllParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
                 return hasValue ? parameter : null;

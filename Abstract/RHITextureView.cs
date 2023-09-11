@@ -8,9 +8,9 @@ namespace Infinity.Graphics
         public uint BaseMipLevel;
         public uint ArrayCount;
         public uint BaseArraySlice;
-        //public EPixelFormat Format;
-        public ETextureViewType ViewType;
-        //public ETextureDimension Dimension;
+        //public ERHIPixelFormat Format;
+        public ERHITextureViewType ViewType;
+        //public ERHITextureDimension Dimension;
     }
 
     public abstract class RHITextureView : Disposal

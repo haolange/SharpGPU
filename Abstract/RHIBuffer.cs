@@ -6,8 +6,8 @@ namespace Infinity.Graphics
     public struct RHIBufferDescriptor
     {
         public int ByteSize;
-        public EBufferUsage UsageFlag;
-        public EStorageMode StorageMode;
+        public ERHIBufferUsage UsageFlag;
+        public ERHIStorageMode StorageMode;
     }
 
     public abstract class RHIBuffer : Disposal

@@ -95,15 +95,15 @@ namespace Infinity.Graphics
         public static void CHECK_HR(int hr, [CallerFilePath] string __FILE__ = "", [CallerLineNumber] int __LINE__ = 0, [CallerArgumentExpression("hr")] string expr = "")
             => Assert.False(FAILED(hr), $"{__FILE__}({__LINE__}): FAILED({(string.IsNullOrEmpty(expr) ? hr.ToString("X8") : expr)})");
 
-        internal static D3D12_QUERY_TYPE ConvertToDx12QueryType(in EQueryType queryType)
+        internal static D3D12_QUERY_TYPE ConvertToDx12QueryType(in ERHIQueryType queryType)
         {
             switch (queryType)
             {
-                case EQueryType.Occlusion:
+                case ERHIQueryType.Occlusion:
                     return D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION;
 
-                case EQueryType.TimestampTransfer:
-                case EQueryType.TimestampGenerice:
+                case ERHIQueryType.TimestampTransfer:
+                case ERHIQueryType.TimestampGenerice:
                     return D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP;
 
                 default:
@@ -111,17 +111,17 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_QUERY_HEAP_TYPE ConvertToDx12QueryHeapType(in EQueryType queryType)
+        internal static D3D12_QUERY_HEAP_TYPE ConvertToDx12QueryHeapType(in ERHIQueryType queryType)
         {
             switch (queryType)
             {
-                case EQueryType.Occlusion:
+                case ERHIQueryType.Occlusion:
                     return D3D12_QUERY_HEAP_TYPE.D3D12_QUERY_HEAP_TYPE_OCCLUSION;
 
-                case EQueryType.TimestampTransfer:
+                case ERHIQueryType.TimestampTransfer:
                     return D3D12_QUERY_HEAP_TYPE.D3D12_QUERY_HEAP_TYPE_COPY_QUEUE_TIMESTAMP;
 
-                case EQueryType.TimestampGenerice:
+                case ERHIQueryType.TimestampGenerice:
                     return D3D12_QUERY_HEAP_TYPE.D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
 
                 default:
@@ -129,14 +129,14 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_COMMAND_LIST_TYPE ConvertToDx12QueueType(in EQueueType queueType)
+        internal static D3D12_COMMAND_LIST_TYPE ConvertToDx12QueueType(in ERHIPipeline pipeline)
         {
-            switch (queueType)
+            switch (pipeline)
             {
-                case EQueueType.Compute:
+                case ERHIPipeline.Compute:
                     return D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_COMPUTE;
 
-                case EQueueType.Graphics:
+                case ERHIPipeline.Graphics:
                     return D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT;
 
                 default:
@@ -144,14 +144,14 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static uint ConvertToDx12SyncInterval(in EPresentMode presentMode)
+        internal static uint ConvertToDx12SyncInterval(in ERHIPresentMode presentMode)
         {
             switch (presentMode)
             {
-                case EPresentMode.VSync:
+                case ERHIPresentMode.VSync:
                     return 1;
 
-                case EPresentMode.Immediately:
+                case ERHIPresentMode.Immediately:
                     return 0;
 
                 default:
@@ -159,14 +159,14 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static DXGI_SWAP_EFFECT ConvertToDx12SwapEffect(in EPresentMode presentMode)
+        internal static DXGI_SWAP_EFFECT ConvertToDx12SwapEffect(in ERHIPresentMode presentMode)
         {
             switch (presentMode)
             {
-                case EPresentMode.VSync:
+                case ERHIPresentMode.VSync:
                     return DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
 
-                case EPresentMode.Immediately:
+                case ERHIPresentMode.Immediately:
                     return DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_DISCARD;
 
                 default:
@@ -176,73 +176,73 @@ namespace Infinity.Graphics
 
         internal static D3D12_FILTER ConvertToDx12Filter(in RHISamplerDescriptor descriptor)
         {
-            EFilterMode minFilter = descriptor.MinFilter;
-            EFilterMode magFilter = descriptor.MagFilter;
-            EFilterMode mipFilter = descriptor.MipFilter;
+            ERHIFilterMode minFilter = descriptor.MinFilter;
+            ERHIFilterMode magFilter = descriptor.MagFilter;
+            ERHIFilterMode mipFilter = descriptor.MipFilter;
 
-            if (minFilter == EFilterMode.Point && magFilter == EFilterMode.Point && mipFilter == EFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT; }
-            if (minFilter == EFilterMode.Point && magFilter == EFilterMode.Point && mipFilter == EFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR; }
-            if (minFilter == EFilterMode.Point && magFilter == EFilterMode.Linear && mipFilter == EFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT; }
-            if (minFilter == EFilterMode.Point && magFilter == EFilterMode.Linear && mipFilter == EFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_POINT_MAG_MIP_LINEAR; }
-            if (minFilter == EFilterMode.Linear && magFilter == EFilterMode.Point && mipFilter == EFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_LINEAR_MAG_MIP_POINT; }
-            if (minFilter == EFilterMode.Linear && magFilter == EFilterMode.Point && mipFilter == EFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR; }
-            if (minFilter == EFilterMode.Linear && magFilter == EFilterMode.Linear && mipFilter == EFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT; }
-            if (minFilter == EFilterMode.Linear && magFilter == EFilterMode.Linear && mipFilter == EFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR; }
-            if (minFilter == EFilterMode.Anisotropic || magFilter == EFilterMode.Anisotropic || mipFilter == EFilterMode.Anisotropic) { return D3D12_FILTER.D3D12_FILTER_ANISOTROPIC; }
+            if (minFilter == ERHIFilterMode.Point && magFilter == ERHIFilterMode.Point && mipFilter == ERHIFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT; }
+            if (minFilter == ERHIFilterMode.Point && magFilter == ERHIFilterMode.Point && mipFilter == ERHIFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR; }
+            if (minFilter == ERHIFilterMode.Point && magFilter == ERHIFilterMode.Linear && mipFilter == ERHIFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT; }
+            if (minFilter == ERHIFilterMode.Point && magFilter == ERHIFilterMode.Linear && mipFilter == ERHIFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_POINT_MAG_MIP_LINEAR; }
+            if (minFilter == ERHIFilterMode.Linear && magFilter == ERHIFilterMode.Point && mipFilter == ERHIFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_LINEAR_MAG_MIP_POINT; }
+            if (minFilter == ERHIFilterMode.Linear && magFilter == ERHIFilterMode.Point && mipFilter == ERHIFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR; }
+            if (minFilter == ERHIFilterMode.Linear && magFilter == ERHIFilterMode.Linear && mipFilter == ERHIFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT; }
+            if (minFilter == ERHIFilterMode.Linear && magFilter == ERHIFilterMode.Linear && mipFilter == ERHIFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR; }
+            if (minFilter == ERHIFilterMode.Anisotropic || magFilter == ERHIFilterMode.Anisotropic || mipFilter == ERHIFilterMode.Anisotropic) { return D3D12_FILTER.D3D12_FILTER_ANISOTROPIC; }
             return D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT;
         }
 
-        internal static D3D12_TEXTURE_ADDRESS_MODE ConvertToDx12AddressMode(in EAddressMode addressMode)
+        internal static D3D12_TEXTURE_ADDRESS_MODE ConvertToDx12AddressMode(in ERHIAddressMode addressMode)
         {
             switch (addressMode)
             {
-                case EAddressMode.MirrorRepeat:
+                case ERHIAddressMode.MirrorRepeat:
                     return D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
 
-                case EAddressMode.ClampToEdge:
+                case ERHIAddressMode.ClampToEdge:
                     return D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
             }
             return D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_WRAP;
         }
 
         // convert to dx12 format COMPARISON func
-        internal static D3D12_COMPARISON_FUNC ConvertToDx12ComparisonMode(in EComparisonMode comparisonMode)
+        internal static D3D12_COMPARISON_FUNC ConvertToDx12ComparisonMode(in ERHIComparisonMode comparisonMode)
         {
             switch (comparisonMode)
             {
-                case EComparisonMode.Less:
+                case ERHIComparisonMode.Less:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_LESS;
 
-                case EComparisonMode.Equal:
+                case ERHIComparisonMode.Equal:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_EQUAL;
 
-                case EComparisonMode.LessEqual:
+                case ERHIComparisonMode.LessEqual:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_LESS_EQUAL;
 
-                case EComparisonMode.Greater:
+                case ERHIComparisonMode.Greater:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_GREATER;
 
-                case EComparisonMode.NotEqual:
+                case ERHIComparisonMode.NotEqual:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NOT_EQUAL;
 
-                case EComparisonMode.GreaterEqual:
+                case ERHIComparisonMode.GreaterEqual:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_GREATER_EQUAL;
 
-                case EComparisonMode.Always:
+                case ERHIComparisonMode.Always:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_ALWAYS;
             }
 
             return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER;
         }
 
-        internal static D3D12_HEAP_TYPE ConvertToDx12HeapTypeByStorage(in EStorageMode storageMode)
+        internal static D3D12_HEAP_TYPE ConvertToDx12HeapTypeByStorage(in ERHIStorageMode storageMode)
         {
             switch (storageMode)
             {
-                case EStorageMode.HostUpload:
+                case ERHIStorageMode.HostUpload:
                     return D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD;
 
-                case EStorageMode.Readback:
+                case ERHIStorageMode.Readback:
                     return D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK;
 
                 default:
@@ -250,26 +250,26 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_SHADING_RATE ConvertToDx12ShadingRate(in EShadingRate shadingRate)
+        internal static D3D12_SHADING_RATE ConvertToDx12ShadingRate(in ERHIShadingRate shadingRate)
         {
             switch (shadingRate)
             {
-                case EShadingRate.Rate1x1:
+                case ERHIShadingRate.Rate1x1:
                     return D3D12_SHADING_RATE.D3D12_SHADING_RATE_1X1;
 
-                case EShadingRate.Rate1x2:
+                case ERHIShadingRate.Rate1x2:
                     return D3D12_SHADING_RATE.D3D12_SHADING_RATE_1X2;
 
-                case EShadingRate.Rate2x1:
+                case ERHIShadingRate.Rate2x1:
                     return D3D12_SHADING_RATE.D3D12_SHADING_RATE_2X1;
 
-                case EShadingRate.Rate2x2:
+                case ERHIShadingRate.Rate2x2:
                     return D3D12_SHADING_RATE.D3D12_SHADING_RATE_2X2;
 
-                case EShadingRate.Rate2x4:
+                case ERHIShadingRate.Rate2x4:
                     return D3D12_SHADING_RATE.D3D12_SHADING_RATE_2X4;
 
-                case EShadingRate.Rate4x2:
+                case ERHIShadingRate.Rate4x2:
                     return D3D12_SHADING_RATE.D3D12_SHADING_RATE_4X2;
 
                 default:
@@ -277,20 +277,20 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_SHADING_RATE_COMBINER ConvertToDx12ShadingRateCombiner(in EShadingRateCombiner shadingRateCombiner)
+        internal static D3D12_SHADING_RATE_COMBINER ConvertToDx12ShadingRateCombiner(in ERHIShadingRateCombiner shadingRateCombiner)
         {
             switch (shadingRateCombiner)
             {
-                case EShadingRateCombiner.Min:
+                case ERHIShadingRateCombiner.Min:
                     return D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MIN;
 
-                case EShadingRateCombiner.Max:
+                case ERHIShadingRateCombiner.Max:
                     return D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MAX;
 
-                case EShadingRateCombiner.Sum:
+                case ERHIShadingRateCombiner.Sum:
                     return D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_SUM;
 
-                case EShadingRateCombiner.Override:
+                case ERHIShadingRateCombiner.Override:
                     return D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_OVERRIDE;
 
                 default:
@@ -298,31 +298,31 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static byte ConvertToDx12WriteChannel(in EColorWriteChannel writeChannel)
+        internal static byte ConvertToDx12WriteChannel(in ERHIColorWriteChannel writeChannel)
         {
             byte result = 0;
 
-            if ((writeChannel & EColorWriteChannel.Red) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_RED;
-            if ((writeChannel & EColorWriteChannel.Green) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_GREEN;
-            if ((writeChannel & EColorWriteChannel.Blue) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_BLUE;
-            if ((writeChannel & EColorWriteChannel.Alpha) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_ALPHA;
+            if ((writeChannel & ERHIColorWriteChannel.Red) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_RED;
+            if ((writeChannel & ERHIColorWriteChannel.Green) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_GREEN;
+            if ((writeChannel & ERHIColorWriteChannel.Blue) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_BLUE;
+            if ((writeChannel & ERHIColorWriteChannel.Alpha) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_ALPHA;
 
             return result;
         }
 
-        internal static D3D12_RESOURCE_STATES ConvertToDx12BufferStateByFlag(in EBufferUsage bufferFlag)
+        internal static D3D12_RESOURCE_STATES ConvertToDx12BufferStateByFlag(in ERHIBufferUsage bufferFlag)
         {
-            /*Dictionary<EBufferUsage, D3D12_RESOURCE_STATES> stateRules = new Dictionary<EBufferUsage, D3D12_RESOURCE_STATES>();
-            stateRules.Add(EBufferUsage.CopySrc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE);
-            stateRules.Add(EBufferUsage.CopyDst, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST);
-            stateRules.Add(EBufferUsage.Index, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
-            stateRules.Add(EBufferUsage.Vertex, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
-            stateRules.Add(EBufferUsage.Uniform, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
-            stateRules.Add(EBufferUsage.Indirect, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
-            stateRules.Add(EBufferUsage.StorageResource, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);*/
+            /*Dictionary<ERHIBufferUsage, D3D12_RESOURCE_STATES> stateRules = new Dictionary<ERHIBufferUsage, D3D12_RESOURCE_STATES>();
+            stateRules.Add(ERHIBufferUsage.CopySrc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE);
+            stateRules.Add(ERHIBufferUsage.CopyDst, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST);
+            stateRules.Add(ERHIBufferUsage.Index, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
+            stateRules.Add(ERHIBufferUsage.Vertex, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
+            stateRules.Add(ERHIBufferUsage.Uniform, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
+            stateRules.Add(ERHIBufferUsage.Indirect, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
+            stateRules.Add(ERHIBufferUsage.StorageResource, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);*/
 
             D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
-            /*foreach (KeyValuePair<EBufferUsage, D3D12_RESOURCE_STATES> rule in stateRules)
+            /*foreach (KeyValuePair<ERHIBufferUsage, D3D12_RESOURCE_STATES> rule in stateRules)
             {
                 if ((bufferflag & rule.Key) == rule.Key)
                 {
@@ -333,18 +333,18 @@ namespace Infinity.Graphics
             return result;
         }
 
-        internal static D3D12_RESOURCE_STATES ConvertToDx12TextureStateByFlag(in ETextureUsage textureflag)
+        internal static D3D12_RESOURCE_STATES ConvertToDx12TextureStateByFlag(in ERHITextureUsage textureflag)
         {
-            /*Dictionary<ETextureUsage, D3D12_RESOURCE_STATES> stateRules = new Dictionary<ETextureUsage, D3D12_RESOURCE_STATES>();
-            stateRules.Add(ETextureUsage.CopySrc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE);
-            stateRules.Add(ETextureUsage.CopyDst, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST);
-            stateRules.Add(ETextureUsage.DepthAttachment, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_WRITE);
-            stateRules.Add(ETextureUsage.ColorAttachment, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET);
-            stateRules.Add(ETextureUsage.ShaderResource, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON);
-            stateRules.Add(ETextureUsage.StorageResource, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);*/
+            /*Dictionary<ERHITextureUsage, D3D12_RESOURCE_STATES> stateRules = new Dictionary<ERHITextureUsage, D3D12_RESOURCE_STATES>();
+            stateRules.Add(ERHITextureUsage.CopySrc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE);
+            stateRules.Add(ERHITextureUsage.CopyDst, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST);
+            stateRules.Add(ERHITextureUsage.DepthAttachment, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_WRITE);
+            stateRules.Add(ERHITextureUsage.ColorAttachment, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET);
+            stateRules.Add(ERHITextureUsage.ShaderResource, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON);
+            stateRules.Add(ERHITextureUsage.StorageResource, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);*/
 
             D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
-            /*foreach (KeyValuePair<ETextureUsage, D3D12_RESOURCE_STATES> rule in stateRules)
+            /*foreach (KeyValuePair<ERHITextureUsage, D3D12_RESOURCE_STATES> rule in stateRules)
             {
                 if ((textureUsages & rule.Key) == rule.Key)
                 {
@@ -355,13 +355,13 @@ namespace Infinity.Graphics
             return result;
         }
 
-        internal static D3D12_RESOURCE_FLAGS ConvertToDx12BufferFlag(in EBufferUsage bufferflag)
+        internal static D3D12_RESOURCE_FLAGS ConvertToDx12BufferFlag(in ERHIBufferUsage bufferflag)
         {
-            Dictionary<EBufferUsage, D3D12_RESOURCE_FLAGS> stateRules = new Dictionary<EBufferUsage, D3D12_RESOURCE_FLAGS>();
-            stateRules.Add(EBufferUsage.UnorderedAccess, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+            Dictionary<ERHIBufferUsage, D3D12_RESOURCE_FLAGS> stateRules = new Dictionary<ERHIBufferUsage, D3D12_RESOURCE_FLAGS>();
+            stateRules.Add(ERHIBufferUsage.UnorderedAccess, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
             D3D12_RESOURCE_FLAGS result = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE;
-            foreach (KeyValuePair<EBufferUsage, D3D12_RESOURCE_FLAGS> rule in stateRules)
+            foreach (KeyValuePair<ERHIBufferUsage, D3D12_RESOURCE_FLAGS> rule in stateRules)
             {
                 if ((bufferflag & rule.Key) == rule.Key)
                 {
@@ -372,15 +372,15 @@ namespace Infinity.Graphics
             return result;
         }
 
-        internal static D3D12_RESOURCE_FLAGS ConvertToDx12TextureFlag(in ETextureUsage textureflag)
+        internal static D3D12_RESOURCE_FLAGS ConvertToDx12TextureFlag(in ERHITextureUsage textureflag)
         {
-            Dictionary<ETextureUsage, D3D12_RESOURCE_FLAGS> stateRules = new Dictionary<ETextureUsage, D3D12_RESOURCE_FLAGS>();
-            stateRules.Add(ETextureUsage.DepthStencil, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
-            stateRules.Add(ETextureUsage.RenderTarget, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
-            stateRules.Add(ETextureUsage.UnorderedAccess, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+            Dictionary<ERHITextureUsage, D3D12_RESOURCE_FLAGS> stateRules = new Dictionary<ERHITextureUsage, D3D12_RESOURCE_FLAGS>();
+            stateRules.Add(ERHITextureUsage.DepthStencil, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+            stateRules.Add(ERHITextureUsage.RenderTarget, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+            stateRules.Add(ERHITextureUsage.UnorderedAccess, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
             D3D12_RESOURCE_FLAGS result = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE;
-            foreach (KeyValuePair<ETextureUsage, D3D12_RESOURCE_FLAGS> rule in stateRules)
+            foreach (KeyValuePair<ERHITextureUsage, D3D12_RESOURCE_FLAGS> rule in stateRules)
             {
                 if ((textureflag & rule.Key) == rule.Key)
                 {
@@ -391,19 +391,19 @@ namespace Infinity.Graphics
             return result;
         }
 
-        internal static D3D12_RESOURCE_DIMENSION ConvertToDx12TextureDimension(in ETextureDimension dimension)
+        internal static D3D12_RESOURCE_DIMENSION ConvertToDx12TextureDimension(in ERHITextureDimension dimension)
         {
             switch (dimension)
             {
-                case ETextureDimension.Texture2D:
-                case ETextureDimension.Texture2DArray:
-                case ETextureDimension.Texture2DMS:
-                case ETextureDimension.Texture2DArrayMS:
-                case ETextureDimension.TextureCube:
-                case ETextureDimension.TextureCubeArray:
+                case ERHITextureDimension.Texture2D:
+                case ERHITextureDimension.Texture2DArray:
+                case ERHITextureDimension.Texture2DMS:
+                case ERHITextureDimension.Texture2DArrayMS:
+                case ERHITextureDimension.TextureCube:
+                case ERHITextureDimension.TextureCubeArray:
                     return D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 
-                case ETextureDimension.Texture3D:
+                case ERHITextureDimension.Texture3D:
                     return D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE3D;
 
                 default:
@@ -411,37 +411,37 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_RESOURCE_STATES ConvertToDx12BufferState(in EBufferState state)
+        internal static D3D12_RESOURCE_STATES ConvertToDx12BufferState(in ERHIBufferState state)
         {
-            if (state == EBufferState.Undefine)
+            if (state == ERHIBufferState.Undefine)
                 return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
 
             D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
 
-            if ((state & EBufferState.CopyDst) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
-            if ((state & EBufferState.CopySrc) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
-            if ((state & EBufferState.IndexBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDEX_BUFFER;
-            if ((state & EBufferState.VertexBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-            if ((state & EBufferState.ConstantBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-            if ((state & EBufferState.IndirectArgument) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
-            if ((state & EBufferState.ShaderResource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-            if ((state & EBufferState.UnorderedAccess) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            if ((state & EBufferState.AccelStructRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
-            if ((state & EBufferState.AccelStructWrite) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
-            if ((state & EBufferState.AccelStructBuildInput) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-            if ((state & EBufferState.AccelStructBuildBlast) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+            if ((state & ERHIBufferState.CopyDst) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
+            if ((state & ERHIBufferState.CopySrc) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
+            if ((state & ERHIBufferState.IndexBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDEX_BUFFER;
+            if ((state & ERHIBufferState.VertexBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+            if ((state & ERHIBufferState.ConstantBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+            if ((state & ERHIBufferState.IndirectArgument) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
+            if ((state & ERHIBufferState.ShaderResource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+            if ((state & ERHIBufferState.UnorderedAccess) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            if ((state & ERHIBufferState.AccelStructRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+            if ((state & ERHIBufferState.AccelStructWrite) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+            if ((state & ERHIBufferState.AccelStructBuildInput) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+            if ((state & ERHIBufferState.AccelStructBuildBlast) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
 
             return result;
         }
 
-        internal static D3D12_RESOURCE_STATES ConvertToDx12ResourceStateFormStorageMode(in EStorageMode storageMode)
+        internal static D3D12_RESOURCE_STATES ConvertToDx12ResourceStateFormStorageMode(in ERHIStorageMode storageMode)
         {
             switch (storageMode)
             {
-                case EStorageMode.HostUpload:
+                case ERHIStorageMode.HostUpload:
                     return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
 
-                case EStorageMode.Readback:
+                case ERHIStorageMode.Readback:
                     return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
 
                 default:
@@ -449,58 +449,58 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_RESOURCE_STATES ConvertToDx12TextureState(in ETextureState state)
+        internal static D3D12_RESOURCE_STATES ConvertToDx12TextureState(in ERHITextureState state)
         {
-            if (state == ETextureState.Undefine)
+            if (state == ERHITextureState.Undefine)
                 return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
 
             D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
 
-            if ((state & ETextureState.Present) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
-            //if ((state & ETextureState.GenericRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
-            if ((state & ETextureState.CopyDst) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
-            if ((state & ETextureState.CopySrc) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
-            if ((state & ETextureState.ResolveDst) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RESOLVE_DEST;
-            if ((state & ETextureState.ResolveSrc) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RESOLVE_SOURCE;
-            if ((state & ETextureState.DepthRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_READ;
-            if ((state & ETextureState.DepthWrite) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_WRITE;
-            if ((state & ETextureState.RenderTarget) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
-            if ((state & ETextureState.ShaderResource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-            if ((state & ETextureState.UnorderedAccess) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            if ((state & ETextureState.ShadingRateSurface) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE;
+            if ((state & ERHITextureState.Present) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
+            //if ((state & ERHITextureState.GenericRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
+            if ((state & ERHITextureState.CopyDst) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
+            if ((state & ERHITextureState.CopySrc) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
+            if ((state & ERHITextureState.ResolveDst) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RESOLVE_DEST;
+            if ((state & ERHITextureState.ResolveSrc) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RESOLVE_SOURCE;
+            if ((state & ERHITextureState.DepthRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_READ;
+            if ((state & ERHITextureState.DepthWrite) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_WRITE;
+            if ((state & ERHITextureState.RenderTarget) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
+            if ((state & ERHITextureState.ShaderResource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+            if ((state & ERHITextureState.UnorderedAccess) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+            if ((state & ERHITextureState.ShadingRateSurface) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE;
 
             return result;
         }
 
-        internal static D3D_PRIMITIVE_TOPOLOGY ConvertToDx12PrimitiveTopology(in EPrimitiveTopology primitiveTopology)
+        internal static D3D_PRIMITIVE_TOPOLOGY ConvertToDx12PrimitiveTopology(in ERHIPrimitiveTopology primitiveTopology)
         {
             switch (primitiveTopology)
             {
-                case EPrimitiveTopology.PointList:
+                case ERHIPrimitiveTopology.PointList:
                     return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
 
-                case EPrimitiveTopology.LineList:
+                case ERHIPrimitiveTopology.LineList:
                     return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_LINELIST;
 
-                case EPrimitiveTopology.LineStrip:
+                case ERHIPrimitiveTopology.LineStrip:
                     return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
 
-                case EPrimitiveTopology.TriangleList:
+                case ERHIPrimitiveTopology.TriangleList:
                     return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 
-                case EPrimitiveTopology.TriangleStrip:
+                case ERHIPrimitiveTopology.TriangleStrip:
                     return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
 
-                case EPrimitiveTopology.LineListAdj:
+                case ERHIPrimitiveTopology.LineListAdj:
                     return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_LINELIST_ADJ;
 
-                case EPrimitiveTopology.LineStripAdj:
+                case ERHIPrimitiveTopology.LineStripAdj:
                     return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_LINESTRIP_ADJ;
 
-                case EPrimitiveTopology.TriangleListAdj:
+                case ERHIPrimitiveTopology.TriangleListAdj:
                     return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST_ADJ;
 
-                case EPrimitiveTopology.TriangleStripAdj:
+                case ERHIPrimitiveTopology.TriangleStripAdj:
                     return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP_ADJ;
 
                 default:
@@ -508,23 +508,23 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_PRIMITIVE_TOPOLOGY_TYPE ConvertToDx12PrimitiveTopologyType(in EPrimitiveTopology primitiveTopology)
+        internal static D3D12_PRIMITIVE_TOPOLOGY_TYPE ConvertToDx12PrimitiveTopologyType(in ERHIPrimitiveTopology primitiveTopology)
         {
             switch (primitiveTopology)
             {
-                case EPrimitiveTopology.PointList:
+                case ERHIPrimitiveTopology.PointList:
                     return D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
 
-                case EPrimitiveTopology.LineList:
-                case EPrimitiveTopology.LineStrip:
-                case EPrimitiveTopology.LineListAdj:
-                case EPrimitiveTopology.LineStripAdj:
+                case ERHIPrimitiveTopology.LineList:
+                case ERHIPrimitiveTopology.LineStrip:
+                case ERHIPrimitiveTopology.LineListAdj:
+                case ERHIPrimitiveTopology.LineStripAdj:
                     return D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
 
-                case EPrimitiveTopology.TriangleList:
-                case EPrimitiveTopology.TriangleStrip:
-                case EPrimitiveTopology.TriangleListAdj:
-                case EPrimitiveTopology.TriangleStripAdj:
+                case ERHIPrimitiveTopology.TriangleList:
+                case ERHIPrimitiveTopology.TriangleStrip:
+                case ERHIPrimitiveTopology.TriangleListAdj:
+                case ERHIPrimitiveTopology.TriangleStripAdj:
                     return D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 
                 default:
@@ -571,32 +571,32 @@ namespace Infinity.Graphics
             return rasterDescription;
         }
 
-        internal static D3D12_COMPARISON_FUNC ConvertToDx12Comparison(in EComparisonMode comparisonMode)
+        internal static D3D12_COMPARISON_FUNC ConvertToDx12Comparison(in ERHIComparisonMode comparisonMode)
         {
             switch (comparisonMode)
             {
-                case EComparisonMode.Never:
+                case ERHIComparisonMode.Never:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER;
 
-                case EComparisonMode.Less:
+                case ERHIComparisonMode.Less:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_LESS;
 
-                case EComparisonMode.Equal:
+                case ERHIComparisonMode.Equal:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_EQUAL;
 
-                case EComparisonMode.LessEqual:
+                case ERHIComparisonMode.LessEqual:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_LESS_EQUAL;
 
-                case EComparisonMode.Greater:
+                case ERHIComparisonMode.Greater:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_GREATER;
 
-                case EComparisonMode.NotEqual:
+                case ERHIComparisonMode.NotEqual:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NOT_EQUAL;
 
-                case EComparisonMode.GreaterEqual:
+                case ERHIComparisonMode.GreaterEqual:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_GREATER_EQUAL;
 
-                case EComparisonMode.Always:
+                case ERHIComparisonMode.Always:
                     return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_ALWAYS;
             }
             return 0;
@@ -633,498 +633,498 @@ namespace Infinity.Graphics
             return depthStencilDescription;
         }
 
-        internal static DXGI_FORMAT ConvertToDx12SemanticFormat(in ESemanticFormat format)
+        internal static DXGI_FORMAT ConvertToDx12SemanticFormat(in ERHISemanticFormat format)
         {
             switch (format)
             {
-                case ESemanticFormat.Byte:
+                case ERHISemanticFormat.Byte:
                     return DXGI_FORMAT.DXGI_FORMAT_R8_SINT;
 
-                case ESemanticFormat.Byte2:
+                case ERHISemanticFormat.Byte2:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8_SINT;
 
-                case ESemanticFormat.Byte4:
+                case ERHISemanticFormat.Byte4:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_SINT;
 
-                case ESemanticFormat.UByte:
+                case ERHISemanticFormat.UByte:
                     return DXGI_FORMAT.DXGI_FORMAT_R8_UINT;
 
-                case ESemanticFormat.UByte2:
+                case ERHISemanticFormat.UByte2:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8_UINT;
 
-                case ESemanticFormat.UByte4:
+                case ERHISemanticFormat.UByte4:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UINT;
 
-                case ESemanticFormat.ByteNormalized:
+                case ERHISemanticFormat.ByteNormalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R8_SNORM;
 
-                case ESemanticFormat.Byte2Normalized:
+                case ERHISemanticFormat.Byte2Normalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8_SNORM;
 
-                case ESemanticFormat.Byte4Normalized:
+                case ERHISemanticFormat.Byte4Normalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_SNORM;
 
-                case ESemanticFormat.UByteNormalized:
+                case ERHISemanticFormat.UByteNormalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R8_UNORM;
 
-                case ESemanticFormat.UByte2Normalized:
+                case ERHISemanticFormat.UByte2Normalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8_UNORM;
 
-                case ESemanticFormat.UByte4Normalized:
+                case ERHISemanticFormat.UByte4Normalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
 
-                case ESemanticFormat.Short:
+                case ERHISemanticFormat.Short:
                     return DXGI_FORMAT.DXGI_FORMAT_R16_SINT;
 
-                case ESemanticFormat.Short2:
+                case ERHISemanticFormat.Short2:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16_SINT;
 
-                case ESemanticFormat.Short4:
+                case ERHISemanticFormat.Short4:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_SINT;
 
-                case ESemanticFormat.UShort:
+                case ERHISemanticFormat.UShort:
                     return DXGI_FORMAT.DXGI_FORMAT_R16_UINT;
 
-                case ESemanticFormat.UShort2:
+                case ERHISemanticFormat.UShort2:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16_UINT;
 
-                case ESemanticFormat.UShort4:
+                case ERHISemanticFormat.UShort4:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_UINT;
 
-                case ESemanticFormat.ShortNormalized:
+                case ERHISemanticFormat.ShortNormalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R16_SNORM;
 
-                case ESemanticFormat.Short2Normalized:
+                case ERHISemanticFormat.Short2Normalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16_SNORM;
 
-                case ESemanticFormat.Short4Normalized:
+                case ERHISemanticFormat.Short4Normalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_SNORM;
 
-                case ESemanticFormat.UShortNormalized:
+                case ERHISemanticFormat.UShortNormalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R16_UNORM;
 
-                case ESemanticFormat.UShort2Normalized:
+                case ERHISemanticFormat.UShort2Normalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16_UNORM;
 
-                case ESemanticFormat.UShort4Normalized:
+                case ERHISemanticFormat.UShort4Normalized:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_UNORM;
 
-                case ESemanticFormat.Int:
+                case ERHISemanticFormat.Int:
                     return DXGI_FORMAT.DXGI_FORMAT_R32_SINT;
 
-                case ESemanticFormat.Int2:
+                case ERHISemanticFormat.Int2:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32_SINT;
 
-                case ESemanticFormat.Int3:
+                case ERHISemanticFormat.Int3:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32B32_SINT;
 
-                case ESemanticFormat.Int4:
+                case ERHISemanticFormat.Int4:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_SINT;
 
-                case ESemanticFormat.UInt:
+                case ERHISemanticFormat.UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R32_UINT;
 
-                case ESemanticFormat.UInt2:
+                case ERHISemanticFormat.UInt2:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32_UINT;
 
-                case ESemanticFormat.UInt3:
+                case ERHISemanticFormat.UInt3:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32B32_UINT;
 
-                case ESemanticFormat.UInt4:
+                case ERHISemanticFormat.UInt4:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_UINT;
 
-                case ESemanticFormat.Half:
+                case ERHISemanticFormat.Half:
                     return DXGI_FORMAT.DXGI_FORMAT_R16_FLOAT;
 
-                case ESemanticFormat.Half2:
+                case ERHISemanticFormat.Half2:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16_FLOAT;
 
-                case ESemanticFormat.Half4:
+                case ERHISemanticFormat.Half4:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT;
 
-                case ESemanticFormat.Float:
+                case ERHISemanticFormat.Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R32_FLOAT;
 
-                case ESemanticFormat.Float2:
+                case ERHISemanticFormat.Float2:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT;
 
-                case ESemanticFormat.Float3:
+                case ERHISemanticFormat.Float3:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32B32_FLOAT;
 
-                case ESemanticFormat.Float4:
+                case ERHISemanticFormat.Float4:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT;
             }
             return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
         }
 
         //convert dxgi format to pixel format
-        internal static DXGI_FORMAT ConvertToDx12Format(in EPixelFormat pixelFormat)
+        internal static DXGI_FORMAT ConvertToDx12Format(in ERHIPixelFormat pixelFormat)
         {
             switch (pixelFormat)
             {
-                case EPixelFormat.R8_UNorm:
-                case EPixelFormat.R8_SNorm:
-                case EPixelFormat.R8_UInt:
-                case EPixelFormat.R8_SInt:
+                case ERHIPixelFormat.R8_UNorm:
+                case ERHIPixelFormat.R8_SNorm:
+                case ERHIPixelFormat.R8_UInt:
+                case ERHIPixelFormat.R8_SInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R8_TYPELESS;
 
-                case EPixelFormat.R16_UInt:
-                case EPixelFormat.R16_SInt:
-                case EPixelFormat.R16_Float:
+                case ERHIPixelFormat.R16_UInt:
+                case ERHIPixelFormat.R16_SInt:
+                case ERHIPixelFormat.R16_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R16_TYPELESS;
 
-                case EPixelFormat.R8G8_UInt:
-                case EPixelFormat.R8G8_SInt:
-                case EPixelFormat.R8G8_UNorm:
-                case EPixelFormat.R8G8_SNorm:
+                case ERHIPixelFormat.R8G8_UInt:
+                case ERHIPixelFormat.R8G8_SInt:
+                case ERHIPixelFormat.R8G8_UNorm:
+                case ERHIPixelFormat.R8G8_SNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8_TYPELESS;
 
-                case EPixelFormat.R32_UInt:
-                case EPixelFormat.R32_SInt:
-                case EPixelFormat.R32_Float:
+                case ERHIPixelFormat.R32_UInt:
+                case ERHIPixelFormat.R32_SInt:
+                case ERHIPixelFormat.R32_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS;
 
-                case EPixelFormat.R16G16_UInt:
-                case EPixelFormat.R16G16_SInt:
-                case EPixelFormat.R16G16_Float:
+                case ERHIPixelFormat.R16G16_UInt:
+                case ERHIPixelFormat.R16G16_SInt:
+                case ERHIPixelFormat.R16G16_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16_TYPELESS;
 
-                case EPixelFormat.R8G8B8A8_UInt:
-                case EPixelFormat.R8G8B8A8_SInt:
-                case EPixelFormat.R8G8B8A8_UNorm:
-                case EPixelFormat.R8G8B8A8_UNorm_Srgb:
-                case EPixelFormat.R8G8B8A8_SNorm:
+                case ERHIPixelFormat.R8G8B8A8_UInt:
+                case ERHIPixelFormat.R8G8B8A8_SInt:
+                case ERHIPixelFormat.R8G8B8A8_UNorm:
+                case ERHIPixelFormat.R8G8B8A8_UNorm_Srgb:
+                case ERHIPixelFormat.R8G8B8A8_SNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_TYPELESS;
 
-                case EPixelFormat.B8G8R8A8_UNorm:
-                case EPixelFormat.B8G8R8A8_UNorm_Srgb:
+                case ERHIPixelFormat.B8G8R8A8_UNorm:
+                case ERHIPixelFormat.B8G8R8A8_UNorm_Srgb:
                     return DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_TYPELESS;
 
-                case EPixelFormat.R99GB99_E5_Float:
+                case ERHIPixelFormat.R99GB99_E5_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
 
-                case EPixelFormat.R10G10B10A2_UInt:
-                case EPixelFormat.R10G10B10A2_UNorm:
+                case ERHIPixelFormat.R10G10B10A2_UInt:
+                case ERHIPixelFormat.R10G10B10A2_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_R10G10B10A2_TYPELESS;
 
-                case EPixelFormat.R11G11B10_Float:
+                case ERHIPixelFormat.R11G11B10_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R11G11B10_FLOAT;
 
-                case EPixelFormat.RG32_UInt:
-                case EPixelFormat.RG32_SInt:
-                case EPixelFormat.RG32_Float:
+                case ERHIPixelFormat.RG32_UInt:
+                case ERHIPixelFormat.RG32_SInt:
+                case ERHIPixelFormat.RG32_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32_TYPELESS;
 
-                case EPixelFormat.R16G16B16A16_UInt:
-                case EPixelFormat.R16G16B16A16_SInt:
-                case EPixelFormat.R16G16B16A16_Float:
+                case ERHIPixelFormat.R16G16B16A16_UInt:
+                case ERHIPixelFormat.R16G16B16A16_SInt:
+                case ERHIPixelFormat.R16G16B16A16_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_TYPELESS;
 
-                case EPixelFormat.R32G32B32A32_UInt:
-                case EPixelFormat.R32G32B32A32_SInt:
-                case EPixelFormat.R32G32B32A32_Float:
+                case ERHIPixelFormat.R32G32B32A32_UInt:
+                case ERHIPixelFormat.R32G32B32A32_SInt:
+                case ERHIPixelFormat.R32G32B32A32_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_TYPELESS;
 
-                case EPixelFormat.D16_UNorm:
+                case ERHIPixelFormat.D16_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_D16_UNORM;
 
-                case EPixelFormat.D24_UNorm_S8_UInt:
+                case ERHIPixelFormat.D24_UNorm_S8_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_D24_UNORM_S8_UINT;
 
-                case EPixelFormat.D32_Float:
+                case ERHIPixelFormat.D32_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT;
 
-                case EPixelFormat.D32_Float_S8_UInt:
+                case ERHIPixelFormat.D32_Float_S8_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
 
-                case EPixelFormat.RGBA_DXT1_SRGB:
+                case ERHIPixelFormat.RGBA_DXT1_SRGB:
                     return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM_SRGB;
 
-                case EPixelFormat.RGB_DXT1_UNorm:
+                case ERHIPixelFormat.RGB_DXT1_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM;
 
-                case EPixelFormat.RGBA_DXT1_UNorm:
+                case ERHIPixelFormat.RGBA_DXT1_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM;
 
-                case EPixelFormat.RGBA_DXT3_SRGB:
+                case ERHIPixelFormat.RGBA_DXT3_SRGB:
                     return DXGI_FORMAT.DXGI_FORMAT_BC2_UNORM_SRGB;
 
-                case EPixelFormat.RGBA_DXT3_UNorm:
+                case ERHIPixelFormat.RGBA_DXT3_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC2_UNORM;
 
-                case EPixelFormat.RGBA_DXT5_SRGB:
+                case ERHIPixelFormat.RGBA_DXT5_SRGB:
                     return DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM_SRGB;
 
-                case EPixelFormat.RGBA_DXT5_UNorm:
+                case ERHIPixelFormat.RGBA_DXT5_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM;
 
-                case EPixelFormat.R_BC4_UNorm:
+                case ERHIPixelFormat.R_BC4_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC4_UNORM;
 
-                case EPixelFormat.R_BC4_SNorm:
+                case ERHIPixelFormat.R_BC4_SNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC4_SNORM;
 
-                case EPixelFormat.RG_BC5_UNorm:
+                case ERHIPixelFormat.RG_BC5_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC5_UNORM;
 
-                case EPixelFormat.RG_BC5_SNorm:
+                case ERHIPixelFormat.RG_BC5_SNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC5_SNORM;
 
-                case EPixelFormat.RGB_BC6H_UFloat:
+                case ERHIPixelFormat.RGB_BC6H_UFloat:
                     return DXGI_FORMAT.DXGI_FORMAT_BC6H_UF16;
 
-                case EPixelFormat.RGB_BC6H_SFloat:
+                case ERHIPixelFormat.RGB_BC6H_SFloat:
                     return DXGI_FORMAT.DXGI_FORMAT_BC6H_SF16;
 
-                case EPixelFormat.RGBA_BC7_SRGB:
+                case ERHIPixelFormat.RGBA_BC7_SRGB:
                     return DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM_SRGB;
 
-                case EPixelFormat.RGBA_BC7_UNorm:
+                case ERHIPixelFormat.RGBA_BC7_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM;
 
-                case EPixelFormat.RGBA_ASTC4X4_SRGB:
-                case EPixelFormat.RGBA_ASTC4X4_UNorm:
-                case EPixelFormat.RGBA_ASTC4X4_UFloat:
-                case EPixelFormat.RGBA_ASTC5X5_SRGB:
-                case EPixelFormat.RGBA_ASTC5X5_UNorm:
-                case EPixelFormat.RGBA_ASTC5X5_UFloat:
-                case EPixelFormat.RGBA_ASTC6X6_SRGB:
-                case EPixelFormat.RGBA_ASTC6X6_UNorm:
-                case EPixelFormat.RGBA_ASTC6X6_UFloat:
-                case EPixelFormat.RGBA_ASTC8X8_SRGB:
-                case EPixelFormat.RGBA_ASTC8X8_UNorm:
-                case EPixelFormat.RGBA_ASTC8X8_UFloat:
-                case EPixelFormat.RGBA_ASTC10X10_SRGB:
-                case EPixelFormat.RGBA_ASTC10X10_UNorm:
-                case EPixelFormat.RGBA_ASTC10X10_UFloat:
-                case EPixelFormat.RGBA_ASTC12X12_SRGB:
-                case EPixelFormat.RGBA_ASTC12X12_UNorm:
-                case EPixelFormat.RGBA_ASTC12X12_UFloat:
+                case ERHIPixelFormat.RGBA_ASTC4X4_SRGB:
+                case ERHIPixelFormat.RGBA_ASTC4X4_UNorm:
+                case ERHIPixelFormat.RGBA_ASTC4X4_UFloat:
+                case ERHIPixelFormat.RGBA_ASTC5X5_SRGB:
+                case ERHIPixelFormat.RGBA_ASTC5X5_UNorm:
+                case ERHIPixelFormat.RGBA_ASTC5X5_UFloat:
+                case ERHIPixelFormat.RGBA_ASTC6X6_SRGB:
+                case ERHIPixelFormat.RGBA_ASTC6X6_UNorm:
+                case ERHIPixelFormat.RGBA_ASTC6X6_UFloat:
+                case ERHIPixelFormat.RGBA_ASTC8X8_SRGB:
+                case ERHIPixelFormat.RGBA_ASTC8X8_UNorm:
+                case ERHIPixelFormat.RGBA_ASTC8X8_UFloat:
+                case ERHIPixelFormat.RGBA_ASTC10X10_SRGB:
+                case ERHIPixelFormat.RGBA_ASTC10X10_UNorm:
+                case ERHIPixelFormat.RGBA_ASTC10X10_UFloat:
+                case ERHIPixelFormat.RGBA_ASTC12X12_SRGB:
+                case ERHIPixelFormat.RGBA_ASTC12X12_UNorm:
+                case ERHIPixelFormat.RGBA_ASTC12X12_UFloat:
                     return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
 
-                case EPixelFormat.YUV2:
+                case ERHIPixelFormat.YUV2:
                     return DXGI_FORMAT.DXGI_FORMAT_YUY2;
             }
             return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
         }
 
-        internal static DXGI_FORMAT ConvertToDx12ViewFormat(in EPixelFormat pixelFormat)
+        internal static DXGI_FORMAT ConvertToDx12ViewFormat(in ERHIPixelFormat pixelFormat)
         {
             switch (pixelFormat)
             {
-                case EPixelFormat.R8_UNorm:
+                case ERHIPixelFormat.R8_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_R8_UNORM;
 
-                case EPixelFormat.R8_SNorm:
+                case ERHIPixelFormat.R8_SNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_R8_SNORM;
 
-                case EPixelFormat.R8_UInt:
+                case ERHIPixelFormat.R8_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R8_UINT;
 
-                case EPixelFormat.R8_SInt:
+                case ERHIPixelFormat.R8_SInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R8_SINT;
 
-                case EPixelFormat.R16_UInt:
+                case ERHIPixelFormat.R16_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R16_UINT;
 
-                case EPixelFormat.R16_SInt:
+                case ERHIPixelFormat.R16_SInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R16_SINT;
 
-                case EPixelFormat.R16_Float:
+                case ERHIPixelFormat.R16_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R16_FLOAT;
 
-                case EPixelFormat.R8G8_UNorm:
+                case ERHIPixelFormat.R8G8_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8_UNORM;
 
-                case EPixelFormat.R8G8_SNorm:
+                case ERHIPixelFormat.R8G8_SNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8_SNORM;
 
-                case EPixelFormat.R8G8_UInt:
+                case ERHIPixelFormat.R8G8_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8_UINT;
 
-                case EPixelFormat.R8G8_SInt:
+                case ERHIPixelFormat.R8G8_SInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8_SINT;
 
-                case EPixelFormat.R32_UInt:
+                case ERHIPixelFormat.R32_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R32_UINT;
 
-                case EPixelFormat.R32_SInt:
+                case ERHIPixelFormat.R32_SInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R32_SINT;
 
-                case EPixelFormat.R32_Float:
+                case ERHIPixelFormat.R32_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R32_FLOAT;
 
-                case EPixelFormat.R16G16_UInt:
+                case ERHIPixelFormat.R16G16_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16_UINT;
 
-                case EPixelFormat.R16G16_SInt:
+                case ERHIPixelFormat.R16G16_SInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16_SINT;
 
-                case EPixelFormat.R16G16_Float:
+                case ERHIPixelFormat.R16G16_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16_FLOAT;
 
-                case EPixelFormat.R8G8B8A8_UNorm:
+                case ERHIPixelFormat.R8G8B8A8_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
 
-                case EPixelFormat.R8G8B8A8_UNorm_Srgb:
+                case ERHIPixelFormat.R8G8B8A8_UNorm_Srgb:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 
-                case EPixelFormat.R8G8B8A8_SNorm:
+                case ERHIPixelFormat.R8G8B8A8_SNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_SNORM;
 
-                case EPixelFormat.R8G8B8A8_UInt:
+                case ERHIPixelFormat.R8G8B8A8_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UINT;
 
-                case EPixelFormat.R8G8B8A8_SInt:
+                case ERHIPixelFormat.R8G8B8A8_SInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_SINT;
 
-                case EPixelFormat.B8G8R8A8_UNorm:
+                case ERHIPixelFormat.B8G8R8A8_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM;
 
-                case EPixelFormat.B8G8R8A8_UNorm_Srgb:
+                case ERHIPixelFormat.B8G8R8A8_UNorm_Srgb:
                     return DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
 
-                case EPixelFormat.R99GB99_E5_Float:
+                case ERHIPixelFormat.R99GB99_E5_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
 
-                case EPixelFormat.R10G10B10A2_UInt:
+                case ERHIPixelFormat.R10G10B10A2_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R10G10B10A2_UINT;
 
-                case EPixelFormat.R10G10B10A2_UNorm:
+                case ERHIPixelFormat.R10G10B10A2_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_R10G10B10A2_UNORM;
 
-                case EPixelFormat.R11G11B10_Float:
+                case ERHIPixelFormat.R11G11B10_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R11G11B10_FLOAT;
 
-                case EPixelFormat.RG32_UInt:
+                case ERHIPixelFormat.RG32_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32_UINT;
 
-                case EPixelFormat.RG32_SInt:
+                case ERHIPixelFormat.RG32_SInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32_SINT;
 
-                case EPixelFormat.RG32_Float:
+                case ERHIPixelFormat.RG32_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT;
 
-                case EPixelFormat.R16G16B16A16_UInt:
+                case ERHIPixelFormat.R16G16B16A16_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_UINT;
 
-                case EPixelFormat.R16G16B16A16_SInt:
+                case ERHIPixelFormat.R16G16B16A16_SInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_SINT;
 
-                case EPixelFormat.R16G16B16A16_Float:
+                case ERHIPixelFormat.R16G16B16A16_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT;
 
-                case EPixelFormat.R32G32B32A32_UInt:
+                case ERHIPixelFormat.R32G32B32A32_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_UINT;
 
-                case EPixelFormat.R32G32B32A32_SInt:
+                case ERHIPixelFormat.R32G32B32A32_SInt:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_SINT;
 
-                case EPixelFormat.R32G32B32A32_Float:
+                case ERHIPixelFormat.R32G32B32A32_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT;
 
-                case EPixelFormat.D16_UNorm:
+                case ERHIPixelFormat.D16_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_D16_UNORM;
 
-                case EPixelFormat.D24_UNorm_S8_UInt:
+                case ERHIPixelFormat.D24_UNorm_S8_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_D24_UNORM_S8_UINT;
 
-                case EPixelFormat.D32_Float:
+                case ERHIPixelFormat.D32_Float:
                     return DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT;
 
-                case EPixelFormat.D32_Float_S8_UInt:
+                case ERHIPixelFormat.D32_Float_S8_UInt:
                     return DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
 
-                case EPixelFormat.RGBA_DXT1_SRGB:
+                case ERHIPixelFormat.RGBA_DXT1_SRGB:
                     return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM_SRGB;
 
-                case EPixelFormat.RGB_DXT1_UNorm:
+                case ERHIPixelFormat.RGB_DXT1_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM;
 
-                case EPixelFormat.RGBA_DXT1_UNorm:
+                case ERHIPixelFormat.RGBA_DXT1_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM;
 
-                case EPixelFormat.RGBA_DXT3_SRGB:
+                case ERHIPixelFormat.RGBA_DXT3_SRGB:
                     return DXGI_FORMAT.DXGI_FORMAT_BC2_UNORM_SRGB;
 
-                case EPixelFormat.RGBA_DXT3_UNorm:
+                case ERHIPixelFormat.RGBA_DXT3_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC2_UNORM;
 
-                case EPixelFormat.RGBA_DXT5_SRGB:
+                case ERHIPixelFormat.RGBA_DXT5_SRGB:
                     return DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM_SRGB;
 
-                case EPixelFormat.RGBA_DXT5_UNorm:
+                case ERHIPixelFormat.RGBA_DXT5_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM;
 
-                case EPixelFormat.R_BC4_UNorm:
+                case ERHIPixelFormat.R_BC4_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC4_UNORM;
 
-                case EPixelFormat.R_BC4_SNorm:
+                case ERHIPixelFormat.R_BC4_SNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC4_SNORM;
 
-                case EPixelFormat.RG_BC5_UNorm:
+                case ERHIPixelFormat.RG_BC5_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC5_UNORM;
 
-                case EPixelFormat.RG_BC5_SNorm:
+                case ERHIPixelFormat.RG_BC5_SNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC5_SNORM;
 
-                case EPixelFormat.RGB_BC6H_UFloat:
+                case ERHIPixelFormat.RGB_BC6H_UFloat:
                     return DXGI_FORMAT.DXGI_FORMAT_BC6H_UF16;
 
-                case EPixelFormat.RGB_BC6H_SFloat:
+                case ERHIPixelFormat.RGB_BC6H_SFloat:
                     return DXGI_FORMAT.DXGI_FORMAT_BC6H_SF16;
 
-                case EPixelFormat.RGBA_BC7_SRGB:
+                case ERHIPixelFormat.RGBA_BC7_SRGB:
                     return DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM_SRGB;
 
-                case EPixelFormat.RGBA_BC7_UNorm:
+                case ERHIPixelFormat.RGBA_BC7_UNorm:
                     return DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM;
 
-                case EPixelFormat.RGBA_ASTC4X4_SRGB:
-                case EPixelFormat.RGBA_ASTC4X4_UNorm:
-                case EPixelFormat.RGBA_ASTC4X4_UFloat:
-                case EPixelFormat.RGBA_ASTC5X5_SRGB:
-                case EPixelFormat.RGBA_ASTC5X5_UNorm:
-                case EPixelFormat.RGBA_ASTC5X5_UFloat:
-                case EPixelFormat.RGBA_ASTC6X6_SRGB:
-                case EPixelFormat.RGBA_ASTC6X6_UNorm:
-                case EPixelFormat.RGBA_ASTC6X6_UFloat:
-                case EPixelFormat.RGBA_ASTC8X8_SRGB:
-                case EPixelFormat.RGBA_ASTC8X8_UNorm:
-                case EPixelFormat.RGBA_ASTC8X8_UFloat:
-                case EPixelFormat.RGBA_ASTC10X10_SRGB:
-                case EPixelFormat.RGBA_ASTC10X10_UNorm:
-                case EPixelFormat.RGBA_ASTC10X10_UFloat:
-                case EPixelFormat.RGBA_ASTC12X12_SRGB:
-                case EPixelFormat.RGBA_ASTC12X12_UNorm:
-                case EPixelFormat.RGBA_ASTC12X12_UFloat:
+                case ERHIPixelFormat.RGBA_ASTC4X4_SRGB:
+                case ERHIPixelFormat.RGBA_ASTC4X4_UNorm:
+                case ERHIPixelFormat.RGBA_ASTC4X4_UFloat:
+                case ERHIPixelFormat.RGBA_ASTC5X5_SRGB:
+                case ERHIPixelFormat.RGBA_ASTC5X5_UNorm:
+                case ERHIPixelFormat.RGBA_ASTC5X5_UFloat:
+                case ERHIPixelFormat.RGBA_ASTC6X6_SRGB:
+                case ERHIPixelFormat.RGBA_ASTC6X6_UNorm:
+                case ERHIPixelFormat.RGBA_ASTC6X6_UFloat:
+                case ERHIPixelFormat.RGBA_ASTC8X8_SRGB:
+                case ERHIPixelFormat.RGBA_ASTC8X8_UNorm:
+                case ERHIPixelFormat.RGBA_ASTC8X8_UFloat:
+                case ERHIPixelFormat.RGBA_ASTC10X10_SRGB:
+                case ERHIPixelFormat.RGBA_ASTC10X10_UNorm:
+                case ERHIPixelFormat.RGBA_ASTC10X10_UFloat:
+                case ERHIPixelFormat.RGBA_ASTC12X12_SRGB:
+                case ERHIPixelFormat.RGBA_ASTC12X12_UNorm:
+                case ERHIPixelFormat.RGBA_ASTC12X12_UFloat:
                     return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
 
-                case EPixelFormat.YUV2:
+                case ERHIPixelFormat.YUV2:
                     return DXGI_FORMAT.DXGI_FORMAT_YUY2;
             }
             return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
         }
 
-        internal static DXGI_FORMAT ConvertToDx12IndexFormat(in EIndexFormat format)
+        internal static DXGI_FORMAT ConvertToDx12IndexFormat(in ERHIIndexFormat format)
         {
-            return (format == EIndexFormat.UInt16) ? DXGI_FORMAT.DXGI_FORMAT_R16_UINT : ((format != EIndexFormat.UInt32) ? DXGI_FORMAT.DXGI_FORMAT_UNKNOWN : DXGI_FORMAT.DXGI_FORMAT_R32_UINT);
+            return (format == ERHIIndexFormat.UInt16) ? DXGI_FORMAT.DXGI_FORMAT_R16_UINT : ((format != ERHIIndexFormat.UInt32) ? DXGI_FORMAT.DXGI_FORMAT_UNKNOWN : DXGI_FORMAT.DXGI_FORMAT_R32_UINT);
         }
 
-        internal static DXGI_SAMPLE_DESC ConvertToDx12SampleCount(in ESampleCount sampleCount)
+        internal static DXGI_SAMPLE_DESC ConvertToDx12SampleCount(in ERHISampleCount sampleCount)
         {
             switch (sampleCount)
             {
-                case ESampleCount.None:
+                case ERHISampleCount.None:
                     return new DXGI_SAMPLE_DESC(1, 0);
 
-                case ESampleCount.Count2:
+                case ERHISampleCount.Count2:
                     return new DXGI_SAMPLE_DESC(2, 0);
 
-                case ESampleCount.Count4:
+                case ERHISampleCount.Count4:
                     return new DXGI_SAMPLE_DESC(4, 0);
 
-                case ESampleCount.Count8:
+                case ERHISampleCount.Count8:
                     return new DXGI_SAMPLE_DESC(8, 0);
             }
             return new DXGI_SAMPLE_DESC(0, 0);
@@ -1147,126 +1147,126 @@ namespace Infinity.Graphics
             return outFlag;
         }
 
-        internal static D3D12_DSV_DIMENSION ConvertToDx12TextureDSVDimension(in ETextureDimension dimension)
+        internal static D3D12_DSV_DIMENSION ConvertToDx12TextureDSVDimension(in ERHITextureDimension dimension)
         {
             switch (dimension)
             {
-                case ETextureDimension.Texture2DMS:
+                case ERHITextureDimension.Texture2DMS:
                     return D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2DMS;
 
-                case ETextureDimension.Texture2DArray:
+                case ERHITextureDimension.Texture2DArray:
                     return D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
 
-                case ETextureDimension.Texture2DArrayMS:
+                case ERHITextureDimension.Texture2DArrayMS:
                     return D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
             }
             return D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2D;
         }
 
-        internal static D3D12_RTV_DIMENSION ConvertToDx12TextureRTVDimension(in ETextureDimension dimension)
+        internal static D3D12_RTV_DIMENSION ConvertToDx12TextureRTVDimension(in ERHITextureDimension dimension)
         {
             switch (dimension)
             {
-                case ETextureDimension.Texture2DMS:
+                case ERHITextureDimension.Texture2DMS:
                     return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2DMS;
 
-                case ETextureDimension.Texture2DArray:
+                case ERHITextureDimension.Texture2DArray:
                     return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
 
-                case ETextureDimension.Texture2DArrayMS:
+                case ERHITextureDimension.Texture2DArrayMS:
                     return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
 
-                case ETextureDimension.Texture3D:
+                case ERHITextureDimension.Texture3D:
                     return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE3D;
             }
             return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2D;
         }
 
-        internal static D3D12_SRV_DIMENSION ConvertToDx12TextureSRVDimension(in ETextureDimension dimension)
+        internal static D3D12_SRV_DIMENSION ConvertToDx12TextureSRVDimension(in ERHITextureDimension dimension)
         {
             switch (dimension)
             {
-                case ETextureDimension.Texture2DMS:
+                case ERHITextureDimension.Texture2DMS:
                     return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2DMS;
 
-                case ETextureDimension.Texture2DArray:
+                case ERHITextureDimension.Texture2DArray:
                     return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
 
-                case ETextureDimension.Texture2DArrayMS:
+                case ERHITextureDimension.Texture2DArrayMS:
                     return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
 
-                case ETextureDimension.TextureCube:
+                case ERHITextureDimension.TextureCube:
                     return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURECUBE;
 
-                case ETextureDimension.TextureCubeArray:
+                case ERHITextureDimension.TextureCubeArray:
                     return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
 
-                case ETextureDimension.Texture3D:
+                case ERHITextureDimension.Texture3D:
                     return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE3D;
             }
             return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2D;
         }
 
-        internal static D3D12_UAV_DIMENSION ConvertToDx12TextureUAVDimension(in ETextureDimension dimension)
+        internal static D3D12_UAV_DIMENSION ConvertToDx12TextureUAVDimension(in ERHITextureDimension dimension)
         {
             switch (dimension)
             {
-                case ETextureDimension.Texture2DMS:
+                case ERHITextureDimension.Texture2DMS:
                     return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DMS;
 
-                case ETextureDimension.Texture2DArray:
+                case ERHITextureDimension.Texture2DArray:
                     return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
 
-                case ETextureDimension.Texture2DArrayMS:
+                case ERHITextureDimension.Texture2DArrayMS:
                     return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DMSARRAY;
 
-                case ETextureDimension.TextureCube:
+                case ERHITextureDimension.TextureCube:
                     return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
 
-                case ETextureDimension.TextureCubeArray:
+                case ERHITextureDimension.TextureCubeArray:
                     return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
 
-                case ETextureDimension.Texture3D:
+                case ERHITextureDimension.Texture3D:
                     return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE3D;
             }
             return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2D;
         }
 
-        internal static byte[] ConvertToDx12SemanticNameByte(this ESemanticType type)
+        internal static byte[] ConvertToDx12SemanticNameByte(this ERHISemanticType type)
         {
             string semanticName = string.Empty;
 
             switch (type)
             {
-                case ESemanticType.Color:
+                case ERHISemanticType.Color:
                     semanticName = "COLOR";
                     break;
 
-                case ESemanticType.Position:
+                case ERHISemanticType.Position:
                     semanticName = "POSITION";
                     break;
 
-                case ESemanticType.TexCoord:
+                case ERHISemanticType.TexCoord:
                     semanticName = "TEXCOORD";
                     break;
 
-                case ESemanticType.Normal:
+                case ERHISemanticType.Normal:
                     semanticName = "NORMAL";
                     break;
 
-                case ESemanticType.Tangent:
+                case ERHISemanticType.Tangent:
                     semanticName = "TANGENT";
                     break;
 
-                case ESemanticType.Binormal:
+                case ERHISemanticType.Binormal:
                     semanticName = "BINORMAL";
                     break;
 
-                case ESemanticType.BlendIndices:
+                case ERHISemanticType.BlendIndices:
                     semanticName = "BLENDINDICES";
                     break;
 
-                case ESemanticType.BlendWeights:
+                case ERHISemanticType.BlendWeights:
                     semanticName = "BLENDWEIGHTS";
                     break;
             }
@@ -1274,9 +1274,9 @@ namespace Infinity.Graphics
             return Encoding.ASCII.GetBytes(semanticName);
         }
 
-        internal static D3D12_INPUT_CLASSIFICATION ConvertToDx12InputSlotClass(this EVertexStepMode stepMode)
+        internal static D3D12_INPUT_CLASSIFICATION ConvertToDx12InputSlotClass(this ERHIVertexStepMode stepMode)
         {
-            return ((stepMode == EVertexStepMode.PerVertex) || (stepMode != EVertexStepMode.PerInstance)) ? D3D12_INPUT_CLASSIFICATION.D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA : D3D12_INPUT_CLASSIFICATION.D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA;
+            return ((stepMode == ERHIVertexStepMode.PerVertex) || (stepMode != ERHIVertexStepMode.PerInstance)) ? D3D12_INPUT_CLASSIFICATION.D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA : D3D12_INPUT_CLASSIFICATION.D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA;
         }
 
         internal static int GetDx12VertexLayoutCount(in Span<RHIVertexLayoutDescriptor> vertexLayouts)
@@ -1326,23 +1326,23 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_DESCRIPTOR_RANGE_TYPE ConvertToDx12BindType(in EBindType bindType)
+        internal static D3D12_DESCRIPTOR_RANGE_TYPE ConvertToDx12BindType(in ERHIBindType bindType)
         {
             switch (bindType)
             {
-                case EBindType.Buffer:
-                case EBindType.Texture:
-                case EBindType.AccelStruct:
+                case ERHIBindType.Buffer:
+                case ERHIBindType.Texture:
+                case ERHIBindType.AccelStruct:
                     return D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 
-                case EBindType.Sampler:
+                case ERHIBindType.Sampler:
                     return D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
 
-                case EBindType.UniformBuffer:
+                case ERHIBindType.UniformBuffer:
                     return D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
 
-                case EBindType.StorageBuffer:
-                case EBindType.StorageTexture:
+                case ERHIBindType.StorageBuffer:
+                case ERHIBindType.StorageTexture:
                     return D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
 
                 default:
@@ -1350,22 +1350,22 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static uint GetDx12BindKey(in EBindType bindType)
+        internal static uint GetDx12BindKey(in ERHIBindType bindType)
         {
             switch (bindType)
             {
-                case EBindType.Buffer:
-                case EBindType.Texture:
+                case ERHIBindType.Buffer:
+                case ERHIBindType.Texture:
                     return 64;
 
-                case EBindType.Sampler:
+                case ERHIBindType.Sampler:
                     return 128;
 
-                case EBindType.UniformBuffer:
+                case ERHIBindType.UniformBuffer:
                     return 256;
 
-                case EBindType.StorageBuffer:
-                case EBindType.StorageTexture:
+                case ERHIBindType.StorageBuffer:
+                case ERHIBindType.StorageTexture:
                     return 512;
 
                 default:
@@ -1373,22 +1373,22 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_DESCRIPTOR_RANGE_FLAGS GetDx12DescriptorRangeFalag(in EBindType bindType)
+        internal static D3D12_DESCRIPTOR_RANGE_FLAGS GetDx12DescriptorRangeFalag(in ERHIBindType bindType)
         {
             switch (bindType)
             {
-                case EBindType.Buffer:
-                case EBindType.Texture:
+                case ERHIBindType.Buffer:
+                case ERHIBindType.Texture:
                     return D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
 
-                case EBindType.Sampler:
+                case ERHIBindType.Sampler:
                     return D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
 
-                case EBindType.UniformBuffer:
+                case ERHIBindType.UniformBuffer:
                     return D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
 
-                case EBindType.StorageBuffer:
-                case EBindType.StorageTexture:
+                case ERHIBindType.StorageBuffer:
+                case ERHIBindType.StorageTexture:
                     return D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
 
                 default:
@@ -1396,20 +1396,20 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_SHADER_VISIBILITY ConvertToDx12ShaderStage(in EFunctionStage shaderStage)
+        internal static D3D12_SHADER_VISIBILITY ConvertToDx12ShaderStage(in ERHIFunctionStage shaderStage)
         {
             switch (shaderStage)
             {
-                case EFunctionStage.Task:
+                case ERHIFunctionStage.Task:
                     return D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_AMPLIFICATION;
 
-                case EFunctionStage.Mesh:
+                case ERHIFunctionStage.Mesh:
                     return D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_MESH;
 
-                case EFunctionStage.Vertex:
+                case ERHIFunctionStage.Vertex:
                     return D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_VERTEX;
 
-                case EFunctionStage.Fragment:
+                case ERHIFunctionStage.Fragment:
                     return D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL;
 
                 default:
@@ -1421,23 +1421,23 @@ namespace Infinity.Graphics
         {
             D3D12_CLEAR_FLAGS result = new D3D12_CLEAR_FLAGS();
 
-            if (depthStencilAttachment.DepthLoadOp == ELoadAction.Clear)
+            if (depthStencilAttachment.DepthLoadOp == ERHILoadAction.Clear)
             {
                 result |= D3D12_CLEAR_FLAGS.D3D12_CLEAR_FLAG_DEPTH;
             }
 
-            if (depthStencilAttachment.StencilLoadOp == ELoadAction.Clear)
+            if (depthStencilAttachment.StencilLoadOp == ERHILoadAction.Clear)
             {
                 result |= D3D12_CLEAR_FLAGS.D3D12_CLEAR_FLAG_STENCIL;
             }
             return result;
         }
 
-        internal static D3D12_HIT_GROUP_TYPE ConverteToDx12HitGroupType(in EHitGroupType type)
+        internal static D3D12_HIT_GROUP_TYPE ConverteToDx12HitGroupType(in ERHIHitGroupType type)
         {
             switch (type)
             {
-                case EHitGroupType.Procedural:
+                case ERHIHitGroupType.Procedural:
                     return D3D12_HIT_GROUP_TYPE.D3D12_HIT_GROUP_TYPE_PROCEDURAL_PRIMITIVE;
 
                 default:
@@ -1445,59 +1445,59 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static bool IsIndexBuffer(in EBufferUsage bufferflag)
+        internal static bool IsIndexBuffer(in ERHIBufferUsage bufferflag)
         {
-            return (bufferflag & EBufferUsage.IndexBuffer) == EBufferUsage.IndexBuffer;
+            return (bufferflag & ERHIBufferUsage.IndexBuffer) == ERHIBufferUsage.IndexBuffer;
         }
 
-        internal static bool IsVertexBuffer(in EBufferUsage bufferflag)
+        internal static bool IsVertexBuffer(in ERHIBufferUsage bufferflag)
         {
-            return (bufferflag & EBufferUsage.VertexBuffer) == EBufferUsage.VertexBuffer;
+            return (bufferflag & ERHIBufferUsage.VertexBuffer) == ERHIBufferUsage.VertexBuffer;
         }
 
-        internal static bool IsConstantBuffer(in EBufferUsage bufferflag)
+        internal static bool IsConstantBuffer(in ERHIBufferUsage bufferflag)
         {
-            return (bufferflag & EBufferUsage.UniformBuffer) == EBufferUsage.UniformBuffer;
+            return (bufferflag & ERHIBufferUsage.UniformBuffer) == ERHIBufferUsage.UniformBuffer;
         }
 
-        internal static bool IsAccelStruct(in EBufferUsage bufferflag)
+        internal static bool IsAccelStruct(in ERHIBufferUsage bufferflag)
         {
-            return (bufferflag & EBufferUsage.AccelStruct) == EBufferUsage.AccelStruct;
+            return (bufferflag & ERHIBufferUsage.AccelStruct) == ERHIBufferUsage.AccelStruct;
         }
 
-        internal static bool IsShaderResourceBuffer(in EBufferUsage bufferflag)
+        internal static bool IsShaderResourceBuffer(in ERHIBufferUsage bufferflag)
         {
-            return (bufferflag & EBufferUsage.ShaderResource) == EBufferUsage.ShaderResource;
+            return (bufferflag & ERHIBufferUsage.ShaderResource) == ERHIBufferUsage.ShaderResource;
         }
 
-        internal static bool IsUnorderedAccessBuffer(in EBufferUsage bufferflag)
+        internal static bool IsUnorderedAccessBuffer(in ERHIBufferUsage bufferflag)
         {
-            return (bufferflag & EBufferUsage.UnorderedAccess) == EBufferUsage.UnorderedAccess;
+            return (bufferflag & ERHIBufferUsage.UnorderedAccess) == ERHIBufferUsage.UnorderedAccess;
         }
 
-        internal static bool IsDepthStencilTexture(in ETextureUsage textureFlag)
+        internal static bool IsDepthStencilTexture(in ERHITextureUsage textureFlag)
         {
-            return (textureFlag & ETextureUsage.DepthStencil) == ETextureUsage.DepthStencil;
+            return (textureFlag & ERHITextureUsage.DepthStencil) == ERHITextureUsage.DepthStencil;
         }
 
-        internal static bool IsRenderTargetTexture(in ETextureUsage textureFlag)
+        internal static bool IsRenderTargetTexture(in ERHITextureUsage textureFlag)
         {
-            return (textureFlag & ETextureUsage.RenderTarget) == ETextureUsage.RenderTarget;
+            return (textureFlag & ERHITextureUsage.RenderTarget) == ERHITextureUsage.RenderTarget;
         }
 
-        internal static bool IsShaderResourceTexture(in ETextureUsage textureFlag)
+        internal static bool IsShaderResourceTexture(in ERHITextureUsage textureFlag)
         {
-            return (textureFlag & ETextureUsage.ShaderResource) == ETextureUsage.ShaderResource;
+            return (textureFlag & ERHITextureUsage.ShaderResource) == ERHITextureUsage.ShaderResource;
         }
 
-        internal static bool IsUnorderedAccessTexture(in ETextureUsage textureFlag)
+        internal static bool IsUnorderedAccessTexture(in ERHITextureUsage textureFlag)
         {
-            return (textureFlag & ETextureUsage.UnorderedAccess) == ETextureUsage.UnorderedAccess;
+            return (textureFlag & ERHITextureUsage.UnorderedAccess) == ERHITextureUsage.UnorderedAccess;
         }
 
-        internal static void FillTexture2DSRV(ref D3D12_TEX2D_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
+        internal static void FillTexture2DSRV(ref D3D12_TEX2D_SRV srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ETextureDimension.Texture2D) == ETextureDimension.Texture2D))
+            if (!((dimension & ERHITextureDimension.Texture2D) == ERHITextureDimension.Texture2D))
             {
                 return;
             }
@@ -1507,9 +1507,9 @@ namespace Infinity.Graphics
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTexture2DArraySRV(ref D3D12_TEX2D_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
+        internal static void FillTexture2DArraySRV(ref D3D12_TEX2D_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ETextureDimension.Texture2DArray) == ETextureDimension.Texture2DArray))
+            if (!((dimension & ERHITextureDimension.Texture2DArray) == ERHITextureDimension.Texture2DArray))
             {
                 return;
             }
@@ -1521,9 +1521,9 @@ namespace Infinity.Graphics
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTextureCubeSRV(ref D3D12_TEXCUBE_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
+        internal static void FillTextureCubeSRV(ref D3D12_TEXCUBE_SRV srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ETextureDimension.TextureCube) == ETextureDimension.TextureCube))
+            if (!((dimension & ERHITextureDimension.TextureCube) == ERHITextureDimension.TextureCube))
             {
                 return;
             }
@@ -1532,9 +1532,9 @@ namespace Infinity.Graphics
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTextureCubeArraySRV(ref D3D12_TEXCUBE_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
+        internal static void FillTextureCubeArraySRV(ref D3D12_TEXCUBE_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ETextureDimension.TextureCubeArray) == ETextureDimension.TextureCubeArray))
+            if (!((dimension & ERHITextureDimension.TextureCubeArray) == ERHITextureDimension.TextureCubeArray))
             {
                 return;
             }
@@ -1545,9 +1545,9 @@ namespace Infinity.Graphics
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTexture3DSRV(ref D3D12_TEX3D_SRV srv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
+        internal static void FillTexture3DSRV(ref D3D12_TEX3D_SRV srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ETextureDimension.Texture3D) == ETextureDimension.Texture3D))
+            if (!((dimension & ERHITextureDimension.Texture3D) == ERHITextureDimension.Texture3D))
             {
                 return;
             }
@@ -1556,9 +1556,9 @@ namespace Infinity.Graphics
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTexture2DUAV(ref D3D12_TEX2D_UAV uav, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
+        internal static void FillTexture2DUAV(ref D3D12_TEX2D_UAV uav, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ETextureDimension.Texture2D) == ETextureDimension.Texture2D))
+            if (!((dimension & ERHITextureDimension.Texture2D) == ERHITextureDimension.Texture2D))
             {
                 return;
             }
@@ -1566,9 +1566,9 @@ namespace Infinity.Graphics
             uav.PlaneSlice = 0;
         }
 
-        internal static void FillTexture2DArrayUAV(ref D3D12_TEX2D_ARRAY_UAV uav, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
+        internal static void FillTexture2DArrayUAV(ref D3D12_TEX2D_ARRAY_UAV uav, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ETextureDimension.Texture2DArray) == ETextureDimension.Texture2DArray))
+            if (!((dimension & ERHITextureDimension.Texture2DArray) == ERHITextureDimension.Texture2DArray))
             {
                 return;
             }
@@ -1578,9 +1578,9 @@ namespace Infinity.Graphics
             uav.PlaneSlice = 0;
         }
 
-        internal static void FillTexture3DUAV(ref D3D12_TEX3D_UAV uav, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
+        internal static void FillTexture3DUAV(ref D3D12_TEX3D_UAV uav, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ETextureDimension.Texture3D) == ETextureDimension.Texture3D))
+            if (!((dimension & ERHITextureDimension.Texture3D) == ERHITextureDimension.Texture3D))
             {
                 return;
             }
@@ -1589,9 +1589,9 @@ namespace Infinity.Graphics
             uav.FirstWSlice = descriptor.BaseArraySlice;
         }
 
-        internal static void FillTexture2DRTV(ref D3D12_TEX2D_RTV rtv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
+        internal static void FillTexture2DRTV(ref D3D12_TEX2D_RTV rtv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ETextureDimension.Texture2D) == ETextureDimension.Texture2D))
+            if (!((dimension & ERHITextureDimension.Texture2D) == ERHITextureDimension.Texture2D))
             {
                 return;
             }
@@ -1599,9 +1599,9 @@ namespace Infinity.Graphics
             rtv.PlaneSlice = 0;
         }
 
-        internal static void FillTexture2DArrayRTV(ref D3D12_TEX2D_ARRAY_RTV rtv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
+        internal static void FillTexture2DArrayRTV(ref D3D12_TEX2D_ARRAY_RTV rtv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ETextureDimension.Texture2DArray) == ETextureDimension.Texture2DArray))
+            if (!((dimension & ERHITextureDimension.Texture2DArray) == ERHITextureDimension.Texture2DArray))
             {
                 return;
             }
@@ -1611,9 +1611,9 @@ namespace Infinity.Graphics
             rtv.PlaneSlice = 0;
         }
 
-        internal static void FillTexture3DRTV(ref D3D12_TEX3D_RTV rtv, in RHITextureViewDescriptor descriptor, in ETextureDimension dimension)
+        internal static void FillTexture3DRTV(ref D3D12_TEX3D_RTV rtv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ETextureDimension.Texture3D) == ETextureDimension.Texture3D))
+            if (!((dimension & ERHITextureDimension.Texture3D) == ERHITextureDimension.Texture3D))
             {
                 return;
             }

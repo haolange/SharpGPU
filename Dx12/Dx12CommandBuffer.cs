@@ -39,14 +39,14 @@ namespace Infinity.Graphics
             m_CommandQueue = commandQueue;
 
             ID3D12CommandAllocator* commandAllocator;
-            HRESULT hResult = commandQueue.Dx12Device.NativeDevice->CreateCommandAllocator(Dx12Utility.ConvertToDx12QueueType(commandQueue.Type), __uuidof<ID3D12CommandAllocator>(), (void**)&commandAllocator);
+            HRESULT hResult = commandQueue.Dx12Device.NativeDevice->CreateCommandAllocator(Dx12Utility.ConvertToDx12QueueType(commandQueue.PipelineType), __uuidof<ID3D12CommandAllocator>(), (void**)&commandAllocator);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
             m_NativeCommandAllocator = commandAllocator;
 
             ID3D12GraphicsCommandList5* commandList;
-            hResult = commandQueue.Dx12Device.NativeDevice->CreateCommandList(0, Dx12Utility.ConvertToDx12QueueType(commandQueue.Type), m_NativeCommandAllocator, null, __uuidof<ID3D12GraphicsCommandList5>(), (void**)&commandList);
+            hResult = commandQueue.Dx12Device.NativeDevice->CreateCommandList(0, Dx12Utility.ConvertToDx12QueueType(commandQueue.PipelineType), m_NativeCommandAllocator, null, __uuidof<ID3D12GraphicsCommandList5>(), (void**)&commandList);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif

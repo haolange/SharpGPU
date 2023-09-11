@@ -7,8 +7,8 @@ namespace Infinity.Graphics
     {
         public uint Slot;
         public uint Count;
-        public EBindType Type;
-        public EFunctionStage Visible;
+        public ERHIBindType Type;
+        public ERHIFunctionStage Visible;
     }
     
     public struct RHIBindTableLayoutDescriptor

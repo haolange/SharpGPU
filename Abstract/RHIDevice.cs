@@ -5,7 +5,7 @@ namespace Infinity.Graphics
 {
     public struct RHIDeviceProperty
     {
-        public EDeviceType Type;
+        public ERHIDeviceType Type;
         public uint VendorId;
         public uint DeviceId;
     }
@@ -15,9 +15,9 @@ namespace Infinity.Graphics
         public abstract bool IsRaytracingSupported { get; }
         public abstract bool IsRaytracingQuerySupported { get; }
         public abstract bool IsFlipProjectionRequired { get; }
-        public abstract EClipDepth ClipDepth { get; }
-        public abstract EMatrixMajorness MatrixMajorness { get; }
-        public abstract EMultiviewStrategy MultiviewStrategy { get; }
+        public abstract ERHIClipDepth ClipDepth { get; }
+        public abstract ERHIMatrixMajorness MatrixMajorness { get; }
+        public abstract ERHIMultiviewStrategy MultiviewStrategy { get; }
 
         public abstract RHIDeviceProperty GetDeviceProperty();
         public abstract RHIFence CreateFence();
@@ -28,7 +28,7 @@ namespace Infinity.Graphics
         public abstract RHITexture CreateTexture(in RHITextureDescriptor descriptor);
         public abstract RHISampler CreateSampler(in RHISamplerDescriptor descriptor);
         public abstract RHIStorageQueue CreateStorageQueue();
-        public abstract RHICommandQueue CreateCommandQueue(in EQueueType type);
+        public abstract RHICommandQueue CreateCommandQueue(in ERHIPipeline pipeline);
         public abstract RHITopLevelAccelStruct CreateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
         public abstract RHIBottomLevelAccelStruct CreateAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor);
         public abstract RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor);

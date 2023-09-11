@@ -7,24 +7,24 @@ namespace Infinity.Graphics
     public struct RHIOutputStateDescriptor
     {
         public uint OutputCount;
-        public ESampleCount SampleCount;
-        public EPixelFormat ColorFormat0;
-        public EPixelFormat ColorFormat1;
-        public EPixelFormat ColorFormat2;
-        public EPixelFormat ColorFormat3;
-        public EPixelFormat ColorFormat4;
-        public EPixelFormat ColorFormat5;
-        public EPixelFormat ColorFormat6;
-        public EPixelFormat ColorFormat7;
-        public EPixelFormat DepthStencilFormat;
+        public ERHISampleCount SampleCount;
+        public ERHIPixelFormat ColorFormat0;
+        public ERHIPixelFormat ColorFormat1;
+        public ERHIPixelFormat ColorFormat2;
+        public ERHIPixelFormat ColorFormat3;
+        public ERHIPixelFormat ColorFormat4;
+        public ERHIPixelFormat ColorFormat5;
+        public ERHIPixelFormat ColorFormat6;
+        public ERHIPixelFormat ColorFormat7;
+        public ERHIPixelFormat DepthStencilFormat;
     }
 
     public struct RHIVertexElementDescriptor
     {
         public uint Slot;
         public uint Offset;
-        public ESemanticType Type;
-        public ESemanticFormat Format;
+        public ERHISemanticType Type;
+        public ERHISemanticFormat Format;
     }
 
     public struct RHIVertexLayoutDescriptor
@@ -32,20 +32,20 @@ namespace Infinity.Graphics
         public uint Index;
         public uint Stride;
         public uint StepRate;
-        public EVertexStepMode StepMode;
+        public ERHIVertexStepMode StepMode;
         public Memory<RHIVertexElementDescriptor> VertexElements;
     }
 
     public struct RHIBlendDescriptor
     {
         public bool BlendEnable;
-        public EBlendOp BlendOpColor;
-        public EBlendMode SrcBlendColor;
-        public EBlendMode DstBlendColor;
-        public EBlendOp BlendOpAlpha;
-        public EBlendMode SrcBlendAlpha;
-        public EBlendMode DstBlendAlpha;
-        public EColorWriteChannel ColorWriteChannel;
+        public ERHIBlendOp BlendOpColor;
+        public ERHIBlendMode SrcBlendColor;
+        public ERHIBlendMode DstBlendColor;
+        public ERHIBlendOp BlendOpAlpha;
+        public ERHIBlendMode SrcBlendAlpha;
+        public ERHIBlendMode DstBlendAlpha;
+        public ERHIColorWriteChannel ColorWriteChannel;
     }
 
     public struct RHIBlendStateDescriptor
@@ -64,8 +64,8 @@ namespace Infinity.Graphics
 
     public struct RHIRasterizerStateDescriptor
     {
-        public EFillMode FillMode;
-        public ECullMode CullMode;
+        public ERHIFillMode FillMode;
+        public ERHICullMode CullMode;
         public bool DepthClipEnable;
         public bool ConservativeRaster;
         public bool AntialiasedLineEnable;
@@ -77,10 +77,10 @@ namespace Infinity.Graphics
 
     public struct RHIStencilStateDescriptor
     {
-        public EStencilOp StencilPassOp;
-        public EStencilOp StencilFailOp;
-        public EStencilOp StencilDepthFailOp;
-        public EComparisonMode ComparisonMode;
+        public ERHIStencilOp StencilPassOp;
+        public ERHIStencilOp StencilFailOp;
+        public ERHIStencilOp StencilDepthFailOp;
+        public ERHIComparisonMode ComparisonMode;
     }
 
     public struct RHIDepthStencilStateDescriptor
@@ -90,7 +90,7 @@ namespace Infinity.Graphics
         public bool StencilEnable;
         public byte StencilReadMask;
         public byte StencilWriteMask;
-        public EComparisonMode ComparisonMode;
+        public ERHIComparisonMode ComparisonMode;
         public RHIStencilStateDescriptor BackFace;
         public RHIStencilStateDescriptor FrontFace;
     }
@@ -113,7 +113,7 @@ namespace Infinity.Graphics
     public struct RHIRayHitGroupDescriptor
     {
         public string Name;
-        public EHitGroupType Type;
+        public ERHIHitGroupType Type;
         internal RHIPipelineLayout PipelineLayout;
         public RHIRayFunctionDescriptor? AnyHit;
         public RHIRayFunctionDescriptor? Intersect;
@@ -145,7 +145,7 @@ namespace Infinity.Graphics
         public RHIFunction MeshFunction;
         public RHIFunction FragmentFunction;
         public RHIPipelineLayout PipelineLayout;
-        public EPrimitiveTopology PrimitiveTopology;
+        public ERHIPrimitiveTopology PrimitiveTopology;
         public RHIOutputStateDescriptor OutputState;
         public RHIRenderStateDescriptor RenderState;
     }
@@ -155,7 +155,7 @@ namespace Infinity.Graphics
         public RHIFunction VertexFunction;
         public RHIFunction FragmentFunction;
         public RHIPipelineLayout PipelineLayout;
-        public EPrimitiveTopology PrimitiveTopology;
+        public ERHIPrimitiveTopology PrimitiveTopology;
         public RHIOutputStateDescriptor OutputState;
         public RHIRenderStateDescriptor RenderState;
         public Memory<RHIVertexLayoutDescriptor> VertexLayouts;

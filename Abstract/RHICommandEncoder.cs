@@ -97,8 +97,8 @@ namespace Infinity.Graphics
         public uint MipLevel;
         public uint ArraySlice;
         public float4 ClearValue;
-        public ELoadAction LoadAction;
-        public EStoreAction StoreAction;
+        public ERHILoadAction LoadAction;
+        public ERHIStoreAction StoreAction;
         public RHITexture RenderTarget;
         public uint ResolveLevel;
         public uint ResolveSlice;
@@ -111,12 +111,12 @@ namespace Infinity.Graphics
         public uint ArraySlice;
         public bool DepthReadOnly;
         public float DepthClearValue;
-        public ELoadAction DepthLoadOp;
-        public EStoreAction DepthStoreOp;
+        public ERHILoadAction DepthLoadOp;
+        public ERHIStoreAction DepthStoreOp;
         public bool StencilReadOnly;
         public int StencilClearValue;
-        public ELoadAction StencilLoadOp;
-        public EStoreAction StencilStoreOp;
+        public ERHILoadAction StencilLoadOp;
+        public ERHIStoreAction StencilStoreOp;
         public RHITexture RenderTarget;
         public uint ResolveLevel;
         public uint ResolveSlice;
@@ -147,7 +147,7 @@ namespace Infinity.Graphics
     {
         public string Name;
         public uint ArrayLength;
-        public ESampleCount SampleCount;
+        public ERHISampleCount SampleCount;
         public RHITimestampDescriptor? Timestamp;
         public RHIStatisticsDescriptor? Statistics;
         public RHITexture ShadingRateTexture;
@@ -160,7 +160,7 @@ namespace Infinity.Graphics
     {
         public string Name;
         public uint ArrayLength;
-        public ESampleCount SampleCount;
+        public ERHISampleCount SampleCount;
         public RHITimestampDescriptor? Timestamp;
         public RHIOcclusionDescriptor? Occlusion;
         public RHIStatisticsDescriptor? Statistics;
@@ -179,8 +179,8 @@ namespace Infinity.Graphics
         public abstract void PopDebugGroup();
         public abstract void WriteTimestamp(in uint index);
         public abstract void ResolveQuery(RHIQuery query, in uint startIndex, in uint queriesCount);
-        public abstract void ResourceBarrier(in EQueueType srcPipeline, in EQueueType dstPipeline, in RHIBarrier barrier);
-        public abstract void ResourceBarriers(in EQueueType srcPipeline, in EQueueType dstPipeline, in Memory<RHIBarrier> barriers);
+        public abstract void ResourceBarrier(in RHIBarrier barrier);
+        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size);
         public abstract void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size);
         public abstract void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size);
@@ -199,8 +199,8 @@ namespace Infinity.Graphics
         public abstract void WriteTimestamp(in uint index);
         public abstract void BeginStatistics(in uint index);
         public abstract void EndStatistics(in uint index);
-        public abstract void ResourceBarrier(in EQueueType srcPipeline, in EQueueType dstPipeline, in RHIBarrier barrier);
-        public abstract void ResourceBarriers(in EQueueType srcPipeline, in EQueueType dstPipeline, in Memory<RHIBarrier> barriers);
+        public abstract void ResourceBarrier(in RHIBarrier barrier);
+        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipelineState(RHIComputePipelineState pipelineState);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
@@ -221,8 +221,8 @@ namespace Infinity.Graphics
         public abstract void WriteTimestamp(in uint index);
         public abstract void BeginStatistics(in uint index);
         public abstract void EndStatistics(in uint index);
-        public abstract void ResourceBarrier(in EQueueType srcPipeline, in EQueueType dstPipeline, in RHIBarrier barrier);
-        public abstract void ResourceBarriers(in EQueueType srcPipeline, in EQueueType dstPipeline, in Memory<RHIBarrier> barriers);
+        public abstract void ResourceBarrier(in RHIBarrier barrier);
+        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipelineState(RHIRaytracingPipelineState pipelineState);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
@@ -245,8 +245,8 @@ namespace Infinity.Graphics
         public abstract void WriteTimestamp(in uint index);
         public abstract void BeginStatistics(in uint index);
         public abstract void EndStatistics(in uint index);
-        public abstract void ResourceBarrier(in EQueueType srcPipeline, in EQueueType dstPipeline, in RHIBarrier barrier);
-        public abstract void ResourceBarriers(in EQueueType srcPipeline, in EQueueType dstPipeline, in Memory<RHIBarrier> barriers);
+        public abstract void ResourceBarrier(in RHIBarrier barrier);
+        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetScissor(in Rect rect);
         public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
@@ -257,7 +257,7 @@ namespace Infinity.Graphics
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipelineState(RHIMeshletPipelineState pipelineState);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
-        public abstract void SetShadingRate(in EShadingRate shadingRate, in EShadingRateCombiner shadingRateCombiner);
+        public abstract void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
         // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
@@ -277,8 +277,8 @@ namespace Infinity.Graphics
         public abstract void EndOcclusion(in uint index);
         public abstract void BeginStatistics(in uint index);
         public abstract void EndStatistics(in uint index);
-        public abstract void ResourceBarrier(in EQueueType srcPipeline, in EQueueType dstPipeline, in RHIBarrier barrier);
-        public abstract void ResourceBarriers(in EQueueType srcPipeline, in EQueueType dstPipeline, in Memory<RHIBarrier> barriers);
+        public abstract void ResourceBarrier(in RHIBarrier barrier);
+        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetScissor(in Rect rect);
         public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
@@ -289,9 +289,9 @@ namespace Infinity.Graphics
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipelineState(RHIGraphicsPipelineState pipelineState);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
-        public abstract void SetIndexBuffer(RHIBuffer buffer, in uint offset, in EIndexFormat format);
+        public abstract void SetIndexBuffer(RHIBuffer buffer, in uint offset, in ERHIIndexFormat format);
         public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset);
-        public abstract void SetShadingRate(in EShadingRate shadingRate, in EShadingRateCombiner shadingRateCombiner);
+        public abstract void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner);
         public abstract void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance);
         public abstract void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance);
         public abstract void DrawIndirect(RHIBuffer argsBuffer, in uint offset);

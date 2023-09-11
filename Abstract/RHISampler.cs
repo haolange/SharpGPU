@@ -9,13 +9,13 @@ namespace Infinity.Graphics
         public float LodMax;
         public float MipLODBias;
         public uint Anisotropy;
-        public EFilterMode MagFilter;
-        public EFilterMode MinFilter;
-        public EFilterMode MipFilter;
-        public EAddressMode AddressModeU;
-        public EAddressMode AddressModeV;
-        public EAddressMode AddressModeW;
-        public EComparisonMode ComparisonMode;
+        public ERHIFilterMode MagFilter;
+        public ERHIFilterMode MinFilter;
+        public ERHIFilterMode MipFilter;
+        public ERHIAddressMode AddressModeU;
+        public ERHIAddressMode AddressModeV;
+        public ERHIAddressMode AddressModeW;
+        public ERHIComparisonMode ComparisonMode;
     }
 
     public struct RHIStaticSamplerElement

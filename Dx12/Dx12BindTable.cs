@@ -43,20 +43,20 @@ namespace Infinity.Graphics
                 ref D3D12_GPU_DESCRIPTOR_HANDLE nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[i];
                 switch (bindInfo.Type)
                 {
-                    case EBindType.Buffer:
-                    case EBindType.UniformBuffer:
-                    case EBindType.StorageBuffer:
+                    case ERHIBindType.Buffer:
+                    case ERHIBindType.UniformBuffer:
+                    case ERHIBindType.StorageBuffer:
                         Dx12BufferView bufferView = element.BufferView as Dx12BufferView;
                         nativeGpuDescriptorHandle = bufferView.NativeGpuDescriptorHandle;
                         break;
 
-                    case EBindType.Texture:
-                    case EBindType.StorageTexture:
+                    case ERHIBindType.Texture:
+                    case ERHIBindType.StorageTexture:
                         Dx12TextureView textureView = element.TextureView as Dx12TextureView;
                         nativeGpuDescriptorHandle = textureView.NativeGpuDescriptorHandle;
                         break;
 
-                    case EBindType.Sampler:
+                    case ERHIBindType.Sampler:
                         Dx12Sampler samplerState = element.Sampler as Dx12Sampler;
                         nativeGpuDescriptorHandle = samplerState.NativeGpuDescriptorHandle;
                         break;
@@ -69,25 +69,25 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void SetBindElement(in RHIBindTableElement element, in EBindType bindType, in int slot)
+        public override void SetBindElement(in RHIBindTableElement element, in ERHIBindType bindType, in int slot)
         {
             ref D3D12_GPU_DESCRIPTOR_HANDLE nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[slot];
             switch (bindType)
             {
-                case EBindType.Buffer:
-                case EBindType.UniformBuffer:
-                case EBindType.StorageBuffer:
+                case ERHIBindType.Buffer:
+                case ERHIBindType.UniformBuffer:
+                case ERHIBindType.StorageBuffer:
                     Dx12BufferView bufferView = element.BufferView as Dx12BufferView;
                     nativeGpuDescriptorHandle = bufferView.NativeGpuDescriptorHandle;
                     break;
 
-                case EBindType.Texture:
-                case EBindType.StorageTexture:
+                case ERHIBindType.Texture:
+                case ERHIBindType.StorageTexture:
                     Dx12TextureView textureView = element.TextureView as Dx12TextureView;
                     nativeGpuDescriptorHandle = textureView.NativeGpuDescriptorHandle;
                     break;
 
-                case EBindType.Sampler:
+                case ERHIBindType.Sampler:
                     Dx12Sampler samplerState = element.Sampler as Dx12Sampler;
                     nativeGpuDescriptorHandle = samplerState.NativeGpuDescriptorHandle;
                     break;

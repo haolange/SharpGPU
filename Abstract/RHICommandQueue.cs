@@ -44,11 +44,11 @@ namespace Infinity.Graphics
 
     public abstract class RHICommandQueue : Disposal
     {
-        public EQueueType Type
+        public ERHIPipeline PipelineType
         {
             get
             {
-                return m_Type;
+                return m_PipelineType;
             }
         }
         public abstract ulong Frequency
@@ -56,7 +56,7 @@ namespace Infinity.Graphics
             get;
         }
 
-        protected EQueueType m_Type;
+        protected ERHIPipeline m_PipelineType;
         public abstract RHICommandBuffer CreateCommandBuffer();
         public abstract void MapTiledTexture(in RHITiledTextureRegions tiledTextureRegions);
         public abstract void UnMapTiledTexture(in RHITiledTextureRegions tiledTextureRegions);

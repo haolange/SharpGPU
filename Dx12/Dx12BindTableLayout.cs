@@ -8,8 +8,8 @@ namespace Infinity.Graphics
         public uint Slot;
         public uint Index;
         public uint Count;
-        public EBindType Type;
-        public EFunctionStage Visible;
+        public ERHIBindType Type;
+        public ERHIFunctionStage Visible;
 
         internal bool IsBindless => Count > 1;
     }
