@@ -1331,8 +1331,14 @@ namespace Infinity.Graphics
             switch (bindType)
             {
                 case ERHIBindType.Buffer:
-                case ERHIBindType.Texture:
                 case ERHIBindType.AccelStruct:
+                case ERHIBindType.Texture2D:
+                case ERHIBindType.Texture2DMS:
+                case ERHIBindType.Texture2DArray:
+                case ERHIBindType.Texture2DArrayMS:
+                case ERHIBindType.TextureCube:
+                case ERHIBindType.TextureCubeArray:
+                case ERHIBindType.Texture3D:
                     return D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 
                 case ERHIBindType.Sampler:
@@ -1342,7 +1348,12 @@ namespace Infinity.Graphics
                     return D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
 
                 case ERHIBindType.StorageBuffer:
-                case ERHIBindType.StorageTexture:
+                case ERHIBindType.StorageTexture2D:
+                case ERHIBindType.StorageTexture2DArray:
+                case ERHIBindType.StorageTexture2DArrayMS:
+                case ERHIBindType.StorageTextureCube:
+                case ERHIBindType.StorageTextureCubeArray:
+                case ERHIBindType.StorageTexture3D:
                     return D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
 
                 default:
@@ -1355,7 +1366,13 @@ namespace Infinity.Graphics
             switch (bindType)
             {
                 case ERHIBindType.Buffer:
-                case ERHIBindType.Texture:
+                case ERHIBindType.Texture2D:
+                case ERHIBindType.Texture2DMS:
+                case ERHIBindType.Texture2DArray:
+                case ERHIBindType.Texture2DArrayMS:
+                case ERHIBindType.TextureCube:
+                case ERHIBindType.TextureCubeArray:
+                case ERHIBindType.Texture3D:
                     return 64;
 
                 case ERHIBindType.Sampler:
@@ -1365,7 +1382,12 @@ namespace Infinity.Graphics
                     return 256;
 
                 case ERHIBindType.StorageBuffer:
-                case ERHIBindType.StorageTexture:
+                case ERHIBindType.StorageTexture2D:
+                case ERHIBindType.StorageTexture2DArray:
+                case ERHIBindType.StorageTexture2DArrayMS:
+                case ERHIBindType.StorageTextureCube:
+                case ERHIBindType.StorageTextureCubeArray:
+                case ERHIBindType.StorageTexture3D:
                     return 512;
 
                 default:
@@ -1378,7 +1400,13 @@ namespace Infinity.Graphics
             switch (bindType)
             {
                 case ERHIBindType.Buffer:
-                case ERHIBindType.Texture:
+                case ERHIBindType.Texture2D:
+                case ERHIBindType.Texture2DMS:
+                case ERHIBindType.Texture2DArray:
+                case ERHIBindType.Texture2DArrayMS:
+                case ERHIBindType.TextureCube:
+                case ERHIBindType.TextureCubeArray:
+                case ERHIBindType.Texture3D:
                     return D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
 
                 case ERHIBindType.Sampler:
@@ -1388,7 +1416,12 @@ namespace Infinity.Graphics
                     return D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
 
                 case ERHIBindType.StorageBuffer:
-                case ERHIBindType.StorageTexture:
+                case ERHIBindType.StorageTexture2D:
+                case ERHIBindType.StorageTexture2DArray:
+                case ERHIBindType.StorageTexture2DArrayMS:
+                case ERHIBindType.StorageTextureCube:
+                case ERHIBindType.StorageTextureCubeArray:
+                case ERHIBindType.StorageTexture3D:
                     return D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
 
                 default:

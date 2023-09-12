@@ -201,7 +201,7 @@ Create a compute bindTable
 ...
 rhi::RHIBindTableLayoutElement computeBindTableLayoutElements[1];
 computeBindTableLayoutElements[0].Slot = 0;
-computeBindTableLayoutElements[0].Type = ERHIBindType::StorageTexture;
+computeBindTableLayoutElements[0].Type = ERHIBindType::StorageTexture2D;
 computeBindTableLayoutElements[0].Visible = ERHIFunctionStage::Compute;
 
 rhi::RHIBindTableLayoutDescriptor computeBindTableLayoutInfo;
@@ -336,7 +336,7 @@ Create a bindTable graphics
 ...
 rhi::RHIBindTableLayoutElement graphicsBindTableLayoutElements[2];
 graphicsBindTableLayoutElements[0].Slot = 0;
-graphicsBindTableLayoutElements[0].Type = ERHIBindType::Texture;
+graphicsBindTableLayoutElements[0].Type = ERHIBindType::Texture2D;
 graphicsBindTableLayoutElements[0].Visible = ERHIFunctionStage::Fragment;
 graphicsBindTableLayoutElements[1].Slot = 1;
 graphicsBindTableLayoutElements[1].Type = ERHIBindType::Sampler;

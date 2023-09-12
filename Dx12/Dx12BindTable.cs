@@ -44,14 +44,25 @@ namespace Infinity.Graphics
                 switch (bindInfo.Type)
                 {
                     case ERHIBindType.Buffer:
-                    case ERHIBindType.UniformBuffer:
                     case ERHIBindType.StorageBuffer:
+                    case ERHIBindType.UniformBuffer:
                         Dx12BufferView bufferView = element.BufferView as Dx12BufferView;
                         nativeGpuDescriptorHandle = bufferView.NativeGpuDescriptorHandle;
                         break;
 
-                    case ERHIBindType.Texture:
-                    case ERHIBindType.StorageTexture:
+                    case ERHIBindType.Texture2D:
+                    case ERHIBindType.Texture2DMS:
+                    case ERHIBindType.Texture2DArray:
+                    case ERHIBindType.Texture2DArrayMS:
+                    case ERHIBindType.TextureCube:
+                    case ERHIBindType.TextureCubeArray:
+                    case ERHIBindType.Texture3D:
+                    case ERHIBindType.StorageTexture2D:
+                    case ERHIBindType.StorageTexture2DArray:
+                    case ERHIBindType.StorageTexture2DArrayMS:
+                    case ERHIBindType.StorageTextureCube:
+                    case ERHIBindType.StorageTextureCubeArray:
+                    case ERHIBindType.StorageTexture3D:
                         Dx12TextureView textureView = element.TextureView as Dx12TextureView;
                         nativeGpuDescriptorHandle = textureView.NativeGpuDescriptorHandle;
                         break;
@@ -81,8 +92,19 @@ namespace Infinity.Graphics
                     nativeGpuDescriptorHandle = bufferView.NativeGpuDescriptorHandle;
                     break;
 
-                case ERHIBindType.Texture:
-                case ERHIBindType.StorageTexture:
+                case ERHIBindType.Texture2D:
+                case ERHIBindType.Texture2DMS:
+                case ERHIBindType.Texture2DArray:
+                case ERHIBindType.Texture2DArrayMS:
+                case ERHIBindType.TextureCube:
+                case ERHIBindType.TextureCubeArray:
+                case ERHIBindType.Texture3D:
+                case ERHIBindType.StorageTexture2D:
+                case ERHIBindType.StorageTexture2DArray:
+                case ERHIBindType.StorageTexture2DArrayMS:
+                case ERHIBindType.StorageTextureCube:
+                case ERHIBindType.StorageTextureCubeArray:
+                case ERHIBindType.StorageTexture3D:
                     Dx12TextureView textureView = element.TextureView as Dx12TextureView;
                     nativeGpuDescriptorHandle = textureView.NativeGpuDescriptorHandle;
                     break;

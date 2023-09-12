@@ -264,13 +264,25 @@ namespace Infinity.Graphics
 
     public enum ERHIBindType : byte
     {
-        Buffer,
-        Texture,
         Sampler,
+        Buffer,
         AccelStruct,
-        UniformBuffer,
         StorageBuffer,
-        StorageTexture,
+        UniformBuffer,
+        Texture2D,
+        Texture2DMS,
+        Texture2DArray,
+        Texture2DArrayMS,
+        TextureCube,
+        TextureCubeArray,
+        Texture3D,
+        StorageTexture2D,
+        StorageTexture2DMS,
+        StorageTexture2DArray,
+        StorageTexture2DArrayMS,
+        StorageTextureCube,
+        StorageTextureCubeArray,
+        StorageTexture3D,
         Pending
     }
 
