@@ -47,6 +47,13 @@ namespace Infinity.Graphics
         Pending
     }
 
+    public enum ERHIGraphicsType : byte
+    {
+        Meshlet,
+        Tradition,
+        Pending
+    }
+
     public enum ERHIQueryType : byte
     {
         Occlusion,

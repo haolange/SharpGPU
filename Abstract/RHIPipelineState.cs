@@ -139,7 +139,7 @@ namespace Infinity.Graphics
         public Memory<RHIRayGeneralGroupDescriptor> RayMissGroups;
     }
 
-    public struct RHIMeshletPipelineStateDescriptor
+    public struct RHIMeshletPipelineDescriptor
     {
         public RHIFunction TaskFunction;
         public RHIFunction MeshFunction;
@@ -150,7 +150,7 @@ namespace Infinity.Graphics
         public RHIRenderStateDescriptor RenderState;
     }
 
-    public struct RHIGraphicsPipelineStateDescriptor
+    public struct RHITraditionPipelineDescriptor
     {
         public RHIFunction VertexFunction;
         public RHIFunction FragmentFunction;
@@ -159,6 +159,13 @@ namespace Infinity.Graphics
         public RHIOutputStateDescriptor OutputState;
         public RHIRenderStateDescriptor RenderState;
         public Memory<RHIVertexLayoutDescriptor> VertexLayouts;
+    }
+
+    public struct RHIGraphicsPipelineStateDescriptor
+    {
+        public ERHIGraphicsType GraphicsType;
+        public RHIMeshletPipelineDescriptor MeshletPipeline;
+        public RHITraditionPipelineDescriptor TraditionPipeline;
     }
 
     public struct RHIPipelineStateLibraryResult
@@ -181,13 +188,6 @@ namespace Infinity.Graphics
         protected RHIRaytracingPipelineStateDescriptor m_Descriptor;
     }
 
-    public abstract class RHIMeshletPipelineState : Disposal
-    {
-        public RHIMeshletPipelineStateDescriptor Descriptor => m_Descriptor;
-
-        protected RHIMeshletPipelineStateDescriptor m_Descriptor;
-    }
-
     public abstract class RHIGraphicsPipelineState : Disposal
     {
         public RHIGraphicsPipelineStateDescriptor Descriptor => m_Descriptor;
@@ -204,11 +204,9 @@ namespace Infinity.Graphics
 
         public abstract void StoreComputePipelineState(string name, RHIComputePipelineState computePipelineState);
         public abstract void StoreRaytracingPipelineState(string name, RHIRaytracingPipelineState raytracingPipelineState);
-        public abstract void StoreMeshletPipelineState(string name, RHIMeshletPipelineState meshletPipelineState);
         public abstract void StoreGraphicsPipelineState(string name, RHIGraphicsPipelineState graphicsPipelineState);
         public abstract RHIComputePipelineState LoadComputePipelineState(RHIComputePipelineStateDescriptor computePipelineDescriptor);
         public abstract RHIRaytracingPipelineState LoadRaytracingPipelineState(RHIRaytracingPipelineStateDescriptor raytracingPipelineDescriptor);
-        public abstract RHIMeshletPipelineState LoadMeshletPipelineState(RHIMeshletPipelineStateDescriptor meshletPipelineDescriptor);
         public abstract RHIGraphicsPipelineState LoadGraphicsPipelineState(RHIGraphicsPipelineStateDescriptor graphicsPipelineDescriptor);
         public abstract RHIPipelineStateLibraryResult Serialize();
     }

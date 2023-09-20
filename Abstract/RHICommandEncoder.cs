@@ -234,36 +234,6 @@ namespace Infinity.Graphics
         public abstract void EndPass();
     }
     
-    public abstract class RHIMeshletEncoder : Disposal
-    {
-        protected RHICommandBuffer? m_CommandBuffer;
-        protected RHIMeshletPipelineState? m_PipelineState;
-
-        internal abstract void BeginPass(in RHIMeshletPassDescriptor descriptor);
-        public abstract void PushDebugGroup(string name);
-        public abstract void PopDebugGroup();
-        public abstract void WriteTimestamp(in uint index);
-        public abstract void BeginStatistics(in uint index);
-        public abstract void EndStatistics(in uint index);
-        public abstract void ResourceBarrier(in RHIBarrier barrier);
-        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
-        public abstract void SetScissor(in Rect rect);
-        public abstract void SetScissors(in Memory<Rect> rects);
-        public abstract void SetViewport(in Viewport viewport);
-        public abstract void SetViewports(in Memory<Viewport> viewports);
-        public abstract void SetStencilRef(in uint value);
-        public abstract void SetBlendFactor(in float4 value);
-        //public abstract void NextSubpass();
-        public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipelineState(RHIMeshletPipelineState pipelineState);
-        public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
-        public abstract void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner);
-        public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
-        public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
-        // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
-        public abstract void EndPass();
-    }
-
     public abstract class RHIGraphicsEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;
@@ -296,6 +266,8 @@ namespace Infinity.Graphics
         public abstract void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance);
         public abstract void DrawIndirect(RHIBuffer argsBuffer, in uint offset);
         public abstract void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset);
+        public abstract void DrawMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
+        public abstract void DrawMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset);
         // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
         public abstract void EndPass();
     }

@@ -134,11 +134,6 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHIMeshletPipelineState CreateMeshletPipelineState(in RHIMeshletPipelineStateDescriptor descriptor)
-        {
-            throw new NotImplementedException();
-        }
-
         public override RHIGraphicsPipelineState CreateGraphicsPipelineState(in RHIGraphicsPipelineStateDescriptor descriptor)
         {
             throw new NotImplementedException();

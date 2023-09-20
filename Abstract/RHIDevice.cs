@@ -38,7 +38,6 @@ namespace Infinity.Graphics
         public abstract RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor);
         public abstract RHIComputePipelineState CreateComputePipelineState(in RHIComputePipelineStateDescriptor descriptor);
         public abstract RHIRaytracingPipelineState CreateRaytracingPipelineState(in RHIRaytracingPipelineStateDescriptor descriptor);
-        public abstract RHIMeshletPipelineState CreateMeshletPipelineState(in RHIMeshletPipelineStateDescriptor descriptor);
         public abstract RHIGraphicsPipelineState CreateGraphicsPipelineState(in RHIGraphicsPipelineStateDescriptor descriptor);
     }
 }

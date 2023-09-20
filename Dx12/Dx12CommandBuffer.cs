@@ -28,7 +28,6 @@ namespace Infinity.Graphics
 
         private Dx12TransferEncoder m_TransferEncoder;
         private Dx12ComputeEncoder m_ComputeEncoder;
-        private Dx12MeshletEncoder m_MeshletEncoder;
         private Dx12GraphicsEncoder m_GraphicsEncoder;
         private Dx12RaytracingEncoder m_RaytracingEncoder;
         private ID3D12CommandAllocator* m_NativeCommandAllocator;
@@ -54,7 +53,6 @@ namespace Infinity.Graphics
 
             m_TransferEncoder = new Dx12TransferEncoder(this);
             m_ComputeEncoder = new Dx12ComputeEncoder(this);
-            m_MeshletEncoder = new Dx12MeshletEncoder(this);
             m_GraphicsEncoder = new Dx12GraphicsEncoder(this);
             m_RaytracingEncoder = new Dx12RaytracingEncoder(this);
         }
@@ -118,19 +116,6 @@ namespace Infinity.Graphics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override RHIMeshletEncoder BeginMeshletPass(in RHIMeshletPassDescriptor descriptor)
-        {
-            m_MeshletEncoder.BeginPass(descriptor);
-            return m_MeshletEncoder;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void EndMeshletPass()
-        {
-            m_MeshletEncoder.EndPass();
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIGraphicsEncoder BeginGraphicsPass(in RHIGraphicsPassDescriptor descriptor)
         {
             m_GraphicsEncoder.BeginPass(descriptor);
@@ -166,12 +151,6 @@ namespace Infinity.Graphics
         public override RHIRaytracingEncoder GetRaytracingEncoder()
         {
             return m_RaytracingEncoder;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override RHIMeshletEncoder GetMeshletEncoder()
-        {
-            return m_MeshletEncoder;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -222,11 +222,6 @@ namespace Infinity.Graphics
             return new Dx12RaytracingPipelineState(this, descriptor);
         }
 
-        public override RHIMeshletPipelineState CreateMeshletPipelineState(in RHIMeshletPipelineStateDescriptor descriptor)
-        {
-            return new Dx12MeshletPipelineState(this, descriptor);
-        }
-
         public override RHIGraphicsPipelineState CreateGraphicsPipelineState(in RHIGraphicsPipelineStateDescriptor descriptor)
         {
             return new Dx12GraphicsPipelineState(this, descriptor);

@@ -50,21 +50,6 @@ namespace Infinity.Graphics
         }
     }
 
-    public struct RHIMeshletPassScoper : IDisposable
-    {
-        RHIMeshletEncoder m_MeshletEncoder;
-
-        internal RHIMeshletPassScoper(RHIMeshletEncoder meshletEncoder)
-        {
-            m_MeshletEncoder = meshletEncoder;
-        }
-
-        public void Dispose()
-        {
-            m_MeshletEncoder.EndPass();
-        }
-    }
-
     public struct RHIGraphicsPassScoper : IDisposable
     {
         RHIGraphicsEncoder m_GraphicsEncoder;
@@ -123,12 +108,6 @@ namespace Infinity.Graphics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static RHIMeshletPassScoper BeginScopedMeshletPass(this RHICommandBuffer cmdBuffer, in RHIMeshletPassDescriptor descriptor)
-        {
-            return new RHIMeshletPassScoper(cmdBuffer.BeginMeshletPass(descriptor));
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static RHIGraphicsPassScoper BeginScopedGraphicsPass(this RHICommandBuffer cmdBuffer, in RHIGraphicsPassDescriptor descriptor)
         {
             return new RHIGraphicsPassScoper(cmdBuffer.BeginGraphicsPass(descriptor));
@@ -162,15 +141,12 @@ namespace Infinity.Graphics
         public abstract void EndComputePass();
         public abstract RHIRaytracingEncoder BeginRaytracingPass(in RHIRayTracingPassDescriptor descriptor);
         public abstract void EndRaytracingPass();
-        public abstract RHIMeshletEncoder BeginMeshletPass(in RHIMeshletPassDescriptor descriptor);
-        public abstract void EndMeshletPass();
         public abstract RHIGraphicsEncoder BeginGraphicsPass(in RHIGraphicsPassDescriptor descriptor);
         public abstract void EndGraphicsPass();
         public abstract void End();
         public abstract RHITransferEncoder GetTransferEncoder();
         public abstract RHIComputeEncoder GetComputeEncoder();
         public abstract RHIRaytracingEncoder GetRaytracingEncoder();
-        public abstract RHIMeshletEncoder GetMeshletEncoder();
         public abstract RHIGraphicsEncoder GetGraphicsEncoder();
         //public abstract void Commit(RHIFence? fence = null);
         //public abstract void WaitUntilCompleted();
