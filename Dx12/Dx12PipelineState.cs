@@ -353,12 +353,14 @@ namespace Infinity.Graphics
 
         public Dx12GraphicsPipelineState(Dx12Device device, in RHIGraphicsPipelineStateDescriptor descriptor)
         {
+            m_Type = ERHIGraphicsPipelineType.Tradition;
             m_Descriptor = descriptor;
-            Dx12Function vertexFunction = descriptor.TraditionPipeline.VertexFunction as Dx12Function;
-            Dx12Function fragmentFunction = descriptor.TraditionPipeline.FragmentFunction as Dx12Function;
-            Dx12PipelineLayout pipelineLayout = descriptor.TraditionPipeline.PipelineLayout as Dx12PipelineLayout;
 
-            Span<RHIVertexLayoutDescriptor> vertexLayouts = descriptor.TraditionPipeline.VertexLayouts.Span;
+            Dx12Function vertexFunction = descriptor.VertexFunction as Dx12Function;
+            Dx12Function fragmentFunction = descriptor.FragmentFunction as Dx12Function;
+            Dx12PipelineLayout pipelineLayout = descriptor.PipelineLayout as Dx12PipelineLayout;
+
+            Span<RHIVertexLayoutDescriptor> vertexLayouts = descriptor.VertexLayouts.Span;
 
             if ((vertexFunction != null))
             {
@@ -369,9 +371,9 @@ namespace Infinity.Graphics
                 }
             }
 
-            m_PrimitiveTopology = Dx12Utility.ConvertToDx12PrimitiveTopology(descriptor.TraditionPipeline.PrimitiveTopology);
+            m_PrimitiveTopology = Dx12Utility.ConvertToDx12PrimitiveTopology(descriptor.PrimitiveTopology);
 
-            D3D12_PRIMITIVE_TOPOLOGY_TYPE primitiveTopologyType = Dx12Utility.ConvertToDx12PrimitiveTopologyType(descriptor.TraditionPipeline.PrimitiveTopology);
+            D3D12_PRIMITIVE_TOPOLOGY_TYPE primitiveTopologyType = Dx12Utility.ConvertToDx12PrimitiveTopologyType(descriptor.PrimitiveTopology);
 
             int inputElementCount = Dx12Utility.GetDx12VertexLayoutCount(vertexLayouts);
             D3D12_INPUT_ELEMENT_DESC* inputElementsPtr = stackalloc D3D12_INPUT_ELEMENT_DESC[inputElementCount];
@@ -389,21 +391,21 @@ namespace Infinity.Graphics
                 pRootSignature = pipelineLayout.NativeRootSignature,
                 PrimitiveTopologyType = primitiveTopologyType,
 
-                SampleMask = descriptor.TraditionPipeline.RenderState.SampleMask.HasValue ? ((uint)descriptor.TraditionPipeline.RenderState.SampleMask.Value) : uint.MaxValue,
-                BlendState = Dx12Utility.CreateDx12BlendState(descriptor.TraditionPipeline.RenderState.BlendState),
-                RasterizerState = Dx12Utility.CreateDx12RasterizerState(descriptor.TraditionPipeline.RenderState.RasterizerState, descriptor.TraditionPipeline.OutputState.SampleCount != ERHISampleCount.None),
-                DepthStencilState = Dx12Utility.CreateDx12DepthStencilState(descriptor.TraditionPipeline.RenderState.DepthStencilState)
+                SampleMask = descriptor.RenderState.SampleMask.HasValue ? ((uint)descriptor.RenderState.SampleMask.Value) : uint.MaxValue,
+                BlendState = Dx12Utility.CreateDx12BlendState(descriptor.RenderState.BlendState),
+                RasterizerState = Dx12Utility.CreateDx12RasterizerState(descriptor.RenderState.RasterizerState, descriptor.OutputState.SampleCount != ERHISampleCount.None),
+                DepthStencilState = Dx12Utility.CreateDx12DepthStencilState(descriptor.RenderState.DepthStencilState)
             };
 
-            if (descriptor.TraditionPipeline.OutputState.DepthStencilFormat != ERHIPixelFormat.Unknown)
+            if (descriptor.OutputState.DepthStencilFormat != ERHIPixelFormat.Unknown)
             {
                 description.DSVFormat = DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
-                description.DSVFormat = Dx12Utility.ConvertToDx12Format(descriptor.TraditionPipeline.OutputState.DepthStencilFormat);
+                description.DSVFormat = Dx12Utility.ConvertToDx12Format(descriptor.OutputState.DepthStencilFormat);
             }
 
-            fixed (ERHIPixelFormat* formatPtr = &descriptor.TraditionPipeline.OutputState.ColorFormat0)
+            fixed (ERHIPixelFormat* formatPtr = &descriptor.OutputState.ColorFormat0)
             {
-                for (int i = 0; i < descriptor.TraditionPipeline.OutputState.OutputCount; ++i)
+                for (int i = 0; i < descriptor.OutputState.OutputCount; ++i)
                 {
                     description.RTVFormats[i] = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
                     description.RTVFormats[i] = Dx12Utility.ConvertToDx12ViewFormat(formatPtr[i]);
@@ -411,17 +413,17 @@ namespace Infinity.Graphics
             }
 
             description.Flags = D3D12_PIPELINE_STATE_FLAGS.D3D12_PIPELINE_STATE_FLAG_NONE;
-            description.NumRenderTargets = descriptor.TraditionPipeline.OutputState.OutputCount;
-            description.SampleDesc = Dx12Utility.ConvertToDx12SampleCount(descriptor.TraditionPipeline.OutputState.SampleCount);
+            description.NumRenderTargets = descriptor.OutputState.OutputCount;
+            description.SampleDesc = Dx12Utility.ConvertToDx12SampleCount(descriptor.OutputState.SampleCount);
             //description.StreamOutput = new StreamOutputDescription();
 
-            if (descriptor.TraditionPipeline.VertexFunction != null)
+            if (descriptor.VertexFunction != null)
             {
                 description.VS.BytecodeLength = vertexFunction.NativeShaderBytecode.BytecodeLength;
                 description.VS.pShaderBytecode = vertexFunction.NativeShaderBytecode.pShaderBytecode;
             }
 
-            if (descriptor.TraditionPipeline.FragmentFunction != null)
+            if (descriptor.FragmentFunction != null)
             {
                 description.PS.BytecodeLength = fragmentFunction.NativeShaderBytecode.BytecodeLength;
                 description.PS.pShaderBytecode = fragmentFunction.NativeShaderBytecode.pShaderBytecode;

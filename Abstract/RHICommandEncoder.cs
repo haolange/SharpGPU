@@ -259,7 +259,7 @@ namespace Infinity.Graphics
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipelineState(RHIGraphicsPipelineState pipelineState);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
-        public abstract void SetIndexBuffer(RHIBuffer buffer, in uint offset, in ERHIIndexFormat format);
+        public abstract void SetIndexBuffer(RHIBuffer buffer, in uint offset);
         public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset);
         public abstract void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner);
         public abstract void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance);

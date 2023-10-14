@@ -6,6 +6,7 @@ namespace Infinity.Graphics
     public struct RHIBufferDescriptor
     {
         public int ByteSize;
+        public ERHIBufferFormat Format;
         public ERHIBufferUsage UsageFlag;
         public ERHIStorageMode StorageMode;
     }

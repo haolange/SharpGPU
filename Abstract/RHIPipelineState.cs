@@ -139,18 +139,7 @@ namespace Infinity.Graphics
         public Memory<RHIRayGeneralGroupDescriptor> RayMissGroups;
     }
 
-    public struct RHIMeshletPipelineDescriptor
-    {
-        public RHIFunction TaskFunction;
-        public RHIFunction MeshFunction;
-        public RHIFunction FragmentFunction;
-        public RHIPipelineLayout PipelineLayout;
-        public ERHIPrimitiveTopology PrimitiveTopology;
-        public RHIOutputStateDescriptor OutputState;
-        public RHIRenderStateDescriptor RenderState;
-    }
-
-    public struct RHITraditionPipelineDescriptor
+    public struct RHIGraphicsPipelineStateDescriptor
     {
         public RHIFunction VertexFunction;
         public RHIFunction FragmentFunction;
@@ -161,11 +150,15 @@ namespace Infinity.Graphics
         public Memory<RHIVertexLayoutDescriptor> VertexLayouts;
     }
 
-    public struct RHIGraphicsPipelineStateDescriptor
+    public struct RHIMeshGraphicsPipelineStateDescriptor
     {
-        public ERHIGraphicsType GraphicsType;
-        public RHIMeshletPipelineDescriptor MeshletPipeline;
-        public RHITraditionPipelineDescriptor TraditionPipeline;
+        public RHIFunction TaskFunction;
+        public RHIFunction MeshFunction;
+        public RHIFunction FragmentFunction;
+        public RHIPipelineLayout PipelineLayout;
+        public ERHIPrimitiveTopology PrimitiveTopology;
+        public RHIOutputStateDescriptor OutputState;
+        public RHIRenderStateDescriptor RenderState;
     }
 
     public struct RHIPipelineStateLibraryResult
@@ -178,6 +171,7 @@ namespace Infinity.Graphics
     {
         public RHIComputePipelineStateDescriptor Descriptor => m_Descriptor;
 
+
         protected RHIComputePipelineStateDescriptor m_Descriptor;
     }
 
@@ -185,12 +179,17 @@ namespace Infinity.Graphics
     {
         public RHIRaytracingPipelineStateDescriptor Descriptor => m_Descriptor;
 
+
         protected RHIRaytracingPipelineStateDescriptor m_Descriptor;
     }
 
     public abstract class RHIGraphicsPipelineState : Disposal
-    {
+    { 
+        public ERHIGraphicsPipelineType Type => m_Type;
         public RHIGraphicsPipelineStateDescriptor Descriptor => m_Descriptor;
+
+
+        protected ERHIGraphicsPipelineType m_Type;
 
         protected RHIGraphicsPipelineStateDescriptor m_Descriptor;
     }

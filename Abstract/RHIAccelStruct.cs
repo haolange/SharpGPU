@@ -58,7 +58,7 @@ namespace Infinity.Graphics
         public uint IndexCount;
         public uint IndexOffset;
         public RHIBuffer? IndexBuffer;
-        public ERHIIndexFormat IndexFormat;
+        public ERHIBufferFormat IndexFormat;
         public uint VertexCount;
         public uint VertexStride;
         public uint VertexOffset;

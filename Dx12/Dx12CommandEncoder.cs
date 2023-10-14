@@ -1399,12 +1399,12 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void SetIndexBuffer(RHIBuffer buffer, in uint offset, in ERHIIndexFormat format)
+        public override void SetIndexBuffer(RHIBuffer buffer, in uint offset)
         {
             Dx12Buffer dx12Buffer = buffer as Dx12Buffer;
             D3D12_INDEX_BUFFER_VIEW indexBufferView = new D3D12_INDEX_BUFFER_VIEW
             {
-                Format = Dx12Utility.ConvertToDx12IndexFormat(format),
+                Format = Dx12Utility.ConvertToDx12IndexFormat(buffer.Descriptor.Format),
                 SizeInBytes = (uint)buffer.Descriptor.ByteSize - offset,
                 BufferLocation = dx12Buffer.NativeResource->GetGPUVirtualAddress() + offset
             };

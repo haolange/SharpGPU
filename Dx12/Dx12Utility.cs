@@ -1106,9 +1106,9 @@ namespace Infinity.Graphics
             return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
         }
 
-        internal static DXGI_FORMAT ConvertToDx12IndexFormat(in ERHIIndexFormat format)
+        internal static DXGI_FORMAT ConvertToDx12IndexFormat(in ERHIBufferFormat format)
         {
-            return (format == ERHIIndexFormat.UInt16) ? DXGI_FORMAT.DXGI_FORMAT_R16_UINT : ((format != ERHIIndexFormat.UInt32) ? DXGI_FORMAT.DXGI_FORMAT_UNKNOWN : DXGI_FORMAT.DXGI_FORMAT_R32_UINT);
+            return (format == ERHIBufferFormat.UInt16) ? DXGI_FORMAT.DXGI_FORMAT_R16_UINT : ((format != ERHIBufferFormat.UInt32) ? DXGI_FORMAT.DXGI_FORMAT_UNKNOWN : DXGI_FORMAT.DXGI_FORMAT_R32_UINT);
         }
 
         internal static DXGI_SAMPLE_DESC ConvertToDx12SampleCount(in ERHISampleCount sampleCount)

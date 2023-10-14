@@ -47,7 +47,7 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ERHIGraphicsType : byte
+    public enum ERHIGraphicsPipelineType : byte
     {
         Meshlet,
         Tradition,
@@ -60,6 +60,20 @@ namespace Infinity.Graphics
         Statistics,
         TimestampTransfer,
         TimestampGenerice,
+        Pending
+    }
+
+    public enum ERHISemanticType : byte
+    {
+        Color = 0,
+        Position = 1,
+        TexCoord = 2,
+        Normal = 3,
+        Tangent = 4,
+        Binormal = 5,
+        BlendIndices = 6,
+        BlendWeights = 7,
+        ShadingRate = 8,
         Pending
     }
 
@@ -161,17 +175,11 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ERHISemanticType : byte
+    public enum ERHIBufferFormat : byte
     {
-        Color = 0,
-        Position = 1,
-        TexCoord = 2,
-        Normal = 3,
-        Tangent = 4,
-        Binormal = 5,
-        BlendIndices = 6,
-        BlendWeights = 7,
-        ShadingRate = 8,
+        Undefine,
+        UInt16,
+        UInt32,
         Pending
     }
 
@@ -319,13 +327,6 @@ namespace Infinity.Graphics
         Point,
         Line,
         Triangle,
-        Pending
-    }
-
-    public enum ERHIIndexFormat : byte
-    {
-        UInt16,
-        UInt32,
         Pending
     }
 
