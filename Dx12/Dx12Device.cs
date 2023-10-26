@@ -18,6 +18,9 @@ namespace Infinity.Graphics
         public override ERHIMatrixMajorness MatrixMajorness => ERHIMatrixMajorness.RowMajor;
         public override ERHIMultiviewStrategy MultiviewStrategy => ERHIMultiviewStrategy.Unsupported;
 
+        internal bool IsRenderPassSupported => bRenderPassSupported;
+        internal D3D_FEATURE_LEVEL MaxNativeFeatureLevel => m_MaxNativeFeatureLevel;
+
         public Dx12Instance Dx12Instance
         {
             get
@@ -96,8 +99,10 @@ namespace Infinity.Graphics
             }
         }
 
+        private bool bRenderPassSupported;
         private bool bRaytracingSupported;
         private bool bRaytracingQuerySupported;
+        private D3D_FEATURE_LEVEL m_MaxNativeFeatureLevel;
         private Dx12Instance m_Dx12Instance;
         private Dx12DescriptorHeap m_DsvHeap;
         private Dx12DescriptorHeap m_RtvHeap;
@@ -319,19 +324,38 @@ namespace Infinity.Graphics
         {
             // check feature level
             D3D_FEATURE_LEVEL* aLevels = stackalloc D3D_FEATURE_LEVEL[3];
-            aLevels[0] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_0;
-            aLevels[1] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1;
-            aLevels[2] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_2;
-
+            {
+                aLevels[0] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_0;
+                aLevels[1] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1;
+                aLevels[2] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_2;
+            }
             D3D12_FEATURE_DATA_FEATURE_LEVELS dLevels;
             dLevels.NumFeatureLevels = 3;
             dLevels.pFeatureLevelsRequested = aLevels;
             m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_FEATURE_LEVELS, &dLevels, (uint)sizeof(D3D12_FEATURE_DATA_FEATURE_LEVELS));
+            m_MaxNativeFeatureLevel = dLevels.MaxSupportedFeatureLevel;
 
-            // check raytracing level
+            // check feature options
             D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5;
             m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS5, &options5, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5));
-            
+
+            // check render pass level
+            switch (options5.RenderPassesTier)
+            {
+                case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_0:
+                    bRenderPassSupported = false;
+                    break;
+
+                case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_1:
+                    bRenderPassSupported = false;
+                    break;
+
+                case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_2:
+                    bRenderPassSupported = true;
+                    break;
+            }
+
+            // check raytracing level
             switch (options5.RaytracingTier)
             {
                 case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_0:

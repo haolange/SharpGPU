@@ -143,19 +143,6 @@ namespace Infinity.Graphics
         public RHIStatisticsDescriptor? Statistics;
     }
 
-    public struct RHIMeshletPassDescriptor
-    {
-        public string Name;
-        public uint ArrayLength;
-        public ERHISampleCount SampleCount;
-        public RHITimestampDescriptor? Timestamp;
-        public RHIStatisticsDescriptor? Statistics;
-        public RHITexture ShadingRateTexture;
-        //public Memory<RHISubpassDescriptor>? SubpassDescriptors;
-        public Memory<RHIColorAttachmentDescriptor> ColorAttachments;
-        public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachment;
-    }
-
     public struct RHIGraphicsPassDescriptor
     {
         public string Name;
@@ -165,7 +152,7 @@ namespace Infinity.Graphics
         public RHIOcclusionDescriptor? Occlusion;
         public RHIStatisticsDescriptor? Statistics;
         public RHITexture ShadingRateTexture;
-        //public Memory<RHISubpassDescriptor>? SubpassDescriptors;
+        public Memory<RHISubpassDescriptor>? SubpassDescriptors;
         public Memory<RHIColorAttachmentDescriptor> ColorAttachments;
         public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachment;
     }
@@ -255,7 +242,7 @@ namespace Infinity.Graphics
         public abstract void SetViewports(in Memory<Viewport> viewports);
         public abstract void SetStencilRef(in uint value);
         public abstract void SetBlendFactor(in float4 value);
-        //public abstract void NextSubpass();
+        public abstract void NextSubpass();
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipelineState(RHIGraphicsPipelineState pipelineState);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
@@ -264,11 +251,11 @@ namespace Infinity.Graphics
         public abstract void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner);
         public abstract void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance);
         public abstract void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance);
-        public abstract void DrawIndirect(RHIBuffer argsBuffer, in uint offset);
-        public abstract void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset);
+        public abstract void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
+        public abstract void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
         public abstract void DrawMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DrawMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset);
-        // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
+        public abstract void ExecuteCommandsInBuffer(RHIIndirectCommandBuffer indirectCommandBuffer);
         public abstract void EndPass();
     }
 }

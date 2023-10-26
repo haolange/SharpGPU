@@ -1329,10 +1329,10 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->OMSetBlendFactor((float*)&tempValue);
         }
 
-        /*public override void NextSubpass()
+        public override void NextSubpass()
         {
             throw new NotImplementedException("Dx12 is not support subpass. Please do not use NextSubpass command in graphics encoder");
-        }*/
+        }
 
         public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
         {
@@ -1447,20 +1447,20 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->DrawIndexedInstanced(indexCount, instanceCount, firstIndex, (int)baseVertex, firstInstance);
         }
 
-        public override void DrawIndirect(RHIBuffer argsBuffer, in uint offset)
+        public override void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DrawIndirectSignature, 1, dx12Buffer.NativeResource, offset, null, 0);
+            dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DrawIndirectSignature, drawCount, dx12Buffer.NativeResource, offset, null, 0);
         }
 
-        public override void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset)
+        public override void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DrawIndexedIndirectSignature, 1, dx12Buffer.NativeResource, offset, null, 0);
+            dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DrawIndexedIndirectSignature, drawCount, dx12Buffer.NativeResource, offset, null, 0);
         }
 
         public override void DrawMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
@@ -1473,11 +1473,10 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        /*public override void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer)
+        public override void ExecuteCommandsInBuffer(RHIIndirectCommandBuffer indirectCommandBuffer)
         {
-            //Dx12IndirectCommandBuffer dx12IndirectCommandBuffer = indirectCommandBuffer as Dx12IndirectCommandBuffer;
-            //dx12CommandBuffer.NativeCommandList->ExecuteIndirect(null, indirectCommandBuffer.Count, dx12IndirectCommandBuffer.NativeResource, indirectCommandBuffer.Offset, null, 0);
-        }*/
+            throw new NotImplementedException();
+        }
 
         public override void EndPass()
         {
