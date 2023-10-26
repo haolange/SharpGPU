@@ -8,13 +8,6 @@ namespace Infinity.Graphics
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal unsafe class MtlDevice : RHIDevice
     {
-        public override bool IsRaytracingSupported => true;
-        public override bool IsRaytracingQuerySupported => true;
-        public override bool IsFlipProjectionRequired => false;
-        public override ERHIClipDepth ClipDepth => ERHIClipDepth.ZeroToOne;
-        public override ERHIMatrixMajorness MatrixMajorness => ERHIMatrixMajorness.RowMajor;
-        public override ERHIMultiviewStrategy MultiviewStrategy => ERHIMultiviewStrategy.Unsupported;
-
         public MTLDevice NativeDevice
         {
             get
@@ -37,11 +30,6 @@ namespace Infinity.Graphics
         {
             m_MtlInstance = instance;
             CreateDevice(devicePtr);
-        }
-
-        public override RHIDeviceProperty GetDeviceProperty()
-        {
-            throw new NotImplementedException();
         }
 
         public override RHIFence CreateFence()

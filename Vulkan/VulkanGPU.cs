@@ -9,13 +9,6 @@ namespace Infinity.Graphics
 {
     internal class VkDevice : RHIDevice
     {
-        public override bool IsRaytracingSupported => true;
-        public override bool IsRaytracingQuerySupported => true;
-        public override bool IsFlipProjectionRequired => false;
-        public override ERHIClipDepth ClipDepth => ERHIClipDepth.ZeroToOne;
-        public override ERHIMatrixMajorness MatrixMajorness => ERHIMatrixMajorness.RowMajor;
-        public override ERHIMultiviewStrategy MultiviewStrategy => ERHIMultiviewStrategy.Unsupported;
-
         public VkInstance VkInstance
         {
             get
@@ -30,11 +23,6 @@ namespace Infinity.Graphics
         {
             m_VkInstance = instance;
             CreateDevice(adapterPtr);
-        }
-
-        public override RHIDeviceProperty GetDeviceProperty()
-        {
-            throw new NotImplementedException();
         }
 
         public override RHIFence CreateFence()

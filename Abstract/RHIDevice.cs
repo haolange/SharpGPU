@@ -1,25 +1,39 @@
-﻿using System;
-using Infinity.Core;
+﻿using Infinity.Core;
 
 namespace Infinity.Graphics
 {
-    public struct RHIDeviceProperty
+    public class RHIDeviceLimit
     {
-        public ERHIDeviceType Type;
+
+    }
+
+    public class RHIDeviceFeature
+    {
+        public bool IsFlipProjection;
+        public bool IsRaytracingSupported;
+        public bool IsRaytracingInlineSupported;
+        public bool IsShaderBarycentricCoordSupported;
+        public bool IsProgrammableSamplePositionSupported;
+        public ERHIMatrixMajorons MatrixMajorons;
+        public ERHIDepthValueRange DepthValueRange;
+        public ERHIMultiviewStrategy MultiviewStrategy;
+    }
+
+    public struct RHIDeviceInfo
+    {
         public uint VendorId;
         public uint DeviceId;
+        public ERHIDeviceType DeviceType;
+        public RHIDeviceLimit DeviceLimit;
+        public RHIDeviceFeature DeviceFeature;
     }
 
     public abstract class RHIDevice : Disposal
     {
-        public abstract bool IsRaytracingSupported { get; }
-        public abstract bool IsRaytracingQuerySupported { get; }
-        public abstract bool IsFlipProjectionRequired { get; }
-        public abstract ERHIClipDepth ClipDepth { get; }
-        public abstract ERHIMatrixMajorness MatrixMajorness { get; }
-        public abstract ERHIMultiviewStrategy MultiviewStrategy { get; }
+        public RHIDeviceInfo DeviceInfo => m_DeviceInfo;
 
-        public abstract RHIDeviceProperty GetDeviceProperty();
+        protected RHIDeviceInfo m_DeviceInfo;
+
         public abstract RHIFence CreateFence();
         public abstract RHISemaphore CreateSemaphore();
         public abstract RHIQuery CreateQuery(in RHIQueryDescriptor descriptor);

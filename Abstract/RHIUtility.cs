@@ -10,17 +10,17 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ERHIClipDepth : byte
-    {
-        ZeroToOne,
-        NegativeOneToOne,
-        Pending
-    }
-
-    public enum ERHIMatrixMajorness : byte
+    public enum ERHIMatrixMajorons : byte
     {
         RowMajor,
         ColumnMajor,
+        Pending
+    }
+
+    public enum ERHIDepthValueRange : byte
+    {
+        ZeroToOne,
+        NegativeOneToOne,
         Pending
     }
 
