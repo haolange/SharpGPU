@@ -23,6 +23,7 @@ namespace Infinity.Graphics
     {
         public uint VendorId;
         public uint DeviceId;
+        public string DeviceName;
         public ERHIDeviceType DeviceType;
         public RHIDeviceLimit DeviceLimit;
         public RHIDeviceFeature DeviceFeature;

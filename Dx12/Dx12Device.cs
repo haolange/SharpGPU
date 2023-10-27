@@ -3,6 +3,7 @@ using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using static TerraFX.Interop.Windows.Windows;
 using IUnknown = TerraFX.Interop.Windows.IUnknown;
+using TerraFX.Interop.Gdiplus;
 
 namespace Infinity.Graphics
 {
@@ -117,8 +118,10 @@ namespace Infinity.Graphics
 
             DXGI_ADAPTER_DESC1 adapterDesc;
             m_DXGIAdapter->GetDesc1(&adapterDesc);
+
             m_DeviceInfo.VendorId = adapterDesc.VendorId;
             m_DeviceInfo.DeviceId = adapterDesc.DeviceId;
+            m_DeviceInfo.DeviceName = SharpGen.Runtime.StringHelpers.PtrToStringUni((IntPtr)adapterDesc.Description, 127);
             m_DeviceInfo.DeviceType = (adapterDesc.Flags & (uint)DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE) == 1 ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
 
             CreateDevice();
