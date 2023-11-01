@@ -225,11 +225,6 @@ namespace Infinity.Graphics
             return new Dx12GraphicsPipelineState(this, descriptor);
         }
 
-        public override RHIGraphicsPipelineState CreateMeshGraphicsPipelineState(in RHIMeshGraphicsPipelineStateDescriptor descriptor)
-        {
-            throw new NotImplementedException();
-        }
-
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)
         {
             int index = m_DsvHeap.Allocate();

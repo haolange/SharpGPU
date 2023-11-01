@@ -47,10 +47,10 @@ namespace Infinity.Graphics
         Pending
     }
 
-    public enum ERHIGraphicsPipelineType : byte
+    public enum ERHIPrimitiveType : byte
     {
-        Meshlet,
-        Tradition,
+        Mesh,
+        Vertex,
         Pending
     }
 

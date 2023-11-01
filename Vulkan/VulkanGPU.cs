@@ -120,11 +120,6 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHIGraphicsPipelineState CreateMeshGraphicsPipelineState(in RHIMeshGraphicsPipelineStateDescriptor descriptor)
-        {
-            throw new NotImplementedException();
-        }
-
         private void CreateDevice(in IntPtr devicePtr)
         {
             throw new NotImplementedException();

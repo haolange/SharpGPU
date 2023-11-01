@@ -139,26 +139,48 @@ namespace Infinity.Graphics
         public Memory<RHIRayGeneralGroupDescriptor> RayMissGroups;
     }
 
-    public struct RHIGraphicsPipelineStateDescriptor
+    public struct RHIVertexAssemblerDescriptor
     {
         public RHIFunction VertexFunction;
-        public RHIFunction FragmentFunction;
-        public RHIPipelineLayout PipelineLayout;
-        public ERHIPrimitiveTopology PrimitiveTopology;
-        public RHIOutputStateDescriptor OutputState;
-        public RHIRenderStateDescriptor RenderState;
         public Memory<RHIVertexLayoutDescriptor> VertexLayouts;
+
+        public RHIVertexAssemblerDescriptor(RHIFunction vertexFunction, in Memory<RHIVertexLayoutDescriptor> vertexLayouts)
+        {
+            VertexLayouts = vertexLayouts;
+            VertexFunction = vertexFunction;
+        }
     }
 
-    public struct RHIMeshGraphicsPipelineStateDescriptor
+    public struct RHIMeshAssemblerDescriptor
     {
         public RHIFunction TaskFunction;
         public RHIFunction MeshFunction;
-        public RHIFunction FragmentFunction;
-        public RHIPipelineLayout PipelineLayout;
+
+        public RHIMeshAssemblerDescriptor(RHIFunction taskFunction, RHIFunction meshFunction)
+        {
+            TaskFunction = taskFunction;
+            MeshFunction = meshFunction;
+        }
+    }
+
+    public struct RHIPrimitiveAssemblerDescriptor
+    {
+        public ERHIPrimitiveType PrimitiveType => (MeshAssembler.HasValue ? ERHIPrimitiveType.Mesh : ERHIPrimitiveType.Vertex);
+
         public ERHIPrimitiveTopology PrimitiveTopology;
-        public RHIOutputStateDescriptor OutputState;
+        public RHIMeshAssemblerDescriptor? MeshAssembler;
+        public RHIVertexAssemblerDescriptor? VertexAssembler;
+    }
+
+    public struct RHIGraphicsPipelineStateDescriptor
+    {
+        public ERHISampleCount SampleCount;
+        public ERHIPixelFormat DepthFormat;
+        public ERHIPixelFormat[] ColorFormats;
         public RHIRenderStateDescriptor RenderState;
+        public RHIPipelineLayout PipelineLayout;
+        public RHIFunction FragmentFunction;
+        public RHIPrimitiveAssemblerDescriptor PrimitiveAssembler;
     }
 
     public struct RHIPipelineStateLibraryResult
@@ -185,11 +207,7 @@ namespace Infinity.Graphics
 
     public abstract class RHIGraphicsPipelineState : Disposal
     { 
-        public ERHIGraphicsPipelineType Type => m_Type;
         public RHIGraphicsPipelineStateDescriptor Descriptor => m_Descriptor;
-
-
-        protected ERHIGraphicsPipelineType m_Type;
 
         protected RHIGraphicsPipelineStateDescriptor m_Descriptor;
     }
