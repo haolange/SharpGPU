@@ -1,5 +1,6 @@
 ﻿using System;
-using Apple.Metal;
+using SharpMetal.Metal;
+using SharpMetal.Foundation;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
@@ -27,7 +28,7 @@ namespace Infinity.Graphics
             {
                 NSArray gpus = MTLDevice.CopyAllDevices();
                 gpusPtr = gpus.NativePtr;
-                gpuCount = (int)gpus.count;
+                gpuCount = (int)gpus.Count;
             }
 
             m_Devices = new List<MtlDevice>(gpuCount);
