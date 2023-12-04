@@ -9,6 +9,17 @@ using static TerraFX.Interop.Windows.Windows;
 namespace Infinity.Graphics
 {
 #pragma warning disable CS0169, CS0649, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct D3D12_COMPUTE_PIPELINE_STATE_CUSTOM_DESC
+    {
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE RootSignature_Type;
+        public ID3D12RootSignature* pRootSignature;
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE CS_Type;
+        public D3D12_SHADER_BYTECODE CS;
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE Flags_Type;
+        public D3D12_PIPELINE_STATE_FLAGS Flags;
+    }
+
     internal unsafe class Dx12ComputePipelineState : RHIComputePipelineState
     {
         public ID3D12PipelineState* NativePipelineState
@@ -27,6 +38,7 @@ namespace Infinity.Graphics
             Dx12Function computeFunction = descriptor.ComputeFunction as Dx12Function;
             Dx12PipelineLayout pipelineLayout = descriptor.PipelineLayout as Dx12PipelineLayout;
 
+#if false
             D3D12_COMPUTE_PIPELINE_STATE_DESC description = new D3D12_COMPUTE_PIPELINE_STATE_DESC();
             description.pRootSignature = pipelineLayout.NativeRootSignature;
             description.Flags = D3D12_PIPELINE_STATE_FLAGS.D3D12_PIPELINE_STATE_FLAG_NONE;
@@ -35,6 +47,26 @@ namespace Infinity.Graphics
 
             ID3D12PipelineState* pipelineState;
             HRESULT hResult = device.NativeDevice->CreateComputePipelineState(&description, __uuidof<ID3D12PipelineState>(), (void**)&pipelineState);
+#else
+            D3D12_COMPUTE_PIPELINE_STATE_CUSTOM_DESC description;
+            description.RootSignature_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE;
+            description.pRootSignature = pipelineLayout.NativeRootSignature;
+
+            description.CS_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_CS;
+            description.CS.BytecodeLength = computeFunction.NativeShaderBytecode.BytecodeLength;
+            description.CS.pShaderBytecode = computeFunction.NativeShaderBytecode.pShaderBytecode;
+
+            description.Flags = D3D12_PIPELINE_STATE_FLAGS.D3D12_PIPELINE_STATE_FLAG_NONE;
+            description.Flags_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_FLAGS;
+
+            D3D12_PIPELINE_STATE_STREAM_DESC streamDesc;
+            streamDesc.SizeInBytes = (uint)sizeof(D3D12_COMPUTE_PIPELINE_STATE_CUSTOM_DESC);
+            streamDesc.pPipelineStateSubobjectStream = &description;
+
+            ID3D12PipelineState* pipelineState;
+            HRESULT hResult = device.NativeDevice->CreatePipelineState(&streamDesc, __uuidof<ID3D12PipelineState>(), (void**)&pipelineState);
+#endif
+
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
