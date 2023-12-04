@@ -214,7 +214,7 @@ namespace Infinity.Graphics
 
     public abstract class RHIPipelineStateLibrary : Disposal
     {
-        public RHIPipelineStateLibrary(in RHIPipelineStateLibraryResult PipelineStateCache)
+        public RHIPipelineStateLibrary(in RHIPipelineStateLibraryResult pipelineStateLibraryResult)
         {
 
         }

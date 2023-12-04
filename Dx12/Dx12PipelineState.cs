@@ -247,6 +247,19 @@ namespace Infinity.Graphics
 
                     m_MaxLocalRootParameters = math.max(m_MaxLocalRootParameters, (uint)rayMissPipelineLayout.ParameterCount);
                 }
+                else
+                {
+                    ++stateSubObjectCount;
+                    D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION missGroupDescriptor;
+                    {
+                        missGroupDescriptor.NumExports = 1;
+                        missGroupDescriptor.pExports = (ushort**)Marshal.StringToHGlobalUni(rayMissGroupDescriptor.General.EntryName).ToPointer();
+                        missGroupDescriptor.pSubobjectToAssociate = null;
+                    }
+                    ref D3D12_STATE_SUBOBJECT missGroupInfo = ref stateSubObjects[stateSubObjectCount];
+                    missGroupInfo.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
+                    missGroupInfo.pDesc = &missGroupDescriptor;
+                }
             }
             #endregion MissGroup
 
