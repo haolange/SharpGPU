@@ -178,8 +178,8 @@ namespace Infinity.Graphics
         public ERHIPixelFormat DepthFormat;
         public ERHIPixelFormat[] ColorFormats;
         public RHIRenderStateDescriptor RenderState;
-        public RHIPipelineLayout PipelineLayout;
         public RHIFunction FragmentFunction;
+        public RHIPipelineLayout PipelineLayout;
         public RHIPrimitiveAssemblerDescriptor PrimitiveAssembler;
     }
 

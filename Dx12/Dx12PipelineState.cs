@@ -5,12 +5,13 @@ using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using static TerraFX.Interop.Windows.Windows;
+using TerraFX.Interop.Gdiplus;
 
 namespace Infinity.Graphics
 {
 #pragma warning disable CS0169, CS0649, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct D3D12_COMPUTE_PIPELINE_STATE_CUSTOM_DESC
+    internal unsafe struct D3D12_CUSTOM_COMPUTE_PIPELINE_STATE_DESC
     {
         public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE RootSignature_Type;
         public ID3D12RootSignature* pRootSignature;
@@ -18,6 +19,35 @@ namespace Infinity.Graphics
         public D3D12_SHADER_BYTECODE CS;
         public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE Flags_Type;
         public D3D12_PIPELINE_STATE_FLAGS Flags;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct D3D12_MESH_PIPELINE_STATE_DESC
+    {
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE RootSignature_Type;
+        public ID3D12RootSignature* pRootSignature;
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE PrimitiveTopology_Type; 
+        public D3D12_PRIMITIVE_TOPOLOGY_TYPE PrimitiveTopologyType;
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE TaskShader_Type; 
+        public D3D12_SHADER_BYTECODE TaskShader;
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE MeshShader_Type; 
+        public D3D12_SHADER_BYTECODE MeshShader;
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE PixelShader_Type; 
+        public D3D12_SHADER_BYTECODE PixelShader;
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE RasterizerState_Type; 
+        public D3D12_RASTERIZER_DESC RasterizerState;
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE DepthStencilState_Type; 
+        public D3D12_DEPTH_STENCIL_DESC DepthStencilState;
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE BlendState_Type; 
+        public D3D12_BLEND_DESC BlendState;
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE SampleDesc_Type; 
+        public DXGI_SAMPLE_DESC SampleDesc;
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE SampleMask_Type; 
+        public uint SampleMask;
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE RTVFormats_Type; 
+        public D3D12_RT_FORMAT_ARRAY RTVFormats;
+        public D3D12_PIPELINE_STATE_SUBOBJECT_TYPE DSVFormat_Type;
+        public DXGI_FORMAT DSVFormat;
     }
 
     internal unsafe class Dx12ComputePipelineState : RHIComputePipelineState
@@ -48,7 +78,7 @@ namespace Infinity.Graphics
             ID3D12PipelineState* pipelineState;
             HRESULT hResult = device.NativeDevice->CreateComputePipelineState(&description, __uuidof<ID3D12PipelineState>(), (void**)&pipelineState);
 #else
-            D3D12_COMPUTE_PIPELINE_STATE_CUSTOM_DESC description;
+            D3D12_CUSTOM_COMPUTE_PIPELINE_STATE_DESC description;
             description.RootSignature_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE;
             description.pRootSignature = pipelineLayout.NativeRootSignature;
 
@@ -60,7 +90,7 @@ namespace Infinity.Graphics
             description.Flags_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_FLAGS;
 
             D3D12_PIPELINE_STATE_STREAM_DESC streamDesc;
-            streamDesc.SizeInBytes = (uint)sizeof(D3D12_COMPUTE_PIPELINE_STATE_CUSTOM_DESC);
+            streamDesc.SizeInBytes = (uint)sizeof(D3D12_CUSTOM_COMPUTE_PIPELINE_STATE_DESC);
             streamDesc.pPipelineStateSubobjectStream = &description;
 
             ID3D12PipelineState* pipelineState;
@@ -408,6 +438,79 @@ namespace Infinity.Graphics
             switch (descriptor.PrimitiveAssembler.PrimitiveType)
             {
                 case ERHIPrimitiveType.Mesh:
+                    if (descriptor.PrimitiveAssembler.MeshAssembler.HasValue)
+                    {
+                        Dx12Function taskFunction = descriptor.PrimitiveAssembler.MeshAssembler.Value.TaskFunction as Dx12Function;
+                        Dx12Function meshFunction = descriptor.PrimitiveAssembler.MeshAssembler.Value.MeshFunction as Dx12Function;
+
+                        D3D12_MESH_PIPELINE_STATE_DESC nativeMeshPipelineDesc = new D3D12_MESH_PIPELINE_STATE_DESC
+                        {
+                            RootSignature_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE,
+                            PrimitiveTopology_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PRIMITIVE_TOPOLOGY,
+                            TaskShader_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_AS,
+                            MeshShader_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_MS,
+                            PixelShader_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PS,
+                            BlendState_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_BLEND,
+                            RasterizerState_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER,
+                            DepthStencilState_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL,
+                            SampleDesc_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_DESC,
+                            SampleMask_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_MASK,
+                            RTVFormats_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS,
+                            DSVFormat_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL_FORMAT,
+
+                            pRootSignature = pipelineLayout.NativeRootSignature,
+                            PrimitiveTopologyType = primitiveTopologyType,
+                            SampleDesc = Dx12Utility.ConvertToDx12SampleCount(descriptor.SampleCount),
+                            SampleMask = descriptor.RenderState.SampleMask.HasValue ? descriptor.RenderState.SampleMask.Value : uint.MaxValue,
+                            BlendState = Dx12Utility.CreateDx12BlendState(descriptor.RenderState.BlendState),
+                            RasterizerState = Dx12Utility.CreateDx12RasterizerState(descriptor.RenderState.RasterizerState, descriptor.SampleCount != ERHISampleCount.None),
+                            DepthStencilState = Dx12Utility.CreateDx12DepthStencilState(descriptor.RenderState.DepthStencilState)
+                        };
+
+                        if (descriptor.DepthFormat != ERHIPixelFormat.Unknown)
+                        {
+                            nativeMeshPipelineDesc.DSVFormat = Dx12Utility.ConvertToDx12Format(descriptor.DepthFormat);
+                        }
+
+                        DXGI_FORMAT* colorFormats = stackalloc DXGI_FORMAT[descriptor.ColorFormats.Length];
+                        {
+                            for (int i = 0; i < descriptor.ColorFormats.Length; ++i)
+                            {
+                                colorFormats[i] = Dx12Utility.ConvertToDx12ViewFormat(descriptor.ColorFormats[i]);
+                            }
+                            nativeMeshPipelineDesc.RTVFormats = new D3D12_RT_FORMAT_ARRAY(colorFormats, (uint)descriptor.ColorFormats.Length);
+                        }
+
+                        if (taskFunction != null)
+                        {
+                            nativeMeshPipelineDesc.TaskShader.BytecodeLength = taskFunction.NativeShaderBytecode.BytecodeLength;
+                            nativeMeshPipelineDesc.TaskShader.pShaderBytecode = taskFunction.NativeShaderBytecode.pShaderBytecode;
+                        }
+
+                        if (meshFunction != null)
+                        {
+                            nativeMeshPipelineDesc.MeshShader.BytecodeLength = meshFunction.NativeShaderBytecode.BytecodeLength;
+                            nativeMeshPipelineDesc.MeshShader.pShaderBytecode = meshFunction.NativeShaderBytecode.pShaderBytecode;
+                        }
+
+                        if (fragmentFunction != null)
+                        {
+                            nativeMeshPipelineDesc.PixelShader.BytecodeLength = fragmentFunction.NativeShaderBytecode.BytecodeLength;
+                            nativeMeshPipelineDesc.PixelShader.pShaderBytecode = fragmentFunction.NativeShaderBytecode.pShaderBytecode;
+                        }
+
+                        D3D12_PIPELINE_STATE_STREAM_DESC streamDesc;
+                        streamDesc.SizeInBytes = (uint)sizeof(D3D12_MESH_PIPELINE_STATE_DESC);
+                        streamDesc.pPipelineStateSubobjectStream = &nativeMeshPipelineDesc;
+
+                        ID3D12PipelineState* pipelineState;
+                        HRESULT hResult = device.NativeDevice->CreatePipelineState(&streamDesc, __uuidof<ID3D12PipelineState>(), (void**)&pipelineState);
+
+#if DEBUG
+                        Dx12Utility.CHECK_HR(hResult);
+#endif
+                        m_NativePipelineState = pipelineState;
+                    }
                     break;
 
                 case ERHIPrimitiveType.Vertex:
@@ -430,25 +533,27 @@ namespace Infinity.Graphics
 
                         Dx12Utility.ConvertToDx12VertexLayout(vertexLayouts, inputElementsView);
 
-                        D3D12_INPUT_LAYOUT_DESC outputLayout;
-                        outputLayout.NumElements = (uint)inputElementCount;
-                        outputLayout.pInputElementDescs = inputElementsPtr;
+                        D3D12_INPUT_LAYOUT_DESC vertexInputLayout;
+                        vertexInputLayout.NumElements = (uint)inputElementCount;
+                        vertexInputLayout.pInputElementDescs = inputElementsPtr;
 
                         D3D12_GRAPHICS_PIPELINE_STATE_DESC nativeGraphicsPipelineDesc = new D3D12_GRAPHICS_PIPELINE_STATE_DESC
                         {
-                            InputLayout = outputLayout,
+                            InputLayout = vertexInputLayout,
                             pRootSignature = pipelineLayout.NativeRootSignature,
                             PrimitiveTopologyType = primitiveTopologyType,
-
+                            SampleDesc = Dx12Utility.ConvertToDx12SampleCount(descriptor.SampleCount),
                             SampleMask = descriptor.RenderState.SampleMask.HasValue ? descriptor.RenderState.SampleMask.Value : uint.MaxValue,
+                            //description.StreamOutput = new StreamOutputDescription(),
                             BlendState = Dx12Utility.CreateDx12BlendState(descriptor.RenderState.BlendState),
                             RasterizerState = Dx12Utility.CreateDx12RasterizerState(descriptor.RenderState.RasterizerState, descriptor.SampleCount != ERHISampleCount.None),
-                            DepthStencilState = Dx12Utility.CreateDx12DepthStencilState(descriptor.RenderState.DepthStencilState)
+                            DepthStencilState = Dx12Utility.CreateDx12DepthStencilState(descriptor.RenderState.DepthStencilState),
+                            Flags = D3D12_PIPELINE_STATE_FLAGS.D3D12_PIPELINE_STATE_FLAG_NONE,
+                            NumRenderTargets = (uint)descriptor.ColorFormats.Length,
                         };
 
                         if (descriptor.DepthFormat != ERHIPixelFormat.Unknown)
                         {
-                            nativeGraphicsPipelineDesc.DSVFormat = DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
                             nativeGraphicsPipelineDesc.DSVFormat = Dx12Utility.ConvertToDx12Format(descriptor.DepthFormat);
                         }
 
@@ -458,18 +563,13 @@ namespace Infinity.Graphics
                             nativeGraphicsPipelineDesc.RTVFormats[i] = Dx12Utility.ConvertToDx12ViewFormat(descriptor.ColorFormats[i]);
                         }
 
-                        nativeGraphicsPipelineDesc.Flags = D3D12_PIPELINE_STATE_FLAGS.D3D12_PIPELINE_STATE_FLAG_NONE;
-                        nativeGraphicsPipelineDesc.NumRenderTargets = (uint)descriptor.ColorFormats.Length;
-                        nativeGraphicsPipelineDesc.SampleDesc = Dx12Utility.ConvertToDx12SampleCount(descriptor.SampleCount);
-                        //description.StreamOutput = new StreamOutputDescription();
-
-                        if (descriptor.PrimitiveAssembler.VertexAssembler.Value.VertexFunction != null)
+                        if (vertexFunction != null)
                         {
                             nativeGraphicsPipelineDesc.VS.BytecodeLength = vertexFunction.NativeShaderBytecode.BytecodeLength;
                             nativeGraphicsPipelineDesc.VS.pShaderBytecode = vertexFunction.NativeShaderBytecode.pShaderBytecode;
                         }
 
-                        if (descriptor.FragmentFunction != null)
+                        if (fragmentFunction != null)
                         {
                             nativeGraphicsPipelineDesc.PS.BytecodeLength = fragmentFunction.NativeShaderBytecode.BytecodeLength;
                             nativeGraphicsPipelineDesc.PS.pShaderBytecode = fragmentFunction.NativeShaderBytecode.pShaderBytecode;
