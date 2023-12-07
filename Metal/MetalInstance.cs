@@ -15,26 +15,26 @@ namespace Infinity.Graphics
 
         public MtlInstance(in RHIInstanceDescriptor descriptor)
         {
-            int gpuCount = 0;
-            IntPtr gpusPtr = IntPtr.Zero;
+            int deviceCount = 0;
+            IntPtr devicePtr = IntPtr.Zero;
 
             if (RuntimeInformation.ProcessArchitecture == Architecture.Arm64)
             {
-                MTLDevice defaultDevice = new MTLDevice(MTLDevice.MTLCreateSystemDefaultDevice());
-                gpusPtr = defaultDevice.NativePtr;
-                gpuCount = 1;
+                MTLDevice defaultDevice = MTLDevice.CreateSystemDefaultDevice();
+                devicePtr = defaultDevice.NativePtr;
+                deviceCount = 1;
             }
             else
             {
-                NSArray gpus = new NSArray(MTLDevice.MTLCopyAllDevices());
-                gpusPtr = gpus.NativePtr;
-                gpuCount = (int)gpus.Count;
+                NSArray devices = MTLDevice.CopyAllDevices();
+                devicePtr = devices.NativePtr;
+                deviceCount = (int)devices.Count;
             }
 
-            m_Devices = new List<MtlDevice>(gpuCount);
-            for (int i = 0; i < gpuCount; ++i)
+            m_Devices = new List<MtlDevice>(deviceCount);
+            for (int i = 0; i < deviceCount; ++i)
             {
-                m_Devices.Add(new MtlDevice(this, IntPtr.Add(gpusPtr, i)));
+                m_Devices.Add(new MtlDevice(this, IntPtr.Add(devicePtr, i)));
             }
         }
 
