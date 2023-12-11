@@ -516,6 +516,8 @@ namespace Infinity.Graphics
 
     public enum ERHIBufferViewType : byte
     {
+        //IndexBuffer,
+        //VertexBuffer,
         AccelStruct,
         UniformBuffer,
         ShaderResource,
