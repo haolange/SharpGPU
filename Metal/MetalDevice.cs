@@ -138,7 +138,7 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            ObjectiveCRuntime.release(m_NativeDevice.NativePtr);
+            ObjectiveCRuntime.Release(m_NativeDevice);
         }
     }
 #pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416
