@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>net7.0</TargetFramework>
+		<TargetFramework>net8.0</TargetFramework>
 		<Platforms>x64;ARM64</Platforms>
 		<AssemblyName>Infinity.RHI</AssemblyName>
 		<RootNamespace>Infinity.RHI</RootNamespace>
@@ -57,18 +57,18 @@
 		<PackageReference Include="Evergine.Bindings.Vulkan" Version="2023.12.1.22" />
 		<PackageReference Include="NUnit" Version="3.13.3" />
 		<PackageReference Include="SharpGen.Runtime" Version="2.1.2-beta" />
-		<PackageReference Include="Silk.NET.Vulkan" Version="2.19.0" />
-		<PackageReference Include="Silk.NET.Vulkan.Extensions.AMD" Version="2.19.0" />
-		<PackageReference Include="Silk.NET.Vulkan.Extensions.ANDROID" Version="2.19.0" />
-		<PackageReference Include="Silk.NET.Vulkan.Extensions.ARM" Version="2.19.0" />
-		<PackageReference Include="Silk.NET.Vulkan.Extensions.EXT" Version="2.19.0" />
-		<PackageReference Include="Silk.NET.Vulkan.Extensions.HUAWEI" Version="2.19.0" />
-		<PackageReference Include="Silk.NET.Vulkan.Extensions.INTEL" Version="2.19.0" />
-		<PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" Version="2.19.0" />
-		<PackageReference Include="Silk.NET.Vulkan.Extensions.MVK" Version="2.19.0" />
-		<PackageReference Include="Silk.NET.Vulkan.Extensions.NV" Version="2.19.0" />
+		<PackageReference Include="Silk.NET.Vulkan" Version="2.20.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.AMD" Version="2.20.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.ANDROID" Version="2.20.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.ARM" Version="2.20.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.EXT" Version="2.20.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.HUAWEI" Version="2.20.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.INTEL" Version="2.20.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" Version="2.20.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.MVK" Version="2.20.0" />
+		<PackageReference Include="Silk.NET.Vulkan.Extensions.NV" Version="2.20.0" />
 		<PackageReference Include="TerraFX.Interop.D3D12MemoryAllocator" Version="2.0.1.4" />
-		<PackageReference Include="Vortice.Vulkan" Version="1.8.2" />
+		<PackageReference Include="Vortice.Vulkan" Version="1.8.3" />
 	</ItemGroup>
 
 	<ItemGroup>
