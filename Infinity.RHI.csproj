@@ -73,7 +73,7 @@
 
 	<ItemGroup>
 	  <ProjectReference Include="..\..\Core\Infinity.Core.csproj" />
-	  <ProjectReference Include="..\..\ThirdParty\Apple\Metal\Apple.Metal.csproj" />
+	  <ProjectReference Include="..\..\ThirdParty\Apple\Metal\SharpMetal.csproj" />
 	</ItemGroup>
 
 </Project>
