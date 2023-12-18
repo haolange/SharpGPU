@@ -45,6 +45,14 @@ namespace Infinity.Graphics
         public EAccelStructGeometryFlag GeometryFlag;
     }
 
+    public class RHIAccelStructCurves : RHIAccelStructGeometry
+    {
+        public uint Count;
+        public uint Stride;
+        public uint Offset;
+        public RHIBuffer? AABBBuffer;
+    }
+
     public class RHIAccelStructAABBs : RHIAccelStructGeometry
     {
         public uint Count;
@@ -74,7 +82,7 @@ namespace Infinity.Graphics
         public uint HitGroupIndex;
         public float4x4 TransformMatrix;
         public EAccelStructInstanceFlag Flag;
-        public RHIBottomLevelAccelStruct BottonLevelAccelStruct;
+        public RHIBottomLevelAccelStruct BottomLevelAccelStruct;
     }
 
     [StructLayout(LayoutKind.Sequential)]

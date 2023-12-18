@@ -476,10 +476,11 @@ namespace Infinity.Graphics
         IndirectArgument = 0x20,
         ShaderResource = 0x40,
         UnorderedAccess = 0x80,
-        AccelStructRead = 0x0100,
-        AccelStructWrite = 0x0200,
-        AccelStructBuildInput = 0x0400,
-        AccelStructBuildBlast = 0x0800,
+        RasterizerOrdered = 0x100,
+        AccelStructRead = 0x200,
+        AccelStructWrite = 0x400,
+        AccelStructBuildInput = 0x800,
+        AccelStructBuildBlast = 0x1000,
         Pending
     }
 
@@ -496,7 +497,8 @@ namespace Infinity.Graphics
         RenderTarget = 0x80,
         ShaderResource = 0x100,
         UnorderedAccess = 0x200,
-        ShadingRateSurface = 0x0400,
+        RasterizerOrdered = 0x400,
+        ShadingRateSurface = 0x800,
         Pending
     }
 
@@ -511,6 +513,7 @@ namespace Infinity.Graphics
         IndirectBuffer = 0x40,
         ShaderResource = 0x80,
         UnorderedAccess = 0x100,
+        RasterizerOrdered = 0x200,
         Pending
     }
 
@@ -522,6 +525,7 @@ namespace Infinity.Graphics
         UniformBuffer,
         ShaderResource,
         UnorderedAccess,
+        RasterizerOrdered,
         Pending
     }
 
@@ -534,6 +538,7 @@ namespace Infinity.Graphics
         ResolveTarget = 0x10,
         ShaderResource = 0x20,
         UnorderedAccess = 0x40,
+        RasterizerOrdered = 0x80,
         Pending
     }
 
@@ -543,6 +548,7 @@ namespace Infinity.Graphics
         //RenderTarget,
         ShaderResource,
         UnorderedAccess,
+        RasterizerOrdered,
         Pending
     }
 
@@ -574,6 +580,7 @@ namespace Infinity.Graphics
 
     public enum ERHIHitGroupType : byte
     {
+        Curve,
         Triangles,
         Procedural,
         Pending

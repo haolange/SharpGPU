@@ -3,19 +3,19 @@
 	<PropertyGroup>
 		<TargetFramework>net8.0</TargetFramework>
 		<Platforms>x64;ARM64</Platforms>
-		<AssemblyName>Infinity.RHI</AssemblyName>
-		<RootNamespace>Infinity.RHI</RootNamespace>
+		<AssemblyName>SharpGPU</AssemblyName>
+		<RootNamespace>SharpGPU</RootNamespace>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-		<IntermediateOutputPath>../../../Intermediate/Graphics/RHI/</IntermediateOutputPath>
+		<IntermediateOutputPath>../../../Intermediate/Graphics/SharpGPU/</IntermediateOutputPath>
 		<Nullable>enable</Nullable>
-		<BaseOutputPath>$(ProjectDir)../../../Binaries/Graphics/RHI/</BaseOutputPath>
+		<BaseOutputPath>$(ProjectDir)../../../Binaries/Graphics/SharpGPU/</BaseOutputPath>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
 		<PlatformTarget>x64</PlatformTarget>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<WarningLevel>3</WarningLevel>
-		<OutputPath>../../../Binaries/Graphics/RHI/Win64/Debug/</OutputPath>
+		<OutputPath>../../../Binaries/Graphics/SharpGPU/Win64/Debug/</OutputPath>
 		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
 		<WarningsAsErrors />
 		<DefineConstants>$(DefineConstants)TRACE;</DefineConstants>
@@ -24,7 +24,7 @@
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
 		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
 		<WarningsAsErrors></WarningsAsErrors>
-		<OutputPath>../../../Binaries/Graphics/RHI/Win64/Release/</OutputPath>
+		<OutputPath>../../../Binaries/Graphics/SharpGPU/Win64/Release/</OutputPath>
 		<WarningLevel>3</WarningLevel>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<Optimize>true</Optimize>
@@ -36,7 +36,7 @@
 		<PlatformTarget>ARM64</PlatformTarget>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<WarningLevel>3</WarningLevel>
-		<OutputPath>../../../Binaries/Graphics/RHI/ARM64/Debug/</OutputPath>
+		<OutputPath>../../../Binaries/Graphics/SharpGPU/ARM64/Debug/</OutputPath>
 		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
 		<WarningsAsErrors />
 		<DefineConstants>$(DefineConstants)TRACE;</DefineConstants>
@@ -45,7 +45,7 @@
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
 		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
 		<WarningsAsErrors></WarningsAsErrors>
-		<OutputPath>../../../Binaries/Graphics/RHI/ARM64/Release/</OutputPath>
+		<OutputPath>../../../Binaries/Graphics/SharpGPU/ARM64/Release/</OutputPath>
 		<WarningLevel>3</WarningLevel>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<Optimize>true</Optimize>
