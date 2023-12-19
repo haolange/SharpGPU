@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <UseHostCompilerIfAvailable>false</UseHostCompilerIfAvailable>
-    <BaseIntermediateOutputPath>$(ProjectDir)../../../Intermediate/Graphics/RHI/</BaseIntermediateOutputPath>
-    <MSBuildProjectExtensionsPath>$(ProjectDir)../../../Intermediate/Graphics/RHI/</MSBuildProjectExtensionsPath>
+    <BaseIntermediateOutputPath>$(ProjectDir)../../../Intermediate/Graphics/SharpGPU/</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(ProjectDir)../../../Intermediate/Graphics/SharpGPU/</MSBuildProjectExtensionsPath>
   </PropertyGroup>
 </Project>
