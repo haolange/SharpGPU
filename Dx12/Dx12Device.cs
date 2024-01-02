@@ -121,7 +121,7 @@ namespace Infinity.Graphics
 
             m_DeviceInfo.VendorId = adapterDesc.VendorId;
             m_DeviceInfo.DeviceId = adapterDesc.DeviceId;
-            m_DeviceInfo.DeviceName = SharpGen.Runtime.StringHelpers.PtrToStringUni((IntPtr)adapterDesc.Description, 127);
+            m_DeviceInfo.DeviceName = SharpGen.Runtime.StringHelpers.PtrToStringUni(new IntPtr(&adapterDesc.Description.e0), 128);
             m_DeviceInfo.DeviceType = (adapterDesc.Flags & (uint)DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE) == 1 ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
 
             CreateDevice();
