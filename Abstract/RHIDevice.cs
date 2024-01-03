@@ -1,4 +1,5 @@
-﻿using Infinity.Core;
+﻿using System;
+using Infinity.Core;
 
 namespace Infinity.Graphics
 {
@@ -19,14 +20,27 @@ namespace Infinity.Graphics
         public ERHIMultiviewStrategy MultiviewStrategy;
     }
 
+    public struct RHIVendorId
+    {
+        public uint IntValue;
+        public string DecimalValue => String.Format("0x{0:X}", IntValue);
+        public ERHIVendorType StringValue => (ERHIVendorType)IntValue;
+    }
+
+    public struct RHIDeviceId
+    {
+        public uint IntValue;
+        public string DecimalValue => String.Format("0x{0:X}", IntValue);
+    }
+
     public struct RHIDeviceInfo
     {
-        public uint VendorId;
-        public uint DeviceId;
-        public string DeviceName;
-        public ERHIDeviceType DeviceType;
-        public RHIDeviceLimit DeviceLimit;
-        public RHIDeviceFeature DeviceFeature;
+        public string Name;
+        public RHIVendorId VendorId;
+        public RHIDeviceId DeviceId;
+        public ERHIDeviceType Type;
+        public RHIDeviceLimit Limit;
+        public RHIDeviceFeature Feature;
     }
 
     public abstract class RHIDevice : Disposal

@@ -119,10 +119,10 @@ namespace Infinity.Graphics
             DXGI_ADAPTER_DESC1 adapterDesc;
             m_DXGIAdapter->GetDesc1(&adapterDesc);
 
-            m_DeviceInfo.VendorId = adapterDesc.VendorId;
-            m_DeviceInfo.DeviceId = adapterDesc.DeviceId;
-            m_DeviceInfo.DeviceName = SharpGen.Runtime.StringHelpers.PtrToStringUni(new IntPtr(&adapterDesc.Description.e0), 128);
-            m_DeviceInfo.DeviceType = (adapterDesc.Flags & (uint)DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE) == 1 ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
+            m_DeviceInfo.Name = SharpGen.Runtime.StringHelpers.PtrToStringUni(new IntPtr(&adapterDesc.Description.e0), 128);
+            m_DeviceInfo.Type = (adapterDesc.Flags & (uint)DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE) == 1 ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
+            m_DeviceInfo.VendorId.IntValue = adapterDesc.VendorId;
+            m_DeviceInfo.DeviceId.IntValue = adapterDesc.DeviceId;
 
             CreateDevice();
             CheckFeatureSupport();
@@ -310,12 +310,12 @@ namespace Infinity.Graphics
 
         private void CheckFeatureSupport()
         {
-            m_DeviceInfo.DeviceFeature = new Dx12DeviceFeature();
+            m_DeviceInfo.Feature = new Dx12DeviceFeature();
 
-            m_DeviceInfo.DeviceFeature.IsFlipProjection = false;
-            m_DeviceInfo.DeviceFeature.MatrixMajorons = ERHIMatrixMajorons.RowMajor;
-            m_DeviceInfo.DeviceFeature.DepthValueRange = ERHIDepthValueRange.ZeroToOne;
-            m_DeviceInfo.DeviceFeature.MultiviewStrategy = ERHIMultiviewStrategy.Unsupported;
+            m_DeviceInfo.Feature.IsFlipProjection = false;
+            m_DeviceInfo.Feature.MatrixMajorons = ERHIMatrixMajorons.RowMajor;
+            m_DeviceInfo.Feature.DepthValueRange = ERHIDepthValueRange.ZeroToOne;
+            m_DeviceInfo.Feature.MultiviewStrategy = ERHIMultiviewStrategy.Unsupported;
 
             // check feature level
             D3D_FEATURE_LEVEL* aLevels = stackalloc D3D_FEATURE_LEVEL[3];
@@ -328,7 +328,7 @@ namespace Infinity.Graphics
             dLevels.NumFeatureLevels = 3;
             dLevels.pFeatureLevelsRequested = aLevels;
             m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_FEATURE_LEVELS, &dLevels, (uint)sizeof(D3D12_FEATURE_DATA_FEATURE_LEVELS));
-            ((Dx12DeviceFeature)m_DeviceInfo.DeviceFeature).MaxNativeFeatureLevel = dLevels.MaxSupportedFeatureLevel;
+            ((Dx12DeviceFeature)m_DeviceInfo.Feature).MaxNativeFeatureLevel = dLevels.MaxSupportedFeatureLevel;
 
             // check feature options
             D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5;
@@ -338,18 +338,18 @@ namespace Infinity.Graphics
             switch (options5.RaytracingTier)
             {
                 case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_0:
-                    m_DeviceInfo.DeviceFeature.IsRaytracingSupported = true;
-                    m_DeviceInfo.DeviceFeature.IsRaytracingInlineSupported = false;
+                    m_DeviceInfo.Feature.IsRaytracingSupported = true;
+                    m_DeviceInfo.Feature.IsRaytracingInlineSupported = false;
                     break;
 
                 case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_1:
-                    m_DeviceInfo.DeviceFeature.IsRaytracingSupported = true;
-                    m_DeviceInfo.DeviceFeature.IsRaytracingInlineSupported = true;
+                    m_DeviceInfo.Feature.IsRaytracingSupported = true;
+                    m_DeviceInfo.Feature.IsRaytracingInlineSupported = true;
                     break;
 
                 case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_NOT_SUPPORTED:
-                    m_DeviceInfo.DeviceFeature.IsRaytracingSupported = false;
-                    m_DeviceInfo.DeviceFeature.IsRaytracingInlineSupported = false;
+                    m_DeviceInfo.Feature.IsRaytracingSupported = false;
+                    m_DeviceInfo.Feature.IsRaytracingInlineSupported = false;
                     break;
             }
 
@@ -357,15 +357,15 @@ namespace Infinity.Graphics
             switch (options5.RenderPassesTier)
             {
                 case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_0:
-                    ((Dx12DeviceFeature)m_DeviceInfo.DeviceFeature).IsRenderPassSupported = false;
+                    ((Dx12DeviceFeature)m_DeviceInfo.Feature).IsRenderPassSupported = false;
                     break;
 
                 case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_1:
-                    ((Dx12DeviceFeature)m_DeviceInfo.DeviceFeature).IsRenderPassSupported = true;
+                    ((Dx12DeviceFeature)m_DeviceInfo.Feature).IsRenderPassSupported = true;
                     break;
 
                 case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_2:
-                    ((Dx12DeviceFeature)m_DeviceInfo.DeviceFeature).IsRenderPassSupported = true;
+                    ((Dx12DeviceFeature)m_DeviceInfo.Feature).IsRenderPassSupported = true;
                     break;
             }
         }
@@ -417,7 +417,7 @@ namespace Infinity.Graphics
 #endif
             m_DispatchComputeIndirectSignature = commandSignature;
 
-            if (m_DeviceInfo.DeviceFeature.IsRaytracingSupported)
+            if (m_DeviceInfo.Feature.IsRaytracingSupported)
             {
                 indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS;
                 //commandSignatureDesc.NodeMask = nodeMask;
@@ -440,7 +440,7 @@ namespace Infinity.Graphics
             m_CbvSrvUavHeap.Dispose();
             m_DrawIndirectSignature->Release();
             m_DrawIndexedIndirectSignature->Release();
-            if (m_DeviceInfo.DeviceFeature.IsRaytracingSupported)
+            if (m_DeviceInfo.Feature.IsRaytracingSupported)
             {
                 m_DispatchRayIndirectSignature->Release();
             }

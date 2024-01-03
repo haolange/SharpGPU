@@ -1,7 +1,13 @@
-﻿using TerraFX.Interop.DirectX;
-
-namespace Infinity.Graphics
+﻿namespace Infinity.Graphics
 {
+    public enum ERHIVendorType
+    {
+        AMD = 0x1002,
+        Intel = 0x8086,
+        Nvidia = 0x10DE,
+        Pending
+    }
+
     public enum ERHIBackend : byte
     {
         Metal,
@@ -588,6 +594,22 @@ namespace Infinity.Graphics
 
     internal static unsafe class RHIUtility
     {
+        /*internal static ERHIVendorType GetVendorType(in uint intValue)
+        {
+            switch (intValue)
+            {
+                case ERHISwapChainFormat.R8G8B8A8_UNorm:
+                    return ERHIPixelFormat.R8G8B8A8_UNorm;
+
+                case ERHISwapChainFormat.R10G10B10A2_UNorm:
+                    return ERHIPixelFormat.R10G10B10A2_UNorm;
+
+                case ERHISwapChainFormat.R16G16B16A16_Float:
+                    return ERHIPixelFormat.R16G16B16A16_Float;
+            }
+            return ERHIPixelFormat.R8G8B8A8_UNorm_Srgb;
+        }*/
+
         internal static ERHIPixelFormat ConvertToPixelFormat(in ERHISwapChainFormat swapChainFormat)
         {
             switch (swapChainFormat)
