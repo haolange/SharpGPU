@@ -554,7 +554,7 @@ namespace Infinity.Graphics
                 Dx12BindTypeAndParameterSlot? parameter = null;
                 ref Dx12BindInfo bindInfo = ref dx12BindTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIFunctionStage.Compute, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.Compute, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
@@ -852,7 +852,7 @@ namespace Infinity.Graphics
                 Dx12BindTypeAndParameterSlot? parameter = null;
                 ref Dx12BindInfo bindInfo = ref dx12BindTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIFunctionStage.Compute, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.Compute, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
@@ -1370,7 +1370,7 @@ namespace Infinity.Graphics
                 Dx12BindTypeAndParameterSlot? parameter = null;
                 ref Dx12BindInfo bindInfo = ref dx12BindTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIFunctionStage.All, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.All, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
@@ -1379,7 +1379,7 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIFunctionStage.Vertex, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.Vertex, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
@@ -1388,7 +1388,7 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIFunctionStage.Fragment, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.Fragment, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG

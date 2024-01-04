@@ -569,7 +569,7 @@
         Pending
     }
 
-    public enum ERHIFunctionStage
+    public enum ERHIPipelineStage
     {
         Vertex = 0x1,
         Fragment = 0x2,

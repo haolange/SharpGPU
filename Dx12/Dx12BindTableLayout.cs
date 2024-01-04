@@ -9,7 +9,7 @@ namespace Infinity.Graphics
         public uint Index;
         public uint Count;
         public ERHIBindType Type;
-        public ERHIFunctionStage Visible;
+        public ERHIPipelineStage Visible;
 
         internal bool IsBindless => Count > 1;
     }

@@ -202,7 +202,7 @@ Create a compute bindTable
 rhi::RHIBindTableLayoutElement computeBindTableLayoutElements[1];
 computeBindTableLayoutElements[0].Slot = 0;
 computeBindTableLayoutElements[0].Type = ERHIBindType::StorageTexture2D;
-computeBindTableLayoutElements[0].Visible = ERHIFunctionStage::Compute;
+computeBindTableLayoutElements[0].Visible = ERHIPipelineStage::Compute;
 
 rhi::RHIBindTableLayoutDescriptor computeBindTableLayoutInfo;
 computeBindTableLayoutInfo.Index = 0;
@@ -337,10 +337,10 @@ Create a bindTable graphics
 rhi::RHIBindTableLayoutElement graphicsBindTableLayoutElements[2];
 graphicsBindTableLayoutElements[0].Slot = 0;
 graphicsBindTableLayoutElements[0].Type = ERHIBindType::Texture2D;
-graphicsBindTableLayoutElements[0].Visible = ERHIFunctionStage::Fragment;
+graphicsBindTableLayoutElements[0].Visible = ERHIPipelineStage::Fragment;
 graphicsBindTableLayoutElements[1].Slot = 1;
 graphicsBindTableLayoutElements[1].Type = ERHIBindType::Sampler;
-graphicsBindTableLayoutElements[1].Visible = ERHIFunctionStage::Fragment;
+graphicsBindTableLayoutElements[1].Visible = ERHIPipelineStage::Fragment;
 
 rhi::RHIBindTableLayoutDescriptor graphicsBindTableLayoutInfo;
 graphicsBindTableLayoutInfo.Index = 0;

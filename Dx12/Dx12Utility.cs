@@ -1429,20 +1429,20 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_SHADER_VISIBILITY ConvertToDx12ShaderStage(in ERHIFunctionStage shaderStage)
+        internal static D3D12_SHADER_VISIBILITY ConvertToDx12ShaderStage(in ERHIPipelineStage shaderStage)
         {
             switch (shaderStage)
             {
-                case ERHIFunctionStage.Task:
+                case ERHIPipelineStage.Task:
                     return D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_AMPLIFICATION;
 
-                case ERHIFunctionStage.Mesh:
+                case ERHIPipelineStage.Mesh:
                     return D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_MESH;
 
-                case ERHIFunctionStage.Vertex:
+                case ERHIPipelineStage.Vertex:
                     return D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_VERTEX;
 
-                case ERHIFunctionStage.Fragment:
+                case ERHIPipelineStage.Fragment:
                     return D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL;
 
                 default:
