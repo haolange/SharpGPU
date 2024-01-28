@@ -47,7 +47,7 @@ namespace Infinity.Graphics
         public override void WriteTimestamp(in uint index)
         {
 #if DEBUG
-            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current GraphicsPass TimestampQuery is null");
+            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
 #endif
             Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -327,7 +327,7 @@ namespace Infinity.Graphics
         public override void WriteTimestamp(in uint index)
         {
 #if DEBUG
-            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current GraphicsPass TimestampQuery is null");
+            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
 #endif
             Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -337,7 +337,7 @@ namespace Infinity.Graphics
         public override void BeginStatistics(in uint index)
         {
 #if DEBUG
-            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current RasterPass StatisticsQuery is null");
 #endif
             Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -347,7 +347,7 @@ namespace Infinity.Graphics
         public override void EndStatistics(in uint index)
         {
 #if DEBUG
-            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current RasterPass StatisticsQuery is null");
 #endif
             Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -625,7 +625,7 @@ namespace Infinity.Graphics
         public override void WriteTimestamp(in uint index)
         {
 #if DEBUG
-            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current GraphicsPass TimestampQuery is null");
+            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
 #endif
             Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -635,7 +635,7 @@ namespace Infinity.Graphics
         public override void BeginStatistics(in uint index)
         {
 #if DEBUG
-            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current RasterPass StatisticsQuery is null");
 #endif
             Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -645,7 +645,7 @@ namespace Infinity.Graphics
         public override void EndStatistics(in uint index)
         {
 #if DEBUG
-            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current RasterPass StatisticsQuery is null");
 #endif
             Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -925,19 +925,19 @@ namespace Infinity.Graphics
         }
     }
 
-    internal unsafe class Dx12GraphicsEncoder : RHIGraphicsEncoder
+    internal unsafe class Dx12RasterEncoder : RHIRasterEncoder
     {
         protected byte m_SubPassIndex;
         protected TValueArray<Dx12AttachmentInfo> m_AttachmentInfos;
 
-        public Dx12GraphicsEncoder(Dx12CommandBuffer cmdBuffer)
+        public Dx12RasterEncoder(Dx12CommandBuffer cmdBuffer)
         {
             m_SubPassIndex = 0;
             m_CommandBuffer = cmdBuffer;
             m_AttachmentInfos = new TValueArray<Dx12AttachmentInfo>(5);
         }
 
-        internal override void BeginPass(in RHIGraphicsPassDescriptor descriptor)
+        internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
         {
             m_SubPassIndex = 0;
 #if DEBUG
@@ -1080,7 +1080,7 @@ namespace Infinity.Graphics
         public override void WriteTimestamp(in uint index)
         {
 #if DEBUG
-            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current GraphicsPass TimestampQuery is null");
+            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
 #endif
             Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1090,7 +1090,7 @@ namespace Infinity.Graphics
         public override void BeginOcclusion(in uint index)
         {
 #if DEBUG
-            Debug.Assert(m_CommandBuffer.OcclusionQueryHeap != null, "Current GraphicsPass OcclusionQuery is null");
+            Debug.Assert(m_CommandBuffer.OcclusionQueryHeap != null, "Current RasterPass OcclusionQuery is null");
 #endif
             Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1100,7 +1100,7 @@ namespace Infinity.Graphics
         public override void EndOcclusion(in uint index)
         {
 #if DEBUG
-            Debug.Assert(m_CommandBuffer.OcclusionQueryHeap != null, "Current GraphicsPass OcclusionQuery is null");
+            Debug.Assert(m_CommandBuffer.OcclusionQueryHeap != null, "Current RasterPass OcclusionQuery is null");
 #endif
             Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1110,7 +1110,7 @@ namespace Infinity.Graphics
         public override void BeginStatistics(in uint index)
         {
 #if DEBUG
-            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current RasterPass StatisticsQuery is null");
 #endif
             Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1120,7 +1120,7 @@ namespace Infinity.Graphics
         public override void EndStatistics(in uint index)
         {
 #if DEBUG
-            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current GraphicsPass StatisticsQuery is null");
+            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current RasterPass StatisticsQuery is null");
 #endif
             Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1329,11 +1329,6 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->OMSetBlendFactor((float*)&tempValue);
         }
 
-        public override void NextSubpass()
-        {
-            throw new NotImplementedException("Dx12 is not support subpass. Please do not use NextSubpass command in graphics encoder");
-        }
-
         public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1343,12 +1338,12 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
 
-        public override void SetPipelineState(RHIGraphicsPipelineState pipelineState)
+        public override void SetPipelineState(RHIRasterPipelineState pipelineState)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
             m_PipelineState = pipelineState;
-            Dx12GraphicsPipelineState dx12PipelineState = pipelineState as Dx12GraphicsPipelineState;
+            Dx12RasterPipelineState dx12PipelineState = pipelineState as Dx12RasterPipelineState;
             dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12PipelineState.NativePipelineState);
             dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12PipelineState.PrimitiveTopology);
         }
@@ -1415,7 +1410,7 @@ namespace Infinity.Graphics
         public override void SetVertexBuffer(RHIBuffer buffer, in uint slot = 0, in uint offset = 0)
         {
             Dx12Buffer dx12Buffer = buffer as Dx12Buffer;
-            Dx12GraphicsPipelineState dx12PipelineState = m_PipelineState as Dx12GraphicsPipelineState;
+            Dx12RasterPipelineState dx12PipelineState = m_PipelineState as Dx12RasterPipelineState;
 
             D3D12_VERTEX_BUFFER_VIEW vertexBufferView = new D3D12_VERTEX_BUFFER_VIEW
             {

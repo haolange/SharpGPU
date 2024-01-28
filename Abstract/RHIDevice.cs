@@ -57,7 +57,7 @@ namespace Infinity.Graphics
         public abstract RHITexture CreateTexture(in RHITextureDescriptor descriptor);
         public abstract RHISampler CreateSampler(in RHISamplerDescriptor descriptor);
         public abstract RHIStorageQueue CreateStorageQueue();
-        public abstract RHICommandQueue CreateCommandQueue(in ERHIPipeline pipeline);
+        public abstract RHICommandQueue CreateCommandQueue(in ERHIPipelineType pipeline);
         public abstract RHITopLevelAccelStruct CreateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
         public abstract RHIBottomLevelAccelStruct CreateAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor);
         public abstract RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor);
@@ -67,6 +67,6 @@ namespace Infinity.Graphics
         public abstract RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor);
         public abstract RHIComputePipelineState CreateComputePipelineState(in RHIComputePipelineStateDescriptor descriptor);
         public abstract RHIRaytracingPipelineState CreateRaytracingPipelineState(in RHIRaytracingPipelineStateDescriptor descriptor);
-        public abstract RHIGraphicsPipelineState CreateGraphicsPipelineState(in RHIGraphicsPipelineStateDescriptor descriptor);
+        public abstract RHIRasterPipelineState CreateRasterPipelineState(in RHIRasterPipelineStateDescriptor descriptor);
     }
 }

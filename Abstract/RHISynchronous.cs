@@ -9,8 +9,8 @@ namespace Infinity.Graphics
         public RHIBuffer Handle;
         public ERHIBufferState SrcState;
         public ERHIBufferState DstState;
-        public ERHIPipeline SrcPipeline;
-        public ERHIPipeline DstPipeline;
+        public ERHIPipelineType SrcPipeline;
+        public ERHIPipelineType DstPipeline;
     }
 
     public struct RHITextureBarrierDescriptor
@@ -18,8 +18,8 @@ namespace Infinity.Graphics
         public RHITexture Handle;
         public ERHITextureState SrcState;
         public ERHITextureState DstState;
-        public ERHIPipeline SrcPipeline;
-        public ERHIPipeline DstPipeline;
+        public ERHIPipelineType SrcPipeline;
+        public ERHIPipelineType DstPipeline;
     }
 
     public struct RHIBarrier
@@ -34,7 +34,7 @@ namespace Infinity.Graphics
         private RHIBufferBarrierDescriptor m_BufferBarrierInfo;
         private RHITextureBarrierDescriptor m_TextureBarrierInfo;
 
-        public static RHIBarrier SyncUAV(RHIBuffer buffer, in ERHIPipeline srcPipeline = ERHIPipeline.Graphics, in ERHIPipeline dstPipeline = ERHIPipeline.Graphics)
+        public static RHIBarrier SyncUAV(RHIBuffer buffer, in ERHIPipelineType srcPipeline = ERHIPipelineType.Graphics, in ERHIPipelineType dstPipeline = ERHIPipelineType.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_BarrierType = ERHIBarrierType.UAV;
@@ -43,7 +43,7 @@ namespace Infinity.Graphics
             return barrier;
         }
 
-        public static RHIBarrier SyncUAV(RHITexture texture, in ERHIPipeline srcPipeline = ERHIPipeline.Graphics, in ERHIPipeline dstPipeline = ERHIPipeline.Graphics)
+        public static RHIBarrier SyncUAV(RHITexture texture, in ERHIPipelineType srcPipeline = ERHIPipelineType.Graphics, in ERHIPipelineType dstPipeline = ERHIPipelineType.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_BarrierType = ERHIBarrierType.UAV;
@@ -52,7 +52,7 @@ namespace Infinity.Graphics
             return barrier;
         }
 
-        public static RHIBarrier Aliasing(RHIBuffer buffer, in ERHIPipeline srcPipeline = ERHIPipeline.Graphics, in ERHIPipeline dstPipeline = ERHIPipeline.Graphics)
+        public static RHIBarrier Aliasing(RHIBuffer buffer, in ERHIPipelineType srcPipeline = ERHIPipelineType.Graphics, in ERHIPipelineType dstPipeline = ERHIPipelineType.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_BarrierType = ERHIBarrierType.Aliasing;
@@ -61,7 +61,7 @@ namespace Infinity.Graphics
             return barrier;
         }
 
-        public static RHIBarrier Aliasing(RHITexture texture, in ERHIPipeline srcPipeline = ERHIPipeline.Graphics, in ERHIPipeline dstPipeline = ERHIPipeline.Graphics)
+        public static RHIBarrier Aliasing(RHITexture texture, in ERHIPipelineType srcPipeline = ERHIPipelineType.Graphics, in ERHIPipelineType dstPipeline = ERHIPipelineType.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_BarrierType = ERHIBarrierType.Aliasing;
@@ -70,7 +70,7 @@ namespace Infinity.Graphics
             return barrier;
         }
 
-        public static RHIBarrier Transition(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState, in ERHIPipeline srcPipeline = ERHIPipeline.Graphics, in ERHIPipeline dstPipeline = ERHIPipeline.Graphics)
+        public static RHIBarrier Transition(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState, in ERHIPipelineType srcPipeline = ERHIPipelineType.Graphics, in ERHIPipelineType dstPipeline = ERHIPipelineType.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_BarrierType = ERHIBarrierType.Triansition;
@@ -81,7 +81,7 @@ namespace Infinity.Graphics
             return barrier;
         }
 
-        public static RHIBarrier Transition(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState, in ERHIPipeline srcPipeline = ERHIPipeline.Graphics, in ERHIPipeline dstPipeline = ERHIPipeline.Graphics)
+        public static RHIBarrier Transition(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState, in ERHIPipelineType srcPipeline = ERHIPipelineType.Graphics, in ERHIPipelineType dstPipeline = ERHIPipelineType.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_BarrierType = ERHIBarrierType.Triansition;

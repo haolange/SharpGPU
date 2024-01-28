@@ -50,18 +50,18 @@ namespace Infinity.Graphics
         }
     }
 
-    public struct RHIGraphicsPassScoper : IDisposable
+    public struct RHIRasterPassScoper : IDisposable
     {
-        RHIGraphicsEncoder m_GraphicsEncoder;
+        RHIRasterEncoder m_RasterEncoder;
 
-        internal RHIGraphicsPassScoper(RHIGraphicsEncoder graphicsEncoder)
+        internal RHIRasterPassScoper(RHIRasterEncoder rasterEncoder)
         {
-            m_GraphicsEncoder = graphicsEncoder;
+            m_RasterEncoder = rasterEncoder;
         }
 
         public void Dispose()
         {
-            m_GraphicsEncoder.EndPass();
+            m_RasterEncoder.EndPass();
         }
     }
 
@@ -108,9 +108,9 @@ namespace Infinity.Graphics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static RHIGraphicsPassScoper BeginScopedGraphicsPass(this RHICommandBuffer cmdBuffer, in RHIGraphicsPassDescriptor descriptor)
+        public static RHIRasterPassScoper BeginScopedRasterPass(this RHICommandBuffer cmdBuffer, in RHIRasterPassDescriptor descriptor)
         {
-            return new RHIGraphicsPassScoper(cmdBuffer.BeginGraphicsPass(descriptor));
+            return new RHIRasterPassScoper(cmdBuffer.BeginRasterPass(descriptor));
         }
     }
 
@@ -141,15 +141,13 @@ namespace Infinity.Graphics
         public abstract void EndComputePass();
         public abstract RHIRaytracingEncoder BeginRaytracingPass(in RHIRayTracingPassDescriptor descriptor);
         public abstract void EndRaytracingPass();
-        public abstract RHIGraphicsEncoder BeginGraphicsPass(in RHIGraphicsPassDescriptor descriptor);
-        public abstract void EndGraphicsPass();
+        public abstract RHIRasterEncoder BeginRasterPass(in RHIRasterPassDescriptor descriptor);
+        public abstract void EndRasterPass();
         public abstract void End();
         public abstract RHITransferEncoder GetTransferEncoder();
         public abstract RHIComputeEncoder GetComputeEncoder();
         public abstract RHIRaytracingEncoder GetRaytracingEncoder();
-        public abstract RHIGraphicsEncoder GetGraphicsEncoder();
-        //public abstract void Commit(RHIFence? fence = null);
-        //public abstract void WaitUntilCompleted();
+        public abstract RHIRasterEncoder GetRasterEncoder();
     }
 
     public struct RHIIndirectCommandBufferDescription

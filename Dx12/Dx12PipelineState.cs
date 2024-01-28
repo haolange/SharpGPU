@@ -398,7 +398,7 @@ namespace Infinity.Graphics
         }
     }
 
-    internal unsafe class Dx12GraphicsPipelineState : RHIGraphicsPipelineState
+    internal unsafe class Dx12RasterPipelineState : RHIRasterPipelineState
     {
         public uint[] VertexStrides
         {
@@ -426,7 +426,7 @@ namespace Infinity.Graphics
         private ID3D12PipelineState* m_NativePipelineState;
         private D3D_PRIMITIVE_TOPOLOGY m_PrimitiveTopology;
 
-        public Dx12GraphicsPipelineState(Dx12Device device, in RHIGraphicsPipelineStateDescriptor descriptor)
+        public Dx12RasterPipelineState(Dx12Device device, in RHIRasterPipelineStateDescriptor descriptor)
         {
             m_Descriptor = descriptor;
             m_PrimitiveTopology = Dx12Utility.ConvertToDx12PrimitiveTopology(descriptor.PrimitiveAssembler.PrimitiveTopology);
@@ -438,10 +438,10 @@ namespace Infinity.Graphics
             switch (descriptor.PrimitiveAssembler.PrimitiveType)
             {
                 case ERHIPrimitiveType.Mesh:
-                    if (descriptor.PrimitiveAssembler.MeshAssembler.HasValue)
+                    if (descriptor.PrimitiveAssembler.MeshletAssembler.HasValue)
                     {
-                        Dx12Function taskFunction = descriptor.PrimitiveAssembler.MeshAssembler.Value.TaskFunction as Dx12Function;
-                        Dx12Function meshFunction = descriptor.PrimitiveAssembler.MeshAssembler.Value.MeshFunction as Dx12Function;
+                        Dx12Function taskFunction = descriptor.PrimitiveAssembler.MeshletAssembler.Value.TaskFunction as Dx12Function;
+                        Dx12Function meshFunction = descriptor.PrimitiveAssembler.MeshletAssembler.Value.MeshFunction as Dx12Function;
 
                         D3D12_MESH_PIPELINE_STATE_DESC nativeMeshPipelineDesc = new D3D12_MESH_PIPELINE_STATE_DESC
                         {

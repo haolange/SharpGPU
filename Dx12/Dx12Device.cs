@@ -170,7 +170,7 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHICommandQueue CreateCommandQueue(in ERHIPipeline pipeline)
+        public override RHICommandQueue CreateCommandQueue(in ERHIPipelineType pipeline)
         {
             return new Dx12CommandQueue(this, pipeline);
         }
@@ -220,9 +220,9 @@ namespace Infinity.Graphics
             return new Dx12RaytracingPipelineState(this, descriptor);
         }
 
-        public override RHIGraphicsPipelineState CreateGraphicsPipelineState(in RHIGraphicsPipelineStateDescriptor descriptor)
+        public override RHIRasterPipelineState CreateRasterPipelineState(in RHIRasterPipelineStateDescriptor descriptor)
         {
-            return new Dx12GraphicsPipelineState(this, descriptor);
+            return new Dx12RasterPipelineState(this, descriptor);
         }
 
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)

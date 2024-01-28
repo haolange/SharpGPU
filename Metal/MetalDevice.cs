@@ -73,7 +73,7 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHICommandQueue CreateCommandQueue(in ERHIPipeline pipeline)
+        public override RHICommandQueue CreateCommandQueue(in ERHIPipelineType pipeline)
         {
             throw new NotImplementedException();
         }
@@ -123,7 +123,7 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHIGraphicsPipelineState CreateGraphicsPipelineState(in RHIGraphicsPipelineStateDescriptor descriptor)
+        public override RHIRasterPipelineState CreateRasterPipelineState(in RHIRasterPipelineStateDescriptor descriptor)
         {
             throw new NotImplementedException();
         }

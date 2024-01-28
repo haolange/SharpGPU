@@ -45,7 +45,7 @@
         Pending
     }
 
-    public enum ERHIPipeline : byte
+    public enum ERHIPipelineType : byte
     {
         Transfer,
         Compute,

@@ -41,7 +41,7 @@ namespace Infinity.Graphics
         private Dx12Device m_Dx12Device;
         private ID3D12CommandQueue* m_NativeCommandQueue;
 
-        public Dx12CommandQueue(Dx12Device device, in ERHIPipeline pipeline)
+        public Dx12CommandQueue(Dx12Device device, in ERHIPipelineType pipeline)
         {
             m_Dx12Device = device;
             m_PipelineType = pipeline;

@@ -85,13 +85,6 @@ namespace Infinity.Graphics
         public uint WriteIndex;
     }
 
-    public struct RHISubpassDescriptor
-    {
-        public bool bUseDepthStencil;
-        public ReadOnlyMemory<byte>? InputAttachmentIndex;
-        public ReadOnlyMemory<byte>? OutputAttachmentIndex;
-    }
-
     public struct RHIColorAttachmentDescriptor
     {
         public uint MipLevel;
@@ -143,7 +136,7 @@ namespace Infinity.Graphics
         public RHIStatisticsDescriptor? Statistics;
     }
 
-    public struct RHIGraphicsPassDescriptor
+    public struct RHIRasterPassDescriptor
     {
         public string Name;
         public uint ArrayLength;
@@ -152,7 +145,6 @@ namespace Infinity.Graphics
         public RHIOcclusionDescriptor? Occlusion;
         public RHIStatisticsDescriptor? Statistics;
         public RHITexture ShadingRateTexture;
-        public Memory<RHISubpassDescriptor>? SubpassDescriptors;
         public Memory<RHIColorAttachmentDescriptor> ColorAttachments;
         public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachment;
     }
@@ -221,12 +213,12 @@ namespace Infinity.Graphics
         public abstract void EndPass();
     }
     
-    public abstract class RHIGraphicsEncoder : Disposal
+    public abstract class RHIRasterEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;
-        protected RHIGraphicsPipelineState? m_PipelineState;
+        protected RHIRasterPipelineState? m_PipelineState;
 
-        internal abstract void BeginPass(in RHIGraphicsPassDescriptor descriptor);
+        internal abstract void BeginPass(in RHIRasterPassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void WriteTimestamp(in uint index);
@@ -242,9 +234,8 @@ namespace Infinity.Graphics
         public abstract void SetViewports(in Memory<Viewport> viewports);
         public abstract void SetStencilRef(in uint value);
         public abstract void SetBlendFactor(in float4 value);
-        public abstract void NextSubpass();
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipelineState(RHIGraphicsPipelineState pipelineState);
+        public abstract void SetPipelineState(RHIRasterPipelineState pipelineState);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
         public abstract void SetIndexBuffer(RHIBuffer buffer, in uint offset);
         public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset);

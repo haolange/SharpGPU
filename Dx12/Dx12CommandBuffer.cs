@@ -28,7 +28,7 @@ namespace Infinity.Graphics
 
         private Dx12TransferEncoder m_TransferEncoder;
         private Dx12ComputeEncoder m_ComputeEncoder;
-        private Dx12GraphicsEncoder m_GraphicsEncoder;
+        private Dx12RasterEncoder m_RasterEncoder;
         private Dx12RaytracingEncoder m_RaytracingEncoder;
         private ID3D12CommandAllocator* m_NativeCommandAllocator;
         private ID3D12GraphicsCommandList5* m_NativeCommandList;
@@ -53,7 +53,7 @@ namespace Infinity.Graphics
 
             m_TransferEncoder = new Dx12TransferEncoder(this);
             m_ComputeEncoder = new Dx12ComputeEncoder(this);
-            m_GraphicsEncoder = new Dx12GraphicsEncoder(this);
+            m_RasterEncoder = new Dx12RasterEncoder(this);
             m_RaytracingEncoder = new Dx12RaytracingEncoder(this);
         }
 
@@ -116,16 +116,16 @@ namespace Infinity.Graphics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override RHIGraphicsEncoder BeginGraphicsPass(in RHIGraphicsPassDescriptor descriptor)
+        public override RHIRasterEncoder BeginRasterPass(in RHIRasterPassDescriptor descriptor)
         {
-            m_GraphicsEncoder.BeginPass(descriptor);
-            return m_GraphicsEncoder;
+            m_RasterEncoder.BeginPass(descriptor);
+            return m_RasterEncoder;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override void EndGraphicsPass()
+        public override void EndRasterPass()
         {
-            m_GraphicsEncoder.EndPass();
+            m_RasterEncoder.EndPass();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -154,9 +154,9 @@ namespace Infinity.Graphics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public override RHIGraphicsEncoder GetGraphicsEncoder()
+        public override RHIRasterEncoder GetRasterEncoder()
         {
-            return m_GraphicsEncoder;
+            return m_RasterEncoder;
         }
 
         /*public override void Commit(RHIFence? fence)

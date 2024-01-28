@@ -44,7 +44,7 @@ namespace Infinity.Graphics
 
     public abstract class RHICommandQueue : Disposal
     {
-        public ERHIPipeline PipelineType
+        public ERHIPipelineType PipelineType
         {
             get
             {
@@ -56,7 +56,7 @@ namespace Infinity.Graphics
             get;
         }
 
-        protected ERHIPipeline m_PipelineType;
+        protected ERHIPipelineType m_PipelineType;
         public abstract RHICommandBuffer CreateCommandBuffer();
         public abstract void MapTiledTexture(in RHITiledTextureRegions tiledTextureRegions);
         public abstract void UnMapTiledTexture(in RHITiledTextureRegions tiledTextureRegions);

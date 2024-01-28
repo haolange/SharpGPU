@@ -129,14 +129,14 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_COMMAND_LIST_TYPE ConvertToDx12QueueType(in ERHIPipeline pipeline)
+        internal static D3D12_COMMAND_LIST_TYPE ConvertToDx12QueueType(in ERHIPipelineType pipeline)
         {
             switch (pipeline)
             {
-                case ERHIPipeline.Compute:
+                case ERHIPipelineType.Compute:
                     return D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_COMPUTE;
 
-                case ERHIPipeline.Graphics:
+                case ERHIPipelineType.Graphics:
                     return D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT;
 
                 default:

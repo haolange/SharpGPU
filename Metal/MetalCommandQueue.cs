@@ -25,7 +25,7 @@ namespace Infinity.Graphics
         private MtlDevice m_MtlDevice;
         private MTLCommandQueue m_NativeQueue;
 
-        public MtlCommandQueue(MtlDevice device, in ERHIPipeline pipeline)
+        public MtlCommandQueue(MtlDevice device, in ERHIPipelineType pipeline)
         {
             m_MtlDevice = device;
             m_PipelineType = pipeline;
