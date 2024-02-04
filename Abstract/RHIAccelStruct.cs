@@ -2,7 +2,6 @@
 using Infinity.Core;
 using Infinity.Mathmatics;
 using System.Runtime.InteropServices;
-using Silk.NET.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -24,18 +23,19 @@ namespace Infinity.Graphics
         NoDuplicateAnyhitInverseOcation = 0x2
     }
 
-    public enum EAccelStructInstanceFlag : byte
+    public enum EAccelStructInstanceFlag
     {
-        None,
-        ForceOpaque,
-        ForceNonOpaque,
-        TriangleCullDisable,
-        TriangleFrontCounterclockwise
+        None = 0,
+        ForceOpaque = 0x4,
+        ForceNonOpaque = 0x8,
+        TriangleCullDisable = 0x1,
+        TriangleFrontCounterclockwise = 0x2
     }
 
     public enum EAccelStructGeometryType : byte
     {
         AABB,
+        Curves,
         Triangle
     }
 
@@ -45,7 +45,7 @@ namespace Infinity.Graphics
         public EAccelStructGeometryFlag GeometryFlag;
     }
 
-    public class RHIAccelStructCurves : RHIAccelStructGeometry
+    public class RHIAccelStructAABBs : RHIAccelStructGeometry
     {
         public uint Count;
         public uint Stride;
@@ -53,7 +53,7 @@ namespace Infinity.Graphics
         public RHIBuffer? AABBBuffer;
     }
 
-    public class RHIAccelStructAABBs : RHIAccelStructGeometry
+    public class RHIAccelStructCurves : RHIAccelStructGeometry
     {
         public uint Count;
         public uint Stride;

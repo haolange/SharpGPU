@@ -661,5 +661,10 @@
                     return ERHITextureState.Common;
             }
         }*/
+
+        internal static uint AlignTo(uint alignment, uint val)
+        {
+            return (((val + alignment) - 1) / alignment) * alignment;
+        }
     }
 }

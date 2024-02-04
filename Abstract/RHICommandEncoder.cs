@@ -205,8 +205,8 @@ namespace Infinity.Graphics
         public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
         public abstract void SetPipelineState(RHIRaytracingPipelineState pipelineState);
         public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
-        public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct tlas);
-        public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct blas);
+        public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct);
+        public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct);
         public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable);
         // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);

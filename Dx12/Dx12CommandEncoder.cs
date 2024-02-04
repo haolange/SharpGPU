@@ -863,20 +863,20 @@ namespace Infinity.Graphics
             }*/
         }
 
-        public override void BuildAccelerationStructure(RHITopLevelAccelStruct tlas)
+        public override void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12TopLevelAccelStruct topLevelAccelStruct = tlas as Dx12TopLevelAccelStruct;
-            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC accelStrucDescription = topLevelAccelStruct.NativeAccelStrucDescriptor;
-            dx12CommandBuffer.NativeCommandList->BuildRaytracingAccelerationStructure(&accelStrucDescription, 0, null);
+            Dx12TopLevelAccelStruct dx12TopLevelAccelStruct = topLevelAccelStruct as Dx12TopLevelAccelStruct;
+            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC accelStructDescription = dx12TopLevelAccelStruct.NativeAccelStructDescriptor;
+            dx12CommandBuffer.NativeCommandList->BuildRaytracingAccelerationStructure(&accelStructDescription, 0, null);
         }
 
-        public override void BuildAccelerationStructure(RHIBottomLevelAccelStruct blas)
+        public override void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12BottomLevelAccelStruct bottomLevelAccelStruct = blas as Dx12BottomLevelAccelStruct;
-            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC accelStrucDescription = bottomLevelAccelStruct.NativeAccelStrucDescriptor;
-            dx12CommandBuffer.NativeCommandList->BuildRaytracingAccelerationStructure(&accelStrucDescription, 0, null);
+            Dx12BottomLevelAccelStruct dx12BottomLevelAccelStruct = bottomLevelAccelStruct as Dx12BottomLevelAccelStruct;
+            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC accelStructDescription = dx12BottomLevelAccelStruct.NativeAccelStructDescriptor;
+            dx12CommandBuffer.NativeCommandList->BuildRaytracingAccelerationStructure(&accelStructDescription, 0, null);
         }
 
         public override void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable)

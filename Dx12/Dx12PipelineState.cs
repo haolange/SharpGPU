@@ -1,11 +1,9 @@
 ﻿using System;
-using System.Diagnostics;
 using Infinity.Mathmatics;
 using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using static TerraFX.Interop.Windows.Windows;
-using TerraFX.Interop.Gdiplus;
 
 namespace Infinity.Graphics
 {
@@ -125,9 +123,17 @@ namespace Infinity.Graphics
                 return m_NativePipelineState;
             }
         }
+        public ID3D12StateObjectProperties* NativeStateObjectProperties
+        {
+            get
+            {
+                return m_NativeStateObjectProperties;
+            }
+        }
 
         private uint m_MaxLocalRootParameters;
         private ID3D12StateObject* m_NativePipelineState;
+        private ID3D12StateObjectProperties* m_NativeStateObjectProperties;
 
         public Dx12RaytracingPipelineState(Dx12Device device, in RHIRaytracingPipelineStateDescriptor descriptor)
         {
@@ -389,6 +395,13 @@ namespace Infinity.Graphics
             Dx12Utility.CHECK_HR(hResult);
 #endif
             m_NativePipelineState = pipelineState;
+
+            ID3D12StateObjectProperties* nativeStateObjectProperties;
+            hResult = pipelineState->QueryInterface(__uuidof<ID3D12StateObjectProperties>(), (void**)&nativeStateObjectProperties);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
+            m_NativeStateObjectProperties = nativeStateObjectProperties;
             #endregion PipelineState
         }
 
