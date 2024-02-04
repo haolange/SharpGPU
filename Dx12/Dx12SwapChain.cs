@@ -4,7 +4,6 @@ using Infinity.Mathmatics;
 using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using static TerraFX.Interop.Windows.Windows;
-using Silk.NET.Core.Native;
 using IUnknown = TerraFX.Interop.Windows.IUnknown;
 
 namespace Infinity.Graphics
@@ -42,7 +41,9 @@ namespace Infinity.Graphics
                     m_Textures[i].NativeResource->Release();
                 }
             }
-            HRESULT hResult = m_NativeSwapChain->ResizeBuffers(m_Descriptor.Count, extent.x, extent.y, Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(m_Descriptor.Format)), (uint)DXGI_SWAP_CHAIN_FLAG.DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH);
+            DXGI_SWAP_CHAIN_DESC desc;
+            m_NativeSwapChain->GetDesc(&desc);
+            HRESULT hResult = m_NativeSwapChain->ResizeBuffers(m_Descriptor.Count, extent.x, extent.y, desc.BufferDesc.Format/*Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(m_Descriptor.Format))*/, desc.Flags/*DXGI_SWAP_CHAIN_FLAG.DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH*/);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif

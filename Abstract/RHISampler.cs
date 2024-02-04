@@ -9,8 +9,8 @@ namespace Infinity.Graphics
         public float LodMax;
         public float MipLODBias;
         public uint Anisotropy;
-        public ERHIFilterMode MagFilter;
         public ERHIFilterMode MinFilter;
+        public ERHIFilterMode MagFilter;
         public ERHIFilterMode MipFilter;
         public ERHIAddressMode AddressModeU;
         public ERHIAddressMode AddressModeV;

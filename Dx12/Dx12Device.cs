@@ -3,7 +3,6 @@ using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using static TerraFX.Interop.Windows.Windows;
 using IUnknown = TerraFX.Interop.Windows.IUnknown;
-using TerraFX.Interop.Gdiplus;
 
 namespace Infinity.Graphics
 {
