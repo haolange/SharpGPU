@@ -48,7 +48,7 @@ namespace Infinity.Graphics
                     return new MtlInstance(descriptor);
 
                 case ERHIBackend.Vulkan:
-                    return new VkInstance(descriptor);
+                    return new VulkanInstance(descriptor);
 
                 case ERHIBackend.DirectX12:
                     return new Dx12Instance(descriptor);

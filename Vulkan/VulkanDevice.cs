@@ -7,9 +7,9 @@ using System.Collections.Generic;
 
 namespace Infinity.Graphics
 {
-    internal class VkDevice : RHIDevice
+    internal class VulkanDevice : RHIDevice
     {
-        public VkInstance VkInstance
+        public VulkanInstance VkInstance
         {
             get
             {
@@ -17,9 +17,9 @@ namespace Infinity.Graphics
             }
         }
 
-        private VkInstance m_VkInstance;
+        private VulkanInstance m_VkInstance;
 
-        public VkDevice(VkInstance instance, in IntPtr adapterPtr)
+        public VulkanDevice(VulkanInstance instance, in IntPtr adapterPtr)
         {
             m_VkInstance = instance;
             CreateDevice(adapterPtr);

@@ -1,7 +1,6 @@
 ﻿using System;
 using SharpMetal.Metal;
 using System.Diagnostics;
-using System.Collections.Generic;
 using SharpMetal.ObjectiveCCore;
 
 namespace Infinity.Graphics
