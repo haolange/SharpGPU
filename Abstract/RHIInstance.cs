@@ -45,7 +45,7 @@ namespace Infinity.Graphics
             switch (descriptor.Backend)
             {
                 case ERHIBackend.Metal:
-                    return new MtlInstance(descriptor);
+                    return new MetalInstance(descriptor);
 
                 case ERHIBackend.Vulkan:
                     return new VulkanInstance(descriptor);

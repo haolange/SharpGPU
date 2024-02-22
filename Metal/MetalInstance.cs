@@ -6,14 +6,14 @@ using System.Runtime.InteropServices;
 
 namespace Infinity.Graphics
 {
-    internal unsafe class MtlInstance : RHIInstance
+    internal unsafe class MetalInstance : RHIInstance
     {
         public override int DeviceCount => m_Devices.Count;
         public override ERHIBackend BackendType => ERHIBackend.Metal;
 
-        private List<MtlDevice> m_Devices;
+        private List<MetalDevice> m_Devices;
 
-        public MtlInstance(in RHIInstanceDescriptor descriptor)
+        public MetalInstance(in RHIInstanceDescriptor descriptor)
         {
             int deviceCount = 0;
             IntPtr devicePtr = IntPtr.Zero;
@@ -31,10 +31,10 @@ namespace Infinity.Graphics
                 deviceCount = (int)devices.Count;
             }
 
-            m_Devices = new List<MtlDevice>(deviceCount);
+            m_Devices = new List<MetalDevice>(deviceCount);
             for (int i = 0; i < deviceCount; ++i)
             {
-                m_Devices.Add(new MtlDevice(this, IntPtr.Add(devicePtr, i)));
+                m_Devices.Add(new MetalDevice(this, IntPtr.Add(devicePtr, i)));
             }
         }
 

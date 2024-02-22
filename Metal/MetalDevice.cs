@@ -6,7 +6,7 @@ using SharpMetal.ObjectiveCCore;
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
-    internal unsafe class MtlDevice : RHIDevice
+    internal unsafe class MetalDevice : RHIDevice
     {
         public MTLDevice NativeDevice
         {
@@ -15,7 +15,7 @@ namespace Infinity.Graphics
                 return m_NativeDevice;
             }
         }
-        public MtlInstance MtlInstance
+        public MetalInstance MtlInstance
         {
             get
             {
@@ -24,9 +24,9 @@ namespace Infinity.Graphics
         }
 
         private MTLDevice m_NativeDevice;
-        private MtlInstance m_MtlInstance;
+        private MetalInstance m_MtlInstance;
 
-        public MtlDevice(MtlInstance instance, in IntPtr devicePtr)
+        public MetalDevice(MetalInstance instance, in IntPtr devicePtr)
         {
             m_MtlInstance = instance;
             CreateDevice(devicePtr);

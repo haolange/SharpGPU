@@ -5,7 +5,7 @@ using SharpMetal.ObjectiveCCore;
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602
-    internal unsafe class MtlCommandQueue : RHICommandQueue
+    internal unsafe class MetalCommandQueue : RHICommandQueue
     {
         public MTLCommandQueue NativeQueue
         {
@@ -22,10 +22,10 @@ namespace Infinity.Graphics
             }
         }
 
-        private MtlDevice m_MtlDevice;
+        private MetalDevice m_MtlDevice;
         private MTLCommandQueue m_NativeQueue;
 
-        public MtlCommandQueue(MtlDevice device, in ERHIPipelineType pipeline)
+        public MetalCommandQueue(MetalDevice device, in ERHIPipelineType pipeline)
         {
             m_MtlDevice = device;
             m_PipelineType = pipeline;
