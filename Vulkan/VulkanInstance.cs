@@ -7,6 +7,8 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+using TerraFX.Interop.Windows;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Infinity.Graphics
 {
@@ -17,52 +19,131 @@ namespace Infinity.Graphics
 
         private VkInstance m_VkInstance;
 
-        string[] validationLayers = new[] { "VK_LAYER_KHRONOS_validation" };
+        List<string> m_ValidationLayers;
 
-        string[] m_Extensions = new[]
-        {
-            "VK_KHR_surface",
-            "VK_KHR_win32_surface",
-            "VK_EXT_debug_utils",
-        };
+        List<string> m_RequiredExtensions;
 
         public VulkanInstance(in RHIInstanceDescriptor descriptor)
         {
+
+            CheckExtensionSupport(descriptor);
+            CheckValidationLayerSupport(descriptor);
             CreateVulkanInstance(descriptor);
         }
 
-        private bool CheckValidationLayerSupport()
+        private void CheckExtension(string[] availableinstanceExtensions, List<string> extensionsToEnable, string extension)
+        {
+            if (!availableinstanceExtensions.Any((string e) => e == extension))
+            {
+                Console.WriteLine("Vulkan", "The requiered instance extensions was not available: " + extension);
+            }
+
+            extensionsToEnable.Add(extension);
+        }
+
+        private void CheckExtensionSupport(in RHIInstanceDescriptor descriptor)
+        {
+            uint supportedExtensionCount;
+            VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceExtensionProperties(null, &supportedExtensionCount, null));
+            VkExtensionProperties* supportedExtensions = stackalloc VkExtensionProperties[(int)supportedExtensionCount];
+            VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceExtensionProperties(null, &supportedExtensionCount, supportedExtensions));
+
+            string[] array = new string[supportedExtensionCount];
+            for (int i = 0; i < supportedExtensionCount; ++i)
+            {
+                array[i] = VulkanUtility.GetString(supportedExtensions[i].extensionName);
+            }
+
+            m_RequiredExtensions = new List<string>();
+            CheckExtension(array, m_RequiredExtensions, "VK_KHR_surface");
+            switch (VulkanUtility.GetCurrentOSPlatfom())
+            {
+                case EOSPlatform.Windows:
+                    CheckExtension(array, m_RequiredExtensions, "VK_KHR_win32_surface");
+                    break;
+                case EOSPlatform.Linux:
+                    CheckExtension(array, m_RequiredExtensions, "VK_KHR_xlib_surface");
+                    break;
+                case EOSPlatform.Android:
+                    CheckExtension(array, m_RequiredExtensions, "VK_KHR_android_surface");
+                    break;
+                case EOSPlatform.MacOS:
+                    CheckExtension(array, m_RequiredExtensions, "VK_MVK_macos_surface");
+                    break;
+                case EOSPlatform.iOS:
+                    CheckExtension(array, m_RequiredExtensions, "VK_MVK_ios_surface");
+                    break;
+            }
+
+            /*foreach (string item in m_RequiredExtensions)
+            {
+                CheckExtension(array, m_RequiredExtensions, item);
+            }*/
+
+            if (array.Any((string e) => e == "VK_KHR_get_physical_device_properties2"))
+            {
+                m_RequiredExtensions.Add("VK_KHR_get_physical_device_properties2");
+            }
+
+            if (descriptor.EnableValidatior)
+            {
+                if (array.Any((string e) => e == "VK_EXT_debug_utils"))
+                {
+                    m_RequiredExtensions.Add("VK_EXT_debug_utils");
+                    //DebugUtilsEnabled = true;
+                    //DebugMarkerEnabled = true;
+                }
+                else
+                {
+                    m_RequiredExtensions.Add("VK_EXT_debug_report");
+                }
+            }
+        }
+
+        private void CheckValidationLayerSupport(in RHIInstanceDescriptor descriptor)
         {
             uint layerCount;
             VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceLayerProperties(&layerCount, null));
             VkLayerProperties* availableLayers = stackalloc VkLayerProperties[(int)layerCount];
             VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceLayerProperties(&layerCount, availableLayers));
 
-            for (int i = 0; i < layerCount; i++)
+            string[] array = new string[layerCount];
+            for (int i = 0; i < layerCount; ++i)
             {
-                Debug.WriteLine($"ValidationLayer: {VulkanUtility.GetString(availableLayers[i].layerName)} version: {availableLayers[i].specVersion} description: {VulkanUtility.GetString(availableLayers[i].description)}");
+                array[i] = VulkanUtility.GetString(availableLayers[i].layerName);
             }
 
-            for (int i = 0; i < validationLayers.Length; i++)
+            if (descriptor.EnableValidatior)
             {
-                bool layerFound = false;
-                string validationLayer = validationLayers[i];
-                for (int j = 0; j < layerCount; j++)
+                m_ValidationLayers = new List<string>();
+                switch (VulkanUtility.GetCurrentOSPlatfom())
                 {
-                    if (validationLayer.Equals(VulkanUtility.GetString(availableLayers[j].layerName)))
-                    {
-                        layerFound = true;
+                    case EOSPlatform.Windows:
+                        if (array.Any((string l) => l == "VK_LAYER_KHRONOS_validation"))
+                        {
+                            m_ValidationLayers.Add("VK_LAYER_KHRONOS_validation");
+                        }
+
                         break;
-                    }
-                }
+                    case EOSPlatform.Android:
+                        if (array.Any((string l) => l == "VK_LAYER_LUNARG_core_validation"))
+                        {
+                            m_ValidationLayers.Add("VK_LAYER_LUNARG_core_validation");
+                        }
 
-                if (!layerFound)
-                {
-                    return false;
+                        if (array.Any((string l) => l == "VK_LAYER_LUNARG_swapchain"))
+                        {
+                            m_ValidationLayers.Add("VK_LAYER_LUNARG_swapchain");
+                        }
+
+                        if (array.Any((string l) => l == "VK_LAYER_LUNARG_parameter_validation"))
+                        {
+                            m_ValidationLayers.Add("VK_LAYER_LUNARG_parameter_validation");
+                        }
+
+                        break;
                 }
             }
-
-            return true;
         }
 
         private void CreateVulkanInstance(in RHIInstanceDescriptor descriptor)
@@ -82,42 +163,23 @@ namespace Infinity.Graphics
             createInfo.pApplicationInfo = &appInfo;
 
             // Extensions
-            uint extensionCount;
-            VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceExtensionProperties(null, &extensionCount, null));
-            VkExtensionProperties* extensions = stackalloc VkExtensionProperties[(int)extensionCount];
-            VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceExtensionProperties(null, &extensionCount, extensions));
-
-            for (int i = 0; i < extensionCount; i++)
+            IntPtr* extensionsToBytesArray = stackalloc IntPtr[m_RequiredExtensions.Count];
+            for (int i = 0; i < m_RequiredExtensions.Count; ++i)
             {
-                Console.WriteLine($"Extension: {VulkanUtility.GetString(extensions[i].extensionName)} version: {extensions[i].specVersion}");
+                extensionsToBytesArray[i] = Marshal.StringToHGlobalAnsi(m_RequiredExtensions[i]);
             }
-
-            IntPtr* extensionsToBytesArray = stackalloc IntPtr[m_Extensions.Length];
-            for (int i = 0; i < m_Extensions.Length; i++)
-            {
-                extensionsToBytesArray[i] = Marshal.StringToHGlobalAnsi(m_Extensions[i]);
-            }
-            createInfo.enabledExtensionCount = (uint)m_Extensions.Length;
+            createInfo.enabledExtensionCount = (uint)m_RequiredExtensions.Count;
             createInfo.ppEnabledExtensionNames = (byte**)extensionsToBytesArray;
 
             // Validation layers
 #if DEBUG
-            if (this.CheckValidationLayerSupport())
+            IntPtr* layersToBytesArray = stackalloc IntPtr[m_ValidationLayers.Count];
+            for (int i = 0; i < m_ValidationLayers.Count; ++i)
             {
-                IntPtr* layersToBytesArray = stackalloc IntPtr[validationLayers.Length];
-                for (int i = 0; i < validationLayers.Length; i++)
-                {
-                    layersToBytesArray[i] = Marshal.StringToHGlobalAnsi(validationLayers[i]);
-                }
-
-                createInfo.enabledLayerCount = (uint)validationLayers.Length;
-                createInfo.ppEnabledLayerNames = (byte**)layersToBytesArray;
+                layersToBytesArray[i] = Marshal.StringToHGlobalAnsi(m_ValidationLayers[i]);
             }
-            else
-            {
-                createInfo.enabledLayerCount = 0;
-                createInfo.pNext = null;
-            }
+            createInfo.enabledLayerCount = (uint)m_ValidationLayers.Count;
+            createInfo.ppEnabledLayerNames = (byte**)layersToBytesArray;
 #else
             createInfo.enabledLayerCount = 0;
             createInfo.pNext = null;
