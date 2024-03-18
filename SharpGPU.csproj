@@ -54,7 +54,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Evergine.Bindings.Vulkan" Version="2024.1.1.23" />
+		<PackageReference Include="Evergine.Bindings.Vulkan" Version="2024.2.1.24" />
 		<PackageReference Include="NUnit" Version="3.13.3" />
 		<PackageReference Include="SharpGen.Runtime" Version="2.1.2-beta" />
 		<PackageReference Include="Silk.NET.Vulkan" Version="2.20.0" />
@@ -68,7 +68,7 @@
 		<PackageReference Include="Silk.NET.Vulkan.Extensions.MVK" Version="2.20.0" />
 		<PackageReference Include="Silk.NET.Vulkan.Extensions.NV" Version="2.20.0" />
 		<PackageReference Include="TerraFX.Interop.D3D12MemoryAllocator" Version="2.0.1.5" />
-		<PackageReference Include="Vortice.Vulkan" Version="1.8.3" />
+		<PackageReference Include="Vortice.Vulkan" Version="1.8.6" />
 	</ItemGroup>
 
 	<ItemGroup>
