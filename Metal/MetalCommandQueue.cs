@@ -61,6 +61,11 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
+        public override void Submits(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores)
+        {
+            throw new NotImplementedException("ToDo : batch submit");
+        }
+
         public override void Submits(RHICommandBuffer[] cmdBuffers, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores)
         {
             throw new NotImplementedException("ToDo : batch submit");

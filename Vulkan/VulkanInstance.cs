@@ -43,7 +43,7 @@ namespace Infinity.Graphics
 
         private void CheckExtensionSupport(in RHIInstanceDescriptor descriptor)
         {
-            uint supportedExtensionCount;
+            uint supportedExtensionCount = 0;
             VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceExtensionProperties(null, &supportedExtensionCount, null));
             VkExtensionProperties* supportedExtensions = stackalloc VkExtensionProperties[(int)supportedExtensionCount];
             VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceExtensionProperties(null, &supportedExtensionCount, supportedExtensions));
@@ -102,7 +102,7 @@ namespace Infinity.Graphics
 
         private void CheckValidationLayerSupport(in RHIInstanceDescriptor descriptor)
         {
-            uint layerCount;
+            uint layerCount = 0;
             VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceLayerProperties(&layerCount, null));
             VkLayerProperties* availableLayers = stackalloc VkLayerProperties[(int)layerCount];
             VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceLayerProperties(&layerCount, availableLayers));

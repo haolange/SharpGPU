@@ -54,7 +54,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Evergine.Bindings.Vulkan" Version="2024.2.1.24" />
+		<PackageReference Include="Evergine.Bindings.Vulkan" Version="2024.3.17.28" />
 		<PackageReference Include="NUnit" Version="3.13.3" />
 		<PackageReference Include="SharpGen.Runtime" Version="2.1.2-beta" />
 		<PackageReference Include="Silk.NET.Vulkan" Version="2.20.0" />

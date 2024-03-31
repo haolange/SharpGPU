@@ -8,7 +8,7 @@ using Silk.NET.Core.Native;
 
 namespace Infinity.Graphics
 {
-#pragma warning disable CA1416 // Validate platform compatibility
+#pragma warning disable CA1416
     internal unsafe class Dx12Fence : RHIFence
     {
         public ID3D12Fence* NativeFence
@@ -22,15 +22,7 @@ namespace Infinity.Graphics
         {
             get
             {
-                return Completed ? EFenceStatus.Success : EFenceStatus.NotReady;
-            }
-        }
-        
-        private bool Completed
-        {
-            get
-            {
-                return m_NativeFence->GetCompletedValue() < 1 ? false : true;
+                return m_NativeFence->GetCompletedValue() > 0 ? EFenceStatus.Success : EFenceStatus.NotReady;
             }
         }
 
@@ -52,7 +44,7 @@ namespace Infinity.Graphics
 #endif
         }
 
-        internal override void Reset()
+        public override void Reset()
         {
             m_NativeFence->Signal(0);
         }
@@ -70,5 +62,33 @@ namespace Infinity.Graphics
             m_NativeFence->Release();
         }
     }
-#pragma warning restore CA1416 // Validate platform compatibility
+
+    internal unsafe class Dx12Semaphore : RHISemaphore
+    {
+        public ID3D12Fence* NativeFence
+        {
+            get
+            {
+                return m_NativeFence;
+            }
+        }
+
+        private ID3D12Fence* m_NativeFence;
+
+        public Dx12Semaphore(Dx12Device device)
+        {
+            ID3D12Fence* fence;
+            HRESULT hResult = device.NativeDevice->CreateFence(0, D3D12_FENCE_FLAGS.D3D12_FENCE_FLAG_NONE, __uuidof<ID3D12Fence>(), (void**)&fence);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
+            m_NativeFence = fence;
+        }
+
+        protected override void Release()
+        {
+            m_NativeFence->Release();
+        }
+    }
+#pragma warning restore CA1416
 }

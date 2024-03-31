@@ -136,7 +136,7 @@ namespace Infinity.Graphics
 
         public override RHISemaphore CreateSemaphore()
         {
-            throw new NotImplementedException();
+            return new Dx12Semaphore(this);
         }
 
         public override RHIQuery CreateQuery(in RHIQueryDescriptor descriptor)

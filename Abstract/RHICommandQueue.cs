@@ -63,6 +63,7 @@ namespace Infinity.Graphics
         public abstract void MapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips);
         public abstract void UnMapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips);
         public abstract void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore);
+        public abstract void Submits(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores);
         public abstract void Submits(RHICommandBuffer[] cmdBuffers, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores);
     }
 }

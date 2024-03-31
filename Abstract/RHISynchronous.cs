@@ -93,10 +93,10 @@ namespace Infinity.Graphics
         }
     }
 
-    public enum EFenceStatus
+    public enum EFenceStatus : byte
     {
-        Success,
-        NotReady,
+        Success = 0,
+        NotReady = 1,
         Undefined
     };
 
@@ -107,7 +107,7 @@ namespace Infinity.Graphics
             get;
         }
 
-        internal abstract void Reset();
+        public abstract void Reset();
         public abstract void Wait();
     }
 

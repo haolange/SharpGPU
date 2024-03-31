@@ -86,6 +86,12 @@ namespace Infinity.Graphics
 
         public override void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore)
         {
+            if (waitSemaphore != null)
+            {
+                Dx12Semaphore dx12Semaphore = waitSemaphore as Dx12Semaphore;
+                m_NativeCommandQueue->Wait(dx12Semaphore.NativeFence, 1);
+            }
+
             if (cmdBuffer != null)
             {
                 Dx12CommandBuffer dx12CommandBuffer = cmdBuffer as Dx12CommandBuffer;
@@ -93,29 +99,95 @@ namespace Infinity.Graphics
                 m_NativeCommandQueue->ExecuteCommandLists(1, ppCommandLists);
             }
 
+            if (signalSemaphore != null)
+            {
+                Dx12Semaphore dx12Semaphore = signalSemaphore as Dx12Semaphore;
+                dx12Semaphore.NativeFence->Signal(0);
+                m_NativeCommandQueue->Signal(dx12Semaphore.NativeFence, 1);
+            }
+
             if (signalFence != null)
             {
                 Dx12Fence dx12Fence = signalFence as Dx12Fence;
-                dx12Fence.Reset();
+                //dx12Fence.NativeFence->Signal(0); // dx12Fence.Reset();
                 m_NativeCommandQueue->Signal(dx12Fence.NativeFence, 1);
-            }
-
-            if (signalSemaphore != null)
-            {
-                throw new NotImplementedException("ToDo : signal semaphore");
-                //m_NativeCommandQueue->Signal(dx12Fence.NativeFence, 1);
-            }
-
-            if (waitSemaphore != null)
-            {
-                throw new NotImplementedException("ToDo : wait semaphore");
-                //m_NativeCommandQueue->Wait(dx12Fence.NativeFence, 1);
             }
         }
 
-        public override void Submits(RHICommandBuffer[] cmdBuffers, RHIFence fence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores)
+        public override void Submits(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores)
         {
-            throw new NotImplementedException("ToDo : batch submit");
+            if (waitSemaphores != null)
+            {
+                for (int i = 0; i < waitSemaphores.Length; ++i)
+                {
+                    Dx12Semaphore dx12Semaphore = waitSemaphores[i] as Dx12Semaphore;
+                    m_NativeCommandQueue->Wait(dx12Semaphore.NativeFence, 1);
+                }
+            }
+
+            if (cmdBuffer != null)
+            {
+                Dx12CommandBuffer dx12CommandBuffer = cmdBuffer as Dx12CommandBuffer;
+                ID3D12CommandList** ppCommandLists = stackalloc ID3D12CommandList*[1] { (ID3D12CommandList*)dx12CommandBuffer.NativeCommandList };
+                m_NativeCommandQueue->ExecuteCommandLists(1, ppCommandLists);
+            }
+
+            if (signalSemaphores != null)
+            {
+                for (int i = 0; i < signalSemaphores.Length; ++i)
+                {
+                    Dx12Semaphore dx12Semaphore = signalSemaphores[i] as Dx12Semaphore;
+                    dx12Semaphore.NativeFence->Signal(0);
+                    m_NativeCommandQueue->Signal(dx12Semaphore.NativeFence, 1);
+                }
+            }
+
+            if (signalFence != null)
+            {
+                Dx12Fence dx12Fence = signalFence as Dx12Fence;
+                //dx12Fence.NativeFence->Signal(0); // dx12Fence.Reset();
+                m_NativeCommandQueue->Signal(dx12Fence.NativeFence, 1);
+            }
+        }
+
+        public override void Submits(RHICommandBuffer[] cmdBuffers, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores)
+        {
+            if (waitSemaphores != null)
+            {
+                for (int i = 0; i < waitSemaphores.Length; ++i)
+                {
+                    Dx12Semaphore dx12Semaphore = waitSemaphores[i] as Dx12Semaphore;
+                    m_NativeCommandQueue->Wait(dx12Semaphore.NativeFence, 1);
+                }
+            }
+
+            if (cmdBuffers != null)
+            {
+                ID3D12CommandList** ppCommandLists = stackalloc ID3D12CommandList*[cmdBuffers.Length];
+                for (int i = 0; i < cmdBuffers.Length; ++i)
+                {
+                    Dx12CommandBuffer dx12CommandBuffer = cmdBuffers[i] as Dx12CommandBuffer;
+                    ppCommandLists[i] = (ID3D12CommandList*)dx12CommandBuffer.NativeCommandList;
+                }
+                m_NativeCommandQueue->ExecuteCommandLists((uint)cmdBuffers.Length, ppCommandLists);
+            }
+
+            if (signalSemaphores != null)
+            {
+                for (int i = 0; i < signalSemaphores.Length; ++i)
+                {
+                    Dx12Semaphore dx12Semaphore = signalSemaphores[i] as Dx12Semaphore;
+                    dx12Semaphore.NativeFence->Signal(0);
+                    m_NativeCommandQueue->Signal(dx12Semaphore.NativeFence, 1);
+                }
+            }
+
+            if (signalFence != null)
+            {
+                Dx12Fence dx12Fence = signalFence as Dx12Fence;
+                //dx12Fence.NativeFence->Signal(0); // dx12Fence.Reset();
+                m_NativeCommandQueue->Signal(dx12Fence.NativeFence, 1);
+            }
         }
 
         protected override void Release()
