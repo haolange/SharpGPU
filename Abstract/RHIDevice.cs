@@ -11,6 +11,7 @@ namespace Infinity.Graphics
     public class RHIDeviceFeature
     {
         public bool IsFlipProjection;
+        public bool IsRenderPassSupported;
         public bool IsRaytracingSupported;
         public bool IsRaytracingInlineSupported;
         public bool IsShaderBarycentricCoordSupported;

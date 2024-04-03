@@ -14,7 +14,6 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12DeviceFeature : RHIDeviceFeature
     {
-        public bool IsRenderPassSupported;
         public D3D_FEATURE_LEVEL MaxNativeFeatureLevel;
     }
 
