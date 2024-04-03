@@ -47,9 +47,10 @@ namespace Infinity.Graphics
                         {
                             debug1->SetEnableGPUBasedValidation(true);
                             debug1->Release();
-                            debug->Release();
                         }
                     }
+
+                    debug->Release();
                 }
             }
 
