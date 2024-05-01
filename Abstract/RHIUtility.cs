@@ -3,7 +3,10 @@
     public enum ERHIVendorType
     {
         AMD = 0x1002,
+        Mali = 0x13B5,
         Intel = 0x8086,
+        Apple = 0x106B,
+        Adreno = 0x5143,
         Nvidia = 0x10DE,
         Pending
     }

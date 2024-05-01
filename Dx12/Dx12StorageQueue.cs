@@ -34,12 +34,12 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override void CloseFile(RHIStorageFileHandle fileHandle)
+        public override void CloseFile(in RHIStorageFileHandle fileHandle)
         {
             throw new NotImplementedException();
         }
 
-        public override void QueryFileInfo(RHIStorageFileHandle fileHandle)
+        public override void QueryFileInfo(in RHIStorageFileHandle fileHandle)
         {
             throw new NotImplementedException();
         }

@@ -14,6 +14,7 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12DeviceFeature : RHIDeviceFeature
     {
+        public bool IsRenderPassSupported;
         public D3D_FEATURE_LEVEL MaxNativeFeatureLevel;
     }
 
@@ -117,7 +118,7 @@ namespace Infinity.Graphics
         private ID3D12CommandSignature* m_DispatchMeshIndirectSignature;
         private ID3D12CommandSignature* m_DispatchComputeIndirectSignature;
 
-        public Dx12Device(Dx12Instance instance, in IDXGIAdapter1* adapter) 
+        public Dx12Device(Dx12Instance instance, in IDXGIAdapter1* adapter)
         {
             m_DXGIAdapter = adapter;
             m_Dx12Instance = instance;
@@ -181,12 +182,12 @@ namespace Infinity.Graphics
             return new Dx12CommandQueue(this, pipeline);
         }
 
-        public override RHITopLevelAccelStruct CreateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
+        public override RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
         {
             return new Dx12TopLevelAccelStruct(this, descriptor);
         }
 
-        public override RHIBottomLevelAccelStruct CreateAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor)
+        public override RHIBottomLevelAccelStruct CreateBottomAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor)
         {
             return new Dx12BottomLevelAccelStruct(this, descriptor);
         }
@@ -216,6 +217,11 @@ namespace Infinity.Graphics
             return new Dx12PipelineLayout(this, descriptor);
         }
 
+        public override RHIRasterPipelineState CreateRasterPipelineState(in RHIRasterPipelineStateDescriptor descriptor)
+        {
+            return new Dx12RasterPipelineState(this, descriptor);
+        }
+
         public override RHIComputePipelineState CreateComputePipelineState(in RHIComputePipelineStateDescriptor descriptor)
         {
             return new Dx12ComputePipelineState(this, descriptor);
@@ -224,11 +230,6 @@ namespace Infinity.Graphics
         public override RHIRaytracingPipelineState CreateRaytracingPipelineState(in RHIRaytracingPipelineStateDescriptor descriptor)
         {
             return new Dx12RaytracingPipelineState(this, descriptor);
-        }
-
-        public override RHIRasterPipelineState CreateRasterPipelineState(in RHIRasterPipelineStateDescriptor descriptor)
-        {
-            return new Dx12RasterPipelineState(this, descriptor);
         }
 
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)
@@ -321,7 +322,6 @@ namespace Infinity.Graphics
             m_DeviceInfo.Feature.IsFlipProjection = false;
             m_DeviceInfo.Feature.MatrixMajorons = ERHIMatrixMajorons.RowMajor;
             m_DeviceInfo.Feature.DepthValueRange = ERHIDepthValueRange.ZeroToOne;
-            m_DeviceInfo.Feature.MultiviewStrategy = ERHIMultiviewStrategy.Unsupported;
 
             // check feature level
             D3D_FEATURE_LEVEL* aLevels = stackalloc D3D_FEATURE_LEVEL[3];
@@ -337,16 +337,98 @@ namespace Infinity.Graphics
             ((Dx12DeviceFeature)m_DeviceInfo.Feature).MaxNativeFeatureLevel = dLevels.MaxSupportedFeatureLevel;
 
             // check feature options
-            D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS6 options6;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS featureOptions0;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS1 featureOptions1;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS2 featureOptions2;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS3 featureOptions3;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS4 featureOptions4;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS5 featureOptions5;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS6 featureOptions6;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS7 featureOptions7;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS8 featureOptions8;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS9 featureOptions9;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS10 featureOptions10;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS11 featureOptions11;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS12 featureOptions12;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS13 featureOptions13;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS14 featureOptions14;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS15 featureOptions15;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS16 featureOptions16;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS17 featureOptions17;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS18 featureOptions18;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS19 featureOptions19;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS20 featureOptions20;
 
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS5, &options5, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS6, &options6, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS6));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS7, &options7, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS7));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS, &featureOptions0, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS1, &featureOptions1, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS1));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS2, &featureOptions2, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS2));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS3, &featureOptions3, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS3));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS4, &featureOptions4, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS4));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS5, &featureOptions5, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS6, &featureOptions6, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS6));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS7, &featureOptions7, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS7));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS8, &featureOptions8, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS8));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS9, &featureOptions9, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS9));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS10, &featureOptions10, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS10));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS11, &featureOptions11, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS11));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS12, &featureOptions12, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS12));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS13, &featureOptions13, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS13));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS14, &featureOptions14, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS14));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS15, &featureOptions15, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS15));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS16, &featureOptions16, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS16));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS17, &featureOptions17, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS17));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS18, &featureOptions18, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS18));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS19, &featureOptions19, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS19));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS20, &featureOptions20, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS20));
+
+            // check programmable msaa supported
+            switch (featureOptions2.ProgrammableSamplePositionsTier)
+            {
+                case D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER.D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_1:
+                    m_DeviceInfo.Feature.IsProgrammableSamplePositionSupported = false;
+                    break;
+
+                case D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER.D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_2:
+                    m_DeviceInfo.Feature.IsProgrammableSamplePositionSupported = true;
+                    break;
+
+                case D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER.D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_NOT_SUPPORTED:
+                    m_DeviceInfo.Feature.IsProgrammableSamplePositionSupported = false;
+                    break;
+            }
+
+            // check barycentric coord supported
+            if(featureOptions3.BarycentricsSupported)
+            {
+                m_DeviceInfo.Feature.IsShaderBarycentricCoordSupported = true;
+            }
+            else
+            {
+                m_DeviceInfo.Feature.IsShaderBarycentricCoordSupported = false;
+            }
+
+            // check multi view instancing supported
+            switch (featureOptions3.ViewInstancingTier)
+            {
+                case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_1:
+                    m_DeviceInfo.Feature.MultiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
+                    break;
+
+                case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_2:
+                    m_DeviceInfo.Feature.MultiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
+                    break;
+
+                case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_3:
+                    m_DeviceInfo.Feature.MultiviewStrategy = ERHIMultiviewStrategy.ViewIndex;
+                    break;
+
+                case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_NOT_SUPPORTED:
+                    m_DeviceInfo.Feature.MultiviewStrategy = ERHIMultiviewStrategy.Unsupported;
+                    break;
+            }
 
             // check raytracing level
-            switch (options5.RaytracingTier)
+            switch (featureOptions5.RaytracingTier)
             {
                 case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_0:
                     m_DeviceInfo.Feature.IsRaytracingSupported = true;
@@ -365,7 +447,7 @@ namespace Infinity.Graphics
             }
 
             // check render pass level
-            switch (options5.RenderPassesTier)
+            switch (featureOptions5.RenderPassesTier)
             {
                 case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_0:
                     ((Dx12DeviceFeature)m_DeviceInfo.Feature).IsRenderPassSupported = false;
@@ -381,7 +463,7 @@ namespace Infinity.Graphics
             }
 
             // check mesh shading level
-            switch (options7.MeshShaderTier)
+            switch (featureOptions7.MeshShaderTier)
             {
                 case D3D12_MESH_SHADER_TIER.D3D12_MESH_SHADER_TIER_1:
                     m_DeviceInfo.Feature.IsMeshShadingSupported = true;
@@ -407,6 +489,7 @@ namespace Infinity.Graphics
             D3D12_INDIRECT_ARGUMENT_DESC indirectArgDesc;
             D3D12_COMMAND_SIGNATURE_DESC commandSignatureDesc;
 
+            #region Create_DrawIndirect_Argument
             indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
             //commandSignatureDesc.NodeMask = nodeMask;
             commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
@@ -417,7 +500,9 @@ namespace Infinity.Graphics
             Dx12Utility.CHECK_HR(hResult);
 #endif
             m_DrawIndirectSignature = commandSignature;
+            #endregion
 
+            #region Create_DrawIndexedIndirect_Argument
             indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
             //commandSignatureDesc.NodeMask = nodeMask;
             commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
@@ -428,7 +513,9 @@ namespace Infinity.Graphics
             Dx12Utility.CHECK_HR(hResult);
 #endif
             m_DrawIndexedIndirectSignature = commandSignature;
+            #endregion
 
+            #region Create_DispatchComputeIndirect_Argument
             indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
             //commandSignatureDesc.NodeMask = nodeMask;
             commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
@@ -439,7 +526,9 @@ namespace Infinity.Graphics
             Dx12Utility.CHECK_HR(hResult);
 #endif
             m_DispatchComputeIndirectSignature = commandSignature;
+            #endregion
 
+            #region Create_DispatchMeshIndirect_Argument
             if (m_DeviceInfo.Feature.IsMeshShadingSupported)
             {
                 indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH;
@@ -453,7 +542,9 @@ namespace Infinity.Graphics
 #endif
                 m_DispatchMeshIndirectSignature = commandSignature;
             }
+            #endregion
 
+            #region Create_DispatchRayIndirect_Argument
             if (m_DeviceInfo.Feature.IsRaytracingSupported)
             {
                 indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS;
@@ -467,6 +558,7 @@ namespace Infinity.Graphics
 #endif
                 m_DispatchRayIndirectSignature = commandSignature;
             }
+            #endregion
         }
 
         protected override void Release()
@@ -477,6 +569,10 @@ namespace Infinity.Graphics
             m_CbvSrvUavHeap.Dispose();
             m_DrawIndirectSignature->Release();
             m_DrawIndexedIndirectSignature->Release();
+            if (m_DeviceInfo.Feature.IsMeshShadingSupported)
+            {
+                DispatchMeshIndirectSignature->Release();
+            }
             if (m_DeviceInfo.Feature.IsRaytracingSupported)
             {
                 m_DispatchRayIndirectSignature->Release();

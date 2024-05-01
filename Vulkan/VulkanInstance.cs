@@ -1,17 +1,12 @@
-﻿using Evergine.Bindings.Vulkan;
-using Silk.NET.Vulkan;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
+﻿using System;
 using System.Linq;
+using Evergine.Bindings.Vulkan;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
-using TerraFX.Interop.Windows;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Infinity.Graphics
 {
+#pragma warning disable CS8618
     internal unsafe class VulkanInstance : RHIInstance
     {
         public override int DeviceCount => 1;
@@ -19,9 +14,9 @@ namespace Infinity.Graphics
 
         private VkInstance m_VkInstance;
 
-        List<string> m_ValidationLayers;
+        private List<string> m_ValidationLayers;
 
-        List<string> m_RequiredExtensions;
+        private List<string> m_RequiredExtensions;
 
         public VulkanInstance(in RHIInstanceDescriptor descriptor)
         {
@@ -55,7 +50,9 @@ namespace Infinity.Graphics
             }
 
             m_RequiredExtensions = new List<string>();
+
             CheckExtension(array, m_RequiredExtensions, "VK_KHR_surface");
+
             switch (VulkanUtility.GetCurrentOSPlatfom())
             {
                 case EOSPlatform.Windows:
@@ -201,4 +198,5 @@ namespace Infinity.Graphics
 
         }
     }
+#pragma warning restore CS8618
 }

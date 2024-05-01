@@ -11,7 +11,6 @@ namespace Infinity.Graphics
     public class RHIDeviceFeature
     {
         public bool IsFlipProjection;
-        public bool IsRenderPassSupported;
         public bool IsRaytracingSupported;
         public bool IsMeshShadingSupported;
         public bool IsRaytracingInlineSupported;
@@ -60,15 +59,15 @@ namespace Infinity.Graphics
         public abstract RHISampler CreateSampler(in RHISamplerDescriptor descriptor);
         public abstract RHIStorageQueue CreateStorageQueue();
         public abstract RHICommandQueue CreateCommandQueue(in ERHIPipelineType pipeline);
-        public abstract RHITopLevelAccelStruct CreateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
-        public abstract RHIBottomLevelAccelStruct CreateAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor);
+        public abstract RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
+        public abstract RHIBottomLevelAccelStruct CreateBottomAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor);
         public abstract RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor);
         public abstract RHISwapChain CreateSwapChain(in RHISwapChainDescriptor descriptor);
         public abstract RHIBindTableLayout CreateBindTableLayout(in RHIBindTableLayoutDescriptor descriptor);
         public abstract RHIBindTable CreateBindTable(in RHIBindTableDescriptor descriptor);
         public abstract RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor);
+        public abstract RHIRasterPipelineState CreateRasterPipelineState(in RHIRasterPipelineStateDescriptor descriptor);
         public abstract RHIComputePipelineState CreateComputePipelineState(in RHIComputePipelineStateDescriptor descriptor);
         public abstract RHIRaytracingPipelineState CreateRaytracingPipelineState(in RHIRaytracingPipelineStateDescriptor descriptor);
-        public abstract RHIRasterPipelineState CreateRasterPipelineState(in RHIRasterPipelineStateDescriptor descriptor);
     }
 }

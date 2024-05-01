@@ -70,12 +70,12 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHITopLevelAccelStruct CreateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
+        public override RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
 
-        public override RHIBottomLevelAccelStruct CreateAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor)
+        public override RHIBottomLevelAccelStruct CreateBottomAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
@@ -105,17 +105,17 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
+        public override RHIRasterPipelineState CreateRasterPipelineState(in RHIRasterPipelineStateDescriptor descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
         public override RHIComputePipelineState CreateComputePipelineState(in RHIComputePipelineStateDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
 
         public override RHIRaytracingPipelineState CreateRaytracingPipelineState(in RHIRaytracingPipelineStateDescriptor descriptor)
-        {
-            throw new NotImplementedException();
-        }
-
-        public override RHIRasterPipelineState CreateRasterPipelineState(in RHIRasterPipelineStateDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
