@@ -23,7 +23,7 @@ namespace Infinity.Graphics
             return outHeapProperties;
         }
 
-        public static ID3D12Resource* CreateBuffer(in ID3D12Device8* pDevice, in uint size, in D3D12_RESOURCE_FLAGS flags, in D3D12_RESOURCE_STATES initState, D3D12_HEAP_PROPERTIES heapProps)
+        public static ID3D12Resource* CreateBuffer(in ID3D12Device10* pDevice, in uint size, in D3D12_RESOURCE_FLAGS flags, in D3D12_RESOURCE_STATES initState, D3D12_HEAP_PROPERTIES heapProps)
         {
             DXGI_SAMPLE_DESC sampleDesc = new DXGI_SAMPLE_DESC();
             sampleDesc.Count = 1;

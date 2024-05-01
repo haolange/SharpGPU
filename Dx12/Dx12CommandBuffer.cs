@@ -18,7 +18,7 @@ namespace Infinity.Graphics
                 return m_NativeCommandAllocator;
             }
         }
-        public ID3D12GraphicsCommandList5* NativeCommandList
+        public ID3D12GraphicsCommandList7* NativeCommandList
         {
             get
             {
@@ -31,7 +31,7 @@ namespace Infinity.Graphics
         private Dx12RasterEncoder m_RasterEncoder;
         private Dx12RaytracingEncoder m_RaytracingEncoder;
         private ID3D12CommandAllocator* m_NativeCommandAllocator;
-        private ID3D12GraphicsCommandList5* m_NativeCommandList;
+        private ID3D12GraphicsCommandList7* m_NativeCommandList;
 
         public Dx12CommandBuffer(Dx12CommandQueue commandQueue)
         {
@@ -44,8 +44,8 @@ namespace Infinity.Graphics
 #endif
             m_NativeCommandAllocator = commandAllocator;
 
-            ID3D12GraphicsCommandList5* commandList;
-            hResult = commandQueue.Dx12Device.NativeDevice->CreateCommandList(0, Dx12Utility.ConvertToDx12QueueType(commandQueue.PipelineType), m_NativeCommandAllocator, null, __uuidof<ID3D12GraphicsCommandList5>(), (void**)&commandList);
+            ID3D12GraphicsCommandList7* commandList;
+            hResult = commandQueue.Dx12Device.NativeDevice->CreateCommandList(0, Dx12Utility.ConvertToDx12QueueType(commandQueue.PipelineType), m_NativeCommandAllocator, null, __uuidof<ID3D12GraphicsCommandList7>(), (void**)&commandList);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif

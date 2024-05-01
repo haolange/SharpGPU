@@ -13,6 +13,7 @@ namespace Infinity.Graphics
         public bool IsFlipProjection;
         public bool IsRenderPassSupported;
         public bool IsRaytracingSupported;
+        public bool IsMeshShadingSupported;
         public bool IsRaytracingInlineSupported;
         public bool IsShaderBarycentricCoordSupported;
         public bool IsProgrammableSamplePositionSupported;

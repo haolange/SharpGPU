@@ -845,22 +845,22 @@ namespace Infinity.Graphics
             Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
 #endif
 
-            /*for (int i = 0; i < dx12BindTable.NativeGpuDescriptorHandles.Length; ++i)
+            for (int i = 0; i < dx12BindTable.NativeGpuDescriptorHandles.Length; ++i)
             {
                 Dx12PipelineLayout dx12PipelineLayout = dx12CommandBuffer.PipelineLayout as Dx12PipelineLayout;
 
                 Dx12BindTypeAndParameterSlot? parameter = null;
                 ref Dx12BindInfo bindInfo = ref dx12BindTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.Compute, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.RayTracing, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in ray tracing at index {0}.", i));
+                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
 #endif
                     dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
                 }
-            }*/
+            }
         }
 
         public override void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct)
@@ -883,31 +883,39 @@ namespace Infinity.Graphics
         {
             Dx12FunctionTable dx12FunctionTable = functionTable as Dx12FunctionTable;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
 
-            D3D12_DISPATCH_RAYS_DESC dispatchRayDescriptor;
-            dispatchRayDescriptor.Depth = depth;
-            dispatchRayDescriptor.Width = width;
-            dispatchRayDescriptor.Height = height;
-            dispatchRayDescriptor.MissShaderTable.SizeInBytes = dx12FunctionTable.MissSize;
-            dispatchRayDescriptor.MissShaderTable.StartAddress = dx12FunctionTable.MissAddress;
-            dispatchRayDescriptor.MissShaderTable.StrideInBytes = dx12FunctionTable.MissStride;
-            dispatchRayDescriptor.HitGroupTable.SizeInBytes = dx12FunctionTable.HitGroupSize;
-            dispatchRayDescriptor.HitGroupTable.StartAddress = dx12FunctionTable.HitGroupAddress;
-            dispatchRayDescriptor.HitGroupTable.StrideInBytes = dx12FunctionTable.HitGroupStride;
-            dispatchRayDescriptor.RayGenerationShaderRecord.SizeInBytes = dx12FunctionTable.RayGenSize;
-            dispatchRayDescriptor.RayGenerationShaderRecord.StartAddress = dx12FunctionTable.RayGenAddress;
-            dispatchRayDescriptor.CallableShaderTable = default;
+            if (dx12Device.DeviceInfo.Feature.IsRaytracingSupported)
+            {
+                D3D12_DISPATCH_RAYS_DESC dispatchRayDescriptor;
+                {
+                    dispatchRayDescriptor.Depth = depth;
+                    dispatchRayDescriptor.Width = width;
+                    dispatchRayDescriptor.Height = height;
+                    dispatchRayDescriptor.MissShaderTable.SizeInBytes = dx12FunctionTable.MissSize;
+                    dispatchRayDescriptor.MissShaderTable.StartAddress = dx12FunctionTable.MissAddress;
+                    dispatchRayDescriptor.MissShaderTable.StrideInBytes = dx12FunctionTable.MissStride;
+                    dispatchRayDescriptor.HitGroupTable.SizeInBytes = dx12FunctionTable.HitGroupSize;
+                    dispatchRayDescriptor.HitGroupTable.StartAddress = dx12FunctionTable.HitGroupAddress;
+                    dispatchRayDescriptor.HitGroupTable.StrideInBytes = dx12FunctionTable.HitGroupStride;
+                    dispatchRayDescriptor.RayGenerationShaderRecord.SizeInBytes = dx12FunctionTable.RayGenSize;
+                    dispatchRayDescriptor.RayGenerationShaderRecord.StartAddress = dx12FunctionTable.RayGenAddress;
+                    dispatchRayDescriptor.CallableShaderTable = default;
+                }
 
-            dx12CommandBuffer.NativeCommandList->DispatchRays(&dispatchRayDescriptor);
+                dx12CommandBuffer.NativeCommandList->DispatchRays(&dispatchRayDescriptor);
+            }
         }
 
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable)
         {
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchRayIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
-            throw new NotImplementedException();
+            if (dx12Device.DeviceInfo.Feature.IsRaytracingSupported)
+            {
+                Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+                dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchRayIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
+            }
         }
 
         public override void EndPass()
@@ -1460,17 +1468,28 @@ namespace Infinity.Graphics
 
         public override void DrawMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
-            throw new NotImplementedException();
+            Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
+            if(dx12Device.DeviceInfo.Feature.IsMeshShadingSupported)
+            {
+                Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+                dx12CommandBuffer.NativeCommandList->DispatchMesh(groupCountX, groupCountY, groupCountZ);
+            }
         }
 
         public override void DrawMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
-            throw new NotImplementedException();
+            Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
+            Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
+            if (dx12Device.DeviceInfo.Feature.IsMeshShadingSupported)
+            {
+                Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+                dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchMeshIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
+            }
         }
 
         public override void ExecuteCommandsInBuffer(RHIIndirectCommandBuffer indirectCommandBuffer)
         {
-            throw new NotImplementedException();
+            throw new NotImplementedException("IndirectCommandBuffer is not yet supported");
         }
 
         public override void EndPass()

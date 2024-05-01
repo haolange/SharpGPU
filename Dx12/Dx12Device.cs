@@ -61,7 +61,7 @@ namespace Infinity.Graphics
                 return m_DXGIAdapter;
             }
         }
-        public ID3D12Device8* NativeDevice
+        public ID3D12Device10* NativeDevice
         {
             get
             {
@@ -89,6 +89,13 @@ namespace Infinity.Graphics
                 return m_DispatchRayIndirectSignature;
             }
         }
+        public ID3D12CommandSignature* DispatchMeshIndirectSignature
+        {
+            get
+            {
+                return m_DispatchMeshIndirectSignature;
+            }
+        }
         public ID3D12CommandSignature* DispatchComputeIndirectSignature
         {
             get
@@ -103,10 +110,11 @@ namespace Infinity.Graphics
         private Dx12DescriptorHeap m_SamplerHeap;
         private Dx12DescriptorHeap m_CbvSrvUavHeap;
         private IDXGIAdapter1* m_DXGIAdapter;
-        private ID3D12Device8* m_NativeDevice;
+        private ID3D12Device10* m_NativeDevice;
         private ID3D12CommandSignature* m_DrawIndirectSignature;
         private ID3D12CommandSignature* m_DrawIndexedIndirectSignature;
         private ID3D12CommandSignature* m_DispatchRayIndirectSignature;
+        private ID3D12CommandSignature* m_DispatchMeshIndirectSignature;
         private ID3D12CommandSignature* m_DispatchComputeIndirectSignature;
 
         public Dx12Device(Dx12Instance instance, in IDXGIAdapter1* adapter) 
@@ -289,15 +297,15 @@ namespace Infinity.Graphics
 
         private void CreateDevice()
         {
-            ID3D12Device8* device;
-            HRESULT hResult = DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_2, __uuidof<ID3D12Device8>(), (void**)&device);
+            ID3D12Device10* device;
+            HRESULT hResult = DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_2, __uuidof<ID3D12Device10>(), (void**)&device);
             if (FAILED(hResult))
             {
-                hResult = DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1, __uuidof<ID3D12Device8>(), (void**)&device);
+                hResult = DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1, __uuidof<ID3D12Device10>(), (void**)&device);
 
                 if (FAILED(hResult))
                 {
-                    hResult = DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_0, __uuidof<ID3D12Device8>(), (void**)&device);
+                    hResult = DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_0, __uuidof<ID3D12Device10>(), (void**)&device);
                 }
             }
 #if DEBUG
@@ -330,7 +338,12 @@ namespace Infinity.Graphics
 
             // check feature options
             D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS6 options6;
+            D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7;
+
             m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS5, &options5, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS6, &options6, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS6));
+            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS7, &options7, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS7));
 
             // check raytracing level
             switch (options5.RaytracingTier)
@@ -364,6 +377,18 @@ namespace Infinity.Graphics
 
                 case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_2:
                     ((Dx12DeviceFeature)m_DeviceInfo.Feature).IsRenderPassSupported = true;
+                    break;
+            }
+
+            // check mesh shading level
+            switch (options7.MeshShaderTier)
+            {
+                case D3D12_MESH_SHADER_TIER.D3D12_MESH_SHADER_TIER_1:
+                    m_DeviceInfo.Feature.IsMeshShadingSupported = true;
+                    break;
+
+                case D3D12_MESH_SHADER_TIER.D3D12_MESH_SHADER_TIER_NOT_SUPPORTED:
+                    m_DeviceInfo.Feature.IsMeshShadingSupported = false;
                     break;
             }
         }
@@ -414,6 +439,20 @@ namespace Infinity.Graphics
             Dx12Utility.CHECK_HR(hResult);
 #endif
             m_DispatchComputeIndirectSignature = commandSignature;
+
+            if (m_DeviceInfo.Feature.IsMeshShadingSupported)
+            {
+                indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH;
+                //commandSignatureDesc.NodeMask = nodeMask;
+                commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
+                commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DISPATCH_MESH_ARGUMENTS);
+                commandSignatureDesc.NumArgumentDescs = 1;
+                hResult = m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature);
+#if DEBUG
+                Dx12Utility.CHECK_HR(hResult);
+#endif
+                m_DispatchMeshIndirectSignature = commandSignature;
+            }
 
             if (m_DeviceInfo.Feature.IsRaytracingSupported)
             {
