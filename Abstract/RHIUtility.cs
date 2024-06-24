@@ -348,6 +348,16 @@
         Pending
     }
 
+    public enum EResolveMode : byte
+    {
+        None = 0,
+        Min = 1,
+        Max = 2,
+        Sample0 = 3,
+        Average = 4,
+        Pending
+    }
+
     public enum ERHIBlendOp : byte
     {
         Add = 1,

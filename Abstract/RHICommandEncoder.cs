@@ -113,6 +113,7 @@ namespace Infinity.Graphics
         public RHITexture RenderTarget;
         public uint ResolveLevel;
         public uint ResolveSlice;
+        public EResolveMode ResolveMode;
         public RHITexture ResolveTarget;
     }
 
