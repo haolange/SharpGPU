@@ -14,7 +14,7 @@ namespace Infinity.Graphics
         internal bool IsBindless => Count > 1;
     }
 
-    internal unsafe class Dx12BindTableLayout : RHIBindTableLayout
+    internal unsafe class Dx12ResourceTableLayout : RHIResourceTableLayout
     {
         public uint Index
         {
@@ -34,15 +34,15 @@ namespace Infinity.Graphics
         private uint m_Index;
         private Dx12BindInfo[] m_BindInfos;
 
-        public Dx12BindTableLayout(in RHIBindTableLayoutDescriptor descriptor)
+        public Dx12ResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor)
         {
             m_Index = descriptor.Index;
             m_BindInfos = new Dx12BindInfo[descriptor.Elements.Length];
 
-            Span<RHIBindTableLayoutElement> elements = descriptor.Elements.Span;
+            Span<RHIResourceTableLayoutElement> elements = descriptor.Elements.Span;
             for (int i = 0; i < descriptor.Elements.Length; ++i)
             {
-                ref RHIBindTableLayoutElement element = ref elements[i];
+                ref RHIResourceTableLayoutElement element = ref elements[i];
                 ref Dx12BindInfo bindInfo = ref m_BindInfos[i];
                 bindInfo.Index = descriptor.Index;
                 bindInfo.Slot = element.Slot;

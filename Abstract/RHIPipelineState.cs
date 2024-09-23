@@ -103,7 +103,7 @@ namespace Infinity.Graphics
         public RHIDepthStencilStateDescriptor DepthStencilState;
     }
 
-    public struct RHIComputePipelineStateDescriptor
+    public struct RHIComputePipelineDescriptor
     {
         public uint3 ThreadSize;
         public RHIFunction ComputeFunction;
@@ -127,7 +127,7 @@ namespace Infinity.Graphics
         internal RHIPipelineLayout PipelineLayout;
     }
 
-    public struct RHIRaytracingPipelineStateDescriptor
+    public struct RHIRaytracingPipelineDescriptor
     {
         public uint MaxPayloadSize;
         public uint MaxAttributeSize;
@@ -172,7 +172,7 @@ namespace Infinity.Graphics
         public RHIMeshletAssemblerDescriptor? MeshletAssembler;
     }
 
-    public struct RHIRasterPipelineStateDescriptor
+    public struct RHIRasterPipelineDescriptor
     {
         public ERHISampleCount SampleCount;
         public ERHIPixelFormat DepthFormat;
@@ -183,48 +183,48 @@ namespace Infinity.Graphics
         public RHIPrimitiveAssemblerDescriptor PrimitiveAssembler;
     }
 
-    public struct RHIPipelineStateLibraryResult
+    public struct RHIPipelineLibraryResult
     {
         public uint ByteSize;
         public IntPtr ByteCode;
     }
 
-    public abstract class RHIComputePipelineState : Disposal
+    public abstract class RHIComputePipeline : Disposal
     {
-        public RHIComputePipelineStateDescriptor Descriptor => m_Descriptor;
+        public RHIComputePipelineDescriptor Descriptor => m_Descriptor;
 
 
-        protected RHIComputePipelineStateDescriptor m_Descriptor;
+        protected RHIComputePipelineDescriptor m_Descriptor;
     }
 
-    public abstract class RHIRaytracingPipelineState : Disposal
+    public abstract class RHIRaytracingPipeline : Disposal
     {
-        public RHIRaytracingPipelineStateDescriptor Descriptor => m_Descriptor;
+        public RHIRaytracingPipelineDescriptor Descriptor => m_Descriptor;
 
 
-        protected RHIRaytracingPipelineStateDescriptor m_Descriptor;
+        protected RHIRaytracingPipelineDescriptor m_Descriptor;
     }
 
-    public abstract class RHIRasterPipelineState : Disposal
+    public abstract class RHIRasterPipeline : Disposal
     { 
-        public RHIRasterPipelineStateDescriptor Descriptor => m_Descriptor;
+        public RHIRasterPipelineDescriptor Descriptor => m_Descriptor;
 
-        protected RHIRasterPipelineStateDescriptor m_Descriptor;
+        protected RHIRasterPipelineDescriptor m_Descriptor;
     }
 
-    public abstract class RHIPipelineStateLibrary : Disposal
+    public abstract class RHIPipelineLibrary : Disposal
     {
-        public RHIPipelineStateLibrary(in RHIPipelineStateLibraryResult pipelineStateLibraryResult)
+        public RHIPipelineLibrary(in RHIPipelineLibraryResult pipelineLibraryResult)
         {
 
         }
 
-        public abstract void StoreComputePipelineState(string name, RHIComputePipelineState computePipelineState);
-        public abstract void StoreRaytracingPipelineState(string name, RHIRaytracingPipelineState raytracingPipelineState);
-        public abstract void StoreRasterPipelineState(string name, RHIRasterPipelineState rasterPipelineState);
-        public abstract RHIComputePipelineState LoadComputePipelineState(RHIComputePipelineStateDescriptor computePipelineDescriptor);
-        public abstract RHIRaytracingPipelineState LoadRaytracingPipelineState(RHIRaytracingPipelineStateDescriptor raytracingPipelineDescriptor);
-        public abstract RHIRasterPipelineState LoadRasterPipelineState(RHIRasterPipelineStateDescriptor rasterPipelineDescriptor);
-        public abstract RHIPipelineStateLibraryResult Serialize();
+        public abstract void StoreComputePipeline(string name, RHIComputePipeline computePipeline);
+        public abstract void StoreRaytracingPipeline(string name, RHIRaytracingPipeline raytracingPipeline);
+        public abstract void StoreRasterPipeline(string name, RHIRasterPipeline rasterPipeline);
+        public abstract RHIComputePipeline LoadComputePipeline(RHIComputePipelineDescriptor computePipelineDescriptor);
+        public abstract RHIRaytracingPipeline LoadRaytracingPipeline(RHIRaytracingPipelineDescriptor raytracingPipelineDescriptor);
+        public abstract RHIRasterPipeline LoadRasterPipeline(RHIRasterPipelineDescriptor rasterPipelineDescriptor);
+        public abstract RHIPipelineLibraryResult Serialize();
     }
 }

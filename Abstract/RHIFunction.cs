@@ -50,14 +50,14 @@ namespace Infinity.Graphics
 
     public abstract class RHIFunctionTable : Disposal
     {
-        public abstract void SetRayGenerationProgram(string exportName, RHIBindTable[]? bindTables = null);
-        public abstract int AddMissProgram(string exportName, RHIBindTable[]? bindTables = null);
-        public abstract int AddHitGroupProgram(string exportName, RHIBindTable[]? bindTables = null);
-        public abstract void SetMissProgram(in int index, string exportName, RHIBindTable[]? bindTables = null);
-        public abstract void SetHitGroupProgram(in int index, string exportName, RHIBindTable[]? bindTables = null);
+        public abstract void SetRayGenerationProgram(string exportName, RHIResourceTable[]? resourceTables = null);
+        public abstract int AddMissProgram(string exportName, RHIResourceTable[]? resourceTables = null);
+        public abstract int AddHitGroupProgram(string exportName, RHIResourceTable[]? resourceTables = null);
+        public abstract void SetMissProgram(in int index, string exportName, RHIResourceTable[]? resourceTables = null);
+        public abstract void SetHitGroupProgram(in int index, string exportName, RHIResourceTable[]? resourceTables = null);
         public abstract void ClearMissPrograms();
         public abstract void ClearHitGroupPrograms();
-        public abstract void Generate(RHIRaytracingPipelineState pipelineState);
-        public abstract void Update(RHIRaytracingPipelineState pipelineState);
+        public abstract void Generate(RHIRaytracingPipeline pipeline);
+        public abstract void Update(RHIRaytracingPipeline pipeline);
     }
 }

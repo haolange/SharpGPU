@@ -6,6 +6,7 @@ using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using Viewport = Infinity.Mathmatics.Viewport;
+using Silk.NET.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -519,48 +520,41 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
 
-        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        public override void SetPipeline(RHIComputePipeline pipeline)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            m_CachedPipeline = pipeline;
 
-            dx12CommandBuffer.PipelineLayout = pipelineLayout;
-            Dx12PipelineLayout dx12PipelineLayout = dx12CommandBuffer.PipelineLayout as Dx12PipelineLayout;
+            Dx12ComputePipeline dx12Pipeline = pipeline as Dx12ComputePipeline;
+            Dx12PipelineLayout dx12PipelineLayout = pipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
+
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12Pipeline.NativePipelineState);
             dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
 
-        public override void SetPipelineState(RHIComputePipelineState pipelineState)
+        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-            m_PipelineState = pipelineState;
-            Dx12ComputePipelineState dx12PipelineState = pipelineState as Dx12ComputePipelineState;
-            dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12PipelineState.NativePipelineState);
-        }
-
-        public override void SetBindTable(RHIBindTable bindTable, in uint tableIndex)
-        {
-            Dx12BindTable dx12BindTable = bindTable as Dx12BindTable;
-            Dx12BindTableLayout dx12BindTableLayout = dx12BindTable.BindTableLayout;
+            Dx12ResourceTable dx12ResourceTable = resourceTable as Dx12ResourceTable;
+            Dx12ResourceTableLayout dx12ResourceTableLayout = dx12ResourceTable.ResourceTableLayout;
+            Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
 #if DEBUG
-            Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
+            Debug.Assert(tableIndex == dx12ResourceTableLayout.Index, "error resourceTable index");
 #endif
 
-            for (int i = 0; i < dx12BindTable.NativeGpuDescriptorHandles.Length; ++i)
+            for (int i = 0; i < dx12ResourceTable.NativeGpuDescriptorHandles.Length; ++i)
             {
-                Dx12PipelineLayout dx12PipelineLayout = dx12CommandBuffer.PipelineLayout as Dx12PipelineLayout;
-
                 Dx12BindTypeAndParameterSlot? parameter = null;
-                ref Dx12BindInfo bindInfo = ref dx12BindTableLayout.BindInfos[i];
+                ref Dx12BindInfo bindInfo = ref dx12ResourceTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.Compute, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.Compute, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type);
 #endif
-                    dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
+                    dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
                 }
             }
         }
@@ -584,8 +578,7 @@ namespace Infinity.Graphics
 #if DEBUG
             PopDebugGroup();
 #endif
-            m_PipelineState = null;
-            m_CommandBuffer.PipelineLayout = null;
+            m_CachedPipeline = null;
         }
 
         protected override void Release()
@@ -817,48 +810,41 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
 
-        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        public override void SetPipeline(RHIRaytracingPipeline pipeline)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            m_CachedPipeline = pipeline;
 
-            dx12CommandBuffer.PipelineLayout = pipelineLayout;
-            Dx12PipelineLayout dx12PipelineLayout = dx12CommandBuffer.PipelineLayout as Dx12PipelineLayout;
+            Dx12RaytracingPipeline dx12Pipeline = pipeline as Dx12RaytracingPipeline;
+            Dx12PipelineLayout dx12PipelineLayout = pipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
+
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->SetPipelineState1(dx12Pipeline.NativePipeline);
             dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
 
-        public override void SetPipelineState(RHIRaytracingPipelineState pipelineState)
+        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-            m_PipelineState = pipelineState;
-            Dx12RaytracingPipelineState dx12PipelineState = pipelineState as Dx12RaytracingPipelineState;
-            dx12CommandBuffer.NativeCommandList->SetPipelineState1(dx12PipelineState.NativePipelineState);
-        }
-
-        public override void SetBindTable(RHIBindTable bindTable, in uint tableIndex)
-        {
-            Dx12BindTable dx12BindTable = bindTable as Dx12BindTable;
-            Dx12BindTableLayout dx12BindTableLayout = dx12BindTable.BindTableLayout;
+            Dx12ResourceTable dx12ResourceTable = resourceTable as Dx12ResourceTable;
+            Dx12ResourceTableLayout dx12ResourceTableLayout = dx12ResourceTable.ResourceTableLayout;
+            Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
 #if DEBUG
-            Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
+            Debug.Assert(tableIndex == dx12ResourceTableLayout.Index, "error resourceTable index");
 #endif
 
-            for (int i = 0; i < dx12BindTable.NativeGpuDescriptorHandles.Length; ++i)
+            for (int i = 0; i < dx12ResourceTable.NativeGpuDescriptorHandles.Length; ++i)
             {
-                Dx12PipelineLayout dx12PipelineLayout = dx12CommandBuffer.PipelineLayout as Dx12PipelineLayout;
-
                 Dx12BindTypeAndParameterSlot? parameter = null;
-                ref Dx12BindInfo bindInfo = ref dx12BindTableLayout.BindInfos[i];
+                ref Dx12BindInfo bindInfo = ref dx12ResourceTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.RayTracing, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.RayTracing, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type);
 #endif
-                    dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
+                    dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
                 }
             }
         }
@@ -923,8 +909,7 @@ namespace Infinity.Graphics
 #if DEBUG
             PopDebugGroup();
 #endif
-            m_PipelineState = null;
-            m_CommandBuffer.PipelineLayout = null;
+            m_CachedPipeline = null;
         }
 
         protected override void Release()
@@ -1337,67 +1322,60 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->OMSetBlendFactor((float*)&tempValue);
         }
 
-        public override void SetPipelineLayout(RHIPipelineLayout pipelineLayout)
+        public override void SetPipeline(RHIRasterPipeline pipeline)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            m_CachedPipeline = pipeline;
 
-            dx12CommandBuffer.PipelineLayout = pipelineLayout;
-            Dx12PipelineLayout dx12PipelineLayout = dx12CommandBuffer.PipelineLayout as Dx12PipelineLayout;
+            Dx12RasterPipeline dx12Pipeline = pipeline as Dx12RasterPipeline;
+            Dx12PipelineLayout dx12PipelineLayout = pipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
+
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12Pipeline.NativePipelineState);
+            dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12Pipeline.PrimitiveTopology);
             dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
 
-        public override void SetPipelineState(RHIRasterPipelineState pipelineState)
+        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-            m_PipelineState = pipelineState;
-            Dx12RasterPipelineState dx12PipelineState = pipelineState as Dx12RasterPipelineState;
-            dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12PipelineState.NativePipelineState);
-            dx12CommandBuffer.NativeCommandList->IASetPrimitiveTopology(dx12PipelineState.PrimitiveTopology);
-        }
-
-        public override void SetBindTable(RHIBindTable bindTable, in uint tableIndex)
-        {
-            Dx12BindTable dx12BindTable = bindTable as Dx12BindTable;
-            Dx12BindTableLayout dx12BindTableLayout = dx12BindTable.BindTableLayout;
+            Dx12ResourceTable dx12ResourceTable = resourceTable as Dx12ResourceTable;
+            Dx12ResourceTableLayout dx12ResourceTableLayout = dx12ResourceTable.ResourceTableLayout;
+            Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
 #if DEBUG
-            Debug.Assert(tableIndex == dx12BindTableLayout.Index, "error bindTable index");
+            Debug.Assert(tableIndex == dx12ResourceTableLayout.Index, "error resourceTable index");
 #endif
 
-            for (int i = 0; i < dx12BindTable.NativeGpuDescriptorHandles.Length; ++i)
+            for (int i = 0; i < dx12ResourceTable.NativeGpuDescriptorHandles.Length; ++i)
             {
-                Dx12PipelineLayout dx12PipelineLayout = dx12CommandBuffer.PipelineLayout as Dx12PipelineLayout;
-
                 Dx12BindTypeAndParameterSlot? parameter = null;
-                ref Dx12BindInfo bindInfo = ref dx12BindTableLayout.BindInfos[i];
+                ref Dx12BindInfo bindInfo = ref dx12ResourceTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.All, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.All, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in graphics at index {0}.", i));
 #endif
-                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
+                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
                 }
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.Vertex, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.Vertex, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in vertex at index {0}.", i));
 #endif
-                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
+                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
                 }
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.Fragment, dx12BindTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIPipelineStage.Fragment, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in fragment at index {0}.", i));
 #endif
-                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12BindTable.NativeGpuDescriptorHandles[i]);
+                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
                 }
             }
         }
@@ -1418,12 +1396,12 @@ namespace Infinity.Graphics
         public override void SetVertexBuffer(RHIBuffer buffer, in uint slot = 0, in uint offset = 0)
         {
             Dx12Buffer dx12Buffer = buffer as Dx12Buffer;
-            Dx12RasterPipelineState dx12PipelineState = m_PipelineState as Dx12RasterPipelineState;
+            Dx12RasterPipeline dx12Pipeline = m_CachedPipeline as Dx12RasterPipeline;
 
             D3D12_VERTEX_BUFFER_VIEW vertexBufferView = new D3D12_VERTEX_BUFFER_VIEW
             {
                 SizeInBytes = (uint)buffer.Descriptor.ByteSize - offset,
-                StrideInBytes = dx12PipelineState.VertexStrides[slot],
+                StrideInBytes = dx12Pipeline.VertexStrides[slot],
                 BufferLocation = dx12Buffer.NativeResource->GetGPUVirtualAddress() + offset
             };
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1497,8 +1475,7 @@ namespace Infinity.Graphics
 #if DEBUG
             PopDebugGroup();
 #endif
-            m_PipelineState = null;
-            m_CommandBuffer.PipelineLayout = null;
+            m_CachedPipeline = null;
 
             Dx12Device device = (m_CommandBuffer.CommandQueue as Dx12CommandQueue).Dx12Device;
 

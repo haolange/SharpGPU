@@ -97,12 +97,12 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHIBindTableLayout CreateBindTableLayout(in RHIBindTableLayoutDescriptor descriptor)
+        public override RHIResourceTableLayout CreateResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
 
-        public override RHIBindTable CreateBindTable(in RHIBindTableDescriptor descriptor)
+        public override RHIResourceTable CreateResourceTable(in RHIResourceTableDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
@@ -112,17 +112,17 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHIRasterPipelineState CreateRasterPipelineState(in RHIRasterPipelineStateDescriptor descriptor)
+        public override RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
 
-        public override RHIComputePipelineState CreateComputePipelineState(in RHIComputePipelineStateDescriptor descriptor)
+        public override RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
 
-        public override RHIRaytracingPipelineState CreateRaytracingPipelineState(in RHIRaytracingPipelineStateDescriptor descriptor)
+        public override RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor)
         {
             throw new NotImplementedException();
         }

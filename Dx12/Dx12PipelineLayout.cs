@@ -46,10 +46,10 @@ namespace Infinity.Graphics
             m_FragmentParameterMap = new Dictionary<int, Dx12BindTypeAndParameterSlot>(5);
             m_ComputeParameterMap = new Dictionary<int, Dx12BindTypeAndParameterSlot>(5);
 
-            for (int i = 0; i < descriptor.BindTableLayouts.Length; ++i)
+            for (int i = 0; i < descriptor.ResourceTableLayouts.Length; ++i)
             {
-                Dx12BindTableLayout bindTableLayout = descriptor.BindTableLayouts[i] as Dx12BindTableLayout;
-                m_ParameterCount += bindTableLayout.BindInfos.Length;
+                Dx12ResourceTableLayout resourceTableLayout = descriptor.ResourceTableLayouts[i] as Dx12ResourceTableLayout;
+                m_ParameterCount += resourceTableLayout.BindInfos.Length;
             }
 
             D3D12_DESCRIPTOR_RANGE1* rootDescriptorRangePtr = stackalloc D3D12_DESCRIPTOR_RANGE1[m_ParameterCount];
@@ -58,13 +58,13 @@ namespace Infinity.Graphics
             D3D12_ROOT_PARAMETER1* rootParameterPtr = stackalloc D3D12_ROOT_PARAMETER1[m_ParameterCount];
             Span<D3D12_ROOT_PARAMETER1> rootParameterViews = new Span<D3D12_ROOT_PARAMETER1>(rootParameterPtr, m_ParameterCount);
 
-            for (int i = 0; i < descriptor.BindTableLayouts.Length; ++i)
+            for (int i = 0; i < descriptor.ResourceTableLayouts.Length; ++i)
             {
-                Dx12BindTableLayout bindTableLayout = descriptor.BindTableLayouts[i] as Dx12BindTableLayout;
+                Dx12ResourceTableLayout resourceTableLayout = descriptor.ResourceTableLayouts[i] as Dx12ResourceTableLayout;
 
-                for (int j = 0; j < bindTableLayout.BindInfos.Length; ++j)
+                for (int j = 0; j < resourceTableLayout.BindInfos.Length; ++j)
                 {
-                    ref Dx12BindInfo bindInfo = ref bindTableLayout.BindInfos[j];
+                    ref Dx12BindInfo bindInfo = ref resourceTableLayout.BindInfos[j];
 
                     ref D3D12_DESCRIPTOR_RANGE1 rootDescriptorRange = ref rootDescriptorRangeViews[i + j];
                     rootDescriptorRange.Init(Dx12Utility.ConvertToDx12BindType(bindInfo.Type), bindInfo.IsBindless ? bindInfo.Count : 1, bindInfo.Slot, bindInfo.Index, Dx12Utility.GetDx12DescriptorRangeFalag(bindInfo.Type));

@@ -130,7 +130,6 @@ namespace Infinity.Graphics
         internal RHIQuery? OcclusionQueryHeap;
         internal RHIQuery? TimestampQueryHeap;
         internal RHIQuery? StatisticsQueryHeap;
-        internal RHIPipelineLayout? PipelineLayout;
 
         protected RHICommandQueue m_CommandQueue;
 

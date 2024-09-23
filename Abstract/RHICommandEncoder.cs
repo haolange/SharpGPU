@@ -171,7 +171,7 @@ namespace Infinity.Graphics
     public abstract class RHIComputeEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;
-        protected RHIComputePipelineState? m_PipelineState;
+        protected RHIComputePipeline? m_CachedPipeline;
 
         internal abstract void BeginPass(in RHIComputePassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
@@ -181,9 +181,8 @@ namespace Infinity.Graphics
         public abstract void EndStatistics(in uint index);
         public abstract void ResourceBarrier(in RHIBarrier barrier);
         public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
-        public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipelineState(RHIComputePipelineState pipelineState);
-        public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
+        public abstract void SetPipeline(RHIComputePipeline pipeline);
+        public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
         // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
@@ -193,7 +192,7 @@ namespace Infinity.Graphics
     public abstract class RHIRaytracingEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;
-        protected RHIRaytracingPipelineState? m_PipelineState;
+        protected RHIRaytracingPipeline? m_CachedPipeline;
 
         internal abstract void BeginPass(in RHIRayTracingPassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
@@ -203,9 +202,8 @@ namespace Infinity.Graphics
         public abstract void EndStatistics(in uint index);
         public abstract void ResourceBarrier(in RHIBarrier barrier);
         public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
-        public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipelineState(RHIRaytracingPipelineState pipelineState);
-        public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
+        public abstract void SetPipeline(RHIRaytracingPipeline pipeline);
+        public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
         public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct);
         public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct);
         public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
@@ -217,7 +215,7 @@ namespace Infinity.Graphics
     public abstract class RHIRasterEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;
-        protected RHIRasterPipelineState? m_PipelineState;
+        protected RHIRasterPipeline? m_CachedPipeline;
 
         internal abstract void BeginPass(in RHIRasterPassDescriptor descriptor);
         public abstract void PushDebugGroup(string name);
@@ -235,9 +233,8 @@ namespace Infinity.Graphics
         public abstract void SetViewports(in Memory<Viewport> viewports);
         public abstract void SetStencilRef(in uint value);
         public abstract void SetBlendFactor(in float4 value);
-        public abstract void SetPipelineLayout(RHIPipelineLayout pipelineLayout);
-        public abstract void SetPipelineState(RHIRasterPipelineState pipelineState);
-        public abstract void SetBindTable(RHIBindTable bindTable, in uint tableIndex);
+        public abstract void SetPipeline(RHIRasterPipeline pipeline);
+        public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
         public abstract void SetIndexBuffer(RHIBuffer buffer, in uint offset);
         public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset);
         public abstract void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner);

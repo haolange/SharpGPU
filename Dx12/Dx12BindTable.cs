@@ -6,13 +6,13 @@ using TerraFX.Interop.Windows;
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
-    internal unsafe class Dx12BindTable : RHIBindTable
+    internal unsafe class Dx12ResourceTable : RHIResourceTable
     {
-        public Dx12BindTableLayout BindTableLayout
+        public Dx12ResourceTableLayout ResourceTableLayout
         {
             get
             {
-                return m_BindTableLayout;
+                return m_ResourceTableLayout;
             }
         }
         public D3D12_GPU_DESCRIPTOR_HANDLE[] NativeGpuDescriptorHandles
@@ -23,22 +23,22 @@ namespace Infinity.Graphics
             }
         }
 
-        private Dx12BindTableLayout m_BindTableLayout;
+        private Dx12ResourceTableLayout m_ResourceTableLayout;
         private D3D12_GPU_DESCRIPTOR_HANDLE[] m_NativeGpuDescriptorHandles;
 
-        public Dx12BindTable(in RHIBindTableDescriptor descriptor)
+        public Dx12ResourceTable(in RHIResourceTableDescriptor descriptor)
         {
-            Dx12BindTableLayout bindTableLayout = descriptor.Layout as Dx12BindTableLayout;
+            Dx12ResourceTableLayout resourceTableLayout = descriptor.Layout as Dx12ResourceTableLayout;
 #if DEBUG
-            Debug.Assert(bindTableLayout != null, "BindTableLayout is null in descriptor");
+            Debug.Assert(resourceTableLayout != null, "ResourceTableLayout is null in descriptor");
 #endif
-            m_BindTableLayout = bindTableLayout;
+            m_ResourceTableLayout = resourceTableLayout;
             m_NativeGpuDescriptorHandles = new D3D12_GPU_DESCRIPTOR_HANDLE[descriptor.Elements.Length];
 
             for (int i = 0; i < descriptor.Elements.Length; ++i)
             {
-                ref Dx12BindInfo bindInfo = ref bindTableLayout.BindInfos[i];
-                ref RHIBindTableElement element = ref descriptor.Elements.Span[i];
+                ref Dx12BindInfo bindInfo = ref resourceTableLayout.BindInfos[i];
+                ref RHIResourceTableElement element = ref descriptor.Elements.Span[i];
 
                 ref D3D12_GPU_DESCRIPTOR_HANDLE nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[i];
                 switch (bindInfo.Type)
@@ -80,7 +80,7 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void SetBindElement(in RHIBindTableElement element, in ERHIBindType bindType, in int slot)
+        public override void SetBindElement(in RHIResourceTableElement element, in ERHIBindType bindType, in int slot)
         {
             ref D3D12_GPU_DESCRIPTOR_HANDLE nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[slot];
             switch (bindType)

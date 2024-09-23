@@ -202,14 +202,14 @@ namespace Infinity.Graphics
             return new Dx12SwapChain(this, descriptor);
         }
 
-        public override RHIBindTableLayout CreateBindTableLayout(in RHIBindTableLayoutDescriptor descriptor)
+        public override RHIResourceTableLayout CreateResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor)
         {
-            return new Dx12BindTableLayout(descriptor);
+            return new Dx12ResourceTableLayout(descriptor);
         }
 
-        public override RHIBindTable CreateBindTable(in RHIBindTableDescriptor descriptor)
+        public override RHIResourceTable CreateResourceTable(in RHIResourceTableDescriptor descriptor)
         {
-            return new Dx12BindTable(descriptor);
+            return new Dx12ResourceTable(descriptor);
         }
 
         public override RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor)
@@ -217,19 +217,19 @@ namespace Infinity.Graphics
             return new Dx12PipelineLayout(this, descriptor);
         }
 
-        public override RHIRasterPipelineState CreateRasterPipelineState(in RHIRasterPipelineStateDescriptor descriptor)
+        public override RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor)
         {
-            return new Dx12RasterPipelineState(this, descriptor);
+            return new Dx12RasterPipeline(this, descriptor);
         }
 
-        public override RHIComputePipelineState CreateComputePipelineState(in RHIComputePipelineStateDescriptor descriptor)
+        public override RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor)
         {
-            return new Dx12ComputePipelineState(this, descriptor);
+            return new Dx12ComputePipeline(this, descriptor);
         }
 
-        public override RHIRaytracingPipelineState CreateRaytracingPipelineState(in RHIRaytracingPipelineStateDescriptor descriptor)
+        public override RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor)
         {
-            return new Dx12RaytracingPipelineState(this, descriptor);
+            return new Dx12RaytracingPipeline(this, descriptor);
         }
 
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)

@@ -7,7 +7,7 @@ namespace Infinity.Graphics
     {
         public bool bLocalSignature;
         public bool bUseVertexLayout;
-        public RHIBindTableLayout[] BindTableLayouts;
+        public RHIResourceTableLayout[] ResourceTableLayouts;
         //public RHIPipelineConstantLayout[] PipelineConstantLayouts;
         public Memory<RHIStaticSamplerDescriptor>? StaticSamplers;
     };

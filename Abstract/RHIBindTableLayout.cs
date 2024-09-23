@@ -3,7 +3,7 @@ using Infinity.Core;
 
 namespace Infinity.Graphics
 {
-    public struct RHIBindTableLayoutElement
+    public struct RHIResourceTableLayoutElement
     {
         public uint Slot;
         public uint Count;
@@ -11,13 +11,13 @@ namespace Infinity.Graphics
         public ERHIPipelineStage Visible;
     }
     
-    public struct RHIBindTableLayoutDescriptor
+    public struct RHIResourceTableLayoutDescriptor
     {
         public uint Index;
-        public Memory<RHIBindTableLayoutElement> Elements;
+        public Memory<RHIResourceTableLayoutElement> Elements;
     }
 
-    public abstract class RHIBindTableLayout : Disposal
+    public abstract class RHIResourceTableLayout : Disposal
     {
 
     }

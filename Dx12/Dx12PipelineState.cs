@@ -48,7 +48,7 @@ namespace Infinity.Graphics
         public DXGI_FORMAT DSVFormat;
     }
 
-    internal unsafe class Dx12ComputePipelineState : RHIComputePipelineState
+    internal unsafe class Dx12ComputePipeline : RHIComputePipeline
     {
         public ID3D12PipelineState* NativePipelineState
         {
@@ -60,7 +60,7 @@ namespace Infinity.Graphics
 
         private ID3D12PipelineState* m_NativePipelineState;
 
-        public Dx12ComputePipelineState(Dx12Device device, in RHIComputePipelineStateDescriptor descriptor)
+        public Dx12ComputePipeline(Dx12Device device, in RHIComputePipelineDescriptor descriptor)
         {
             m_Descriptor = descriptor;
             Dx12Function computeFunction = descriptor.ComputeFunction as Dx12Function;
@@ -73,8 +73,8 @@ namespace Infinity.Graphics
             description.CS.BytecodeLength = computeFunction.NativeShaderBytecode.BytecodeLength;
             description.CS.pShaderBytecode = computeFunction.NativeShaderBytecode.pShaderBytecode;
 
-            ID3D12PipelineState* pipelineState;
-            HRESULT hResult = device.NativeDevice->CreateComputePipelineState(&description, __uuidof<ID3D12PipelineState>(), (void**)&pipelineState);
+            ID3D12Pipeline* pipeline;
+            HRESULT hResult = device.NativeDevice->CreateComputePipeline(&description, __uuidof<ID3D12Pipeline>(), (void**)&pipeline);
 #else
             D3D12_CUSTOM_COMPUTE_PIPELINE_STATE_DESC description;
             description.RootSignature_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE;
@@ -107,7 +107,7 @@ namespace Infinity.Graphics
         }
     }
 
-    internal unsafe class Dx12RaytracingPipelineState : RHIRaytracingPipelineState
+    internal unsafe class Dx12RaytracingPipeline : RHIRaytracingPipeline
     {
         public uint MaxLocalRootParameters
         {
@@ -116,11 +116,11 @@ namespace Infinity.Graphics
                 return m_MaxLocalRootParameters;
             }
         }
-        public ID3D12StateObject* NativePipelineState
+        public ID3D12StateObject* NativePipeline
         {
             get
             {
-                return m_NativePipelineState;
+                return m_NativePipeline;
             }
         }
         public ID3D12StateObjectProperties* NativeStateObjectProperties
@@ -132,10 +132,10 @@ namespace Infinity.Graphics
         }
 
         private uint m_MaxLocalRootParameters;
-        private ID3D12StateObject* m_NativePipelineState;
+        private ID3D12StateObject* m_NativePipeline;
         private ID3D12StateObjectProperties* m_NativeStateObjectProperties;
 
-        public Dx12RaytracingPipelineState(Dx12Device device, in RHIRaytracingPipelineStateDescriptor descriptor)
+        public Dx12RaytracingPipeline(Dx12Device device, in RHIRaytracingPipelineDescriptor descriptor)
         {
             m_Descriptor = descriptor;
 
@@ -382,36 +382,36 @@ namespace Infinity.Graphics
             globalRootSignature.pDesc = &globalRootSignatureDescriptor;
             #endregion GlobalRootSignature
 
-            #region PipelineState
+            #region Pipeline
             D3D12_STATE_OBJECT_DESC stateObjectDescriptor;
             {
                 stateObjectDescriptor.pSubobjects = stateSubObjects;
                 stateObjectDescriptor.NumSubobjects = (uint)stateSubObjectCount;
                 stateObjectDescriptor.Type = D3D12_STATE_OBJECT_TYPE.D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE;
             }
-            ID3D12StateObject* pipelineState;
-            HRESULT hResult = device.NativeDevice->CreateStateObject(&stateObjectDescriptor, __uuidof<ID3D12StateObject>(), (void**)&pipelineState);
+            ID3D12StateObject* pipeline;
+            HRESULT hResult = device.NativeDevice->CreateStateObject(&stateObjectDescriptor, __uuidof<ID3D12StateObject>(), (void**)&pipeline);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
-            m_NativePipelineState = pipelineState;
+            m_NativePipeline = pipeline;
 
             ID3D12StateObjectProperties* nativeStateObjectProperties;
-            hResult = pipelineState->QueryInterface(__uuidof<ID3D12StateObjectProperties>(), (void**)&nativeStateObjectProperties);
+            hResult = pipeline->QueryInterface(__uuidof<ID3D12StateObjectProperties>(), (void**)&nativeStateObjectProperties);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
             m_NativeStateObjectProperties = nativeStateObjectProperties;
-            #endregion PipelineState
+            #endregion Pipeline
         }
 
         protected override void Release()
         {
-            m_NativePipelineState->Release();
+            m_NativePipeline->Release();
         }
     }
 
-    internal unsafe class Dx12RasterPipelineState : RHIRasterPipelineState
+    internal unsafe class Dx12RasterPipeline : RHIRasterPipeline
     {
         public uint[] VertexStrides
         {
@@ -439,7 +439,7 @@ namespace Infinity.Graphics
         private ID3D12PipelineState* m_NativePipelineState;
         private D3D_PRIMITIVE_TOPOLOGY m_PrimitiveTopology;
 
-        public Dx12RasterPipelineState(Dx12Device device, in RHIRasterPipelineStateDescriptor descriptor)
+        public Dx12RasterPipeline(Dx12Device device, in RHIRasterPipelineDescriptor descriptor)
         {
             m_Descriptor = descriptor;
             m_PrimitiveTopology = Dx12Utility.ConvertToDx12PrimitiveTopology(descriptor.PrimitiveAssembler.PrimitiveTopology);
@@ -588,12 +588,12 @@ namespace Infinity.Graphics
                             nativeGraphicsPipelineDesc.PS.pShaderBytecode = fragmentFunction.NativeShaderBytecode.pShaderBytecode;
                         }
 
-                        ID3D12PipelineState* nativePipelineState;
-                        HRESULT hResult = device.NativeDevice->CreateGraphicsPipelineState(&nativeGraphicsPipelineDesc, __uuidof<ID3D12PipelineState>(), (void**)&nativePipelineState);
+                        ID3D12PipelineState* pipelineState;
+                        HRESULT hResult = device.NativeDevice->CreateGraphicsPipelineState(&nativeGraphicsPipelineDesc, __uuidof<ID3D12PipelineState>(), (void**)&pipelineState);
 #if DEBUG
                         Dx12Utility.CHECK_HR(hResult);
 #endif
-                        m_NativePipelineState = nativePipelineState;
+                        m_NativePipelineState = pipelineState;
                     }
                     break;
             }

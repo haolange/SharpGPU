@@ -60,7 +60,7 @@ namespace Infinity.Graphics
     internal struct Dx12FunctionTableEntry
     {
         public string ShaderIdentifier;
-        public RHIBindTable[]? BindTables;
+        public RHIResourceTable[]? ResourceTables;
     };
 
     internal unsafe class Dx12FunctionTable : RHIFunctionTable
@@ -90,39 +90,39 @@ namespace Infinity.Graphics
             m_HitGroupPrograms = new TArray<Dx12FunctionTableEntry>(8);
         }
 
-        public override void SetRayGenerationProgram(string exportName, RHIBindTable[]? bindTables = null)
+        public override void SetRayGenerationProgram(string exportName, RHIResourceTable[]? resourceTables = null)
         {
-            m_RayGenerationProgram.BindTables = bindTables;
+            m_RayGenerationProgram.ResourceTables = resourceTables;
             m_RayGenerationProgram.ShaderIdentifier = exportName;
         }
 
-        public override int AddMissProgram(string exportName, RHIBindTable[]? bindTables = null)
+        public override int AddMissProgram(string exportName, RHIResourceTable[]? resourceTables = null)
         {
             Dx12FunctionTableEntry missEntry;
-            missEntry.BindTables = bindTables;
+            missEntry.ResourceTables = resourceTables;
             missEntry.ShaderIdentifier = exportName;
             return m_MissPrograms.Add(missEntry);
         }
 
-        public override int AddHitGroupProgram(string exportName, RHIBindTable[]? bindTables = null)
+        public override int AddHitGroupProgram(string exportName, RHIResourceTable[]? resourceTables = null)
         {
             Dx12FunctionTableEntry hitGroupEntry;
-            hitGroupEntry.BindTables = bindTables;
+            hitGroupEntry.ResourceTables = resourceTables;
             hitGroupEntry.ShaderIdentifier = exportName;
             return m_HitGroupPrograms.Add(hitGroupEntry);
         }
 
-        public override void SetMissProgram(in int index, string exportName, RHIBindTable[]? bindTables = null)
+        public override void SetMissProgram(in int index, string exportName, RHIResourceTable[]? resourceTables = null)
         {
             ref Dx12FunctionTableEntry missEntry = ref m_MissPrograms[index];
-            missEntry.BindTables = bindTables;
+            missEntry.ResourceTables = resourceTables;
             missEntry.ShaderIdentifier = exportName;
         }
 
-        public override void SetHitGroupProgram(in int index, string exportName, RHIBindTable[]? bindTables = null)
+        public override void SetHitGroupProgram(in int index, string exportName, RHIResourceTable[]? resourceTables = null)
         {
             ref Dx12FunctionTableEntry hitGroupEntry = ref m_HitGroupPrograms[index];
-            hitGroupEntry.BindTables = bindTables;
+            hitGroupEntry.ResourceTables = resourceTables;
             hitGroupEntry.ShaderIdentifier = exportName;
         }
 
@@ -136,12 +136,12 @@ namespace Infinity.Graphics
             m_HitGroupPrograms.Clear();
         }
 
-        public override void Generate(RHIRaytracingPipelineState pipelineState)
+        public override void Generate(RHIRaytracingPipeline pipeline)
         {
-            Dx12RaytracingPipelineState dx12RaytracingPipelineState = pipelineState as Dx12RaytracingPipelineState;
+            Dx12RaytracingPipeline dx12RaytracingPipeline = pipeline as Dx12RaytracingPipeline;
 
             m_EntryCount = (uint)(1 + m_MissPrograms.length + m_HitGroupPrograms.length);
-            m_EntryStride = (uint)(RHIUtility.AlignTo(0x20, D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES) + (sizeof(ulong) * (int)dx12RaytracingPipelineState.MaxLocalRootParameters));
+            m_EntryStride = (uint)(RHIUtility.AlignTo(0x20, D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES) + (sizeof(ulong) * (int)dx12RaytracingPipeline.MaxLocalRootParameters));
 
             ID3D12Resource* dx12Resource;
             D3D12_RESOURCE_DESC resourceDesc = D3D12_RESOURCE_DESC.Buffer(m_EntryCount * m_EntryStride, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE);
@@ -158,7 +158,7 @@ namespace Infinity.Graphics
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
-            ID3D12StateObjectProperties* objectProperties = dx12RaytracingPipelineState.NativeStateObjectProperties;
+            ID3D12StateObjectProperties* objectProperties = dx12RaytracingPipeline.NativeStateObjectProperties;
 
             // copy ray generation shader identifier
             {
@@ -167,7 +167,7 @@ namespace Infinity.Graphics
                 {
                     void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pRayGenChar);
                     Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, m_EntryStride);
-                    /*if (m_RayGenerationProgram.BindTables != null)
+                    /*if (m_RayGenerationProgram.ResourceTables != null)
                     {
                         // To do local binding...
                     }*/
@@ -184,7 +184,7 @@ namespace Infinity.Graphics
                 {
                     void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pMissChar);
                     Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, m_EntryStride);
-                    /*if (missEntry.BindTables != null)
+                    /*if (missEntry.ResourceTables != null)
                     {
                         // To do local binding...
                     }*/
@@ -201,7 +201,7 @@ namespace Infinity.Graphics
                 {
                     void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pHitGroupChar);
                     Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, m_EntryStride);
-                    /*if (hitGroupEntry.BindTables != null)
+                    /*if (hitGroupEntry.ResourceTables != null)
                     {
                         // To do local binding...
                     }*/
@@ -212,7 +212,7 @@ namespace Infinity.Graphics
             m_NativeResource->Unmap(0, null);
         }
 
-        public override void Update(RHIRaytracingPipelineState pipelineState)
+        public override void Update(RHIRaytracingPipeline pipeline)
         {
             throw new NotImplementedException("To do ...");
         }
