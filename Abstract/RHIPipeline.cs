@@ -4,6 +4,20 @@ using Infinity.Mathmatics;
 
 namespace Infinity.Graphics
 {
+    public struct RHIPipelineLayoutDescriptor
+    {
+        public bool bLocalSignature;
+        public bool bUseVertexLayout;
+        public RHIResourceTableLayout[] ResourceTableLayouts;
+        //public RHIPipelineConstantLayout[] PipelineConstantLayouts;
+        public Memory<RHIStaticSamplerDescriptor>? StaticSamplers;
+    };
+
+    public abstract class RHIPipelineLayout : Disposal
+    {
+
+    }
+
     public struct RHIOutputStateDescriptor
     {
         public uint OutputCount;

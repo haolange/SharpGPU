@@ -26,15 +26,15 @@ namespace Infinity.Graphics
     internal unsafe class Dx12DescriptorHeap : Disposal
     {
         public uint DescriptorSize => m_DescriptorSize;
-        public D3D12_DESCRIPTOR_HEAP_TYPE Type => m_Type;
-        public ID3D12DescriptorHeap* DescriptorHeap => m_DescriptorHeap;
-        public D3D12_CPU_DESCRIPTOR_HANDLE CpuStartHandle => m_DescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-        public D3D12_GPU_DESCRIPTOR_HANDLE GpuStartHandle => m_DescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+        public D3D12_DESCRIPTOR_HEAP_TYPE NativeType => m_NativeType;
+        public ID3D12DescriptorHeap* NativeDescriptorHeap => m_NativeDescriptorHeap;
+        public D3D12_CPU_DESCRIPTOR_HANDLE NativeCpuStartHandle => m_NativeDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+        public D3D12_GPU_DESCRIPTOR_HANDLE NativeGpuStartHandle => m_NativeDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
 
         private uint m_DescriptorSize;
         private TValueArray<int> m_CacheMap;
-        private D3D12_DESCRIPTOR_HEAP_TYPE m_Type;
-        private ID3D12DescriptorHeap* m_DescriptorHeap;
+        private D3D12_DESCRIPTOR_HEAP_TYPE m_NativeType;
+        private ID3D12DescriptorHeap* m_NativeDescriptorHeap;
 
         public Dx12DescriptorHeap(ID3D12Device10* device, in D3D12_DESCRIPTOR_HEAP_TYPE type, in D3D12_DESCRIPTOR_HEAP_FLAGS flag, in uint count)
         {
@@ -44,20 +44,20 @@ namespace Infinity.Graphics
                 m_CacheMap.Add(i);
             }
 
-            m_Type = type;
-            m_DescriptorSize = device->GetDescriptorHandleIncrementSize(type);
+            m_NativeType = type;
+            m_DescriptorSize = device->GetDescriptorHandleIncrementSize(m_NativeType);
 
             D3D12_DESCRIPTOR_HEAP_DESC descriptorInfo;
             descriptorInfo.Type = type;
             descriptorInfo.Flags = flag;
             descriptorInfo.NumDescriptors = count;
 
-            ID3D12DescriptorHeap* descriptorHeap;
-            HRESULT hResult = device->CreateDescriptorHeap(&descriptorInfo, __uuidof<ID3D12DescriptorHeap>(), (void**)&descriptorHeap);
+            ID3D12DescriptorHeap* nativeDescriptorHeap;
+            HRESULT hResult = device->CreateDescriptorHeap(&descriptorInfo, __uuidof<ID3D12DescriptorHeap>(), (void**)&nativeDescriptorHeap);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
-            m_DescriptorHeap = descriptorHeap;
+            m_NativeDescriptorHeap = nativeDescriptorHeap;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -83,7 +83,7 @@ namespace Infinity.Graphics
         protected override void Release()
         {
             m_CacheMap.Dispose();
-            m_DescriptorHeap->Release();
+            m_NativeDescriptorHeap->Release();
         }
     }
 

@@ -76,6 +76,7 @@ namespace Infinity.Graphics
             }
         }
 
+        /*
         public override void ResourceBarrier(in RHIBarrier barrier)
         {
             ID3D12Resource* resource = null;
@@ -240,7 +241,8 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
-
+        */
+       
         public override void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size)
         {
             Dx12Buffer dx12SrcBuffer = srcBuffer as Dx12Buffer;
@@ -355,6 +357,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
+        /*
         public override void ResourceBarrier(in RHIBarrier barrier)
         {
             ID3D12Resource* resource = null;
@@ -519,6 +522,7 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
+        */
 
         public override void SetPipeline(RHIComputePipeline pipeline)
         {
@@ -645,6 +649,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
+        /*
         public override void ResourceBarrier(in RHIBarrier barrier)
         {
             ID3D12Resource* resource = null;
@@ -809,6 +814,7 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
+        */
 
         public override void SetPipeline(RHIRaytracingPipeline pipeline)
         {
@@ -1120,6 +1126,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
+        /*
         public override void ResourceBarrier(in RHIBarrier barrier)
         {
             ID3D12Resource* resource = null;
@@ -1284,6 +1291,7 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
+        */
 
         public override void SetScissor(in Rect rect)
         {

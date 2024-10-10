@@ -194,30 +194,30 @@ rhi::TextureView* rhiTextureSRV = rhiTexture->CreateTextureView(rasterInputViewI
 
 
 ### Creating the Compute bind table
-Create a compute bindTable
+Create a compute resourceTable
 
 ```c++
 #include <rhi/d3d12.h>
 ...
-rhi::RHIBindTableLayoutElement computeBindTableLayoutElements[1];
-computeBindTableLayoutElements[0].Slot = 0;
-computeBindTableLayoutElements[0].Type = ERHIBindType::StorageTexture2D;
-computeBindTableLayoutElements[0].Visible = ERHIPipelineStage::Compute;
+rhi::RHIResourceTableLayoutElement computeResourceTableLayoutElements[1];
+computeResourceTableLayoutElements[0].Slot = 0;
+computeResourceTableLayoutElements[0].Type = ERHIBindType::StorageTexture2D;
+computeResourceTableLayoutElements[0].Visible = ERHIPipelineStage::Compute;
 
-rhi::RHIBindTableLayoutDescriptor computeBindTableLayoutInfo;
-computeBindTableLayoutInfo.Index = 0;
-computeBindTableLayoutInfo.Elements = computeBindTableLayoutElements;
-computeBindTableLayoutInfo.NumElements = 1;
-rhi::RHIBindTableLayout* rhiComputeBindTableLayout = rhiDevice->CreateBindTableLayout(computeBindTableLayoutInfo);
+rhi::RHIResourceTableLayoutDescriptor computeResourceTableLayoutInfo;
+computeResourceTableLayoutInfo.Index = 0;
+computeResourceTableLayoutInfo.Elements = computeResourceTableLayoutElements;
+computeResourceTableLayoutInfo.NumElements = 1;
+rhi::RHIResourceTableLayout* rhiComputeResourceTableLayout = rhiDevice->CreateResourceTableLayout(computeResourceTableLayoutInfo);
 
-rhi::RHIBindTableElement computeBindTableElements[1];
-computeBindTableElements[0].TextureView = rhiTextureUAV;
+rhi::RHIResourceTableElement computeResourceTableElements[1];
+computeResourceTableElements[0].TextureView = rhiTextureUAV;
 
-rhi::RHIBindTableDescriptor computeBindTableInfo;
-computeBindTableInfo.Layout = rhiComputeBindTableLayout;
-computeBindTableInfo.Elements = computeBindTableElements;
-computeBindTableInfo.NumElements = 1;
-rhi::RHIBindTable* rhiComputeBindTable= rhiDevice->CreateBindTable(computeBindTableInfo);
+rhi::RHIResourceTableDescriptor computeResourceTableInfo;
+computeResourceTableInfo.Layout = rhiComputeResourceTableLayout;
+computeResourceTableInfo.Elements = computeResourceTableElements;
+computeResourceTableInfo.NumElements = 1;
+rhi::RHIResourceTable* rhiComputeResourceTable= rhiDevice->CreateResourceTable(computeResourceTableInfo);
 ```
 
 
@@ -240,15 +240,15 @@ computePipelienLayoutInfo.bLocalSignature = false;
 computePipelienLayoutInfo.bUseVertexLayout = false;
 computePipelienLayoutInfo.StaticSamplers = nullptr;
 computePipelienLayoutInfo.NumStaticSamplers = 0;
-computePipelienLayoutInfo.BindTableLayouts = rhiComputeBindTableLayout;
-computePipelienLayoutInfo.NumBindTableLayouts = 1;
+computePipelienLayoutInfo.ResourceTableLayouts = rhiComputeResourceTableLayout;
+computePipelienLayoutInfo.NumResourceTableLayouts = 1;
 rhi::RHIPipelineLayout* rhiComputePipelineLayout = rhiDevice->CreatePipelineLayout(computePipelienLayoutInfo);
 
-rhi::RHIComputePipelineStateDescriptor computePipelineStateInfo;
-computePipelineStateInfo.ThreadSize = uint3(8, 8, 1);
-computePipelineStateInfo.ComputeFunction = rhiComputeFunction;
-computePipelineStateInfo.PipelineLayout = rhiComputePipelineLayout;
-rhi::RHIPipelineState* rhiComputePipelineState = rhiDevice->CreateComputePipelineState(computePipelineStateInfo);
+rhi::RHIComputePipelineDescriptor computePipelineInfo;
+computePipelineInfo.ThreadSize = uint3(8, 8, 1);
+computePipelineInfo.ComputeFunction = rhiComputeFunction;
+computePipelineInfo.PipelineLayout = rhiComputePipelineLayout;
+rhi::RHIPipeline* rhiComputePipeline = rhiDevice->CreateComputePipeline(computePipelineInfo);
 ```
 
 
@@ -329,34 +329,34 @@ rhi::RHIBuffer* rhiVertexBufferGPU = rhiDevice->CreateBuffer(vertexBufferInfo);
 
 
 ### Creating the Raster bind table
-Create a bindTable raster
+Create a resourceTable raster
 
 ```c++
 #include <rhi/d3d12.h>
 ...
-rhi::RHIBindTableLayoutElement rasterBindTableLayoutElements[2];
-rasterBindTableLayoutElements[0].Slot = 0;
-rasterBindTableLayoutElements[0].Type = ERHIBindType::Texture2D;
-rasterBindTableLayoutElements[0].Visible = ERHIPipelineStage::Fragment;
-rasterBindTableLayoutElements[1].Slot = 1;
-rasterBindTableLayoutElements[1].Type = ERHIBindType::Sampler;
-rasterBindTableLayoutElements[1].Visible = ERHIPipelineStage::Fragment;
+rhi::RHIResourceTableLayoutElement rasterResourceTableLayoutElements[2];
+rasterResourceTableLayoutElements[0].Slot = 0;
+rasterResourceTableLayoutElements[0].Type = ERHIBindType::Texture2D;
+rasterResourceTableLayoutElements[0].Visible = ERHIPipelineStage::Fragment;
+rasterResourceTableLayoutElements[1].Slot = 1;
+rasterResourceTableLayoutElements[1].Type = ERHIBindType::Sampler;
+rasterResourceTableLayoutElements[1].Visible = ERHIPipelineStage::Fragment;
 
-rhi::RHIBindTableLayoutDescriptor rasterBindTableLayoutInfo;
-rasterBindTableLayoutInfo.Index = 0;
-rasterBindTableLayoutInfo.Elements = &rasterBindTableLayoutElements;
-rasterBindTableLayoutInfo.NumElements = 2;
-rhi::RHIBindTableLayout* rhiRasterBindTableLayout = rhiDevice->CreateBindTableLayout(rasterBindTableLayoutInfo);
+rhi::RHIResourceTableLayoutDescriptor rasterResourceTableLayoutInfo;
+rasterResourceTableLayoutInfo.Index = 0;
+rasterResourceTableLayoutInfo.Elements = &rasterResourceTableLayoutElements;
+rasterResourceTableLayoutInfo.NumElements = 2;
+rhi::RHIResourceTableLayout* rhiRasterResourceTableLayout = rhiDevice->CreateResourceTableLayout(rasterResourceTableLayoutInfo);
 
-rhi::RHIBindTableElement rasterBindTableElements[2];
-rasterBindTableElements[0].TextureView = rhiTextureSRV;
-rasterBindTableElements[1].Sampler = rhiSampler;
+rhi::RHIResourceTableElement rasterResourceTableElements[2];
+rasterResourceTableElements[0].TextureView = rhiTextureSRV;
+rasterResourceTableElements[1].Sampler = rhiSampler;
 
-rhi::RHIBindTableDescriptor rasterBindTableInfo;
-rasterBindTableInfo.Layout = rhiRasterBindTableLayout;
-rasterBindTableInfo.Elements = &rasterBindTableElements;
-rasterBindTableInfo.NumElements = 2;
-rhi::RHIBindTable* rhiRasterBindTable = rhiDevice->CreateBindTable(rasterBindTableInfo);
+rhi::RHIResourceTableDescriptor rasterResourceTableInfo;
+rasterResourceTableInfo.Layout = rhiRasterResourceTableLayout;
+rasterResourceTableInfo.Elements = &rasterResourceTableElements;
+rasterResourceTableInfo.NumElements = 2;
+rhi::RHIResourceTable* rhiRasterResourceTable = rhiDevice->CreateResourceTable(rasterResourceTableInfo);
 ```
 
 
@@ -453,8 +453,8 @@ rasterPipelienLayoutInfo.bLocalSignature = false;
 rasterPipelienLayoutInfo.bUseVertexLayout = true;
 rasterPipelienLayoutInfo.StaticSamplers = nullptr;
 rasterPipelienLayoutInfo.NumStaticSamplers = 0;
-rasterPipelienLayoutInfo.BindTableLayouts = rhirasterBindTableLayout;
-rasterPipelienLayoutInfo.NumBindTableLayouts = 1;
+rasterPipelienLayoutInfo.ResourceTableLayouts = rhirasterResourceTableLayout;
+rasterPipelienLayoutInfo.NumResourceTableLayouts = 1;
 rhi::RHIPipelineLayout* rhiRasterPipelineLayout = rhiDevice->CreatePipelineLayout(rasterPipelienLayoutInfo);
 
 rhi::RHIFunctionDescriptor vertexFunctionInfo;
@@ -471,16 +471,16 @@ fragmentFunctionInfo.ByteCode = fragmentBlob.Data;
 fragmentFunctionInfo.EntryName = "FSMain";
 rhi::RHIFunction* rhiVertexFunction = rhiDevice->CreateFunction(fragmentFunctionInfo);
 
-rhi::RHIRasterPipelineStateDescriptor rasterPipelineStateInfo;
-rasterPipelineStateInfo.OutputState = outputStateInfo;
-rasterPipelineStateInfo.RenderState = renderStateInfo;
-rasterPipelineStateInfo.VertexLayouts = &vertexLayoutInfos;
-rasterPipelineStateInfo.NumVertexLayouts = vertexLayoutInfos.length;
-rasterPipelineStateInfo.VertexFunction = rhiVertexFunction;
-rasterPipelineStateInfo.FragmentFunction = rhiVertexFunction;
-rasterPipelineStateInfo.PipelineLayout = rhiRasterPipelineLayout;
-rasterPipelineStateInfo.PrimitiveTopology = ERHIPrimitiveTopology::TriangleList;
-rhi::RHIPipeline* rhiRasterPipelineState = rhiDevice->CreateRasterPipelineState(rasterPipelineStateInfo);
+rhi::RHIRasterPipelineDescriptor rasterPipelineInfo;
+rasterPipelineInfo.OutputState = outputStateInfo;
+rasterPipelineInfo.RenderState = renderStateInfo;
+rasterPipelineInfo.VertexLayouts = &vertexLayoutInfos;
+rasterPipelineInfo.NumVertexLayouts = vertexLayoutInfos.length;
+rasterPipelineInfo.VertexFunction = rhiVertexFunction;
+rasterPipelineInfo.FragmentFunction = rhiVertexFunction;
+rasterPipelineInfo.PipelineLayout = rhiRasterPipelineLayout;
+rasterPipelineInfo.PrimitiveTopology = ERHIPrimitiveTopology::TriangleList;
+rhi::RHIPipeline* rhiRasterPipeline = rhiDevice->CreateRasterPipeline(rasterPipelineInfo);
 ```
 
 
@@ -492,22 +492,26 @@ Create commandbuffer and encoder for init
 #include <rhi/d3d12.h>
 ...
 rhi::RHICommandBuffer* rhiCmdBuffer = rhiRasterQueue->CreateCommandBuffer(); //if renderer use async upload it's sould be use TransferQueue to record upload command and use Fence to sync CPU event
+
 rhiCmdBuffer.Begin("FrameInit");
+{
+    rhiCmdBuffer->ResourceBarrier(RHIBarrier::Transition(rhiIndexBufferGPU, ERHITextureState::Undefine, ERHITextureState::CopyDst, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
+    rhiCmdBuffer->ResourceBarrier(RHIBarrier::Transition(rhiVertexBufferGPU, ERHITextureState::Undefine, ERHITextureState::CopyDst, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
 
-rhi::RHITransferPassDescriptor transferPassInfo;
-transferPassInfo.Name = "Upload VertexStream";
-transferPassInfo.Timestamp = nullptr;
+    rhi::RHITransferEncoder* rhiTransferEncoder = rhiCmdBuffer.BeginTransferPass(RHITransferPassDescriptor("Upload VertexStream"));
+    {
+        rhiTransferEncoder->CopyBufferToBuffer(rhiIndexBufferCPU, 0, rhiIndexBufferGPU, 0, indexBufferInfo.ByteSize);
+        rhiTransferEncoder->CopyBufferToBuffer(rhiVertexBufferCPU, 0, rhiVertexBufferGPU, 0, vertexBufferInfo.ByteSize);
+    }
+    rhiTransferEncoder->EndPass();
 
-rhi::RHITransferEncoder* rhiTransferEncoder = rhiCmdBuffer.BeginTransferPass(transferPassInfo);
-rhiTransferEncoder->ResourceBarrier(ERHIPipelineType::Raster, ERHIPipelineType::Raster, RHIBarrier::Transition(rhiIndexBufferGPU, ERHITextureState::Undefine, ERHITextureState::CopyDst));
-rhiTransferEncoder->ResourceBarrier(ERHIPipelineType::Raster, ERHIPipelineType::Raster,RHIBarrier::Transition(rhiVertexBufferGPU, ERHITextureState::Undefine, ERHITextureState::CopyDst));
-rhiTransferEncoder->CopyBufferToBuffer(rhiIndexBufferCPU, 0, rhiIndexBufferGPU, 0, indexBufferInfo.ByteSize);
-rhiTransferEncoder->CopyBufferToBuffer(rhiVertexBufferCPU, 0, rhiVertexBufferGPU, 0, vertexBufferInfo.ByteSize);
-rhiTransferEncoder->ResourceBarrier(ERHIPipelineType::Raster, ERHIPipelineType::Raster,RHIBarrier::Transition(rhiIndexBufferGPU, ERHITextureState::CopyDst, ERHITextureState::IndexBuffer));
-rhiTransferEncoder->ResourceBarrier(ERHIPipelineType::Raster, ERHIPipelineType::Raster,RHIBarrier::Transition(rhiVertexBufferGPU, ERHITextureState::CopyDst, ERHITextureState::VertexBuffer));
-rhiTransferEncoder->EndPass();
+    rhiCmdBuffer->ResourceBarrier(RHIBarrier::Transition(rhiIndexBufferGPU, ERHITextureState::CopyDst, ERHITextureState::IndexBuffer, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
+    rhiCmdBuffer->ResourceBarrier(RHIBarrier::Transition(rhiVertexBufferGPU, ERHITextureState::CopyDst, ERHITextureState::VertexBuffer, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
 
+    rhiCmdBuffer->ResourceBarrier(RHIBarrier::Transition(rhiTexture, ERHITextureState::Undefine, ERHITextureState::UnorderedAccess, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
+}
 rhiCmdBuffer.End("FrameInit");
+
 rhiRasterQueue->Submit(rhiCmdBuffer, 1, rhiFence, nullptr, 0, nullptr, 0); //cmdBuffers, cmdBufferCount, fence, waitSemaphores, waitSemaphoreCount, signalSemaphores, signalSemaphoreCount
 ```
 
@@ -520,69 +524,76 @@ Create commandbuffer and encoder for rendering
 #include <rhi/d3d12.h>
 ...
 rhi::RHICommandBuffer* rhiCmdBuffer = rhiRasterQueue->CreateCommandBuffer();
+
 rhiCmdBuffer.Begin("FrameRendering");
+{
+    // run compute pass
+    rhi::RHIComputeEncoder* rhiComputeEncoder = rhiCmdBuffer->BeginComputePass(RHIComputePassDescriptor("ComputePass"));
+    {
+        rhiComputeEncoder->PushDebugGroup("GenereteIndex");
+        rhiComputeEncoder->SetPipelineLayout(rhiComputePipelineLayout);
+        rhiComputeEncoder->SetPipeline(rhiComputePipeline);
+        rhiComputeEncoder->SetResourceTable(rhiComputeResourceTable, 0);
+        rhiComputeEncoder->Dispatch(math::ceil(screenSize.x / 8), math::ceil(screenSize.y / 8), 1);
+        rhiComputeEncoder->PopDebugGroup();
+    }
+    rhiComputeEncoder->EndPass();
 
-// run compute pass
-rhi::RHIComputePassDescriptor computePassInfo;
-computePassInfo.Name = "ComputePass";
-computePassInfo.Timestamp = nullptr;
-computePassInfo.Statistics = nullptr;
+    //run raster pass
+    rhi::RHIColorAttachmentDescriptor colorAttachmentInfos[1];
+    {
+        colorAttachmentInfos[0].MipLevel = 0;
+        colorAttachmentInfos[0].ArraySlice = 0;
+        colorAttachmentInfos[0].ClearValue = float4(0.5f, 0.5f, 1, 1);
+        colorAttachmentInfos[0].LoadAction = ERHILoadAction::Clear;
+        colorAttachmentInfos[0].StoreAction = ERHIStoreAction::Store;
+        colorAttachmentInfos[0].RenderTarget = rhiSwapChain->AcquireBackBufferTexture();
+        colorAttachmentInfos[0].ResolveTarget = nullptr;
+    }
 
-rhi::RHIComputeEncoder* rhiComputeEncoder = rhiCmdBuffer->BeginComputePass(computePassInfo);
-rhiComputeEncoder->PushDebugGroup("GenereteIndex");
-rhiComputeEncoder->ResourceBarrier(ERHIPipelineType::Raster, ERHIPipelineType::Raster,RHIBarrier::Transition(rhiTexture, ERHITextureState::Undefine, ERHITextureState::UnorderedAccess));
-rhiComputeEncoder->SetPipelineLayout(rhiComputePipelineLayout);
-rhiComputeEncoder->SetPipelineState(rhiComputePipelineState);
-rhiComputeEncoder->SetBindTable(rhiComputeBindTable, 0);
-rhiComputeEncoder->Dispatch(math::ceil(screenSize.x / 8), math::ceil(screenSize.y / 8), 1);
-rhiComputeEncoder->PopDebugGroup();
-rhiComputeEncoder->EndPass();
+    rhi::RHIRasterPassDescriptor rasterPassInfo;
+    {
+        rasterPassInfo.Name = "RasterPassInfo";
+        rasterPassInfo.ArrayLength = 1;
+        rasterPassInfo.SampleCount = 1;
+        rasterPassInfo.MultiViewCount = 0;
+        rasterPassInfo.Occlusion = nullptr;
+        rasterPassInfo.Timestamp = nullptr;
+        rasterPassInfo.Statistics = nullptr;
+        rasterPassInfo.ShadingRateTexture = nullptr;
+        rasterPassInfo.ColorAttachments = colorAttachmentInfos;
+        rasterPassInfo.DepthStencilAttachment = nullptr;
+    }
 
-//run raster pass
-rhi::RHIColorAttachmentDescriptor colorAttachmentInfos[1];
-colorAttachmentInfos[0].MipLevel = 0;
-colorAttachmentInfos[0].ArraySlice = 0;
-colorAttachmentInfos[0].ClearValue = float4(0.5f, 0.5f, 1, 1);
-colorAttachmentInfos[0].LoadAction = ERHILoadAction::Clear;
-colorAttachmentInfos[0].StoreAction = ERHIStoreAction::Store;
-colorAttachmentInfos[0].RenderTarget = rhiSwapChain->AcquireBackBufferTexture();
-colorAttachmentInfos[0].ResolveTarget = nullptr;
+    rhiCmdBuffer->ResourceBarrier(RHIBarrier::Transition(rhiTexture, ERHITextureState::UnorderedAccess, ERHITextureState::ShaderResource, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
+    rhiCmdBuffer->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), ERHITextureState::Present, ERHITextureState::RenderTarget, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
 
-rhi::RHIRasterPassDescriptor rasterPassInfo;
-rasterPassInfo.Name = "RasterPassInfo";
-rasterPassInfo.ArrayLength = 1;
-rasterPassInfo.SampleCount = 1;
-rasterPassInfo.MultiViewCount = 0;
-rasterPassInfo.Occlusion = nullptr;
-rasterPassInfo.Timestamp = nullptr;
-rasterPassInfo.Statistics = nullptr;
-rasterPassInfo.ShadingRateTexture = nullptr;
-rasterPassInfo.ColorAttachments = colorAttachmentInfos;
-rasterPassInfo.DepthStencilAttachment = nullptr;
+    rhi::RHIRasterEncoder* rhiRasterEncoder = rhiCmdBuffer->BeginRasterPass(rasterPassInfo);
+    {
+        rhiRasterEncoder->SetScissor(Rect(0, 0, screenSize.x, screenSize.y));
+        rhiRasterEncoder->SetViewport(Viewport(0, 0, screenSize.x, screenSize.y, 0, 1));
+        rhiRasterEncoder->SetBlendFactor(1);
+        rhiRasterEncoder->PushDebugGroup("DrawTriange");
+        rhiRasterEncoder->SetPipelineLayout(rhiRasterPipelineLayout);
+        rhiRasterEncoder->SetPipeline(rhiRasterPipeline);
+        rhiRasterEncoder->SetResourceTable(rhiRasterResourceTable, 0);
+        rhiRasterEncoder->SetIndexBuffer(rhiIndexBufferGPU, 0, ERHIIndexFormat::UInt16);
+        rhiRasterEncoder->SetVertexBuffer(rhiVertexBufferGPU, 0, 0);
+        rhiRasterEncoder->SetShadingRate(ERHIShadingRate.Rate2x1, ERHIShadingRateCombiner.Passthrough);
+        rhiRasterEncoder->DrawIndexed(3, 1, 0, 0, 0);
+        rhiRasterEncoder->PopDebugGroup();
+    }
+    rhiRasterEncoder->EndPass();
 
-rhi::RHIRasterEncoder* rhiRasterEncoder = rhiCmdBuffer->BeginRasterPass(rasterPassInfo);
-rhiRasterEncoder->SetScissor(Rect(0, 0, screenSize.x, screenSize.y));
-rhiRasterEncoder->SetViewport(Viewport(0, 0, screenSize.x, screenSize.y, 0, 1));
-rhiRasterEncoder->SetBlendFactor(1);
-rhiRasterEncoder->PushDebugGroup("DrawTriange");
-rhiRasterEncoder->ResourceBarrier(ERHIPipelineType::Raster, ERHIPipelineType::Raster,RHIBarrier::Transition(rhiTexture, ERHITextureState::UnorderedAccess, ERHITextureState::ShaderResource));
-rhiRasterEncoder->ResourceBarrier(ERHIPipelineType::Raster, ERHIPipelineType::Raster,RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), ERHITextureState::Present, ERHITextureState::RenderTarget));
-rhiRasterEncoder->SetPipelineLayout(rhiRasterPipelineLayout);
-rhiRasterEncoder->SetPipelineState(rhiRasterPipelineState);
-rhiRasterEncoder->SetBindTable(rhiRasterBindTable, 0);
-rhiRasterEncoder->SetIndexBuffer(rhiIndexBufferGPU, 0, ERHIIndexFormat::UInt16);
-rhiRasterEncoder->SetVertexBuffer(rhiVertexBufferGPU, 0, 0);
-rhiRasterEncoder->SetShadingRate(ERHIShadingRate.Rate2x1, ERHIShadingRateCombiner.Passthrough);
-rhiRasterEncoder->DrawIndexed(3, 1, 0, 0, 0);
-rhiRasterEncoder->ResourceBarrier(ERHIPipelineType::Raster, ERHIPipelineType::Raster,RHIBarrier::Transition(rhiTexture, ERHITextureState::ShaderResource, ERHITextureState::Undefine));
-rhiRasterEncoder->ResourceBarrier(ERHIPipelineType::Raster, ERHIPipelineType::Raster,RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), ERHITextureState::RenderTarget, ERHITextureState::Present));
-rhiRasterEncoder->PopDebugGroup();
-rhiRasterEncoder->EndPass();
-
+    rhiCmdBuffer->ResourceBarrier(RHIBarrier::Transition(rhiTexture, ERHITextureState::ShaderResource, ERHITextureState::UnorderedAccess, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
+    rhiCmdBuffer->ResourceBarrier(RHIBarrier::Transition(rhiSwapChain->AcquireBackBufferTexture(), ERHITextureState::RenderTarget, ERHITextureState::Present, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
+}
 rhiCmdBuffer.End("FrameRendering");
+
 rhiRasterQueue->Submit(rhiCmdBuffer, 1, rhiFence, nullptr, 0, nullptr, 0); //cmdBuffers, cmdBufferCount, fence, waitSemaphores, waitSemaphoreCount, signalSemaphores, signalSemaphoreCount
 
 rhiSwapChain->Present();
+
 rhiFence->Wait();
 ```
 
@@ -603,15 +614,15 @@ rhiTexture->Release();
 rhiTextureSRV->Release();
 rhiTextureUAV->Release();
 rhiComputeFunction->Release();
-rhiComputeBindTable->Release();
-rhiComputeBindTableLayout->Release();
-rhiComputePipelineState->Release();
+rhiComputeResourceTable->Release();
+rhiComputeResourceTableLayout->Release();
+rhiComputePipeline->Release();
 rhiComputePipelineLayout->Release();
 rhiVertexFunction->Release();
 rhiFragmentFunction->Release();
-rhiRasterBindTable->Release();
-rhiRasterBindTableLayout->Release();
-rhiRasterPipelineState->Release();
+rhiRasterResourceTable->Release();
+rhiRasterResourceTableLayout->Release();
+rhiRasterPipeline->Release();
 rhiRasterPipelineLayout->Release();
 rhiCmdBuffer->Release();
 rhiTransferQueue->Release();

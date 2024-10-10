@@ -1,11 +1,65 @@
-﻿using System.Diagnostics;
-using System.Xml.Linq;
+﻿using System;
+using System.Diagnostics;
 using TerraFX.Interop.DirectX;
-using TerraFX.Interop.Windows;
 
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
+    internal struct Dx12BindInfo
+    {
+        public uint Slot;
+        public uint Index;
+        public uint Count;
+        public ERHIBindType Type;
+        public ERHIPipelineStage Visible;
+
+        internal bool IsBindless => Count > 1;
+    }
+
+    internal unsafe class Dx12ResourceTableLayout : RHIResourceTableLayout
+    {
+        public uint Index
+        {
+            get
+            {
+                return m_Index;
+            }
+        }
+        public Dx12BindInfo[] BindInfos
+        {
+            get
+            {
+                return m_BindInfos;
+            }
+        }
+
+        private uint m_Index;
+        private Dx12BindInfo[] m_BindInfos;
+
+        public Dx12ResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor)
+        {
+            m_Index = descriptor.Index;
+            m_BindInfos = new Dx12BindInfo[descriptor.Elements.Length];
+
+            Span<RHIResourceTableLayoutElement> elements = descriptor.Elements.Span;
+            for (int i = 0; i < descriptor.Elements.Length; ++i)
+            {
+                ref RHIResourceTableLayoutElement element = ref elements[i];
+                ref Dx12BindInfo bindInfo = ref m_BindInfos[i];
+                bindInfo.Index = descriptor.Index;
+                bindInfo.Slot = element.Slot;
+                bindInfo.Type = element.Type;
+                bindInfo.Count = element.Count;
+                bindInfo.Visible = element.Visible;
+            }
+        }
+
+        protected override void Release()
+        {
+            m_Index = 0;
+        }
+    }
+
     internal unsafe class Dx12ResourceTable : RHIResourceTable
     {
         public Dx12ResourceTableLayout ResourceTableLayout

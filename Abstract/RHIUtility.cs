@@ -8,6 +8,15 @@
         Apple = 0x106B,
         Adreno = 0x5143,
         Nvidia = 0x10DE,
+        Vivante = 0x7a05,
+        Broadcom = 0x14E4,
+        Microsoft = 0x1414,
+        SamsungAMD = 0x144D,
+        VeriSilicon = 0x1EB1,
+        Imagination = 0x1010,
+        Kazan = 0x10003,    // VkVendorId
+        Codeplay = 0x10004, // VkVendorId
+        Mesa = 0x10005,	// VkVendorId
         Pending
     }
 

@@ -13,7 +13,15 @@ namespace Infinity.Graphics
         public bool IsFlipProjection;
         public bool IsRaytracingSupported;
         public bool IsMeshShadingSupported;
+        public bool IsAtomicUInt64Supported;
+        public bool IsDrawIndirectSupported;
+        public bool IsWaveOperationSupported;
+        public bool IsDrawMultiIndirectSupported;
+        public bool IsPixelShaderUAVSupported;
+        public bool IsDepthbufferFetchSupported;
+        public bool IsFramebufferFetchSupported;
         public bool IsRaytracingInlineSupported;
+        public bool IsHiddenSurfaceRemovalSupported;
         public bool IsShaderBarycentricCoordSupported;
         public bool IsProgrammableSamplePositionSupported;
         public ERHIMatrixMajorons MatrixMajorons;

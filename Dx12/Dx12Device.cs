@@ -27,34 +27,6 @@ namespace Infinity.Graphics
                 return m_Dx12Instance;
             }
         }
-        public Dx12DescriptorHeap DsvHeap
-        {
-            get
-            {
-                return m_DsvHeap;
-            }
-        }
-        public Dx12DescriptorHeap RtvHeap
-        {
-            get
-            {
-                return m_RtvHeap;
-            }
-        }
-        public Dx12DescriptorHeap SamplerHeap
-        {
-            get
-            {
-                return m_SamplerHeap;
-            }
-        }
-        public Dx12DescriptorHeap CbvSrvUavHeap
-        {
-            get
-            {
-                return m_CbvSrvUavHeap;
-            }
-        }
         public IDXGIAdapter1* DXGIAdapter
         {
             get
@@ -67,6 +39,34 @@ namespace Infinity.Graphics
             get
             {
                 return m_NativeDevice;
+            }
+        }
+        public Dx12DescriptorHeap DescriptorHeapDSV
+        {
+            get
+            {
+                return m_DescriptorHeapDSV;
+            }
+        }
+        public Dx12DescriptorHeap DescriptorHeapHeapRTV
+        {
+            get
+            {
+                return m_DescriptorHeapHeapRTV;
+            }
+        }
+        public Dx12DescriptorHeap DescriptorHeapSampler
+        {
+            get
+            {
+                return m_DescriptorHeapSampler;
+            }
+        }
+        public Dx12DescriptorHeap DescriptorHeapCbvSrvUav
+        {
+            get
+            {
+                return m_DescriptorHeapCbvSrvUav;
             }
         }
         public ID3D12CommandSignature* DrawIndirectSignature
@@ -106,12 +106,12 @@ namespace Infinity.Graphics
         }
 
         private Dx12Instance m_Dx12Instance;
-        private Dx12DescriptorHeap m_DsvHeap;
-        private Dx12DescriptorHeap m_RtvHeap;
-        private Dx12DescriptorHeap m_SamplerHeap;
-        private Dx12DescriptorHeap m_CbvSrvUavHeap;
         private IDXGIAdapter1* m_DXGIAdapter;
         private ID3D12Device10* m_NativeDevice;
+        private Dx12DescriptorHeap m_DescriptorHeapDSV;
+        private Dx12DescriptorHeap m_DescriptorHeapHeapRTV;
+        private Dx12DescriptorHeap m_DescriptorHeapSampler;
+        private Dx12DescriptorHeap m_DescriptorHeapCbvSrvUav;
         private ID3D12CommandSignature* m_DrawIndirectSignature;
         private ID3D12CommandSignature* m_DrawIndexedIndirectSignature;
         private ID3D12CommandSignature* m_DispatchRayIndirectSignature;
@@ -234,66 +234,66 @@ namespace Infinity.Graphics
 
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)
         {
-            int index = m_DsvHeap.Allocate();
+            int index = m_DescriptorHeapDSV.Allocate();
             Dx12DescriptorInfo descriptorInfo;
             descriptorInfo.Index = index;
-            descriptorInfo.CpuHandle = m_DsvHeap.CpuStartHandle.Offset(index, m_DsvHeap.DescriptorSize);
-            descriptorInfo.GpuHandle = m_DsvHeap.GpuStartHandle.Offset(index, m_DsvHeap.DescriptorSize);
-            descriptorInfo.DescriptorHeap = m_DsvHeap.DescriptorHeap;
+            descriptorInfo.CpuHandle = m_DescriptorHeapDSV.NativeCpuStartHandle.Offset(index, m_DescriptorHeapDSV.DescriptorSize);
+            descriptorInfo.GpuHandle = m_DescriptorHeapDSV.NativeGpuStartHandle.Offset(index, m_DescriptorHeapDSV.DescriptorSize);
+            descriptorInfo.DescriptorHeap = m_DescriptorHeapDSV.NativeDescriptorHeap;
             return descriptorInfo;
         }
 
         public Dx12DescriptorInfo AllocateRtvDescriptor(in int count)
         {
-            int index = m_RtvHeap.Allocate();
+            int index = m_DescriptorHeapHeapRTV.Allocate();
             Dx12DescriptorInfo descriptorInfo;
             descriptorInfo.Index = index;
-            descriptorInfo.CpuHandle = m_RtvHeap.CpuStartHandle.Offset(index, m_RtvHeap.DescriptorSize);
-            descriptorInfo.GpuHandle = m_RtvHeap.GpuStartHandle.Offset(index, m_RtvHeap.DescriptorSize);
-            descriptorInfo.DescriptorHeap = m_RtvHeap.DescriptorHeap;
+            descriptorInfo.CpuHandle = m_DescriptorHeapHeapRTV.NativeCpuStartHandle.Offset(index, m_DescriptorHeapHeapRTV.DescriptorSize);
+            descriptorInfo.GpuHandle = m_DescriptorHeapHeapRTV.NativeGpuStartHandle.Offset(index, m_DescriptorHeapHeapRTV.DescriptorSize);
+            descriptorInfo.DescriptorHeap = m_DescriptorHeapHeapRTV.NativeDescriptorHeap;
             return descriptorInfo;
         }
 
         public Dx12DescriptorInfo AllocateSamplerDescriptor(in int count)
         {
-            int index = m_SamplerHeap.Allocate();
+            int index = m_DescriptorHeapSampler.Allocate();
             Dx12DescriptorInfo descriptorInfo;
             descriptorInfo.Index = index;
-            descriptorInfo.CpuHandle = m_SamplerHeap.CpuStartHandle.Offset(index, m_SamplerHeap.DescriptorSize);
-            descriptorInfo.GpuHandle = m_SamplerHeap.GpuStartHandle.Offset(index, m_SamplerHeap.DescriptorSize);
-            descriptorInfo.DescriptorHeap = m_SamplerHeap.DescriptorHeap;
+            descriptorInfo.CpuHandle = m_DescriptorHeapSampler.NativeCpuStartHandle.Offset(index, m_DescriptorHeapSampler.DescriptorSize);
+            descriptorInfo.GpuHandle = m_DescriptorHeapSampler.NativeGpuStartHandle.Offset(index, m_DescriptorHeapSampler.DescriptorSize);
+            descriptorInfo.DescriptorHeap = m_DescriptorHeapSampler.NativeDescriptorHeap;
             return descriptorInfo;
         }
 
         public Dx12DescriptorInfo AllocateCbvSrvUavDescriptor(in int count)
         {
-            int index = m_CbvSrvUavHeap.Allocate();
+            int index = m_DescriptorHeapCbvSrvUav.Allocate();
             Dx12DescriptorInfo descriptorInfo;
             descriptorInfo.Index = index;
-            descriptorInfo.CpuHandle = m_CbvSrvUavHeap.CpuStartHandle.Offset(index, m_CbvSrvUavHeap.DescriptorSize);
-            descriptorInfo.GpuHandle = m_CbvSrvUavHeap.GpuStartHandle.Offset(index, m_CbvSrvUavHeap.DescriptorSize);
-            descriptorInfo.DescriptorHeap = m_CbvSrvUavHeap.DescriptorHeap;
+            descriptorInfo.CpuHandle = m_DescriptorHeapCbvSrvUav.NativeCpuStartHandle.Offset(index, m_DescriptorHeapCbvSrvUav.DescriptorSize);
+            descriptorInfo.GpuHandle = m_DescriptorHeapCbvSrvUav.NativeGpuStartHandle.Offset(index, m_DescriptorHeapCbvSrvUav.DescriptorSize);
+            descriptorInfo.DescriptorHeap = m_DescriptorHeapCbvSrvUav.NativeDescriptorHeap;
             return descriptorInfo;
         }
 
         public void FreeDsvDescriptor(in int index)
         {
-            m_DsvHeap.Free(index);
+            m_DescriptorHeapDSV.Free(index);
         }
 
         public void FreeRtvDescriptor(in int index)
         {
-            m_RtvHeap.Free(index);
+            m_DescriptorHeapHeapRTV.Free(index);
         }
 
         public void FreeSamplerDescriptor(in int index)
         {
-            m_SamplerHeap.Free(index);
+            m_DescriptorHeapSampler.Free(index);
         }
 
         public void FreeCbvSrvUavDescriptor(in int index)
         {
-            m_CbvSrvUavHeap.Free(index);
+            m_DescriptorHeapCbvSrvUav.Free(index);
         }
 
         private void CreateDevice()
@@ -477,10 +477,10 @@ namespace Infinity.Graphics
 
         private void CreateDescriptorHeaps()
         {
-            m_DsvHeap = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_DSV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 1024);
-            m_RtvHeap = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 1024);
-            m_SamplerHeap = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 2048);
-            m_CbvSrvUavHeap = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 32768);
+            m_DescriptorHeapDSV = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_DSV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 1024);
+            m_DescriptorHeapHeapRTV = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 1024);
+            m_DescriptorHeapSampler = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 2048);
+            m_DescriptorHeapCbvSrvUav = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 32768);
         }
 
         private void CreateCommandSignatures()
@@ -563,10 +563,11 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            m_DsvHeap.Dispose();
-            m_RtvHeap.Dispose();
-            m_SamplerHeap.Dispose();
-            m_CbvSrvUavHeap.Dispose();
+            m_DescriptorHeapDSV.Dispose();
+            m_DescriptorHeapHeapRTV.Dispose();
+            m_DescriptorHeapSampler.Dispose();
+            m_DescriptorHeapCbvSrvUav.Dispose();
+
             m_DrawIndirectSignature->Release();
             m_DrawIndexedIndirectSignature->Release();
             if (m_DeviceInfo.Feature.IsMeshShadingSupported)
@@ -578,6 +579,7 @@ namespace Infinity.Graphics
                 m_DispatchRayIndirectSignature->Release();
             }
             m_DispatchComputeIndirectSignature->Release();
+
             m_NativeDevice->Release();
             m_DXGIAdapter->Release();
         }
