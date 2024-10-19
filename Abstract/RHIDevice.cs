@@ -1,4 +1,6 @@
 ﻿using System;
+using Infinity.Collections;
+using System.Collections.Generic;
 using Infinity.Core;
 
 namespace Infinity.Graphics
@@ -42,22 +44,30 @@ namespace Infinity.Graphics
         public string DecimalValue => String.Format("0x{0:X}", IntValue);
     }
 
-    public struct RHIDeviceInfo
-    {
-        public string Name;
-        public RHIVendorId VendorId;
-        public RHIDeviceId DeviceId;
-        public ERHIDeviceType Type;
-        public RHIDeviceLimit Limit;
-        public RHIDeviceFeature Feature;
-    }
-
     public abstract class RHIDevice : Disposal
     {
-        public RHIDeviceInfo DeviceInfo => m_DeviceInfo;
+        public string? Name => m_Name;
+        public RHIVendorId VendorId => m_VendorId;
+        public RHIDeviceId DeviceId => m_DeviceId;
+        public ERHIDeviceType Type => m_Type;
+        public RHIDeviceLimit? Limit => m_Limit;
+        public RHIDeviceFeature? Feature => m_Feature;
+        public int ComputeQueueCount => m_ComputeQueueCount;
+        public int TransferQueueCount => m_TransferQueueCount;
+        public int GraphicsQueueCount => m_GraphicsQueueCount;
 
-        protected RHIDeviceInfo m_DeviceInfo;
+        protected string? m_Name;
+        protected RHIVendorId m_VendorId;
+        protected RHIDeviceId m_DeviceId;
+        protected ERHIDeviceType m_Type;
+        protected RHIDeviceLimit? m_Limit;
+        protected RHIDeviceFeature? m_Feature;
+        protected int m_ComputeQueueCount;
+        protected int m_TransferQueueCount;
+        protected int m_GraphicsQueueCount;
+        protected Dictionary<ERHIPipelineType, TArray<RHICommandQueue>>? m_CommandQueueMap;
 
+        public abstract RHICommandQueue? GetCommandQueue(in ERHIPipelineType pipeline, in int index);
         public abstract RHIFence CreateFence();
         public abstract RHISemaphore CreateSemaphore();
         public abstract RHIQuery CreateQuery(in RHIQueryDescriptor descriptor);
@@ -66,7 +76,6 @@ namespace Infinity.Graphics
         public abstract RHITexture CreateTexture(in RHITextureDescriptor descriptor);
         public abstract RHISampler CreateSampler(in RHISamplerDescriptor descriptor);
         public abstract RHIStorageQueue CreateStorageQueue();
-        public abstract RHICommandQueue CreateCommandQueue(in ERHIPipelineType pipeline);
         public abstract RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
         public abstract RHIBottomLevelAccelStruct CreateBottomAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor);
         public abstract RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor);

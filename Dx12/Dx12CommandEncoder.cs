@@ -877,7 +877,7 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
 
-            if (dx12Device.DeviceInfo.Feature.IsRaytracingSupported)
+            if (dx12Device.Feature.IsRaytracingSupported)
             {
                 D3D12_DISPATCH_RAYS_DESC dispatchRayDescriptor;
                 {
@@ -903,7 +903,7 @@ namespace Infinity.Graphics
         {
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
-            if (dx12Device.DeviceInfo.Feature.IsRaytracingSupported)
+            if (dx12Device.Feature.IsRaytracingSupported)
             {
                 Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
                 dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchRayIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
@@ -1293,6 +1293,11 @@ namespace Infinity.Graphics
         }
         */
 
+        public override void NextSubPass()
+        {
+            throw new NotImplementedException("Current is not supported");
+        }
+
         public override void SetScissor(in Rect rect)
         {
             RECT tempScissor = new RECT((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom);
@@ -1455,7 +1460,7 @@ namespace Infinity.Graphics
         public override void DrawMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
-            if(dx12Device.DeviceInfo.Feature.IsMeshShadingSupported)
+            if(dx12Device.Feature.IsMeshShadingSupported)
             {
                 Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
                 dx12CommandBuffer.NativeCommandList->DispatchMesh(groupCountX, groupCountY, groupCountZ);
@@ -1466,7 +1471,7 @@ namespace Infinity.Graphics
         {
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
-            if (dx12Device.DeviceInfo.Feature.IsMeshShadingSupported)
+            if (dx12Device.Feature.IsMeshShadingSupported)
             {
                 Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
                 dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchMeshIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);

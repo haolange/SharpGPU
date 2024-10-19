@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using TerraFX.Interop.Windows;
+﻿using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Collections.Generic;
 using static TerraFX.Interop.Windows.Windows;
@@ -69,7 +68,7 @@ namespace Infinity.Graphics
 
             for (uint i = 0; SUCCEEDED(m_DXGIFactory->EnumAdapters1(i, &adapter)); ++i)
             {
-                m_Devices.Add(new Dx12Device(this, adapter));
+                m_Devices.Add(new Dx12Device(this, adapter, descriptor.ComputeQueueRequestCount, descriptor.TransferQueueRequestCount, descriptor.GraphicsQueueRequestCount));
                 adapter = null;
             }
         }

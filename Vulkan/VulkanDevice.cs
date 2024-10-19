@@ -25,6 +25,11 @@ namespace Infinity.Graphics
             CreateDevice(adapterPtr);
         }
 
+        public override RHICommandQueue? GetCommandQueue(in ERHIPipelineType pipeline, in int index)
+        {
+            throw new NotImplementedException();
+        }
+
         public override RHIFence CreateFence()
         {
             throw new NotImplementedException();
@@ -61,11 +66,6 @@ namespace Infinity.Graphics
         }
 
         public override RHIStorageQueue CreateStorageQueue()
-        {
-            throw new NotImplementedException();
-        }
-
-        public override RHICommandQueue CreateCommandQueue(in ERHIPipelineType pipeline)
         {
             throw new NotImplementedException();
         }

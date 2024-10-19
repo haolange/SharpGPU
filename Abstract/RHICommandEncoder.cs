@@ -231,6 +231,7 @@ namespace Infinity.Graphics
         public abstract void EndStatistics(in uint index);
         //public abstract void ResourceBarrier(in RHIBarrier barrier);
         //public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
+        public abstract void NextSubPass();
         public abstract void SetScissor(in Rect rect);
         public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);

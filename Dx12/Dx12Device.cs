@@ -3,6 +3,10 @@ using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using static TerraFX.Interop.Windows.Windows;
 using IUnknown = TerraFX.Interop.Windows.IUnknown;
+using Infinity.Collections;
+using System.Collections;
+using System.Collections.Generic;
+using Silk.NET.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -118,7 +122,7 @@ namespace Infinity.Graphics
         private ID3D12CommandSignature* m_DispatchMeshIndirectSignature;
         private ID3D12CommandSignature* m_DispatchComputeIndirectSignature;
 
-        public Dx12Device(Dx12Instance instance, in IDXGIAdapter1* adapter)
+        public Dx12Device(Dx12Instance instance, in IDXGIAdapter1* adapter, in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
         {
             m_DXGIAdapter = adapter;
             m_Dx12Instance = instance;
@@ -126,15 +130,28 @@ namespace Infinity.Graphics
             DXGI_ADAPTER_DESC1 adapterDesc;
             m_DXGIAdapter->GetDesc1(&adapterDesc);
 
-            m_DeviceInfo.Name = SharpGen.Runtime.StringHelpers.PtrToStringUni(new IntPtr(&adapterDesc.Description.e0), 128);
-            m_DeviceInfo.Type = (adapterDesc.Flags & (uint)DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE) == 1 ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
-            m_DeviceInfo.VendorId.IntValue = adapterDesc.VendorId;
-            m_DeviceInfo.DeviceId.IntValue = adapterDesc.DeviceId;
+            m_Name = SharpGen.Runtime.StringHelpers.PtrToStringUni(new IntPtr(&adapterDesc.Description.e0), 128);
+            m_Type = (adapterDesc.Flags & (uint)DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE) == 1 ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
+            m_VendorId.IntValue = adapterDesc.VendorId;
+            m_DeviceId.IntValue = adapterDesc.DeviceId;
 
             CreateDevice();
             CheckFeatureSupport();
+            CreateCommandQueues(computeQueueCount, transferQueueCount, graphicsQueueCount);
             CreateDescriptorHeaps();
             CreateCommandSignatures();
+        }
+
+        public override RHICommandQueue? GetCommandQueue(in ERHIPipelineType pipeline, in int index)
+        {
+            if (m_CommandQueueMap.TryGetValue(pipeline, out var cmdQueue))
+            {
+                if(index < cmdQueue.length)
+                {
+                    return cmdQueue[index];
+                }
+            }
+            return null;
         }
 
         public override RHIFence CreateFence()
@@ -175,11 +192,6 @@ namespace Infinity.Graphics
         public override RHIStorageQueue CreateStorageQueue()
         {
             throw new NotImplementedException();
-        }
-
-        public override RHICommandQueue CreateCommandQueue(in ERHIPipelineType pipeline)
-        {
-            return new Dx12CommandQueue(this, pipeline);
         }
 
         public override RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
@@ -317,11 +329,11 @@ namespace Infinity.Graphics
 
         private void CheckFeatureSupport()
         {
-            m_DeviceInfo.Feature = new Dx12DeviceFeature();
+            m_Feature = new Dx12DeviceFeature();
 
-            m_DeviceInfo.Feature.IsFlipProjection = false;
-            m_DeviceInfo.Feature.MatrixMajorons = ERHIMatrixMajorons.RowMajor;
-            m_DeviceInfo.Feature.DepthValueRange = ERHIDepthValueRange.ZeroToOne;
+            m_Feature.IsFlipProjection = false;
+            m_Feature.MatrixMajorons = ERHIMatrixMajorons.RowMajor;
+            m_Feature.DepthValueRange = ERHIDepthValueRange.ZeroToOne;
 
             // check feature level
             D3D_FEATURE_LEVEL* aLevels = stackalloc D3D_FEATURE_LEVEL[3];
@@ -334,7 +346,7 @@ namespace Infinity.Graphics
             dLevels.NumFeatureLevels = 3;
             dLevels.pFeatureLevelsRequested = aLevels;
             m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_FEATURE_LEVELS, &dLevels, (uint)sizeof(D3D12_FEATURE_DATA_FEATURE_LEVELS));
-            ((Dx12DeviceFeature)m_DeviceInfo.Feature).MaxNativeFeatureLevel = dLevels.MaxSupportedFeatureLevel;
+            ((Dx12DeviceFeature)m_Feature).MaxNativeFeatureLevel = dLevels.MaxSupportedFeatureLevel;
 
             // check feature options
             D3D12_FEATURE_DATA_D3D12_OPTIONS featureOptions0;
@@ -385,45 +397,45 @@ namespace Infinity.Graphics
             switch (featureOptions2.ProgrammableSamplePositionsTier)
             {
                 case D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER.D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_1:
-                    m_DeviceInfo.Feature.IsProgrammableSamplePositionSupported = false;
+                    m_Feature.IsProgrammableSamplePositionSupported = false;
                     break;
 
                 case D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER.D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_2:
-                    m_DeviceInfo.Feature.IsProgrammableSamplePositionSupported = true;
+                    m_Feature.IsProgrammableSamplePositionSupported = true;
                     break;
 
                 case D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER.D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_NOT_SUPPORTED:
-                    m_DeviceInfo.Feature.IsProgrammableSamplePositionSupported = false;
+                    m_Feature.IsProgrammableSamplePositionSupported = false;
                     break;
             }
 
             // check barycentric coord supported
             if(featureOptions3.BarycentricsSupported)
             {
-                m_DeviceInfo.Feature.IsShaderBarycentricCoordSupported = true;
+                m_Feature.IsShaderBarycentricCoordSupported = true;
             }
             else
             {
-                m_DeviceInfo.Feature.IsShaderBarycentricCoordSupported = false;
+                m_Feature.IsShaderBarycentricCoordSupported = false;
             }
 
             // check multi view instancing supported
             switch (featureOptions3.ViewInstancingTier)
             {
                 case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_1:
-                    m_DeviceInfo.Feature.MultiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
+                    m_Feature.MultiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
                     break;
 
                 case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_2:
-                    m_DeviceInfo.Feature.MultiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
+                    m_Feature.MultiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
                     break;
 
                 case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_3:
-                    m_DeviceInfo.Feature.MultiviewStrategy = ERHIMultiviewStrategy.ViewIndex;
+                    m_Feature.MultiviewStrategy = ERHIMultiviewStrategy.ViewIndex;
                     break;
 
                 case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_NOT_SUPPORTED:
-                    m_DeviceInfo.Feature.MultiviewStrategy = ERHIMultiviewStrategy.Unsupported;
+                    m_Feature.MultiviewStrategy = ERHIMultiviewStrategy.Unsupported;
                     break;
             }
 
@@ -431,18 +443,18 @@ namespace Infinity.Graphics
             switch (featureOptions5.RaytracingTier)
             {
                 case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_0:
-                    m_DeviceInfo.Feature.IsRaytracingSupported = true;
-                    m_DeviceInfo.Feature.IsRaytracingInlineSupported = false;
+                    m_Feature.IsRaytracingSupported = true;
+                    m_Feature.IsRaytracingInlineSupported = false;
                     break;
 
                 case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_1:
-                    m_DeviceInfo.Feature.IsRaytracingSupported = true;
-                    m_DeviceInfo.Feature.IsRaytracingInlineSupported = true;
+                    m_Feature.IsRaytracingSupported = true;
+                    m_Feature.IsRaytracingInlineSupported = true;
                     break;
 
                 case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_NOT_SUPPORTED:
-                    m_DeviceInfo.Feature.IsRaytracingSupported = false;
-                    m_DeviceInfo.Feature.IsRaytracingInlineSupported = false;
+                    m_Feature.IsRaytracingSupported = false;
+                    m_Feature.IsRaytracingInlineSupported = false;
                     break;
             }
 
@@ -450,15 +462,15 @@ namespace Infinity.Graphics
             switch (featureOptions5.RenderPassesTier)
             {
                 case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_0:
-                    ((Dx12DeviceFeature)m_DeviceInfo.Feature).IsRenderPassSupported = false;
+                    ((Dx12DeviceFeature)m_Feature).IsRenderPassSupported = false;
                     break;
 
                 case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_1:
-                    ((Dx12DeviceFeature)m_DeviceInfo.Feature).IsRenderPassSupported = true;
+                    ((Dx12DeviceFeature)m_Feature).IsRenderPassSupported = true;
                     break;
 
                 case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_2:
-                    ((Dx12DeviceFeature)m_DeviceInfo.Feature).IsRenderPassSupported = true;
+                    ((Dx12DeviceFeature)m_Feature).IsRenderPassSupported = true;
                     break;
             }
 
@@ -466,11 +478,11 @@ namespace Infinity.Graphics
             switch (featureOptions7.MeshShaderTier)
             {
                 case D3D12_MESH_SHADER_TIER.D3D12_MESH_SHADER_TIER_1:
-                    m_DeviceInfo.Feature.IsMeshShadingSupported = true;
+                    m_Feature.IsMeshShadingSupported = true;
                     break;
 
                 case D3D12_MESH_SHADER_TIER.D3D12_MESH_SHADER_TIER_NOT_SUPPORTED:
-                    m_DeviceInfo.Feature.IsMeshShadingSupported = false;
+                    m_Feature.IsMeshShadingSupported = false;
                     break;
             }
         }
@@ -529,7 +541,7 @@ namespace Infinity.Graphics
             #endregion
 
             #region Create_DispatchMeshIndirect_Argument
-            if (m_DeviceInfo.Feature.IsMeshShadingSupported)
+            if (m_Feature.IsMeshShadingSupported)
             {
                 indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH;
                 //commandSignatureDesc.NodeMask = nodeMask;
@@ -545,7 +557,7 @@ namespace Infinity.Graphics
             #endregion
 
             #region Create_DispatchRayIndirect_Argument
-            if (m_DeviceInfo.Feature.IsRaytracingSupported)
+            if (m_Feature.IsRaytracingSupported)
             {
                 indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS;
                 //commandSignatureDesc.NodeMask = nodeMask;
@@ -561,6 +573,44 @@ namespace Infinity.Graphics
             #endregion
         }
 
+        private void CreateCommandQueues(in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
+        {
+            m_ComputeQueueCount = computeQueueCount;
+            m_TransferQueueCount = transferQueueCount;
+            m_GraphicsQueueCount = graphicsQueueCount;
+            m_CommandQueueMap = new Dictionary<ERHIPipelineType, TArray<RHICommandQueue>>(3);
+
+            if (computeQueueCount > 0)
+            {
+                TArray<RHICommandQueue> computeQueueArray = new TArray<RHICommandQueue>(computeQueueCount);
+                for (int j = 0; j < computeQueueCount; ++j)
+                {
+                    computeQueueArray.Add(new Dx12CommandQueue(this, ERHIPipelineType.Compute));
+            }
+                m_CommandQueueMap.Add(ERHIPipelineType.Compute, computeQueueArray);
+            }
+
+            if (transferQueueCount > 0)
+            {
+                TArray<RHICommandQueue> transferQueueArray = new TArray<RHICommandQueue>(transferQueueCount);
+                for (int k = 0; k < transferQueueCount; ++k)
+                {
+                    transferQueueArray.Add(new Dx12CommandQueue(this, ERHIPipelineType.Transfer));
+                }
+                m_CommandQueueMap.Add(ERHIPipelineType.Transfer, transferQueueArray);
+            }
+
+            if (graphicsQueueCount > 0)
+            {
+                TArray<RHICommandQueue> graphicsQueueArray = new TArray<RHICommandQueue>(graphicsQueueCount);
+                for (int i = 0; i < graphicsQueueCount; ++i)
+                {
+                    graphicsQueueArray.Add(new Dx12CommandQueue(this, ERHIPipelineType.Graphics));
+            }
+                m_CommandQueueMap.Add(ERHIPipelineType.Graphics, graphicsQueueArray);
+            }
+        }
+
         protected override void Release()
         {
             m_DescriptorHeapDSV.Dispose();
@@ -570,11 +620,11 @@ namespace Infinity.Graphics
 
             m_DrawIndirectSignature->Release();
             m_DrawIndexedIndirectSignature->Release();
-            if (m_DeviceInfo.Feature.IsMeshShadingSupported)
+            if (m_Feature.IsMeshShadingSupported)
             {
                 DispatchMeshIndirectSignature->Release();
             }
-            if (m_DeviceInfo.Feature.IsRaytracingSupported)
+            if (m_Feature.IsRaytracingSupported)
             {
                 m_DispatchRayIndirectSignature->Release();
             }

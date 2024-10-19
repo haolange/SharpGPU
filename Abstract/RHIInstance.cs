@@ -8,6 +8,9 @@ namespace Infinity.Graphics
         public ERHIBackend Backend;
         public bool EnableDebugLayer;
         public bool EnableValidatior;
+        public int ComputeQueueRequestCount;
+        public int TransferQueueRequestCount;
+        public int GraphicsQueueRequestCount;
     }
 
     public abstract class RHIInstance : Disposal
