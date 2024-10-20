@@ -78,7 +78,7 @@ rhi::RHIInstance* instance = rhi::CreateInstance(descriptor);
 
 
 
-### Creating the Device
+### Get the Device
 That select device form instance use index
 
 ```c++
@@ -89,15 +89,15 @@ rhi::RHIDevice* device = instance->GetDevice(0);
 
 
 
-### Creating the CommandQueue
+### Get the CommandQueue
 Create command queue for execution gpu task
 
 ```c++
 #include <rhi/d3d12.h>
 ...
-uint32 computeQueueCount = device->GetMaxQueueCount(ERHIPipelineType.Compute);
-uint32 transferQueueCount = device->GetMaxQueueCount(ERHIPipelineType.Transfer);
-uint32 graphicsQueueCount = device->GetMaxQueueCount(ERHIPipelineType.Graphics);
+uint32 computeQueueCount = device->QueryQueueCount(ERHIPipelineType.Compute);
+uint32 transferQueueCount = device->QueryQueueCount(ERHIPipelineType.Transfer);
+uint32 graphicsQueueCount = device->QueryQueueCount(ERHIPipelineType.Graphics);
 
 rhi::RHICommandQueue* computeQueue = device->GetCommandQueue(ERHIPipelineType.Compute, 0);
 rhi::RHICommandQueue* transferQueue = device->GetCommandQueue(ERHIPipelineType.Transfer, 0);
@@ -597,7 +597,6 @@ cmdBuffer.Begin("FrameRendering");
     rhi::RHIComputeEncoder* computeEncoder = cmdBuffer->BeginComputePass(RHIComputePassDescriptor("ComputePass"));
     {
         computeEncoder->PushDebugGroup("GenereteIndex");
-        computeEncoder->SetPipelineLayout(computePipelineLayout);
         computeEncoder->SetPipeline(computePipeline);
         computeEncoder->SetResourceTable(computeResourceTable, 0);
         computeEncoder->Dispatch(math::ceil(screenSize.x / 8), math::ceil(screenSize.y / 8), 1);
@@ -640,7 +639,6 @@ cmdBuffer.Begin("FrameRendering");
         rasterEncoder->SetViewport(Viewport(0, 0, screenSize.x, screenSize.y, 0, 1));
         rasterEncoder->SetBlendFactor(1);
         rasterEncoder->PushDebugGroup("DrawTriange");
-        rasterEncoder->SetPipelineLayout(rasterPipelineLayout);
         rasterEncoder->SetPipeline(rasterPipeline);
         rasterEncoder->SetResourceTable(rasterResourceTable, 0);
         rasterEncoder->SetIndexBuffer(indexBufferGPU, 0, ERHIIndexFormat::UInt16);
