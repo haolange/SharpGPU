@@ -9,6 +9,8 @@ namespace Infinity.Graphics
         public RHIBuffer Handle;
         public ERHIBufferState SrcState;
         public ERHIBufferState DstState;
+        public ERHIPipelineStage SrcStage;
+        public ERHIPipelineStage DstStage;
         public ERHIPipelineType SrcPipeline;
         public ERHIPipelineType DstPipeline;
     }
@@ -18,6 +20,8 @@ namespace Infinity.Graphics
         public RHITexture Handle;
         public ERHITextureState SrcState;
         public ERHITextureState DstState;
+        public ERHIPipelineStage SrcStage;
+        public ERHIPipelineStage DstStage;
         public ERHIPipelineType SrcPipeline;
         public ERHIPipelineType DstPipeline;
     }
@@ -58,6 +62,8 @@ namespace Infinity.Graphics
             barrier.m_BarrierType = ERHIBarrierType.Aliasing;
             barrier.m_ResourceType = ERHIResourceType.Buffer;
             barrier.m_BufferBarrierInfo.Handle = buffer;
+            barrier.m_BufferBarrierInfo.SrcPipeline = srcPipeline;
+            barrier.m_BufferBarrierInfo.DstPipeline = dstPipeline;
             return barrier;
         }
 
@@ -67,10 +73,12 @@ namespace Infinity.Graphics
             barrier.m_BarrierType = ERHIBarrierType.Aliasing;
             barrier.m_ResourceType = ERHIResourceType.Texture;
             barrier.m_TextureBarrierInfo.Handle = texture;
+            barrier.m_TextureBarrierInfo.SrcPipeline = srcPipeline;
+            barrier.m_TextureBarrierInfo.DstPipeline = dstPipeline;
             return barrier;
         }
 
-        public static RHIBarrier Transition(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState, in ERHIPipelineType srcPipeline = ERHIPipelineType.Graphics, in ERHIPipelineType dstPipeline = ERHIPipelineType.Graphics)
+        public static RHIBarrier Transition(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState, in ERHIPipelineStage srcStage, in ERHIPipelineStage dstStage, in ERHIPipelineType srcPipeline = ERHIPipelineType.Graphics, in ERHIPipelineType dstPipeline = ERHIPipelineType.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_BarrierType = ERHIBarrierType.Triansition;
@@ -78,10 +86,14 @@ namespace Infinity.Graphics
             barrier.m_BufferBarrierInfo.Handle = buffer;
             barrier.m_BufferBarrierInfo.SrcState = srcState;
             barrier.m_BufferBarrierInfo.DstState = dstState;
+            barrier.m_BufferBarrierInfo.SrcStage = srcStage;
+            barrier.m_BufferBarrierInfo.DstStage = dstStage;
+            barrier.m_BufferBarrierInfo.SrcPipeline = srcPipeline;
+            barrier.m_BufferBarrierInfo.DstPipeline = dstPipeline;
             return barrier;
         }
 
-        public static RHIBarrier Transition(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState, in ERHIPipelineType srcPipeline = ERHIPipelineType.Graphics, in ERHIPipelineType dstPipeline = ERHIPipelineType.Graphics)
+        public static RHIBarrier Transition(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState, in ERHIPipelineStage srcStage, in ERHIPipelineStage dstStage, in ERHIPipelineType srcPipeline = ERHIPipelineType.Graphics, in ERHIPipelineType dstPipeline = ERHIPipelineType.Graphics)
         {
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_BarrierType = ERHIBarrierType.Triansition;
@@ -89,6 +101,10 @@ namespace Infinity.Graphics
             barrier.m_TextureBarrierInfo.Handle = texture;
             barrier.m_TextureBarrierInfo.SrcState = srcState;
             barrier.m_TextureBarrierInfo.DstState = dstState;
+            barrier.m_TextureBarrierInfo.SrcStage = srcStage;
+            barrier.m_TextureBarrierInfo.DstStage = dstStage;
+            barrier.m_TextureBarrierInfo.SrcPipeline = srcPipeline;
+            barrier.m_TextureBarrierInfo.DstPipeline = dstPipeline;
             return barrier;
         }
     }

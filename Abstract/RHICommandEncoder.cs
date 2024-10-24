@@ -1,7 +1,6 @@
 using System;
 using Infinity.Core;
 using Infinity.Mathmatics;
-using TerraFX.Interop.Gdiplus;
 
 namespace Infinity.Graphics
 {
@@ -92,8 +91,6 @@ namespace Infinity.Graphics
         public float4 ClearValue;
         public ERHILoadAction LoadAction;
         public ERHIStoreAction StoreAction;
-        public ERHITextureState BeforeState;
-        public ERHITextureState AfterState;
         public RHITexture RenderTarget;
         public uint ResolveLevel;
         public uint ResolveSlice;
@@ -106,8 +103,6 @@ namespace Infinity.Graphics
         public uint ArraySlice;
         public bool DepthReadOnly;
         public float DepthClearValue;
-        public ERHITextureState BeforeState;
-        public ERHITextureState AfterState;
         public ERHILoadAction DepthLoadOp;
         public ERHIStoreAction DepthStoreOp;
         public bool StencilReadOnly;

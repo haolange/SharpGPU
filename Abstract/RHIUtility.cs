@@ -65,6 +65,36 @@
         Pending
     }
 
+    public enum ERHIPipelineStage : byte
+    {
+        TopPipeline,
+        Vertex,
+        Fragment,
+        Compute,
+        Task,
+        Mesh,
+        RayTracing,
+        Transfer,
+        BottomPipeline,
+        Host,
+        Pending
+    }
+
+    public enum ERHIShaderType
+    {
+        Vertex = 0x1,
+        Fragment = 0x2,
+        Compute = 0x4,
+        Task = 0x8,
+        Mesh = 0x10,
+        AllGraphics = 0x20,
+        //AllGraphics = Vertex | Fragment,
+        RayTracing = 0x40,
+        All = 0x80,
+        //All = Vertex | Fragment | Compute | Task | Mesh | RayTracing,
+        Pending
+    }
+
     public enum ERHIPrimitiveType : byte
     {
         Mesh,
@@ -363,7 +393,6 @@
         Min = 1,
         Max = 2,
         Sample0 = 3,
-        Average = 4,
         Pending
     }
 
@@ -522,11 +551,12 @@
         ResolveDst = 0x10,
         DepthRead = 0x20,
         DepthWrite = 0x40,
-        RenderTarget = 0x80,
-        ShaderResource = 0x100,
-        UnorderedAccess = 0x200,
-        RasterizerOrdered = 0x400,
-        ShadingRateSurface = 0x800,
+        RenderFetch = 0x80,
+        RenderTarget = 0x100,
+        ShaderResource = 0x200,
+        UnorderedAccess = 0x800,
+        RasterizerOrdered = 0x800,
+        ShadingRateSurface = 0x1000,
         Pending
     }
 
@@ -588,21 +618,6 @@
         Task,
         Mesh,
         RayTracing,
-        Pending
-    }
-
-    public enum ERHIPipelineStage
-    {
-        Vertex = 0x1,
-        Fragment = 0x2,
-        Compute = 0x4,
-        Task = 0x8,
-        Mesh = 0x10,
-        AllGraphics = 0x20,
-        //AllGraphics = Vertex | Fragment,
-        RayTracing = 0x40,
-        All = 0x80,
-        //All = Vertex | Fragment | Compute | Task | Mesh | RayTracing,
         Pending
     }
 

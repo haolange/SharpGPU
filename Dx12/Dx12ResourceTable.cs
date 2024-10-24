@@ -11,7 +11,7 @@ namespace Infinity.Graphics
         public uint Index;
         public uint Count;
         public ERHIBindType Type;
-        public ERHIPipelineStage Visible;
+        public ERHIShaderType Visible;
 
         internal bool IsBindless => Count > 1;
     }
