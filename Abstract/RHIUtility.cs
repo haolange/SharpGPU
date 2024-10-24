@@ -67,16 +67,13 @@
 
     public enum ERHIPipelineStage : byte
     {
-        TopPipeline,
+        Common,
         Vertex,
         Fragment,
         Compute,
         Task,
         Mesh,
         RayTracing,
-        Transfer,
-        BottomPipeline,
-        Host,
         Pending
     }
 
