@@ -77,7 +77,7 @@
         Pending
     }
 
-    public enum ERHIShaderType
+    public enum ERHIShaderStage
     {
         Vertex = 0x1,
         Fragment = 0x2,

@@ -552,7 +552,7 @@ namespace Infinity.Graphics
                 Dx12BindTypeAndParameterSlot? parameter = null;
                 ref Dx12BindInfo bindInfo = ref dx12ResourceTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderType.Compute, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Compute, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
@@ -844,7 +844,7 @@ namespace Infinity.Graphics
                 Dx12BindTypeAndParameterSlot? parameter = null;
                 ref Dx12BindInfo bindInfo = ref dx12ResourceTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderType.RayTracing, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.RayTracing, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
@@ -1364,7 +1364,7 @@ namespace Infinity.Graphics
                 Dx12BindTypeAndParameterSlot? parameter = null;
                 ref Dx12BindInfo bindInfo = ref dx12ResourceTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderType.All, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.All, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
@@ -1373,7 +1373,7 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
                 }
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderType.Vertex, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Vertex, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
@@ -1382,7 +1382,7 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
                 }
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderType.Fragment, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Fragment, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG

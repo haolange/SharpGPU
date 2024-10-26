@@ -8,7 +8,7 @@ namespace Infinity.Graphics
         public uint Slot;
         public uint Count;
         public ERHIBindType Type;
-        public ERHIShaderType Visible;
+        public ERHIShaderStage Stage;
     }
 
     public struct RHIResourceTableLayoutDescriptor

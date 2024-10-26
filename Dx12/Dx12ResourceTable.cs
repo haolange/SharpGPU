@@ -11,7 +11,7 @@ namespace Infinity.Graphics
         public uint Index;
         public uint Count;
         public ERHIBindType Type;
-        public ERHIShaderType Visible;
+        public ERHIShaderStage Stage;
 
         internal bool IsBindless => Count > 1;
     }
@@ -50,7 +50,7 @@ namespace Infinity.Graphics
                 bindInfo.Slot = element.Slot;
                 bindInfo.Type = element.Type;
                 bindInfo.Count = element.Count;
-                bindInfo.Visible = element.Visible;
+                bindInfo.Stage = element.Stage;
             }
         }
 

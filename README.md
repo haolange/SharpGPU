@@ -215,7 +215,7 @@ rhi::RHIResourceTableLayoutElement computeResourceTableLayoutElements[1];
 {
     computeResourceTableLayoutElements[0].Slot = 0;
     computeResourceTableLayoutElements[0].Type = ERHIBindType::StorageTexture2D;
-    computeResourceTableLayoutElements[0].Visible = ERHIPipelineStage::Compute;
+    computeResourceTableLayoutElements[0].Stage = ERHIShaderStage::Compute;
 }
 
 rhi::RHIResourceTableLayoutDescriptor computeResourceTableLayoutInfo;
@@ -374,10 +374,10 @@ rhi::RHIResourceTableLayoutElement rasterResourceTableLayoutElements[2];
 {
     rasterResourceTableLayoutElements[0].Slot = 0;
     rasterResourceTableLayoutElements[0].Type = ERHIBindType::Texture2D;
-    rasterResourceTableLayoutElements[0].Visible = ERHIPipelineStage::Fragment;
+    rasterResourceTableLayoutElements[0].Stage = ERHIShaderStage::Fragment;
     rasterResourceTableLayoutElements[1].Slot = 1;
     rasterResourceTableLayoutElements[1].Type = ERHIBindType::Sampler;
-    rasterResourceTableLayoutElements[1].Visible = ERHIPipelineStage::Fragment;
+    rasterResourceTableLayoutElements[1].Stage = ERHIShaderStage::Fragment;
 }
 
 rhi::RHIResourceTableLayoutDescriptor rasterResourceTableLayoutInfo;
@@ -573,8 +573,6 @@ cmdBuffer.Begin("FrameInit");
 
     cmdBuffer->ResourceBarrier(RHIBarrier::Transition(indexBufferGPU, ERHITextureState::CopyDst, ERHITextureState::IndexBuffer, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
     cmdBuffer->ResourceBarrier(RHIBarrier::Transition(vertexBufferGPU, ERHITextureState::CopyDst, ERHITextureState::VertexBuffer, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
-
-    cmdBuffer->ResourceBarrier(RHIBarrier::Transition(texture, ERHITextureState::Undefine, ERHITextureState::UnorderedAccess, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
 }
 cmdBuffer.End("FrameInit");
 
@@ -593,6 +591,8 @@ rhi::RHICommandBuffer* cmdBuffer = graphicsQueue->CreateCommandBuffer();
 
 cmdBuffer.Begin("FrameRendering");
 {
+    cmdBuffer->ResourceBarrier(RHIBarrier::Transition(texture, ERHITextureState::Undefine, ERHITextureState::UnorderedAccess, ERHIPipelineStage.Common, ERHIPipelineStage.Compute, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
+
     // run compute pass
     rhi::RHIComputeEncoder* computeEncoder = cmdBuffer->BeginComputePass(RHIComputePassDescriptor("ComputePass"));
     {
@@ -630,8 +630,8 @@ cmdBuffer.Begin("FrameRendering");
         rasterPassInfo.DepthStencilAttachment = nullptr;
     }
 
-    cmdBuffer->ResourceBarrier(RHIBarrier::Transition(texture, ERHITextureState::UnorderedAccess, ERHITextureState::ShaderResource, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
-    cmdBuffer->ResourceBarrier(RHIBarrier::Transition(swapChain->AcquireBackBufferTexture(), ERHITextureState::Present, ERHITextureState::RenderTarget, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
+    cmdBuffer->ResourceBarrier(RHIBarrier::Transition(texture, ERHITextureState::UnorderedAccess, ERHITextureState::ShaderResource, ERHIPipelineStage.Compute, ERHIPipelineStage.Fragment, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
+    cmdBuffer->ResourceBarrier(RHIBarrier::Transition(swapChain->AcquireBackBufferTexture(), ERHITextureState::Present, ERHITextureState::RenderTarget, ERHIPipelineStage.Common, ERHIPipelineStage.Fragment, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
 
     rhi::RHIRasterEncoder* rasterEncoder = cmdBuffer->BeginRasterPass(rasterPassInfo);
     {
@@ -649,8 +649,8 @@ cmdBuffer.Begin("FrameRendering");
     }
     rasterEncoder->EndPass();
 
-    cmdBuffer->ResourceBarrier(RHIBarrier::Transition(texture, ERHITextureState::ShaderResource, ERHITextureState::UnorderedAccess, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
-    cmdBuffer->ResourceBarrier(RHIBarrier::Transition(swapChain->AcquireBackBufferTexture(), ERHITextureState::RenderTarget, ERHITextureState::Present, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
+    cmdBuffer->ResourceBarrier(RHIBarrier::Transition(texture, ERHITextureState.ShaderResource, ERHITextureState.Undefine, ERHIPipelineStage.Fragment, ERHIPipelineStage.Common, ERHIPipelineType.Graphics, ERHIPipelineType.Graphics));
+    cmdBuffer->ResourceBarrier(RHIBarrier::Transition(swapChain->AcquireBackBufferTexture(), ERHITextureState.RenderTarget, ERHITextureState.Present, ERHIPipelineStage.Fragment, ERHIPipelineStage.Common, ERHIPipelineType.Graphics, ERHIPipelineType.Graphics));
 }
 cmdBuffer.End("FrameRendering");
 
