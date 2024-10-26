@@ -1,25 +1,106 @@
 ﻿using System;
+using Infinity.Collections;
 using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
+using System.Collections.Generic;
 using static TerraFX.Interop.Windows.Windows;
 using IUnknown = TerraFX.Interop.Windows.IUnknown;
-using Infinity.Collections;
-using System.Collections;
-using System.Collections.Generic;
-using Silk.NET.Vulkan;
 
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal unsafe class Dx12DeviceLimit : RHIDeviceLimit
     {
+        public readonly D3D_FEATURE_LEVEL NativeMaxFeatureLevel;
 
+        internal Dx12DeviceLimit(in int maxMSAACount,
+                                in int maxBoundTexture,
+                                in int minWavefrontSize,
+                                in int maxWavefrontSize,
+                                in int maxComputeThreads,
+                                in int uniformBufferAlignment,
+                                in int uploadBufferAlignment,
+                                in int uploadBufferTextureAlignment,
+                                in int uploadBufferTextureRowAlignment,
+                                in int maxVertexInputBindings,
+                                in D3D_FEATURE_LEVEL nativeMaxFeatureLevel) : base(maxMSAACount,
+                                                                                maxBoundTexture,
+                                                                                minWavefrontSize,
+                                                                                maxWavefrontSize,
+                                                                                maxComputeThreads,
+                                                                                uniformBufferAlignment,
+                                                                                uploadBufferAlignment,
+                                                                                uploadBufferTextureAlignment,
+                                                                                uploadBufferTextureRowAlignment,
+                                                                                maxVertexInputBindings)
+        {
+            NativeMaxFeatureLevel = nativeMaxFeatureLevel;
+        }
     }
 
     internal unsafe class Dx12DeviceFeature : RHIDeviceFeature
     {
-        public bool IsRenderPassSupported;
-        public D3D_FEATURE_LEVEL MaxNativeFeatureLevel;
+        public readonly bool IsNativeRenderPassSupported;
+
+        internal Dx12DeviceFeature(in bool isFlipProjection,
+                                in bool isHDRPresentSupported,
+                                in bool isUnifiedMemorySupported,
+                                in bool isRootConstantSupport,
+                                in bool isIndirectRootConstantSupport,
+                                in bool isPixelShaderUAVSupported,
+                                in bool isRasterizerOrderedSupported,
+                                in bool isAnisotropyTextureSupported,
+                                in bool isDepthbufferFetchSupported,
+                                in bool isFramebufferFetchSupported,
+                                in bool isTimestampQueriesSupported,
+                                in bool isOcclusionQueriesSupported,
+                                in bool isPipelineStatsQueriesSupported,
+                                in bool isAtomicUInt64Supported,
+                                in bool isWorkgraphSupported,
+                                in bool isMeshShadingSupported,
+                                in bool isDrawIndirectSupported,
+                                in bool isDrawMultiIndirectSupported,
+                                in bool isRaytracingSupported,
+                                in bool isRaytracingInlineSupported,
+                                in bool isVariableRateShadingSupported,
+                                in bool isHiddenSurfaceRemovalSupported,
+                                in bool isBarycentricCoordSupported,
+                                in bool isProgrammableSamplePositionSupported,
+                                in ERHIMatrixMajorons matrixMajorons,
+                                in ERHIDepthValueRange depthValueRange,
+                                in ERHIMultiviewStrategy multiviewStrategy,
+                                in ERHIWaveOperationStrategy waveOperationStrategy,
+                                in bool isNativeRenderPassSupported) : base(isFlipProjection,
+                                                                        isHDRPresentSupported,
+                                                                        isUnifiedMemorySupported,
+                                                                        isRootConstantSupport,
+                                                                        isIndirectRootConstantSupport,
+                                                                        isPixelShaderUAVSupported,
+                                                                        isRasterizerOrderedSupported,
+                                                                        isAnisotropyTextureSupported,
+                                                                        isDepthbufferFetchSupported,
+                                                                        isFramebufferFetchSupported,
+                                                                        isTimestampQueriesSupported,
+                                                                        isOcclusionQueriesSupported,
+                                                                        isPipelineStatsQueriesSupported,
+                                                                        isAtomicUInt64Supported,
+                                                                        isWorkgraphSupported,
+                                                                        isMeshShadingSupported,
+                                                                        isDrawIndirectSupported,
+                                                                        isDrawMultiIndirectSupported,
+                                                                        isRaytracingSupported,
+                                                                        isRaytracingInlineSupported,
+                                                                        isVariableRateShadingSupported,
+                                                                        isHiddenSurfaceRemovalSupported,
+                                                                        isBarycentricCoordSupported,
+                                                                        isProgrammableSamplePositionSupported,
+                                                                        matrixMajorons,
+                                                                        depthValueRange,
+                                                                        multiviewStrategy,
+                                                                        waveOperationStrategy)
+        {
+            IsNativeRenderPassSupported = isNativeRenderPassSupported;
+        }
     }
 
     internal unsafe class Dx12Device : RHIDevice
@@ -329,11 +410,47 @@ namespace Infinity.Graphics
 
         private void CheckFeatureSupport()
         {
-            m_Feature = new Dx12DeviceFeature();
+            int maxMSAACount = 16;
+            int maxBoundTexture = 16;
+            int minWavefrontSize = 32;
+            int maxWavefrontSize = 32;
+            int maxComputeThreads = 1024;
+            int uniformBufferAlignment = 256;
+            int uploadBufferAlignment = 256;
+            int uploadBufferTextureAlignment = 256;
+            int uploadBufferTextureRowAlignment = 256;
+            int maxVertexInputBindings = 32;
+            D3D_FEATURE_LEVEL nativeMaxFeatureLevel;
 
-            m_Feature.IsFlipProjection = false;
-            m_Feature.MatrixMajorons = ERHIMatrixMajorons.RowMajor;
-            m_Feature.DepthValueRange = ERHIDepthValueRange.ZeroToOne;
+            bool isFlipProjection = false;
+            bool isHDRPresentSupported = false;
+            bool isUnifiedMemorySupported = false;
+            bool isRootConstantSupport = true;
+            bool isIndirectRootConstantSupport = false;
+            bool isPixelShaderUAVSupported = true;
+            bool isRasterizerOrderedSupported = false;
+            bool isAnisotropyTextureSupported = true;
+            bool isDepthbufferFetchSupported = false;
+            bool isFramebufferFetchSupported = false;
+            bool isTimestampQueriesSupported = true;
+            bool isOcclusionQueriesSupported = true;
+            bool isPipelineStatsQueriesSupported = true;
+            bool isAtomicUInt64Supported = true;
+            bool isWorkgraphSupported = false;
+            bool isMeshShadingSupported = false;
+            bool isDrawIndirectSupported = true;
+            bool isDrawMultiIndirectSupported = true;
+            bool isRaytracingSupported = false;
+            bool isRaytracingInlineSupported = false;
+            bool isVariableRateShadingSupported = true;
+            bool isHiddenSurfaceRemovalSupported = false;
+            bool isBarycentricCoordSupported = false;
+            bool isProgrammableSamplePositionSupported = false;
+            ERHIMatrixMajorons matrixMajorons = ERHIMatrixMajorons.RowMajor;
+            ERHIDepthValueRange depthValueRange = ERHIDepthValueRange.ZeroToOne;
+            ERHIMultiviewStrategy multiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
+            ERHIWaveOperationStrategy waveOperationStrategy = ERHIWaveOperationStrategy.Basic;
+            bool isNativeRenderPassSupported = false;
 
             // check feature level
             D3D_FEATURE_LEVEL* aLevels = stackalloc D3D_FEATURE_LEVEL[3];
@@ -346,7 +463,7 @@ namespace Infinity.Graphics
             dLevels.NumFeatureLevels = 3;
             dLevels.pFeatureLevelsRequested = aLevels;
             m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_FEATURE_LEVELS, &dLevels, (uint)sizeof(D3D12_FEATURE_DATA_FEATURE_LEVELS));
-            ((Dx12DeviceFeature)m_Feature).MaxNativeFeatureLevel = dLevels.MaxSupportedFeatureLevel;
+            nativeMaxFeatureLevel = dLevels.MaxSupportedFeatureLevel;
 
             // check feature options
             D3D12_FEATURE_DATA_D3D12_OPTIONS featureOptions0;
@@ -397,45 +514,45 @@ namespace Infinity.Graphics
             switch (featureOptions2.ProgrammableSamplePositionsTier)
             {
                 case D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER.D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_1:
-                    m_Feature.IsProgrammableSamplePositionSupported = false;
+                    isProgrammableSamplePositionSupported = false;
                     break;
 
                 case D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER.D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_2:
-                    m_Feature.IsProgrammableSamplePositionSupported = true;
+                    isProgrammableSamplePositionSupported = true;
                     break;
 
                 case D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER.D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_NOT_SUPPORTED:
-                    m_Feature.IsProgrammableSamplePositionSupported = false;
+                    isProgrammableSamplePositionSupported = false;
                     break;
             }
 
             // check barycentric coord supported
             if(featureOptions3.BarycentricsSupported)
             {
-                m_Feature.IsShaderBarycentricCoordSupported = true;
+                isBarycentricCoordSupported = true;
             }
             else
             {
-                m_Feature.IsShaderBarycentricCoordSupported = false;
+                isBarycentricCoordSupported = false;
             }
 
             // check multi view instancing supported
             switch (featureOptions3.ViewInstancingTier)
             {
                 case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_1:
-                    m_Feature.MultiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
+                    multiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
                     break;
 
                 case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_2:
-                    m_Feature.MultiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
+                    multiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
                     break;
 
                 case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_3:
-                    m_Feature.MultiviewStrategy = ERHIMultiviewStrategy.ViewIndex;
+                    multiviewStrategy = ERHIMultiviewStrategy.ViewIndex;
                     break;
 
                 case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_NOT_SUPPORTED:
-                    m_Feature.MultiviewStrategy = ERHIMultiviewStrategy.Unsupported;
+                    multiviewStrategy = ERHIMultiviewStrategy.Unsupported;
                     break;
             }
 
@@ -443,18 +560,18 @@ namespace Infinity.Graphics
             switch (featureOptions5.RaytracingTier)
             {
                 case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_0:
-                    m_Feature.IsRaytracingSupported = true;
-                    m_Feature.IsRaytracingInlineSupported = false;
+                    isRaytracingSupported = true;
+                    isRaytracingInlineSupported = false;
                     break;
 
                 case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_1:
-                    m_Feature.IsRaytracingSupported = true;
-                    m_Feature.IsRaytracingInlineSupported = true;
+                    isRaytracingSupported = true;
+                    isRaytracingInlineSupported = true;
                     break;
 
                 case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_NOT_SUPPORTED:
-                    m_Feature.IsRaytracingSupported = false;
-                    m_Feature.IsRaytracingInlineSupported = false;
+                    isRaytracingSupported = false;
+                    isRaytracingInlineSupported = false;
                     break;
             }
 
@@ -462,15 +579,15 @@ namespace Infinity.Graphics
             switch (featureOptions5.RenderPassesTier)
             {
                 case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_0:
-                    ((Dx12DeviceFeature)m_Feature).IsRenderPassSupported = false;
+                    isNativeRenderPassSupported = false;
                     break;
 
                 case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_1:
-                    ((Dx12DeviceFeature)m_Feature).IsRenderPassSupported = true;
+                    isNativeRenderPassSupported = true;
                     break;
 
                 case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_2:
-                    ((Dx12DeviceFeature)m_Feature).IsRenderPassSupported = true;
+                    isNativeRenderPassSupported = true;
                     break;
             }
 
@@ -478,13 +595,55 @@ namespace Infinity.Graphics
             switch (featureOptions7.MeshShaderTier)
             {
                 case D3D12_MESH_SHADER_TIER.D3D12_MESH_SHADER_TIER_1:
-                    m_Feature.IsMeshShadingSupported = true;
+                    isMeshShadingSupported = true;
                     break;
 
                 case D3D12_MESH_SHADER_TIER.D3D12_MESH_SHADER_TIER_NOT_SUPPORTED:
-                    m_Feature.IsMeshShadingSupported = false;
+                    isMeshShadingSupported = false;
                     break;
             }
+
+            m_Limit = new Dx12DeviceLimit(maxMSAACount,
+                                        maxBoundTexture,
+                                        minWavefrontSize,
+                                        maxWavefrontSize,
+                                        maxComputeThreads,
+                                        uniformBufferAlignment,
+                                        uploadBufferAlignment,
+                                        uploadBufferTextureAlignment,
+                                        uploadBufferTextureRowAlignment,
+                                        maxVertexInputBindings,
+                                        nativeMaxFeatureLevel);
+
+            m_Feature = new Dx12DeviceFeature(isFlipProjection,
+                                            isHDRPresentSupported,
+                                            isUnifiedMemorySupported,
+                                            isRootConstantSupport,
+                                            isIndirectRootConstantSupport,
+                                            isPixelShaderUAVSupported,
+                                            isRasterizerOrderedSupported,
+                                            isAnisotropyTextureSupported,
+                                            isDepthbufferFetchSupported,
+                                            isFramebufferFetchSupported,
+                                            isTimestampQueriesSupported,
+                                            isOcclusionQueriesSupported,
+                                            isPipelineStatsQueriesSupported,
+                                            isAtomicUInt64Supported,
+                                            isWorkgraphSupported,
+                                            isMeshShadingSupported,
+                                            isDrawIndirectSupported,
+                                            isDrawMultiIndirectSupported,
+                                            isRaytracingSupported,
+                                            isRaytracingInlineSupported,
+                                            isVariableRateShadingSupported,
+                                            isHiddenSurfaceRemovalSupported,
+                                            isBarycentricCoordSupported,
+                                            isProgrammableSamplePositionSupported,
+                                            matrixMajorons,
+                                            depthValueRange,
+                                            multiviewStrategy,
+                                            waveOperationStrategy,
+                                            isNativeRenderPassSupported);
         }
 
         private void CreateDescriptorHeaps()

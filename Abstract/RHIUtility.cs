@@ -50,6 +50,21 @@
         Pending
     }
 
+    public enum ERHIWaveOperationStrategy
+    {
+        None = 0x0,
+        Basic = 0x1,
+        Vote = 0x2,
+        Arithmetic = 0x4,
+        Ballot = 0x8,
+        Shuffle = 0x10,
+        ShuffleRelative = 0x20,
+        Clustered = 0x40,
+        Quad = 0x80,
+        All = 0x200,
+        Pending
+    }
+
     public enum ERHIDeviceType : byte
     {
         Hardware,

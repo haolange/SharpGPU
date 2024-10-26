@@ -7,28 +7,130 @@ namespace Infinity.Graphics
 {
     public class RHIDeviceLimit
     {
+        public readonly int MaxMSAACount;
+        public readonly int MaxBoundTexture;
+        public readonly int MinWavefrontSize;
+        public readonly int MaxWavefrontSize;
+        public readonly int MaxComputeThreads;
+        public readonly int UniformBufferAlignment;
+        public readonly int UploadBufferAlignment;
+        public readonly int UploadBufferTextureAlignment;
+        public readonly int UploadBufferTextureRowAlignment;
+        public readonly int MaxVertexInputBindings;
 
+        internal RHIDeviceLimit(in int maxMSAACount,
+                                in int maxBoundTexture,
+                                in int minWavefrontSize,
+                                in int maxWavefrontSize,
+                                in int maxComputeThreads,
+                                in int uniformBufferAlignment,
+                                in int uploadBufferAlignment,
+                                in int uploadBufferTextureAlignment,
+                                in int uploadBufferTextureRowAlignment,
+                                in int maxVertexInputBindings)
+        {
+            MaxMSAACount = maxMSAACount;
+            MaxBoundTexture = maxBoundTexture;
+            MinWavefrontSize = minWavefrontSize;
+            MaxWavefrontSize = maxWavefrontSize;
+            MaxComputeThreads = maxComputeThreads;
+            UniformBufferAlignment = uniformBufferAlignment;
+            UploadBufferAlignment = uploadBufferAlignment;
+            UploadBufferTextureAlignment = uploadBufferTextureAlignment;
+            UploadBufferTextureRowAlignment = uploadBufferTextureRowAlignment;
+            MaxVertexInputBindings = maxVertexInputBindings;
+        }
     }
 
     public class RHIDeviceFeature
     {
-        public bool IsFlipProjection;
-        public bool IsRaytracingSupported;
-        public bool IsMeshShadingSupported;
-        public bool IsAtomicUInt64Supported;
-        public bool IsDrawIndirectSupported;
-        public bool IsWaveOperationSupported;
-        public bool IsDrawMultiIndirectSupported;
-        public bool IsPixelShaderUAVSupported;
-        public bool IsDepthbufferFetchSupported;
-        public bool IsFramebufferFetchSupported;
-        public bool IsRaytracingInlineSupported;
-        public bool IsHiddenSurfaceRemovalSupported;
-        public bool IsShaderBarycentricCoordSupported;
-        public bool IsProgrammableSamplePositionSupported;
-        public ERHIMatrixMajorons MatrixMajorons;
-        public ERHIDepthValueRange DepthValueRange;
-        public ERHIMultiviewStrategy MultiviewStrategy;
+        public readonly bool IsFlipProjection;
+        public readonly bool IsHDRPresentSupported;
+        public readonly bool IsUnifiedMemorySupported;
+        public readonly bool IsRootConstantSupport;
+        public readonly bool IsIndirectRootConstantSupport;
+        public readonly bool IsPixelShaderUAVSupported;
+        public readonly bool IsRasterizerOrderedSupported;
+        public readonly bool IsAnisotropyTextureSupported;
+        public readonly bool IsDepthbufferFetchSupported;
+        public readonly bool IsFramebufferFetchSupported;
+        public readonly bool IsTimestampQueriesSupported;
+        public readonly bool IsOcclusionQueriesSupported;
+        public readonly bool IsPipelineStatsQueriesSupported;
+        public readonly bool IsAtomicUInt64Supported;
+        public readonly bool IsWorkgraphSupported;
+        public readonly bool IsMeshShadingSupported;
+        public readonly bool IsDrawIndirectSupported;
+        public readonly bool IsDrawMultiIndirectSupported;
+        public readonly bool IsRaytracingSupported;
+        public readonly bool IsRaytracingInlineSupported;
+        public readonly bool IsVariableRateShadingSupported;
+        public readonly bool IsHiddenSurfaceRemovalSupported;
+        public readonly bool IsBarycentricCoordSupported;
+        public readonly bool IsProgrammableSamplePositionSupported;
+        public readonly ERHIMatrixMajorons MatrixMajorons;
+        public readonly ERHIDepthValueRange DepthValueRange;
+        public readonly ERHIMultiviewStrategy MultiviewStrategy;
+        public readonly ERHIWaveOperationStrategy WaveOperationStrategy;
+
+        internal RHIDeviceFeature(in bool isFlipProjection,
+                                in bool isHDRPresentSupported,
+                                in bool isUnifiedMemorySupported,
+                                in bool isRootConstantSupport,
+                                in bool isIndirectRootConstantSupport,
+                                in bool isPixelShaderUAVSupported,
+                                in bool isRasterizerOrderedSupported,
+                                in bool isAnisotropyTextureSupported,
+                                in bool isDepthbufferFetchSupported,
+                                in bool isFramebufferFetchSupported,
+                                in bool isTimestampQueriesSupported,
+                                in bool isOcclusionQueriesSupported,
+                                in bool isPipelineStatsQueriesSupported,
+                                in bool isAtomicUInt64Supported,
+                                in bool isWorkgraphSupported,
+                                in bool isMeshShadingSupported,
+                                in bool isDrawIndirectSupported,
+                                in bool isDrawMultiIndirectSupported,
+                                in bool isRaytracingSupported,
+                                in bool isRaytracingInlineSupported,
+                                in bool isVariableRateShadingSupported,
+                                in bool isHiddenSurfaceRemovalSupported,
+                                in bool isBarycentricCoordSupported,
+                                in bool isProgrammableSamplePositionSupported,
+                                in ERHIMatrixMajorons matrixMajorons,
+                                in ERHIDepthValueRange depthValueRange,
+                                in ERHIMultiviewStrategy multiviewStrategy,
+                                in ERHIWaveOperationStrategy waveOperationStrategy)
+        {
+            IsFlipProjection = isFlipProjection;
+            IsHDRPresentSupported = isHDRPresentSupported;
+            IsUnifiedMemorySupported = isUnifiedMemorySupported;
+            IsRootConstantSupport = isRootConstantSupport;
+            IsIndirectRootConstantSupport = isIndirectRootConstantSupport;
+            IsPixelShaderUAVSupported = isPixelShaderUAVSupported;
+            IsRasterizerOrderedSupported = isRasterizerOrderedSupported;
+            IsAnisotropyTextureSupported = isAnisotropyTextureSupported;
+            IsDepthbufferFetchSupported = isDepthbufferFetchSupported;
+            IsFramebufferFetchSupported = isFramebufferFetchSupported;
+            IsTimestampQueriesSupported = isTimestampQueriesSupported;
+            IsOcclusionQueriesSupported = isOcclusionQueriesSupported;
+            IsPipelineStatsQueriesSupported = isPipelineStatsQueriesSupported;
+            IsAtomicUInt64Supported = isAtomicUInt64Supported;
+            IsWorkgraphSupported = isWorkgraphSupported;
+            IsMeshShadingSupported = isMeshShadingSupported;
+            IsDrawIndirectSupported = isDrawIndirectSupported;
+            IsDrawMultiIndirectSupported = isDrawMultiIndirectSupported;
+            IsRaytracingSupported = isRaytracingSupported;
+            IsRaytracingInlineSupported = isRaytracingInlineSupported;
+            IsVariableRateShadingSupported = isVariableRateShadingSupported;
+            IsHiddenSurfaceRemovalSupported = isHiddenSurfaceRemovalSupported;
+            IsBarycentricCoordSupported = isBarycentricCoordSupported;
+            IsProgrammableSamplePositionSupported = isProgrammableSamplePositionSupported;
+            MatrixMajorons = matrixMajorons;
+            DepthValueRange = depthValueRange;
+            MultiviewStrategy = multiviewStrategy;
+            WaveOperationStrategy = waveOperationStrategy;
+        }
     }
 
     public struct RHIVendorId
