@@ -92,8 +92,8 @@ namespace Infinity.Graphics
         public ERHILoadAction LoadAction;
         public ERHIStoreAction StoreAction;
         public RHITexture RenderTarget;
-        public uint ResolveLevel;
-        public uint ResolveSlice;
+        public uint ResolveMipLevel;
+        public uint ResolveArraySlice;
         public RHITexture ResolveTarget;
     }
 
@@ -101,19 +101,110 @@ namespace Infinity.Graphics
     {
         public uint MipLevel;
         public uint ArraySlice;
-        public bool DepthReadOnly;
         public float DepthClearValue;
         public ERHILoadAction DepthLoadOp;
         public ERHIStoreAction DepthStoreOp;
-        public bool StencilReadOnly;
         public int StencilClearValue;
         public ERHILoadAction StencilLoadOp;
         public ERHIStoreAction StencilStoreOp;
         public RHITexture RenderTarget;
-        public uint ResolveLevel;
-        public uint ResolveSlice;
+        public uint ResolveMipLevel;
+        public uint ResolveArraySlice;
         public EResolveMode ResolveMode;
         public RHITexture ResolveTarget;
+    }
+
+    public struct RHIAttachmentIndexArray
+    {
+        public static RHIAttachmentIndexArray Emtpy = new RHIAttachmentIndexArray(0);
+
+        public const int MaxAttachments = 8;
+
+        private int a0;
+
+        private int a1;
+
+        private int a2;
+
+        private int a3;
+
+        private int a4;
+
+        private int a5;
+
+        private int a6;
+
+        private int a7;
+
+        private int activeAttachments;
+
+        public int Length => activeAttachments;
+
+        public unsafe int this[int index]
+        {
+            get
+            {
+                if ((uint)index >= 8u)
+                {
+                    throw new IndexOutOfRangeException($"AttachmentIndexArray - index must be in range of [0, {8}[");
+                }
+
+                if ((uint)index >= activeAttachments)
+                {
+                    throw new IndexOutOfRangeException($"AttachmentIndexArray - index must be in range of [0, {activeAttachments}[");
+                }
+
+                fixed (RHIAttachmentIndexArray* ptr = &this)
+                {
+                    int* ptr2 = (int*)ptr;
+                    return ptr2[index];
+                }
+            }
+            set
+            {
+                if ((uint)index >= 8u)
+                {
+                    throw new IndexOutOfRangeException($"AttachmentIndexArray - index must be in range of [0, {8}[");
+                }
+
+                if ((uint)index >= activeAttachments)
+                {
+                    throw new IndexOutOfRangeException($"AttachmentIndexArray - index must be in range of [0, {activeAttachments}[");
+                }
+
+                fixed (RHIAttachmentIndexArray* ptr = &this)
+                {
+                    int* ptr2 = (int*)ptr;
+                    ptr2[index] = value;
+                }
+            }
+        }
+
+        public RHIAttachmentIndexArray(in int numAttachments)
+        {
+            if (numAttachments < 0 || numAttachments > 8)
+            {
+                throw new ArgumentException($"AttachmentIndexArray - numAttachments must be in range of [0, {8}[");
+            }
+
+            a0 = (a1 = (a2 = (a3 = (a4 = (a5 = (a6 = (a7 = -1)))))));
+            activeAttachments = numAttachments;
+        }
+
+        public RHIAttachmentIndexArray(int[] attachments) : this(attachments.Length)
+        {
+            for (int i = 0; i < activeAttachments; i++)
+            {
+                this[i] = attachments[i];
+            }
+        }
+    }
+
+    public struct RHISubPassDescriptor
+    {
+        public ERHISubPassFlags Flags;
+        public RHIAttachmentIndexArray ColorInputs;
+        public RHIAttachmentIndexArray ColorOutputs;
     }
 
     public struct RHITransferPassDescriptor
@@ -147,6 +238,7 @@ namespace Infinity.Graphics
         public RHITexture ShadingRateTexture;
         public Memory<RHIColorAttachmentDescriptor> ColorAttachments;
         public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachment;
+        public Memory<RHISubPassDescriptor> SubPassDescriptors;
     }
 
     public abstract class RHITransferEncoder : Disposal
@@ -178,13 +270,13 @@ namespace Infinity.Graphics
         public abstract void WriteTimestamp(in uint index);
         public abstract void BeginStatistics(in uint index);
         public abstract void EndStatistics(in uint index);
-        //public abstract void ResourceBarrier(in RHIBarrier barrier);
-        //public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
+        public abstract void ResourceBarrier(in RHIBarrier barrier);
+        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetPipeline(RHIComputePipeline pipeline);
         public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
-        // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
+        public abstract void ExecuteIndirectCommandBuffer(RHIIndirectComputeCommandBuffer indirectCmdBuffer);
         public abstract void EndPass();
     }
 
@@ -199,15 +291,15 @@ namespace Infinity.Graphics
         public abstract void WriteTimestamp(in uint index);
         public abstract void BeginStatistics(in uint index);
         public abstract void EndStatistics(in uint index);
-        //public abstract void ResourceBarrier(in RHIBarrier barrier);
-        //public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
+        public abstract void ResourceBarrier(in RHIBarrier barrier);
+        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void SetPipeline(RHIRaytracingPipeline pipeline);
         public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
         public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct);
         public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct);
         public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable);
-        // TODO public abstract void ExecuteBundles(RHIIndirectCommandBuffer indirectCommandBuffer);
+        public abstract void ExecuteIndirectCommandBuffer(RHIIndirectRayTracingCommandBuffer indirectCmdBuffer);
         public abstract void EndPass();
     }
     
@@ -244,7 +336,7 @@ namespace Infinity.Graphics
         public abstract void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
         public abstract void DrawMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DrawMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset);
-        public abstract void ExecuteCommandsInBuffer(RHIIndirectCommandBuffer indirectCommandBuffer);
+        public abstract void ExecuteIndirectCommandBuffer(RHIIndirectRasterCommandBuffer indirectCmdBuffer);
         public abstract void EndPass();
     }
 }

@@ -6,7 +6,6 @@ using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using Viewport = Infinity.Mathmatics.Viewport;
-using Silk.NET.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -357,7 +356,6 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
-        /*
         public override void ResourceBarrier(in RHIBarrier barrier)
         {
             ID3D12Resource* resource = null;
@@ -522,7 +520,6 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
-        */
 
         public override void SetPipeline(RHIComputePipeline pipeline)
         {
@@ -575,6 +572,11 @@ namespace Infinity.Graphics
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchComputeIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
+        }
+
+        public override void ExecuteIndirectCommandBuffer(RHIIndirectComputeCommandBuffer indirectCmdBuffer)
+        {
+            throw new NotImplementedException();
         }
 
         public override void EndPass()
@@ -649,7 +651,6 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
-        /*
         public override void ResourceBarrier(in RHIBarrier barrier)
         {
             ID3D12Resource* resource = null;
@@ -814,7 +815,6 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
-        */
 
         public override void SetPipeline(RHIRaytracingPipeline pipeline)
         {
@@ -910,6 +910,11 @@ namespace Infinity.Graphics
             }
         }
 
+        public override void ExecuteIndirectCommandBuffer(RHIIndirectRayTracingCommandBuffer indirectCmdBuffer)
+        {
+            throw new NotImplementedException();
+        }
+
         public override void EndPass()
         {
 #if DEBUG
@@ -938,16 +943,10 @@ namespace Infinity.Graphics
 
         internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
         {
-            m_SubPassIndex = 0;
 #if DEBUG
             PushDebugGroup(descriptor.Name);
 #endif
-
-            /*if (descriptor.SubpassDescriptors != null)
-            {
-                throw new NotImplementedException("Dx12 is not support subpass. Please do not use subpass descriptors");
-            }*/
-
+            m_SubPassIndex = 0;
             m_AttachmentInfos.Clear();
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
@@ -1007,7 +1006,8 @@ namespace Infinity.Graphics
                     //viewDescriptor.Dimension = texture.Descriptor.Dimension;
                 }
                 D3D12_DEPTH_STENCIL_VIEW_DESC desc = new D3D12_DEPTH_STENCIL_VIEW_DESC();
-                desc.Flags = Dx12Utility.GetDx12DSVFlag(descriptor.DepthStencilAttachment.Value.DepthReadOnly, descriptor.DepthStencilAttachment.Value.StencilReadOnly);
+                desc.Flags = Dx12Utility.GetDx12DSVFlag(false, false);
+                //desc.Flags = Dx12Utility.GetDx12DSVFlag(descriptor.DepthStencilAttachment.Value.DepthReadOnly, descriptor.DepthStencilAttachment.Value.StencilReadOnly);
                 desc.Format = Dx12Utility.ConvertToDx12Format(texture.Descriptor.Format);
                 desc.ViewDimension = Dx12Utility.ConvertToDx12TextureDSVDimension(texture.Descriptor.Dimension);
                 /*Dx12Utility.FillTexture2DDSV(ref desc.Texture2D, viewDescriptor);
@@ -1478,9 +1478,9 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void ExecuteCommandsInBuffer(RHIIndirectCommandBuffer indirectCommandBuffer)
+        public override void ExecuteIndirectCommandBuffer(RHIIndirectRasterCommandBuffer indirectCmdBuffer)
         {
-            throw new NotImplementedException("IndirectCommandBuffer is not yet supported");
+            throw new NotImplementedException();
         }
 
         public override void EndPass()

@@ -760,5 +760,53 @@ namespace Infinity.Graphics
             m_NativePipelineState->Release();
         }
     }
+
+    internal unsafe class Dx12PipelineLibrary : RHIPipelineLibrary
+    {
+        public Dx12PipelineLibrary(Dx12Device device, in RHIPipelineLibraryDescriptor descriptor) : base(descriptor)
+        {
+
+        }
+
+        public Dx12PipelineLibrary(in RHIPipelineLibraryResult pipelineLibraryResult) : base(pipelineLibraryResult)
+        {
+
+        }
+
+        public override void StoreComputePipeline(string name, RHIComputePipeline computePipeline)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void StoreRasterPipeline(string name, RHIRasterPipeline rasterPipeline)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void StoreRaytracingPipeline(string name, RHIRaytracingPipeline raytracingPipeline)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override RHIComputePipeline LoadComputePipeline(RHIComputePipelineDescriptor computePipelineDescriptor)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override RHIRasterPipeline LoadRasterPipeline(RHIRasterPipelineDescriptor rasterPipelineDescriptor)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override RHIRaytracingPipeline LoadRaytracingPipeline(RHIRaytracingPipelineDescriptor raytracingPipelineDescriptor)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override RHIPipelineLibraryResult Serialize()
+        {
+            throw new NotImplementedException();
+        }
+    }
 #pragma warning restore CS0169, CS0649, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
 }

@@ -226,9 +226,19 @@ namespace Infinity.Graphics
         protected RHIRasterPipelineDescriptor m_Descriptor;
     }
 
+    public struct RHIPipelineLibraryDescriptor
+    {
+
+    }
+
     public abstract class RHIPipelineLibrary : Disposal
     {
-        public RHIPipelineLibrary(in RHIPipelineLibraryResult pipelineLibraryResult)
+        internal RHIPipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
+        {
+
+        }
+
+        internal RHIPipelineLibrary(in RHIPipelineLibraryResult pipelineLibraryResult)
         {
 
         }

@@ -7,38 +7,50 @@ namespace Infinity.Graphics
 {
     public class RHIDeviceLimit
     {
+        public readonly int UniformBufferAlignment;
+        public readonly int UploadBufferAlignment;
+        public readonly int UploadBufferTextureAlignment;
+        public readonly int UploadBufferTextureRowAlignment;
         public readonly int MaxMSAACount;
         public readonly int MaxBoundTexture;
         public readonly int MinWavefrontSize;
         public readonly int MaxWavefrontSize;
         public readonly int MaxComputeThreads;
-        public readonly int UniformBufferAlignment;
-        public readonly int UploadBufferAlignment;
-        public readonly int UploadBufferTextureAlignment;
-        public readonly int UploadBufferTextureRowAlignment;
+        public readonly int MaxGroupShareMemorySize;
         public readonly int MaxVertexInputBindings;
+        public readonly int MaxColorAttachments;
+        public readonly int MaxTexture2DSize;
+        public readonly int MaxTextureCubeSize;
 
-        internal RHIDeviceLimit(in int maxMSAACount,
+        internal RHIDeviceLimit(in int uniformBufferAlignment,
+                                in int uploadBufferAlignment,
+                                in int uploadBufferTextureAlignment,
+                                in int uploadBufferTextureRowAlignment, 
+                                in int maxMSAACount,
                                 in int maxBoundTexture,
                                 in int minWavefrontSize,
                                 in int maxWavefrontSize,
                                 in int maxComputeThreads,
-                                in int uniformBufferAlignment,
-                                in int uploadBufferAlignment,
-                                in int uploadBufferTextureAlignment,
-                                in int uploadBufferTextureRowAlignment,
-                                in int maxVertexInputBindings)
+                                in int maxGroupShareMemorySize,
+                                in int maxVertexInputBindings,
+                                in int maxColorAttachments,
+                                in int maxTexture2DSize,
+                                in int maxTextureCubeSize)
         {
+            UniformBufferAlignment = uniformBufferAlignment;
+            UploadBufferAlignment = uploadBufferAlignment;
+            UploadBufferTextureAlignment = uploadBufferTextureAlignment;
+            UploadBufferTextureRowAlignment = uploadBufferTextureRowAlignment;
             MaxMSAACount = maxMSAACount;
             MaxBoundTexture = maxBoundTexture;
             MinWavefrontSize = minWavefrontSize;
             MaxWavefrontSize = maxWavefrontSize;
             MaxComputeThreads = maxComputeThreads;
-            UniformBufferAlignment = uniformBufferAlignment;
-            UploadBufferAlignment = uploadBufferAlignment;
-            UploadBufferTextureAlignment = uploadBufferTextureAlignment;
-            UploadBufferTextureRowAlignment = uploadBufferTextureRowAlignment;
+            MaxGroupShareMemorySize = maxGroupShareMemorySize;
             MaxVertexInputBindings = maxVertexInputBindings;
+            MaxColorAttachments = maxColorAttachments;
+            MaxTexture2DSize = maxTexture2DSize;
+            MaxTextureCubeSize = maxTextureCubeSize;
         }
     }
 
@@ -170,23 +182,27 @@ namespace Infinity.Graphics
         protected Dictionary<ERHIPipelineType, TArray<RHICommandQueue>>? m_CommandQueueMap;
 
         public abstract RHICommandQueue? GetCommandQueue(in ERHIPipelineType pipeline, in int index);
+        public abstract RHISwapChain CreateSwapChain(in RHISwapChainDescriptor descriptor);
         public abstract RHIFence CreateFence();
         public abstract RHISemaphore CreateSemaphore();
+        public abstract RHIStorageQueue CreateStorageQueue();
         public abstract RHIQuery CreateQuery(in RHIQueryDescriptor descriptor);
         public abstract RHIHeap CreateHeap(in RHIHeapDescription descriptor);
         public abstract RHIBuffer CreateBuffer(in RHIBufferDescriptor descriptor);
         public abstract RHITexture CreateTexture(in RHITextureDescriptor descriptor);
         public abstract RHISampler CreateSampler(in RHISamplerDescriptor descriptor);
-        public abstract RHIStorageQueue CreateStorageQueue();
         public abstract RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
         public abstract RHIBottomLevelAccelStruct CreateBottomAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor);
-        public abstract RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor);
-        public abstract RHISwapChain CreateSwapChain(in RHISwapChainDescriptor descriptor);
+        public abstract RHIIndirectComputeCommandBuffer CreateComputeIndirectCommandBuffer(in RHIIndirectComputeCommandBufferDescription descriptor);
+        public abstract RHIIndirectRayTracingCommandBuffer CreateComputeIndirectCommandBuffer(in RHIIndirectRayTracingCommandBufferDescription descriptor);
+        public abstract RHIIndirectRasterCommandBuffer CreateComputeIndirectCommandBuffer(in RHIIndirectRasterCommandBufferDescription descriptor);
         public abstract RHIResourceTableLayout CreateResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor);
         public abstract RHIResourceTable CreateResourceTable(in RHIResourceTableDescriptor descriptor);
         public abstract RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor);
+        public abstract RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor);
         public abstract RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor);
         public abstract RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor);
         public abstract RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor);
+        public abstract RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor);
     }
 }

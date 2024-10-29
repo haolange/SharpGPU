@@ -13,26 +13,34 @@ namespace Infinity.Graphics
     {
         public readonly D3D_FEATURE_LEVEL NativeMaxFeatureLevel;
 
-        internal Dx12DeviceLimit(in int maxMSAACount,
+        internal Dx12DeviceLimit(in int uniformBufferAlignment,
+                                in int uploadBufferAlignment,
+                                in int uploadBufferTextureAlignment,
+                                in int uploadBufferTextureRowAlignment,
+                                in int maxMSAACount,
                                 in int maxBoundTexture,
                                 in int minWavefrontSize,
                                 in int maxWavefrontSize,
                                 in int maxComputeThreads,
-                                in int uniformBufferAlignment,
-                                in int uploadBufferAlignment,
-                                in int uploadBufferTextureAlignment,
-                                in int uploadBufferTextureRowAlignment,
+                                in int maxGroupShareMemorySize,
                                 in int maxVertexInputBindings,
-                                in D3D_FEATURE_LEVEL nativeMaxFeatureLevel) : base(maxMSAACount,
-                                                                                maxBoundTexture,
-                                                                                minWavefrontSize,
-                                                                                maxWavefrontSize,
-                                                                                maxComputeThreads,
-                                                                                uniformBufferAlignment,
-                                                                                uploadBufferAlignment,
-                                                                                uploadBufferTextureAlignment,
-                                                                                uploadBufferTextureRowAlignment,
-                                                                                maxVertexInputBindings)
+                                in int maxColorAttachments,
+                                in int maxTexture2DSize,
+                                in int maxTextureCubeSize,
+                                in D3D_FEATURE_LEVEL nativeMaxFeatureLevel) : base(uniformBufferAlignment,
+                                                                                   uploadBufferAlignment,
+                                                                                   uploadBufferTextureAlignment,
+                                                                                   uploadBufferTextureRowAlignment,
+                                                                                   maxMSAACount,
+                                                                                   maxBoundTexture,
+                                                                                   minWavefrontSize,
+                                                                                   maxWavefrontSize,
+                                                                                   maxComputeThreads,
+                                                                                   maxGroupShareMemorySize,
+                                                                                   maxVertexInputBindings,
+                                                                                   maxColorAttachments,
+                                                                                   maxTexture2DSize,
+                                                                                   maxTextureCubeSize)
         {
             NativeMaxFeatureLevel = nativeMaxFeatureLevel;
         }
@@ -235,6 +243,11 @@ namespace Infinity.Graphics
             return null;
         }
 
+        public override RHISwapChain CreateSwapChain(in RHISwapChainDescriptor descriptor)
+        {
+            return new Dx12SwapChain(this, descriptor);
+        }
+
         public override RHIFence CreateFence()
         {
             return new Dx12Fence(this);
@@ -243,6 +256,11 @@ namespace Infinity.Graphics
         public override RHISemaphore CreateSemaphore()
         {
             return new Dx12Semaphore(this);
+        }
+
+        public override RHIStorageQueue CreateStorageQueue()
+        {
+            throw new NotImplementedException();
         }
 
         public override RHIQuery CreateQuery(in RHIQueryDescriptor descriptor)
@@ -270,11 +288,6 @@ namespace Infinity.Graphics
             return new Dx12Sampler(this, descriptor);
         }
 
-        public override RHIStorageQueue CreateStorageQueue()
-        {
-            throw new NotImplementedException();
-        }
-
         public override RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
         {
             return new Dx12TopLevelAccelStruct(this, descriptor);
@@ -283,16 +296,6 @@ namespace Infinity.Graphics
         public override RHIBottomLevelAccelStruct CreateBottomAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor)
         {
             return new Dx12BottomLevelAccelStruct(this, descriptor);
-        }
-
-        public override RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor)
-        {
-            return new Dx12Function(descriptor);
-        }
-
-        public override RHISwapChain CreateSwapChain(in RHISwapChainDescriptor descriptor)
-        {
-            return new Dx12SwapChain(this, descriptor);
         }
 
         public override RHIResourceTableLayout CreateResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor)
@@ -310,6 +313,11 @@ namespace Infinity.Graphics
             return new Dx12PipelineLayout(this, descriptor);
         }
 
+        public override RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor)
+        {
+            return new Dx12Function(descriptor);
+        }
+
         public override RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor)
         {
             return new Dx12RasterPipeline(this, descriptor);
@@ -323,6 +331,26 @@ namespace Infinity.Graphics
         public override RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor)
         {
             return new Dx12RaytracingPipeline(this, descriptor);
+        }
+
+        public override RHIIndirectComputeCommandBuffer CreateComputeIndirectCommandBuffer(in RHIIndirectComputeCommandBufferDescription descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override RHIIndirectRayTracingCommandBuffer CreateComputeIndirectCommandBuffer(in RHIIndirectRayTracingCommandBufferDescription descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override RHIIndirectRasterCommandBuffer CreateComputeIndirectCommandBuffer(in RHIIndirectRasterCommandBufferDescription descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
+        {
+            throw new NotImplementedException();
         }
 
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)
@@ -410,16 +438,20 @@ namespace Infinity.Graphics
 
         private void CheckFeatureSupport()
         {
+            int uniformBufferAlignment = 256;
+            int uploadBufferAlignment = 256;
+            int uploadBufferTextureAlignment = 256;
+            int uploadBufferTextureRowAlignment = 256;
             int maxMSAACount = 16;
             int maxBoundTexture = 16;
             int minWavefrontSize = 32;
             int maxWavefrontSize = 32;
             int maxComputeThreads = 1024;
-            int uniformBufferAlignment = 256;
-            int uploadBufferAlignment = 256;
-            int uploadBufferTextureAlignment = 256;
-            int uploadBufferTextureRowAlignment = 256;
+            int maxGroupShareMemorySize = 1024;
             int maxVertexInputBindings = 32;
+            int maxColorAttachments = 8;
+            int maxTexture2DSize = 16384;
+            int maxTextureCubeSize = 8192;
             D3D_FEATURE_LEVEL nativeMaxFeatureLevel;
 
             bool isFlipProjection = false;
@@ -603,47 +635,51 @@ namespace Infinity.Graphics
                     break;
             }
 
-            m_Limit = new Dx12DeviceLimit(maxMSAACount,
-                                        maxBoundTexture,
-                                        minWavefrontSize,
-                                        maxWavefrontSize,
-                                        maxComputeThreads,
-                                        uniformBufferAlignment,
-                                        uploadBufferAlignment,
-                                        uploadBufferTextureAlignment,
-                                        uploadBufferTextureRowAlignment,
-                                        maxVertexInputBindings,
-                                        nativeMaxFeatureLevel);
+            m_Limit = new Dx12DeviceLimit(uniformBufferAlignment,
+                                          uploadBufferAlignment,
+                                          uploadBufferTextureAlignment,
+                                          uploadBufferTextureRowAlignment,
+                                          maxMSAACount,
+                                          maxBoundTexture,
+                                          minWavefrontSize,
+                                          maxWavefrontSize,
+                                          maxComputeThreads,
+                                          maxGroupShareMemorySize,
+                                          maxVertexInputBindings,
+                                          maxColorAttachments,
+                                          maxTexture2DSize,
+                                          maxTextureCubeSize,
+                                          nativeMaxFeatureLevel);
 
             m_Feature = new Dx12DeviceFeature(isFlipProjection,
-                                            isHDRPresentSupported,
-                                            isUnifiedMemorySupported,
-                                            isRootConstantSupport,
-                                            isIndirectRootConstantSupport,
-                                            isPixelShaderUAVSupported,
-                                            isRasterizerOrderedSupported,
-                                            isAnisotropyTextureSupported,
-                                            isDepthbufferFetchSupported,
-                                            isFramebufferFetchSupported,
-                                            isTimestampQueriesSupported,
-                                            isOcclusionQueriesSupported,
-                                            isPipelineStatsQueriesSupported,
-                                            isAtomicUInt64Supported,
-                                            isWorkgraphSupported,
-                                            isMeshShadingSupported,
-                                            isDrawIndirectSupported,
-                                            isDrawMultiIndirectSupported,
-                                            isRaytracingSupported,
-                                            isRaytracingInlineSupported,
-                                            isVariableRateShadingSupported,
-                                            isHiddenSurfaceRemovalSupported,
-                                            isBarycentricCoordSupported,
-                                            isProgrammableSamplePositionSupported,
-                                            matrixMajorons,
-                                            depthValueRange,
-                                            multiviewStrategy,
-                                            waveOperationStrategy,
-                                            isNativeRenderPassSupported);
+                                              isHDRPresentSupported,
+                                              isUnifiedMemorySupported,
+                                              isRootConstantSupport,
+                                              isIndirectRootConstantSupport,
+                                              isPixelShaderUAVSupported,
+                                              isRasterizerOrderedSupported,
+                                              isAnisotropyTextureSupported,
+                                              isDepthbufferFetchSupported,
+                                              isFramebufferFetchSupported,
+                                              isTimestampQueriesSupported,
+                                              isOcclusionQueriesSupported,
+                                              isPipelineStatsQueriesSupported,
+                                              isAtomicUInt64Supported,
+                                              isWorkgraphSupported,
+                                              isMeshShadingSupported,
+                                              isDrawIndirectSupported,
+                                              isDrawMultiIndirectSupported,
+                                              isRaytracingSupported,
+                                              isRaytracingInlineSupported,
+                                              isVariableRateShadingSupported,
+                                              isHiddenSurfaceRemovalSupported,
+                                              isBarycentricCoordSupported,
+                                              isProgrammableSamplePositionSupported,
+                                              matrixMajorons,
+                                              depthValueRange,
+                                              multiviewStrategy,
+                                              waveOperationStrategy,
+                                              isNativeRenderPassSupported);
         }
 
         private void CreateDescriptorHeaps()

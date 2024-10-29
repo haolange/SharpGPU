@@ -151,12 +151,32 @@ namespace Infinity.Graphics
         public abstract RHIRasterEncoder GetRasterEncoder();
     }
 
-    public struct RHIIndirectCommandBufferDescription
+    public struct RHIIndirectComputeCommandBufferDescription
     {
 
     }
 
-    public abstract class RHIIndirectCommandBuffer : Disposal
+    public abstract class RHIIndirectComputeCommandBuffer : Disposal
+    {
+
+    }
+
+    public struct RHIIndirectRayTracingCommandBufferDescription
+    {
+
+    }
+
+    public abstract class RHIIndirectRayTracingCommandBuffer : Disposal
+    {
+
+    }
+
+    public struct RHIIndirectRasterCommandBufferDescription
+    {
+
+    }
+
+    public abstract class RHIIndirectRasterCommandBuffer : Disposal
     {
 
     }

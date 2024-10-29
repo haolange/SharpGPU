@@ -486,6 +486,15 @@
         Pending
     }
 
+    public enum ERHISubPassFlags : byte
+    {
+        None = 0,
+        ReadOnlyDepth = 1,
+        ReadOnlyStencil = 2,
+        ReadOnlyDepthStencil = 3,
+        Pending
+    }
+
     public enum ERHILoadAction : byte
     {
         Load,
@@ -563,12 +572,11 @@
         ResolveDst = 0x10,
         DepthRead = 0x20,
         DepthWrite = 0x40,
-        RenderFetch = 0x80,
-        RenderTarget = 0x100,
-        ShaderResource = 0x200,
-        UnorderedAccess = 0x800,
-        RasterizerOrdered = 0x800,
-        ShadingRateSurface = 0x1000,
+        RenderTarget = 0x80,
+        ShaderResource = 0x100,
+        UnorderedAccess = 0x200,
+        RasterizerOrdered = 0x400,
+        ShadingRateSurface = 0x800,
         Pending
     }
 

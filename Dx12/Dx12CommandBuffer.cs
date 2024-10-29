@@ -347,9 +347,35 @@ namespace Infinity.Graphics
         }
     }
 
-    internal unsafe class Dx12IndirectCommandBuffer : RHIIndirectCommandBuffer
+    internal unsafe class Dx12IndirectComputeCommandBuffer : RHIIndirectComputeCommandBuffer
     {
-        public Dx12IndirectCommandBuffer(Dx12Device device, in RHIIndirectCommandBufferDescription descriptor)
+        public Dx12IndirectComputeCommandBuffer(Dx12Device device, in RHIIndirectComputeCommandBufferDescription descriptor)
+        {
+
+        }
+
+        protected override void Release()
+        {
+
+        }
+    }
+
+    internal unsafe class Dx12IndirectRayTracingCommandBuffer : RHIIndirectRayTracingCommandBuffer
+    {
+        public Dx12IndirectRayTracingCommandBuffer(Dx12Device device, in RHIIndirectRayTracingCommandBufferDescription descriptor)
+        {
+
+        }
+
+        protected override void Release()
+        {
+
+        }
+    }
+
+    internal unsafe class Dx12IndirectRasterCommandBuffer : RHIIndirectRasterCommandBuffer
+    {
+        public Dx12IndirectRasterCommandBuffer(Dx12Device device, in RHIIndirectRasterCommandBufferDescription descriptor)
         {
 
         }
