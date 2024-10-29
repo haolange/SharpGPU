@@ -276,7 +276,7 @@ namespace Infinity.Graphics
         public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
-        public abstract void ExecuteIndirectCommandBuffer(RHIIndirectComputeCommandBuffer indirectCmdBuffer);
+        public abstract void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer);
         public abstract void EndPass();
     }
 
@@ -299,7 +299,7 @@ namespace Infinity.Graphics
         public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct);
         public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable);
-        public abstract void ExecuteIndirectCommandBuffer(RHIIndirectRayTracingCommandBuffer indirectCmdBuffer);
+        public abstract void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer);
         public abstract void EndPass();
     }
     
@@ -336,7 +336,7 @@ namespace Infinity.Graphics
         public abstract void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
         public abstract void DrawMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DrawMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset);
-        public abstract void ExecuteIndirectCommandBuffer(RHIIndirectRasterCommandBuffer indirectCmdBuffer);
+        public abstract void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer);
         public abstract void EndPass();
     }
 }

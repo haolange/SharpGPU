@@ -347,9 +347,9 @@ namespace Infinity.Graphics
         }
     }
 
-    internal unsafe class Dx12IndirectComputeCommandBuffer : RHIIndirectComputeCommandBuffer
+    internal unsafe class Dx12ComputeIndirectCommandBuffer : RHIComputeIndirectCommandBuffer
     {
-        public Dx12IndirectComputeCommandBuffer(Dx12Device device, in RHIIndirectComputeCommandBufferDescription descriptor)
+        public Dx12ComputeIndirectCommandBuffer(Dx12Device device, in RHIComputeIndirectCommandBufferDescription descriptor)
         {
 
         }
@@ -360,9 +360,9 @@ namespace Infinity.Graphics
         }
     }
 
-    internal unsafe class Dx12IndirectRayTracingCommandBuffer : RHIIndirectRayTracingCommandBuffer
+    internal unsafe class Dx12RayTracingIndirectCommandBuffer : RHIRayTracingIndirectCommandBuffer
     {
-        public Dx12IndirectRayTracingCommandBuffer(Dx12Device device, in RHIIndirectRayTracingCommandBufferDescription descriptor)
+        public Dx12RayTracingIndirectCommandBuffer(Dx12Device device, in RHIRayTracingIndirectCommandBufferDescription descriptor)
         {
 
         }
@@ -373,9 +373,9 @@ namespace Infinity.Graphics
         }
     }
 
-    internal unsafe class Dx12IndirectRasterCommandBuffer : RHIIndirectRasterCommandBuffer
+    internal unsafe class Dx12RasterIndirectCommandBuffer : RHIRasterIndirectCommandBuffer
     {
-        public Dx12IndirectRasterCommandBuffer(Dx12Device device, in RHIIndirectRasterCommandBufferDescription descriptor)
+        public Dx12RasterIndirectCommandBuffer(Dx12Device device, in RHIRasterIndirectCommandBufferDescription descriptor)
         {
 
         }

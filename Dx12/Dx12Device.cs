@@ -333,17 +333,17 @@ namespace Infinity.Graphics
             return new Dx12RaytracingPipeline(this, descriptor);
         }
 
-        public override RHIIndirectComputeCommandBuffer CreateComputeIndirectCommandBuffer(in RHIIndirectComputeCommandBufferDescription descriptor)
+        public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
         {
             throw new NotImplementedException();
         }
 
-        public override RHIIndirectRayTracingCommandBuffer CreateComputeIndirectCommandBuffer(in RHIIndirectRayTracingCommandBufferDescription descriptor)
+        public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor)
         {
             throw new NotImplementedException();
         }
 
-        public override RHIIndirectRasterCommandBuffer CreateComputeIndirectCommandBuffer(in RHIIndirectRasterCommandBufferDescription descriptor)
+        public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
         {
             throw new NotImplementedException();
         }

@@ -574,7 +574,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchComputeIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIIndirectComputeCommandBuffer indirectCmdBuffer)
+        public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
         {
             throw new NotImplementedException();
         }
@@ -910,7 +910,7 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIIndirectRayTracingCommandBuffer indirectCmdBuffer)
+        public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
         {
             throw new NotImplementedException();
         }
@@ -1478,7 +1478,7 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIIndirectRasterCommandBuffer indirectCmdBuffer)
+        public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
         {
             throw new NotImplementedException();
         }
