@@ -105,17 +105,17 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
-        public override RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor)
-        {
-            throw new NotImplementedException();
-        }
-
         public override RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
 
         public override RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor)
         {
             throw new NotImplementedException();
         }

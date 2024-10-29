@@ -318,11 +318,6 @@ namespace Infinity.Graphics
             return new Dx12Function(descriptor);
         }
 
-        public override RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor)
-        {
-            return new Dx12RasterPipeline(this, descriptor);
-        }
-
         public override RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor)
         {
             return new Dx12ComputePipeline(this, descriptor);
@@ -331,6 +326,11 @@ namespace Infinity.Graphics
         public override RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor)
         {
             return new Dx12RaytracingPipeline(this, descriptor);
+        }
+
+        public override RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor)
+        {
+            return new Dx12RasterPipeline(this, descriptor);
         }
 
         public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
