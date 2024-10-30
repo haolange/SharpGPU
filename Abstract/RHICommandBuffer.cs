@@ -134,8 +134,8 @@ namespace Infinity.Graphics
         protected RHICommandQueue m_CommandQueue;
 
         public abstract void Begin(string name);
-        public abstract void ResourceBarrier(in RHIBarrier barrier);
-        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
+        public abstract void ResourceBarrier(in RHIResourceBarrier barrier);
+        public abstract void ResourceBarriers(in Memory<RHIResourceBarrier> barriers);
         public abstract RHITransferEncoder BeginTransferPass(in RHITransferPassDescriptor descriptor);
         public abstract void EndTransferPass();
         public abstract RHIComputeEncoder BeginComputePass(in RHIComputePassDescriptor descriptor);

@@ -250,8 +250,6 @@ namespace Infinity.Graphics
         public abstract void PopDebugGroup();
         public abstract void WriteTimestamp(in uint index);
         public abstract void ResolveQuery(RHIQuery query, in uint startIndex, in uint queriesCount);
-        //public abstract void ResourceBarrier(in RHIBarrier barrier);
-        //public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size);
         public abstract void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size);
         public abstract void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size);
@@ -270,8 +268,8 @@ namespace Infinity.Graphics
         public abstract void WriteTimestamp(in uint index);
         public abstract void BeginStatistics(in uint index);
         public abstract void EndStatistics(in uint index);
-        public abstract void ResourceBarrier(in RHIBarrier barrier);
-        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
+        public abstract void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState);
+        public abstract void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState);
         public abstract void SetPipeline(RHIComputePipeline pipeline);
         public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
@@ -291,8 +289,8 @@ namespace Infinity.Graphics
         public abstract void WriteTimestamp(in uint index);
         public abstract void BeginStatistics(in uint index);
         public abstract void EndStatistics(in uint index);
-        public abstract void ResourceBarrier(in RHIBarrier barrier);
-        public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
+        public abstract void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState);
+        public abstract void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState);
         public abstract void SetPipeline(RHIRaytracingPipeline pipeline);
         public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
         public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct);
@@ -316,8 +314,6 @@ namespace Infinity.Graphics
         public abstract void EndOcclusion(in uint index);
         public abstract void BeginStatistics(in uint index);
         public abstract void EndStatistics(in uint index);
-        //public abstract void ResourceBarrier(in RHIBarrier barrier);
-        //public abstract void ResourceBarriers(in Memory<RHIBarrier> barriers);
         public abstract void NextSubPass();
         public abstract void SetScissor(in Rect rect);
         public abstract void SetScissors(in Memory<Rect> rects);

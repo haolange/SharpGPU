@@ -193,16 +193,17 @@ namespace Infinity.Graphics
         public abstract RHISampler CreateSampler(in RHISamplerDescriptor descriptor);
         public abstract RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
         public abstract RHIBottomLevelAccelStruct CreateBottomAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor);
-        public abstract RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor);
-        public abstract RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor);
-        public abstract RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor);
         public abstract RHIResourceTableLayout CreateResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor);
         public abstract RHIResourceTable CreateResourceTable(in RHIResourceTableDescriptor descriptor);
         public abstract RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor);
         public abstract RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor);
+        public abstract RHIFunctionTable CreateFunctionTable();
         public abstract RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor);
         public abstract RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor);
         public abstract RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor);
         public abstract RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor);
+        public abstract RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor);
+        public abstract RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor);
+        public abstract RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor);
     }
 }

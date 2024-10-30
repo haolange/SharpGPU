@@ -78,14 +78,14 @@ namespace Infinity.Graphics
             m_NativeCommandList->SetDescriptorHeaps(2, &*resourceBarriers);
         }
 
-        public override void ResourceBarrier(in RHIBarrier barrier)
+        public override void ResourceBarrier(in RHIResourceBarrier barrier)
         {
             ID3D12Resource* resource = null;
             D3D12_RESOURCE_BARRIER resourceBarrier;
 
-            switch (barrier.BarrierType)
+            switch (barrier.ResourceBarrierType)
             {
-                case ERHIBarrierType.UAV:
+                case ERHIResourceBarrierType.UAV:
                     if (barrier.ResourceType == ERHIResourceType.Buffer)
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
@@ -105,7 +105,7 @@ namespace Infinity.Graphics
                     resourceBarrier = D3D12_RESOURCE_BARRIER.InitUAV(resource);
                     break;
 
-                case ERHIBarrierType.Aliasing:
+                case ERHIResourceBarrierType.Aliasing:
                     if (barrier.ResourceType == ERHIResourceType.Buffer)
                     {
                         Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
@@ -125,7 +125,7 @@ namespace Infinity.Graphics
                     resourceBarrier = D3D12_RESOURCE_BARRIER.InitAliasing(null, resource);
                     break;
 
-                case ERHIBarrierType.Triansition:
+                case ERHIResourceBarrierType.Triansition:
                     D3D12_RESOURCE_STATES srcState;
                     D3D12_RESOURCE_STATES dstState;
                     if (barrier.ResourceType == ERHIResourceType.Buffer)
@@ -157,7 +157,7 @@ namespace Infinity.Graphics
             m_NativeCommandList->ResourceBarrier(1, &resourceBarrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIBarrier> barriers)
+        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
         {
             ID3D12Resource* resource;
             D3D12_RESOURCE_STATES srcState;
@@ -166,11 +166,11 @@ namespace Infinity.Graphics
 
             for (int i = 0; i < barriers.Length; ++i)
             {
-                ref RHIBarrier barrier = ref barriers.Span[i];
+                ref RHIResourceBarrier barrier = ref barriers.Span[i];
 
-                switch (barrier.BarrierType)
+                switch (barrier.ResourceBarrierType)
                 {
-                    case ERHIBarrierType.UAV:
+                    case ERHIResourceBarrierType.UAV:
                         if (barrier.ResourceType == ERHIResourceType.Buffer)
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
@@ -190,7 +190,7 @@ namespace Infinity.Graphics
                         resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitUAV(resource);
                         break;
 
-                    case ERHIBarrierType.Aliasing:
+                    case ERHIResourceBarrierType.Aliasing:
                         if (barrier.ResourceType == ERHIResourceType.Buffer)
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
@@ -210,7 +210,7 @@ namespace Infinity.Graphics
                         resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitAliasing(null, resource);
                         break;
 
-                    case ERHIBarrierType.Triansition:
+                    case ERHIResourceBarrierType.Triansition:
                         if (barrier.ResourceType == ERHIResourceType.Buffer)
                         {
                             Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;

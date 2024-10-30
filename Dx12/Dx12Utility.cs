@@ -298,6 +298,123 @@ namespace Infinity.Graphics
             }
         }
 
+        internal static D3D12_FILL_MODE ConvertToDx12FillMode(in ERHIFillMode fillMode)
+        {
+            switch (fillMode)
+            {
+                case ERHIFillMode.Solid:
+                    return D3D12_FILL_MODE.D3D12_FILL_MODE_SOLID;
+
+                case ERHIFillMode.Wireframe:
+                    return D3D12_FILL_MODE.D3D12_FILL_MODE_WIREFRAME;
+
+                default:
+                    return D3D12_FILL_MODE.D3D12_FILL_MODE_SOLID;
+            }
+        }
+
+        internal static D3D12_CULL_MODE ConvertToDx12CullMode(in ERHICullMode cullMode)
+        {
+            switch (cullMode)
+            {
+                case ERHICullMode.None:
+                    return D3D12_CULL_MODE.D3D12_CULL_MODE_NONE;
+
+                case ERHICullMode.Back:
+                    return D3D12_CULL_MODE.D3D12_CULL_MODE_BACK;
+
+                case ERHICullMode.Front:
+                    return D3D12_CULL_MODE.D3D12_CULL_MODE_FRONT;
+
+                default:
+                    return D3D12_CULL_MODE.D3D12_CULL_MODE_BACK;
+            }
+        }
+
+        internal static D3D12_BLEND_OP ConvertToDx12BlendOp(in ERHIBlendOp blendOp)
+        {
+            switch (blendOp)
+            {
+                case ERHIBlendOp.Add:
+                    return D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
+
+                case ERHIBlendOp.Substract:
+                    return D3D12_BLEND_OP.D3D12_BLEND_OP_SUBTRACT;
+
+                case ERHIBlendOp.ReverseSubstract:
+                    return D3D12_BLEND_OP.D3D12_BLEND_OP_REV_SUBTRACT;
+
+                case ERHIBlendOp.Min:
+                    return D3D12_BLEND_OP.D3D12_BLEND_OP_MIN;
+
+                case ERHIBlendOp.Max:
+                    return D3D12_BLEND_OP.D3D12_BLEND_OP_MAX;
+
+                default:
+                    return D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
+            }
+        }
+
+        internal static D3D12_BLEND ConvertToDx12BlendMode(in ERHIBlendMode blendMode)
+        {
+            switch (blendMode)
+            {
+                case ERHIBlendMode.Zero:
+                    return D3D12_BLEND.D3D12_BLEND_ZERO;
+
+                case ERHIBlendMode.One:
+                    return D3D12_BLEND.D3D12_BLEND_ONE;
+
+                case ERHIBlendMode.SrcColor:
+                    return D3D12_BLEND.D3D12_BLEND_SRC_COLOR;
+
+                case ERHIBlendMode.OneMinusSrcColor:
+                    return D3D12_BLEND.D3D12_BLEND_INV_SRC_COLOR;
+
+                case ERHIBlendMode.SrcAlpha:
+                    return D3D12_BLEND.D3D12_BLEND_SRC_ALPHA;
+
+                case ERHIBlendMode.OneMinusSrcAlpha:
+                    return D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
+
+                case ERHIBlendMode.DstColor:
+                    return D3D12_BLEND.D3D12_BLEND_DEST_COLOR;
+
+                case ERHIBlendMode.OneMinusDstColor:
+                    return D3D12_BLEND.D3D12_BLEND_INV_DEST_COLOR;
+
+                case ERHIBlendMode.DstAlpha:
+                    return D3D12_BLEND.D3D12_BLEND_DEST_ALPHA;
+
+                case ERHIBlendMode.OneMinusDstAlpha:
+                    return D3D12_BLEND.D3D12_BLEND_INV_DEST_ALPHA;
+
+                case ERHIBlendMode.SrcAlphaSaturate:
+                    return D3D12_BLEND.D3D12_BLEND_SRC_ALPHA_SAT;
+
+                case ERHIBlendMode.BlendFactor:
+                    return D3D12_BLEND.D3D12_BLEND_BLEND_FACTOR;
+
+                case ERHIBlendMode.InverseBlendFactor:
+                    return D3D12_BLEND.D3D12_BLEND_INV_BLEND_FACTOR;
+
+                case ERHIBlendMode.SecondarySourceColor:
+                    return D3D12_BLEND.D3D12_BLEND_SRC1_COLOR;
+
+                case ERHIBlendMode.InverseSecondarySourceColor:
+                    return D3D12_BLEND.D3D12_BLEND_INV_SRC1_COLOR;
+
+                case ERHIBlendMode.SecondarySourceAlpha:
+                    return D3D12_BLEND.D3D12_BLEND_SRC1_ALPHA;
+
+                case ERHIBlendMode.InverseSecondarySourceAlpha:
+                    return D3D12_BLEND.D3D12_BLEND_INV_SRC1_ALPHA;
+
+                default:
+                    return D3D12_BLEND.D3D12_BLEND_ZERO;
+            }
+        }
+
         internal static byte ConvertToDx12WriteChannel(in ERHIColorWriteChannel writeChannel)
         {
             byte result = 0;
@@ -452,7 +569,9 @@ namespace Infinity.Graphics
         internal static D3D12_RESOURCE_STATES ConvertToDx12TextureState(in ERHITextureState state)
         {
             if (state == ERHITextureState.Undefine)
+            {
                 return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
+            }
 
             D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
 
@@ -468,6 +587,40 @@ namespace Infinity.Graphics
             if ((state & ERHITextureState.ShaderResource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
             if ((state & ERHITextureState.UnorderedAccess) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
             if ((state & ERHITextureState.ShadingRateSurface) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE;
+
+            return result;
+        }
+
+        internal static D3D12_RAYTRACING_GEOMETRY_FLAGS ConvertToDx12AccelStructGeometryFlag(in EAccelStructGeometryFlag geometryFlag)
+        {
+            if (geometryFlag == EAccelStructGeometryFlag.None)
+            {
+                return D3D12_RAYTRACING_GEOMETRY_FLAGS.D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
+            }
+
+            D3D12_RAYTRACING_GEOMETRY_FLAGS result = D3D12_RAYTRACING_GEOMETRY_FLAGS.D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
+
+            if ((geometryFlag & EAccelStructGeometryFlag.Opaque) != 0) result |= D3D12_RAYTRACING_GEOMETRY_FLAGS.D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+            if ((geometryFlag & EAccelStructGeometryFlag.NoDuplicateAnyhitInverseOcation) != 0) result |= D3D12_RAYTRACING_GEOMETRY_FLAGS.D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION;
+
+            return result;
+        }
+
+        internal static D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS ConvertToDx12AccelStructGeometryFlag(in EAccelStructFlag buildFlag)
+        {
+            if (buildFlag == EAccelStructFlag.None)
+            {
+                return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+            }
+
+            D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS result = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+
+            if ((buildFlag & EAccelStructFlag.AllowUpdate) != 0) result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
+            if ((buildFlag & EAccelStructFlag.PerformUpdate) != 0) result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
+            if ((buildFlag & EAccelStructFlag.MinimizeMemory) != 0) result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_MINIMIZE_MEMORY;
+            if ((buildFlag & EAccelStructFlag.PreferFastTrace) != 0) result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE; 
+            if ((buildFlag & EAccelStructFlag.PreferFastBuild) != 0) result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
+            if ((buildFlag & EAccelStructFlag.AllowCompaction) != 0) result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION;
 
             return result;
         }
@@ -542,12 +695,12 @@ namespace Infinity.Graphics
                 for (int i = 0; i < 8; i++)
                 {
                     blendDescription.RenderTarget[i].BlendEnable = blendDescriptorPtr[i].BlendEnable;
-                    blendDescription.RenderTarget[i].BlendOp = (D3D12_BLEND_OP)blendDescriptorPtr[i].BlendOpColor;
-                    blendDescription.RenderTarget[i].SrcBlend = (D3D12_BLEND)blendDescriptorPtr[i].SrcBlendColor;
-                    blendDescription.RenderTarget[i].DestBlend = (D3D12_BLEND)blendDescriptorPtr[i].DstBlendColor;
-                    blendDescription.RenderTarget[i].BlendOpAlpha = (D3D12_BLEND_OP)blendDescriptorPtr[i].BlendOpAlpha;
-                    blendDescription.RenderTarget[i].SrcBlendAlpha = (D3D12_BLEND)blendDescriptorPtr[i].SrcBlendAlpha;
-                    blendDescription.RenderTarget[i].DestBlendAlpha = (D3D12_BLEND)blendDescriptorPtr[i].DstBlendAlpha;
+                    blendDescription.RenderTarget[i].BlendOp = ConvertToDx12BlendOp(blendDescriptorPtr[i].BlendOpColor);
+                    blendDescription.RenderTarget[i].SrcBlend = ConvertToDx12BlendMode(blendDescriptorPtr[i].SrcBlendColor);
+                    blendDescription.RenderTarget[i].DestBlend = ConvertToDx12BlendMode(blendDescriptorPtr[i].DstBlendColor);
+                    blendDescription.RenderTarget[i].BlendOpAlpha = ConvertToDx12BlendOp(blendDescriptorPtr[i].BlendOpAlpha);
+                    blendDescription.RenderTarget[i].SrcBlendAlpha = ConvertToDx12BlendMode(blendDescriptorPtr[i].SrcBlendAlpha);
+                    blendDescription.RenderTarget[i].DestBlendAlpha = ConvertToDx12BlendMode(blendDescriptorPtr[i].DstBlendAlpha);
                     blendDescription.RenderTarget[i].RenderTargetWriteMask = ConvertToDx12WriteChannel(blendDescriptorPtr[i].ColorWriteChannel);
                 }
             }
@@ -557,8 +710,8 @@ namespace Infinity.Graphics
         internal static D3D12_RASTERIZER_DESC CreateDx12RasterizerState(in RHIRasterizerStateDescriptor description, bool bMultisample)
         {
             D3D12_RASTERIZER_DESC rasterDescription;
-            rasterDescription.FillMode = (D3D12_FILL_MODE)description.FillMode;
-            rasterDescription.CullMode = (D3D12_CULL_MODE)description.CullMode;
+            rasterDescription.FillMode = ConvertToDx12FillMode(description.FillMode);
+            rasterDescription.CullMode = ConvertToDx12CullMode(description.CullMode);
             rasterDescription.ForcedSampleCount = 0;
             rasterDescription.MultisampleEnable = bMultisample;
             rasterDescription.DepthBias = (int)description.DepthBias;
@@ -569,6 +722,37 @@ namespace Infinity.Graphics
             rasterDescription.FrontCounterClockwise = description.FrontCounterClockwise;
             rasterDescription.ConservativeRaster = description.ConservativeRaster ? D3D12_CONSERVATIVE_RASTERIZATION_MODE.D3D12_CONSERVATIVE_RASTERIZATION_MODE_ON : D3D12_CONSERVATIVE_RASTERIZATION_MODE.D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
             return rasterDescription;
+        }
+
+        internal static D3D12_STENCIL_OP ConvertToDx12StencilOp(in ERHIStencilOp stencilOp)
+        {
+            switch (stencilOp)
+            {
+                case ERHIStencilOp.Keep:
+                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_KEEP;
+
+                case ERHIStencilOp.Zero:
+                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_ZERO;
+
+                case ERHIStencilOp.Replace:
+                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_REPLACE;
+
+                case ERHIStencilOp.IncrementSaturation:
+                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_INCR_SAT;
+
+                case ERHIStencilOp.DecrementSaturation:
+                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_DECR_SAT;
+
+                case ERHIStencilOp.Invert:
+                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_INVERT;
+
+                case ERHIStencilOp.Increment:
+                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_INCR;
+
+                case ERHIStencilOp.Decrement:
+                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_DECR;
+            }
+            return 0;
         }
 
         internal static D3D12_COMPARISON_FUNC ConvertToDx12Comparison(in ERHIComparisonMode comparisonMode)
@@ -616,18 +800,18 @@ namespace Infinity.Graphics
             D3D12_DEPTH_STENCILOP_DESC frontFaceDescription = new D3D12_DEPTH_STENCILOP_DESC
             {
                 StencilFunc = ConvertToDx12Comparison(depthStencilStateDescriptor.FrontFace.ComparisonMode),
-                StencilFailOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.FrontFace.StencilFailOp,
-                StencilPassOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.FrontFace.StencilPassOp,
-                StencilDepthFailOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.FrontFace.StencilDepthFailOp
+                StencilFailOp = ConvertToDx12StencilOp(depthStencilStateDescriptor.FrontFace.StencilFailOp),
+                StencilPassOp = ConvertToDx12StencilOp(depthStencilStateDescriptor.FrontFace.StencilPassOp),
+                StencilDepthFailOp = ConvertToDx12StencilOp(depthStencilStateDescriptor.FrontFace.StencilDepthFailOp)
             };
             depthStencilDescription.FrontFace = frontFaceDescription;
 
             D3D12_DEPTH_STENCILOP_DESC backFaceDescription = new D3D12_DEPTH_STENCILOP_DESC
             {
                 StencilFunc = ConvertToDx12Comparison(depthStencilStateDescriptor.BackFace.ComparisonMode),
-                StencilFailOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.BackFace.StencilFailOp,
-                StencilPassOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.BackFace.StencilPassOp,
-                StencilDepthFailOp = (D3D12_STENCIL_OP)depthStencilStateDescriptor.BackFace.StencilDepthFailOp
+                StencilFailOp = ConvertToDx12StencilOp(depthStencilStateDescriptor.BackFace.StencilFailOp),
+                StencilPassOp = ConvertToDx12StencilOp(depthStencilStateDescriptor.BackFace.StencilPassOp),
+                StencilDepthFailOp = ConvertToDx12StencilOp(depthStencilStateDescriptor.BackFace.StencilDepthFailOp)
             };
             depthStencilDescription.BackFace = backFaceDescription;
             return depthStencilDescription;

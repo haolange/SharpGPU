@@ -105,7 +105,7 @@ namespace Infinity.Graphics
             D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS nativeAccelStructDescriptor = new D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS();
             {
                 nativeAccelStructDescriptor.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-                nativeAccelStructDescriptor.Flags = (D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS)descriptor.Flag;
+                nativeAccelStructDescriptor.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(descriptor.Flag);
                 nativeAccelStructDescriptor.DescsLayout = D3D12_ELEMENTS_LAYOUT.D3D12_ELEMENTS_LAYOUT_ARRAY;
                 nativeAccelStructDescriptor.NumDescs = (uint)descriptor.Instances.Length;
                 nativeAccelStructDescriptor.InstanceDescs = m_NativeInstancesBuffer->GetGPUVirtualAddress() + descriptor.Offset;
@@ -158,7 +158,7 @@ namespace Infinity.Graphics
             D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS nativeAccelStructDescriptor = new D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS();
             {
                 nativeAccelStructDescriptor.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-                nativeAccelStructDescriptor.Flags = (D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS)descriptor.Flag | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
+                nativeAccelStructDescriptor.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(descriptor.Flag) | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
                 nativeAccelStructDescriptor.DescsLayout = D3D12_ELEMENTS_LAYOUT.D3D12_ELEMENTS_LAYOUT_ARRAY;
                 nativeAccelStructDescriptor.NumDescs = (uint)descriptor.Instances.Length;
                 nativeAccelStructDescriptor.InstanceDescs = m_NativeInstancesBuffer->GetGPUVirtualAddress() + descriptor.Offset;
@@ -208,7 +208,7 @@ namespace Infinity.Graphics
                         Dx12Buffer aabbBuffer = aabbGeometry.AABBBuffer as Dx12Buffer;
 
                         nativeGeometryDescription.Type = D3D12_RAYTRACING_GEOMETRY_TYPE.D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS;
-                        nativeGeometryDescription.Flags = (D3D12_RAYTRACING_GEOMETRY_FLAGS)asGeometry.GeometryFlag;
+                        nativeGeometryDescription.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(asGeometry.GeometryFlag);
 
                         ref D3D12_RAYTRACING_GEOMETRY_AABBS_DESC nativeAABBGeometry = ref nativeGeometryDescription.AABBs;
                         nativeAABBGeometry.AABBCount = aabbGeometry.Count;
@@ -222,7 +222,7 @@ namespace Infinity.Graphics
                         Dx12Buffer vertexBuffer = triangleGeometry.VertexBuffer as Dx12Buffer;
 
                         nativeGeometryDescription.Type = D3D12_RAYTRACING_GEOMETRY_TYPE.D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-                        nativeGeometryDescription.Flags = (D3D12_RAYTRACING_GEOMETRY_FLAGS)asGeometry.GeometryFlag;
+                        nativeGeometryDescription.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(asGeometry.GeometryFlag);
 
                         ref D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC nativeTriangleGeometry = ref nativeGeometryDescription.Triangles;
                         nativeTriangleGeometry.IndexCount = triangleGeometry.IndexCount;

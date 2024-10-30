@@ -133,7 +133,6 @@
         Binormal = 5,
         BlendIndices = 6,
         BlendWeights = 7,
-        ShadingRate = 8,
         Pending
     }
 
@@ -410,27 +409,33 @@
 
     public enum ERHIBlendOp : byte
     {
-        Add = 1,
-        Substract = 2,
-        ReverseSubstract = 3,
-        Min = 4,
-        Max = 5,
+        Min = 0,
+        Max = 1,
+        Add = 2,
+        Substract = 3,
+        ReverseSubstract = 4,
         Pending
     }
 
     public enum ERHIBlendMode : byte
     {
-        Zero = 1,
-        One = 2,
-        DstColor = 9,
-        SrcColor = 3,
-        OneMinusDstColor = 10,
-        SrcAlpha = 5,
-        OneMinusSrcColor = 4,
-        DstAlpha = 7,
-        OneMinusDstAlpha = 8,
-        SrcAlphaSaturate = 11,
-        OneMinusSrcAlpha = 6,
+        Zero = 0,
+        One = 1,
+        SrcColor = 2,
+        OneMinusSrcColor = 3,
+        SrcAlpha = 4,
+        OneMinusSrcAlpha = 5,
+        DstColor = 6,
+        OneMinusDstColor = 7,
+        DstAlpha = 8,
+        OneMinusDstAlpha = 9,
+        SrcAlphaSaturate = 10,
+        BlendFactor = 11,
+        InverseBlendFactor = 12,
+        SecondarySourceColor = 13,
+        InverseSecondarySourceColor = 14,
+        SecondarySourceAlpha = 15,
+        InverseSecondarySourceAlpha = 16,
         Pending
     }
 
@@ -473,15 +478,15 @@
 
     public enum ERHIFillMode : byte
     {
-        Solid = 3,
-        Wireframe = 2,
+        Solid = 0,
+        Wireframe = 1,
         Pending
     }
 
     public enum ERHICullMode : byte
     {
-        None = 1,
-        Back = 3,
+        None = 0,
+        Back = 1,
         Front = 2,
         Pending
     }
@@ -519,7 +524,7 @@
         Pending
     }
 
-    public enum ERHIBarrierType : byte
+    public enum ERHIResourceBarrierType : byte
     {
         UAV,
         Aliasing,

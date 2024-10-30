@@ -105,6 +105,11 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
+        public override RHIFunctionTable CreateFunctionTable()
+        {
+            throw new NotImplementedException();
+        }
+
         public override RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor)
         {
             throw new NotImplementedException();
@@ -120,6 +125,11 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
+        public override RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
         public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
         {
             throw new NotImplementedException();
@@ -131,11 +141,6 @@ namespace Infinity.Graphics
         }
 
         public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
-        {
-            throw new NotImplementedException();
-        }
-
-        public override RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
         {
             throw new NotImplementedException();
         }

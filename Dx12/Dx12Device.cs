@@ -318,6 +318,11 @@ namespace Infinity.Graphics
             return new Dx12Function(descriptor);
         }
 
+        public override RHIFunctionTable CreateFunctionTable()
+        {
+            return new Dx12FunctionTable(this);
+        }
+
         public override RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor)
         {
             return new Dx12ComputePipeline(this, descriptor);
@@ -333,6 +338,11 @@ namespace Infinity.Graphics
             return new Dx12RasterPipeline(this, descriptor);
         }
 
+        public override RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
         public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
         {
             throw new NotImplementedException();
@@ -344,11 +354,6 @@ namespace Infinity.Graphics
         }
 
         public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
-        {
-            throw new NotImplementedException();
-        }
-
-        public override RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
         {
             throw new NotImplementedException();
         }
