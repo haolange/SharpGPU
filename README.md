@@ -614,6 +614,15 @@ cmdBuffer.Begin("FrameRendering");
         colorAttachmentInfos[0].StoreAction = ERHIStoreAction::Store;
         colorAttachmentInfos[0].RenderTarget = swapChain->AcquireBackBufferTexture();
         colorAttachmentInfos[0].ResolveTarget = nullptr;
+        colorAttachmentInfos[0].ResolveMipLevel = 0;
+        colorAttachmentInfos[0].ResolveArraySlice = 0;
+    }
+
+    RHISubPassDescriptor subPassDescriptors[1];
+    {
+        subPassDescriptors[0].Flags = ERHISubPassFlags::None;
+        subPassDescriptors[0].ColorInputs = RHIAttachmentIndexArray::Emtpy;
+        subPassDescriptors[0].ColorOutputs = RHIAttachmentIndexArray(1);
     }
 
     rhi::RHIRasterPassDescriptor rasterPassInfo;
@@ -628,6 +637,7 @@ cmdBuffer.Begin("FrameRendering");
         rasterPassInfo.ShadingRateTexture = nullptr;
         rasterPassInfo.ColorAttachments = colorAttachmentInfos;
         rasterPassInfo.DepthStencilAttachment = nullptr;
+        rasterPassInfo.SubPassDescriptors = subPassDescriptors;
     }
 
     cmdBuffer->ResourceBarrier(RHIBarrier::Transition(texture, ERHITextureState::UnorderedAccess, ERHITextureState::ShaderResource, ERHIPipelineStage.Compute, ERHIPipelineStage.Fragment, ERHIPipelineType::Graphics, ERHIPipelineType::Graphics));
