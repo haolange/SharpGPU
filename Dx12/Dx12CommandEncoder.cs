@@ -6,8 +6,6 @@ using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using System.Runtime.InteropServices;
 using Viewport = Infinity.Mathmatics.Viewport;
-using System.Threading;
-using TerraFX.Interop.Gdiplus;
 
 namespace Infinity.Graphics
 {
@@ -255,36 +253,113 @@ namespace Infinity.Graphics
 
         public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
         {
-            /*Dx12Buffer srcBuffer = src.buffer as Dx12Buffer;
-            Dx12Texture dstTexture = dst.texture as Dx12Texture;
+            Dx12Buffer srcBuffer = src.Buffer as Dx12Buffer;
+            Dx12Texture dstTexture = dst.Texture as Dx12Texture;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
-            D3D12_TEXTURE_COPY_LOCATION textureLocation = new D3D12_TEXTURE_COPY_LOCATION();
-            textureLocation.pResource = dstTexture.NativeResource;
-            textureLocation.Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-            textureLocation.SubresourceIndex = (uint)(dstTexture.Descriptor.mipCount * dst.arrayLayer + dst.mipLevel);
+            D3D12_TEXTURE_COPY_LOCATION srcLocation = new D3D12_TEXTURE_COPY_LOCATION
+            {
+                pResource = srcBuffer.NativeResource,
+                Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
+                PlacedFootprint = new D3D12_PLACED_SUBRESOURCE_FOOTPRINT
+                {
+                    Offset = (ulong)src.Offset,
+                    Footprint = new D3D12_SUBRESOURCE_FOOTPRINT
+                    {
+                        Format = Dx12Utility.ConvertToDx12Format(dstTexture.Descriptor.Format),
+                        Width = (uint)size.x,
+                        Height = (uint)size.y,
+                        Depth = (uint)size.z,
+                        RowPitch = (uint)(size.x * 4) // Assuming 4 bytes per pixel, adjust as needed
+                    }
+                }
+            };
 
-            dx12CommandBuffer.NativeCommandList->CopyTextureRegion(&textureLocation);*/
+            D3D12_TEXTURE_COPY_LOCATION dstLocation = new D3D12_TEXTURE_COPY_LOCATION
+            {
+                pResource = dstTexture.NativeResource,
+                Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+                SubresourceIndex = dst.SliceCount * dstTexture.Descriptor.MipCount + dst.MipLevel
+            };
 
-            throw new NotImplementedException();
+            D3D12_BOX srcBox = new D3D12_BOX
+            {
+                left = 0,
+                top = 0,
+                front = 0,
+                right = (uint)size.x,
+                bottom = (uint)size.y,
+                back = (uint)size.z
+            };
+
+            dx12CommandBuffer.NativeCommandList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, &srcBox);
         }
 
         public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size)
         {
-            //Dx12Texture srcTexture = src as Dx12Texture;
-            //Dx12Buffer dstBuffer = dst as Dx12Buffer;
+            Dx12Texture srcTexture = src.Texture as Dx12Texture;
+            Dx12Buffer dstBuffer = dst.Buffer as Dx12Buffer;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
-            throw new NotImplementedException();
+            D3D12_TEXTURE_COPY_LOCATION srcLocation = new D3D12_TEXTURE_COPY_LOCATION
+            {
+                pResource = srcTexture.NativeResource,
+                Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+                SubresourceIndex = src.SliceCount * srcTexture.Descriptor.MipCount + src.MipLevel
+            };
+
+            D3D12_TEXTURE_COPY_LOCATION dstLocation = new D3D12_TEXTURE_COPY_LOCATION
+            {
+                pResource = dstBuffer.NativeResource,
+                Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
+                PlacedFootprint = new D3D12_PLACED_SUBRESOURCE_FOOTPRINT
+                {
+                    Offset = dst.Offset,
+                    Footprint = new D3D12_SUBRESOURCE_FOOTPRINT
+                    {
+                        Format = Dx12Utility.ConvertToDx12Format(srcTexture.Descriptor.Format), // Assuming the format is the same
+                        Width = (uint)size.x,
+                        Height = (uint)size.y,
+                        Depth = (uint)size.z,
+                        RowPitch = (uint)(size.x * 4) // Assuming 4 bytes per pixel, adjust as needed
+                    }
+                }
+            };
+
+            dx12CommandBuffer.NativeCommandList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, null);
         }
 
         public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
         {
-            //Dx12Texture srcTexture = src as Dx12Texture;
-            //Dx12Texture dstTexture = dst as Dx12Texture;
+            Dx12Texture srcTexture = src.Texture as Dx12Texture;
+            Dx12Texture dstTexture = dst.Texture as Dx12Texture;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
-            //D3D12_TEXTURE_COPY_LOCATION srcLocation = new D3D12_TEXTURE_COPY_LOCATION(srcTexture.NativeResource, new D3D12_PLACED_SUBRESOURCE_FOOTPRINT());
-            //dx12CommandBuffer.NativeCommandList->CopyTextureRegion();
+            D3D12_TEXTURE_COPY_LOCATION srcLocation = new D3D12_TEXTURE_COPY_LOCATION
+            {
+                pResource = srcTexture.NativeResource,
+                Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+                SubresourceIndex = 0 // Assuming the first subresource, adjust as needed
+            };
 
-            throw new NotImplementedException();
+            D3D12_TEXTURE_COPY_LOCATION dstLocation = new D3D12_TEXTURE_COPY_LOCATION
+            {
+                pResource = dstTexture.NativeResource,
+                Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+                SubresourceIndex = 0 // Assuming the first subresource, adjust as needed
+            };
+
+            D3D12_BOX srcBox = new D3D12_BOX
+            {
+                left = 0,
+                top = 0,
+                front = 0,
+                right = (uint)size.x,
+                bottom = (uint)size.y,
+                back = (uint)size.z
+            };
+
+            dx12CommandBuffer.NativeCommandList->CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, &srcBox);
         }
 
         public override void EndPass()
@@ -1193,7 +1268,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DrawIndexedIndirectSignature, drawCount, dx12Buffer.NativeResource, offset, null, 0);
         }
 
-        public override void DrawMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
+        public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
             if(dx12Device.Feature.IsMeshShadingSupported)
@@ -1203,7 +1278,7 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void DrawMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
+        public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
@@ -1212,6 +1287,11 @@ namespace Infinity.Graphics
                 Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
                 dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchMeshIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
             }
+        }
+
+        public override void DispatchGraph()
+        {
+            throw new NotImplementedException();
         }
 
         public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
