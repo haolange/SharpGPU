@@ -3,12 +3,22 @@ using Infinity.Core;
 
 namespace Infinity.Graphics
 {
+    public enum ERHIShaderPayloadKind : byte
+    {
+        Dxil = 0,
+        SpirV = 1,
+        MslSource = 2,
+        MetalLibrary = 3,
+        Pending = 255
+    }
+
     public struct RHIFunctionDescriptor
     {
         public uint ByteSize;
         public IntPtr ByteCode;
         public string EntryName;
         public ERHIFunctionType Type;
+        public ERHIShaderPayloadKind PayloadKind;
     }
 
     public struct RHIRayFunctionDescriptor
@@ -20,6 +30,7 @@ namespace Infinity.Graphics
     {
         public uint ByteSize;
         public IntPtr ByteCode;
+        public ERHIShaderPayloadKind PayloadKind;
     }
 
     public abstract class RHIFunction : Disposal

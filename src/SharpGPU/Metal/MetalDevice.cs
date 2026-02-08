@@ -1,169 +1,302 @@
 ﻿using System;
+using System.Collections.Generic;
+using Infinity.Collections;
+using SharpMetal.Foundation;
 using SharpMetal.Metal;
-using System.Diagnostics;
 using SharpMetal.ObjectiveCCore;
 
 namespace Infinity.Graphics
 {
-#pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
-    internal unsafe class MetalDevice : RHIDevice
+    internal sealed class MetalDevice : RHIDevice
     {
-        public MTLDevice NativeDevice
-        {
-            get
-            {
-                return m_NativeDevice;
-            }
-        }
-        public MetalInstance MtlInstance
-        {
-            get
-            {
-                return m_MtlInstance;
-            }
-        }
+        public MTLDevice NativeDevice => m_NativeDevice;
+        public MetalInstance MetalInstance => m_MetalInstance;
+        internal bool SupportsMetal4Barriers => m_SupportsMetal4Barriers;
 
-        private MTLDevice m_NativeDevice;
-        private MetalInstance m_MtlInstance;
+        private readonly MTLDevice m_NativeDevice;
+        private readonly MetalInstance m_MetalInstance;
+        private readonly bool m_SupportsMetal4Barriers;
 
-        public MetalDevice(MetalInstance instance, in IntPtr devicePtr)
+        public MetalDevice(MetalInstance instance, in MTLDevice device, in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
         {
-            m_MtlInstance = instance;
-            CreateDevice(devicePtr);
+            m_MetalInstance = instance;
+            m_NativeDevice = device;
+
+            if (m_NativeDevice.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Metal device pointer is null.");
+            }
+
+            m_Name = m_NativeDevice.Name.ToString();
+            m_Type = m_NativeDevice.IsHeadless ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
+            m_VendorId.IntValue = (uint)ERHIVendorType.Apple;
+            m_DeviceId.IntValue = (uint)(m_NativeDevice.RegistryID & uint.MaxValue);
+            m_SupportsMetal4Barriers = SafeSupportsFamily(MTLGPUFamily.Metal4);
+
+            BuildLimitAndFeature();
+            CreateCommandQueues(computeQueueCount, transferQueueCount, graphicsQueueCount);
         }
 
         public override RHICommandQueue? GetCommandQueue(in ERHIPipelineType pipeline, in int index)
         {
-            throw new NotImplementedException();
+            if (m_CommandQueueMap == null)
+            {
+                return null;
+            }
+
+            if (m_CommandQueueMap.TryGetValue(pipeline, out TArray<RHICommandQueue> queues))
+            {
+                if ((uint)index < (uint)queues.length)
+                {
+                    return queues[index];
+                }
+            }
+
+            return null;
         }
 
         public override RHISwapChain CreateSwapChain(in RHISwapChainDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalSwapChain(this, descriptor);
         }
 
         public override RHIFence CreateFence()
         {
-            throw new NotImplementedException();
+            return new MetalFence();
         }
 
         public override RHISemaphore CreateSemaphore()
         {
-            throw new NotImplementedException();
+            return new MetalSemaphore(this);
         }
 
         public override RHIStorageQueue CreateStorageQueue()
         {
-            throw new NotImplementedException();
+            return new MetalStorageQueue();
         }
 
         public override RHIQuery CreateQuery(in RHIQueryDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalQuery(descriptor);
         }
 
         public override RHIHeap CreateHeap(in RHIHeapDescription descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalHeap(descriptor);
         }
 
         public override RHIBuffer CreateBuffer(in RHIBufferDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalBuffer(this, descriptor);
         }
 
         public override RHITexture CreateTexture(in RHITextureDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalTexture(this, descriptor);
         }
 
         public override RHISampler CreateSampler(in RHISamplerDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalSampler(this, descriptor);
         }
 
         public override RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            throw new NotSupportedException("Metal top-level acceleration structure is not implemented yet.");
         }
 
         public override RHIBottomLevelAccelStruct CreateBottomAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            throw new NotSupportedException("Metal bottom-level acceleration structure is not implemented yet.");
         }
 
         public override RHIResourceTableLayout CreateResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalResourceTableLayout(descriptor);
         }
 
         public override RHIResourceTable CreateResourceTable(in RHIResourceTableDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalResourceTable(descriptor);
         }
 
         public override RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalPipelineLayout(descriptor);
         }
 
         public override RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalFunction(this, descriptor);
         }
 
         public override RHIFunctionTable CreateFunctionTable()
         {
-            throw new NotImplementedException();
+            return new MetalFunctionTable();
         }
 
         public override RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalComputePipeline(this, descriptor);
         }
 
         public override RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalRaytracingPipeline(descriptor);
         }
 
         public override RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalRasterPipeline(this, descriptor);
         }
 
         public override RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalPipelineLibrary(descriptor);
         }
 
         public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalComputeIndirectCommandBuffer(descriptor);
         }
 
         public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalRayTracingIndirectCommandBuffer(descriptor);
         }
 
         public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
         {
-            throw new NotImplementedException();
+            return new MetalRasterIndirectCommandBuffer(descriptor);
         }
 
-        private void CreateDevice(in IntPtr devicePtr)
+        private void BuildLimitAndFeature()
         {
-#if DEBUG
-            Debug.Assert(devicePtr.ToPointer() != null, "System device is null");
-#endif
-            m_NativeDevice = new MTLDevice(devicePtr);
+            int maxTextureSize = 16384;
+            int maxCubeTextureSize = 16384;
+
+            m_Limit = new RHIDeviceLimit(
+                uniformBufferAlignment: 256,
+                uploadBufferAlignment: 4,
+                uploadBufferTextureAlignment: 256,
+                uploadBufferTextureRowAlignment: 256,
+                maxMSAACount: 8,
+                maxBoundTexture: 128,
+                minWavefrontSize: 32,
+                maxWavefrontSize: 64,
+                maxComputeThreads: (int)Math.Max(64UL, m_NativeDevice.MaxThreadsPerThreadgroup.width * m_NativeDevice.MaxThreadsPerThreadgroup.height * m_NativeDevice.MaxThreadsPerThreadgroup.depth),
+                maxGroupShareMemorySize: (int)m_NativeDevice.MaxThreadgroupMemoryLength,
+                maxVertexInputBindings: 31,
+                maxColorAttachments: 8,
+                maxTexture2DSize: maxTextureSize,
+                maxTextureCubeSize: maxCubeTextureSize);
+
+            bool isRayTracingSupported = m_NativeDevice.SupportsRaytracing;
+            bool isMetal3 = SafeSupportsFamily(MTLGPUFamily.Metal3);
+            bool isTimestampSupported = m_NativeDevice.CounterSets.Count > 0;
+
+            m_Feature = new RHIDeviceFeature(
+                isFlipProjection: true,
+                isHDRPresentSupported: true,
+                isUnifiedMemorySupported: m_NativeDevice.HasUnifiedMemory,
+                isRootConstantSupport: false,
+                isIndirectRootConstantSupport: false,
+                isPixelShaderUAVSupported: true,
+                isRasterizerOrderedSupported: m_NativeDevice.RasterOrderGroupsSupported,
+                isAnisotropyTextureSupported: true,
+                isDepthbufferFetchSupported: false,
+                isFramebufferFetchSupported: false,
+                isTimestampQueriesSupported: isTimestampSupported,
+                isOcclusionQueriesSupported: false,
+                isPipelineStatsQueriesSupported: false,
+                isAtomicUInt64Supported: isMetal3,
+                isWorkgraphSupported: false,
+                isMeshShadingSupported: false,
+                isDrawIndirectSupported: true,
+                isDrawMultiIndirectSupported: true,
+                isRaytracingSupported: isRayTracingSupported,
+                isRaytracingInlineSupported: isRayTracingSupported,
+                isVariableRateShadingSupported: false,
+                isHiddenSurfaceRemovalSupported: false,
+                isBarycentricCoordSupported: m_NativeDevice.SupportsShaderBarycentricCoordinates,
+                isProgrammableSamplePositionSupported: m_NativeDevice.ProgrammableSamplePositionsSupported,
+                matrixMajorons: ERHIMatrixMajorons.RowMajor,
+                depthValueRange: ERHIDepthValueRange.ZeroToOne,
+                multiviewStrategy: ERHIMultiviewStrategy.Unsupported,
+                waveOperationStrategy: ERHIWaveOperationStrategy.Basic);
+        }
+
+        private void CreateCommandQueues(in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
+        {
+            m_ComputeQueueCount = computeQueueCount;
+            m_TransferQueueCount = transferQueueCount;
+            m_GraphicsQueueCount = graphicsQueueCount;
+            m_CommandQueueMap = new Dictionary<ERHIPipelineType, TArray<RHICommandQueue>>(3);
+
+            if (computeQueueCount > 0)
+            {
+                TArray<RHICommandQueue> computeQueues = new TArray<RHICommandQueue>(computeQueueCount);
+                for (int i = 0; i < computeQueueCount; ++i)
+                {
+                    computeQueues.Add(new MetalCommandQueue(this, ERHIPipelineType.Compute));
+                }
+
+                m_CommandQueueMap.Add(ERHIPipelineType.Compute, computeQueues);
+            }
+
+            if (transferQueueCount > 0)
+            {
+                TArray<RHICommandQueue> transferQueues = new TArray<RHICommandQueue>(transferQueueCount);
+                for (int i = 0; i < transferQueueCount; ++i)
+                {
+                    transferQueues.Add(new MetalCommandQueue(this, ERHIPipelineType.Transfer));
+                }
+
+                m_CommandQueueMap.Add(ERHIPipelineType.Transfer, transferQueues);
+            }
+
+            if (graphicsQueueCount > 0)
+            {
+                TArray<RHICommandQueue> graphicsQueues = new TArray<RHICommandQueue>(graphicsQueueCount);
+                for (int i = 0; i < graphicsQueueCount; ++i)
+                {
+                    graphicsQueues.Add(new MetalCommandQueue(this, ERHIPipelineType.Graphics));
+                }
+
+                m_CommandQueueMap.Add(ERHIPipelineType.Graphics, graphicsQueues);
+            }
+        }
+
+        private bool SafeSupportsFamily(in MTLGPUFamily family)
+        {
+            try
+            {
+                return m_NativeDevice.SupportsFamily(family);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         protected override void Release()
         {
-            ObjectiveCRuntime.Release(m_NativeDevice);
+            if (m_CommandQueueMap != null)
+            {
+                foreach (KeyValuePair<ERHIPipelineType, TArray<RHICommandQueue>> pair in m_CommandQueueMap)
+                {
+                    TArray<RHICommandQueue> queues = pair.Value;
+                    for (int i = 0; i < queues.length; ++i)
+                    {
+                        queues[i]?.Dispose();
+                    }
+                }
+            }
+
+            if (m_NativeDevice.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_NativeDevice);
+            }
         }
     }
-#pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416
 }

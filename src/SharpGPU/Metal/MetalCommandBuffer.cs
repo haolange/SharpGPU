@@ -1,0 +1,366 @@
+using System;
+using SharpMetal.Metal;
+using SharpMetal.ObjectiveCCore;
+using SharpMetal.QuartzCore;
+
+namespace Infinity.Graphics
+{
+    internal enum MetalActiveEncoderType : byte
+    {
+        None,
+        Transfer,
+        Compute,
+        Raster,
+        Raytracing
+    }
+
+    internal sealed class MetalCommandBuffer : RHICommandBuffer
+    {
+        internal MTLCommandBuffer NativeCommandBuffer => m_NativeCommandBuffer;
+        internal CAMetalDrawable PresentDrawable => m_PresentDrawable;
+        internal bool EnableMetal4Barriers => m_EnableMetal4Barriers;
+
+        private readonly MetalTransferEncoder m_TransferEncoder;
+        private readonly MetalComputeEncoder m_ComputeEncoder;
+        private readonly MetalRasterEncoder m_RasterEncoder;
+        private readonly MetalRaytracingEncoder m_RaytracingEncoder;
+        private readonly MTLFence m_BarrierFence;
+        private readonly bool m_EnableMetal4Barriers;
+
+        private MTLCommandBuffer m_NativeCommandBuffer;
+        private CAMetalDrawable m_PresentDrawable;
+        private MetalActiveEncoderType m_ActiveEncoder;
+        private MetalActiveEncoderType m_LastCompletedEncoder;
+        private bool m_HasPendingBarrier;
+        private ulong m_PendingAfterStages;
+        private ulong m_PendingBeforeStages;
+        private MTLBarrierScope m_PendingBarrierScope;
+
+        public MetalCommandBuffer(MetalCommandQueue commandQueue)
+        {
+            m_CommandQueue = commandQueue;
+            m_TransferEncoder = new MetalTransferEncoder(this);
+            m_ComputeEncoder = new MetalComputeEncoder(this);
+            m_RasterEncoder = new MetalRasterEncoder(this);
+            m_RaytracingEncoder = new MetalRaytracingEncoder(this);
+            m_BarrierFence = commandQueue.MetalDevice.NativeDevice.NewFence;
+            m_EnableMetal4Barriers = commandQueue.MetalDevice.SupportsMetal4Barriers && IsMetal4BarrierEnabledByEnv();
+
+            ResetState();
+        }
+
+        public override void Begin(string name)
+        {
+            m_NativeCommandBuffer = ((MetalCommandQueue)m_CommandQueue).NativeQueue.CommandBuffer();
+            if (m_NativeCommandBuffer.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create MTLCommandBuffer.");
+            }
+
+            m_NativeCommandBuffer.Label = new SharpMetal.Foundation.NSString(name);
+            ResetState();
+        }
+
+        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        {
+            MTLBarrierScope scope = MetalUtility.ConvertToMetalBarrierScope(barrier.ResourceType);
+            ulong afterStages = (ulong)long.MaxValue;
+            ulong beforeStages = afterStages;
+
+            if (barrier.ResourceBarrierType == ERHIResourceBarrierType.Triansition)
+            {
+                if (barrier.ResourceType == ERHIResourceType.Buffer)
+                {
+                    afterStages = MetalUtility.ConvertToMetal4Stages(barrier.BufferBarrierInfo.SrcStage);
+                    beforeStages = MetalUtility.ConvertToMetal4Stages(barrier.BufferBarrierInfo.DstStage);
+                }
+                else
+                {
+                    afterStages = MetalUtility.ConvertToMetal4Stages(barrier.TextureBarrierInfo.SrcStage);
+                    beforeStages = MetalUtility.ConvertToMetal4Stages(barrier.TextureBarrierInfo.DstStage);
+                }
+            }
+
+            ApplyBarrier(scope, afterStages, beforeStages);
+        }
+
+        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        {
+            Span<RHIResourceBarrier> span = barriers.Span;
+            for (int i = 0; i < span.Length; ++i)
+            {
+                ResourceBarrier(span[i]);
+            }
+        }
+
+        public override RHITransferEncoder BeginTransferPass(in RHITransferPassDescriptor descriptor)
+        {
+            m_TransferEncoder.BeginPass(descriptor);
+            ApplyPendingBarrierToTransfer();
+            m_ActiveEncoder = MetalActiveEncoderType.Transfer;
+            return m_TransferEncoder;
+        }
+
+        public override void EndTransferPass()
+        {
+            if (m_ActiveEncoder != MetalActiveEncoderType.Transfer)
+            {
+                return;
+            }
+
+            m_TransferEncoder.SignalFence(m_BarrierFence);
+            m_TransferEncoder.EndPass();
+            m_LastCompletedEncoder = MetalActiveEncoderType.Transfer;
+            m_ActiveEncoder = MetalActiveEncoderType.None;
+        }
+
+        public override RHIComputeEncoder BeginComputePass(in RHIComputePassDescriptor descriptor)
+        {
+            m_ComputeEncoder.BeginPass(descriptor);
+            ApplyPendingBarrierToCompute();
+            m_ActiveEncoder = MetalActiveEncoderType.Compute;
+            return m_ComputeEncoder;
+        }
+
+        public override void EndComputePass()
+        {
+            if (m_ActiveEncoder != MetalActiveEncoderType.Compute)
+            {
+                return;
+            }
+
+            m_ComputeEncoder.SignalFence(m_BarrierFence);
+            m_ComputeEncoder.EndPass();
+            m_LastCompletedEncoder = MetalActiveEncoderType.Compute;
+            m_ActiveEncoder = MetalActiveEncoderType.None;
+        }
+
+        public override RHIRaytracingEncoder BeginRaytracingPass(in RHIRayTracingPassDescriptor descriptor)
+        {
+            m_RaytracingEncoder.BeginPass(descriptor);
+            m_ActiveEncoder = MetalActiveEncoderType.Raytracing;
+            return m_RaytracingEncoder;
+        }
+
+        public override void EndRaytracingPass()
+        {
+            if (m_ActiveEncoder != MetalActiveEncoderType.Raytracing)
+            {
+                return;
+            }
+
+            m_RaytracingEncoder.EndPass();
+            m_LastCompletedEncoder = MetalActiveEncoderType.Raytracing;
+            m_ActiveEncoder = MetalActiveEncoderType.None;
+        }
+
+        public override RHIRasterEncoder BeginRasterPass(in RHIRasterPassDescriptor descriptor)
+        {
+            m_RasterEncoder.BeginPass(descriptor);
+            ApplyPendingBarrierToRaster();
+            m_ActiveEncoder = MetalActiveEncoderType.Raster;
+            return m_RasterEncoder;
+        }
+
+        public override void EndRasterPass()
+        {
+            if (m_ActiveEncoder != MetalActiveEncoderType.Raster)
+            {
+                return;
+            }
+
+            m_RasterEncoder.SignalFence(m_BarrierFence);
+            m_RasterEncoder.EndPass();
+            m_LastCompletedEncoder = MetalActiveEncoderType.Raster;
+            m_ActiveEncoder = MetalActiveEncoderType.None;
+        }
+
+        public override void End()
+        {
+            switch (m_ActiveEncoder)
+            {
+                case MetalActiveEncoderType.Transfer:
+                    EndTransferPass();
+                    break;
+                case MetalActiveEncoderType.Compute:
+                    EndComputePass();
+                    break;
+                case MetalActiveEncoderType.Raster:
+                    EndRasterPass();
+                    break;
+                case MetalActiveEncoderType.Raytracing:
+                    EndRaytracingPass();
+                    break;
+            }
+        }
+
+        public override RHITransferEncoder GetTransferEncoder()
+        {
+            return m_TransferEncoder;
+        }
+
+        public override RHIComputeEncoder GetComputeEncoder()
+        {
+            return m_ComputeEncoder;
+        }
+
+        public override RHIRaytracingEncoder GetRaytracingEncoder()
+        {
+            return m_RaytracingEncoder;
+        }
+
+        public override RHIRasterEncoder GetRasterEncoder()
+        {
+            return m_RasterEncoder;
+        }
+
+        internal void SetPresentDrawable(in CAMetalDrawable drawable)
+        {
+            if (drawable.NativePtr != IntPtr.Zero)
+            {
+                m_PresentDrawable = drawable;
+            }
+        }
+
+        private void ApplyBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
+        {
+            if (m_ActiveEncoder == MetalActiveEncoderType.Compute)
+            {
+                m_ComputeEncoder.ApplyImmediateBarrier(scope, afterStages, beforeStages);
+                return;
+            }
+
+            if (m_ActiveEncoder == MetalActiveEncoderType.Raster)
+            {
+                m_RasterEncoder.ApplyImmediateBarrier(scope, afterStages, beforeStages);
+                return;
+            }
+
+            m_HasPendingBarrier = true;
+            m_PendingBarrierScope |= scope;
+            m_PendingAfterStages = afterStages;
+            m_PendingBeforeStages = beforeStages;
+        }
+
+        private void ApplyPendingBarrierToTransfer()
+        {
+            if (!m_HasPendingBarrier)
+            {
+                return;
+            }
+
+            if (m_BarrierFence.NativePtr != IntPtr.Zero && m_LastCompletedEncoder != MetalActiveEncoderType.None)
+            {
+                m_TransferEncoder.WaitForFence(m_BarrierFence);
+            }
+
+            ClearPendingBarrier();
+        }
+
+        private void ApplyPendingBarrierToCompute()
+        {
+            if (!m_HasPendingBarrier)
+            {
+                return;
+            }
+
+            if (m_BarrierFence.NativePtr != IntPtr.Zero && m_LastCompletedEncoder != MetalActiveEncoderType.None)
+            {
+                m_ComputeEncoder.WaitForFence(m_BarrierFence);
+            }
+
+            m_ComputeEncoder.ApplyImmediateBarrier(m_PendingBarrierScope, m_PendingAfterStages, m_PendingBeforeStages);
+            ClearPendingBarrier();
+        }
+
+        private void ApplyPendingBarrierToRaster()
+        {
+            if (!m_HasPendingBarrier)
+            {
+                return;
+            }
+
+            if (m_BarrierFence.NativePtr != IntPtr.Zero && m_LastCompletedEncoder != MetalActiveEncoderType.None)
+            {
+                m_RasterEncoder.WaitForFence(m_BarrierFence);
+            }
+
+            m_RasterEncoder.ApplyImmediateBarrier(m_PendingBarrierScope, m_PendingAfterStages, m_PendingBeforeStages);
+            ClearPendingBarrier();
+        }
+
+        private void ClearPendingBarrier()
+        {
+            m_HasPendingBarrier = false;
+            m_PendingAfterStages = 0;
+            m_PendingBeforeStages = 0;
+            m_PendingBarrierScope = 0;
+        }
+
+        private void ResetState()
+        {
+            m_PresentDrawable = default;
+            m_ActiveEncoder = MetalActiveEncoderType.None;
+            m_LastCompletedEncoder = MetalActiveEncoderType.None;
+            ClearPendingBarrier();
+        }
+
+        private static bool IsMetal4BarrierEnabledByEnv()
+        {
+            string? value = Environment.GetEnvironmentVariable("INFINITY_METAL_USE_MTL4_BARRIER");
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            string lower = value.Trim().ToLowerInvariant();
+            return lower == "1" || lower == "true" || lower == "yes" || lower == "on";
+        }
+
+        protected override void Release()
+        {
+            m_TransferEncoder.Dispose();
+            m_ComputeEncoder.Dispose();
+            m_RasterEncoder.Dispose();
+            m_RaytracingEncoder.Dispose();
+
+            if (m_BarrierFence.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_BarrierFence);
+            }
+        }
+    }
+
+    internal sealed class MetalComputeIndirectCommandBuffer : RHIComputeIndirectCommandBuffer
+    {
+        internal MetalComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
+        {
+        }
+
+        protected override void Release()
+        {
+        }
+    }
+
+    internal sealed class MetalRayTracingIndirectCommandBuffer : RHIRayTracingIndirectCommandBuffer
+    {
+        internal MetalRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor)
+        {
+        }
+
+        protected override void Release()
+        {
+        }
+    }
+
+    internal sealed class MetalRasterIndirectCommandBuffer : RHIRasterIndirectCommandBuffer
+    {
+        internal MetalRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
+        {
+        }
+
+        protected override void Release()
+        {
+        }
+    }
+}
