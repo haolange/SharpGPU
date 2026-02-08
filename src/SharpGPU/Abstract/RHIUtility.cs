@@ -627,11 +627,20 @@
 
     public enum ERHITextureViewType : byte
     {
-        //DepthStencil,
-        //RenderTarget,
+        DepthStencil,
+        RenderTarget,
         ShaderResource,
         UnorderedAccess,
         RasterizerOrdered,
+        Pending
+    }
+
+    public enum ERHIHeapType : byte
+    {
+        Default,
+        BuffersOnly,
+        TexturesOnly,
+        RenderTarget,
         Pending
     }
 

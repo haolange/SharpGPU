@@ -349,40 +349,157 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12ComputeIndirectCommandBuffer : RHIComputeIndirectCommandBuffer
     {
+        public ID3D12CommandSignature* NativeCommandSignature
+        {
+            get
+            {
+                return m_NativeCommandSignature;
+            }
+        }
+        public ID3D12Resource* NativeArgumentBuffer
+        {
+            get
+            {
+                return m_NativeArgumentBuffer;
+            }
+        }
+        public uint MaxCommandCount
+        {
+            get
+            {
+                return m_MaxCommandCount;
+            }
+        }
+
+        private uint m_MaxCommandCount;
+        private Dx12Device m_Dx12Device;
+        private ID3D12Resource* m_NativeArgumentBuffer;
+        private ID3D12CommandSignature* m_NativeCommandSignature;
+
         public Dx12ComputeIndirectCommandBuffer(Dx12Device device, in RHIComputeIndirectCommandBufferDescription descriptor)
         {
+            m_Dx12Device = device;
+            m_NativeCommandSignature = device.DispatchComputeIndirectSignature;
+            m_MaxCommandCount = descriptor.MaxCommandCount;
 
+            D3D12_RESOURCE_DESC bufferDesc = D3D12_RESOURCE_DESC.Buffer(m_MaxCommandCount * (uint)sizeof(D3D12_DISPATCH_ARGUMENTS));
+            D3D12_HEAP_PROPERTIES heapProps = new D3D12_HEAP_PROPERTIES(D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT);
+
+            ID3D12Resource* resource;
+            HRESULT hResult = device.NativeDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON, null, __uuidof<ID3D12Resource>(), (void**)&resource);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
+            m_NativeArgumentBuffer = resource;
         }
 
         protected override void Release()
         {
-
+            m_NativeArgumentBuffer->Release();
         }
     }
 
     internal unsafe class Dx12RayTracingIndirectCommandBuffer : RHIRayTracingIndirectCommandBuffer
     {
+        public ID3D12CommandSignature* NativeCommandSignature
+        {
+            get
+            {
+                return m_NativeCommandSignature;
+            }
+        }
+        public ID3D12Resource* NativeArgumentBuffer
+        {
+            get
+            {
+                return m_NativeArgumentBuffer;
+            }
+        }
+        public uint MaxCommandCount
+        {
+            get
+            {
+                return m_MaxCommandCount;
+            }
+        }
+
+        private uint m_MaxCommandCount;
+        private Dx12Device m_Dx12Device;
+        private ID3D12Resource* m_NativeArgumentBuffer;
+        private ID3D12CommandSignature* m_NativeCommandSignature;
+
         public Dx12RayTracingIndirectCommandBuffer(Dx12Device device, in RHIRayTracingIndirectCommandBufferDescription descriptor)
         {
+            m_Dx12Device = device;
+            m_NativeCommandSignature = device.DispatchRayIndirectSignature;
+            m_MaxCommandCount = descriptor.MaxCommandCount;
 
+            D3D12_RESOURCE_DESC bufferDesc = D3D12_RESOURCE_DESC.Buffer(m_MaxCommandCount * (uint)sizeof(D3D12_DISPATCH_RAYS_DESC));
+            D3D12_HEAP_PROPERTIES heapProps = new D3D12_HEAP_PROPERTIES(D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT);
+
+            ID3D12Resource* resource;
+            HRESULT hResult = device.NativeDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON, null, __uuidof<ID3D12Resource>(), (void**)&resource);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
+            m_NativeArgumentBuffer = resource;
         }
 
         protected override void Release()
         {
-
+            m_NativeArgumentBuffer->Release();
         }
     }
 
     internal unsafe class Dx12RasterIndirectCommandBuffer : RHIRasterIndirectCommandBuffer
     {
+        public ID3D12CommandSignature* NativeCommandSignature
+        {
+            get
+            {
+                return m_NativeCommandSignature;
+            }
+        }
+        public ID3D12Resource* NativeArgumentBuffer
+        {
+            get
+            {
+                return m_NativeArgumentBuffer;
+            }
+        }
+        public uint MaxCommandCount
+        {
+            get
+            {
+                return m_MaxCommandCount;
+            }
+        }
+
+        private uint m_MaxCommandCount;
+        private Dx12Device m_Dx12Device;
+        private ID3D12Resource* m_NativeArgumentBuffer;
+        private ID3D12CommandSignature* m_NativeCommandSignature;
+
         public Dx12RasterIndirectCommandBuffer(Dx12Device device, in RHIRasterIndirectCommandBufferDescription descriptor)
         {
+            m_Dx12Device = device;
+            m_NativeCommandSignature = device.DrawIndexedIndirectSignature;
+            m_MaxCommandCount = descriptor.MaxCommandCount;
 
+            D3D12_RESOURCE_DESC bufferDesc = D3D12_RESOURCE_DESC.Buffer(m_MaxCommandCount * (uint)sizeof(D3D12_DRAW_INDEXED_ARGUMENTS));
+            D3D12_HEAP_PROPERTIES heapProps = new D3D12_HEAP_PROPERTIES(D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT);
+
+            ID3D12Resource* resource;
+            HRESULT hResult = device.NativeDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON, null, __uuidof<ID3D12Resource>(), (void**)&resource);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
+            m_NativeArgumentBuffer = resource;
         }
 
         protected override void Release()
         {
-
+            m_NativeArgumentBuffer->Release();
         }
     }
 #pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416

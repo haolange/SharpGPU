@@ -5,7 +5,8 @@ namespace Infinity.Graphics
 #pragma warning disable CS8618
     public struct RHIHeapDescription
     {
-
+        public ulong Size;
+        public ERHIStorageMode StorageMode;
     }
 
     public abstract class RHIHeap : Disposal

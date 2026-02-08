@@ -260,7 +260,7 @@ namespace Infinity.Graphics
 
         public override RHIStorageQueue CreateStorageQueue()
         {
-            throw new NotImplementedException();
+            return new Dx12StorageQueue(this);
         }
 
         public override RHIQuery CreateQuery(in RHIQueryDescriptor descriptor)
@@ -270,7 +270,7 @@ namespace Infinity.Graphics
 
         public override RHIHeap CreateHeap(in RHIHeapDescription descriptor)
         {
-            throw new NotImplementedException();
+            return new Dx12Heap(this, descriptor);
         }
 
         public override RHIBuffer CreateBuffer(in RHIBufferDescriptor descriptor)
@@ -340,22 +340,22 @@ namespace Infinity.Graphics
 
         public override RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
         {
-            throw new NotImplementedException();
+            return new Dx12PipelineLibrary(this, descriptor);
         }
 
         public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
         {
-            throw new NotImplementedException();
+            return new Dx12ComputeIndirectCommandBuffer(this, descriptor);
         }
 
         public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor)
         {
-            throw new NotImplementedException();
+            return new Dx12RayTracingIndirectCommandBuffer(this, descriptor);
         }
 
         public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
         {
-            throw new NotImplementedException();
+            return new Dx12RasterIndirectCommandBuffer(this, descriptor);
         }
 
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)
@@ -420,6 +420,26 @@ namespace Infinity.Graphics
         public void FreeCbvSrvUavDescriptor(in int index)
         {
             m_DescriptorHeapCbvSrvUav.Free(index);
+        }
+
+        public void FreeDsvDescriptor(in int index, in int count)
+        {
+            m_DescriptorHeapDSV.Free(index, count);
+        }
+
+        public void FreeRtvDescriptor(in int index, in int count)
+        {
+            m_DescriptorHeapHeapRTV.Free(index, count);
+        }
+
+        public void FreeSamplerDescriptor(in int index, in int count)
+        {
+            m_DescriptorHeapSampler.Free(index, count);
+        }
+
+        public void FreeCbvSrvUavDescriptor(in int index, in int count)
+        {
+            m_DescriptorHeapCbvSrvUav.Free(index, count);
         }
 
         private void CreateDevice()
@@ -639,6 +659,11 @@ namespace Infinity.Graphics
                     isMeshShadingSupported = false;
                     break;
             }
+
+            // WorkGraph support requires D3D12_FEATURE_DATA_D3D12_OPTIONS21 which is not available
+            // in TerraFX.Interop.Windows v10.0.22621.5. Upgrade TerraFX to a newer SDK version
+            // (targeting Windows SDK 10.0.26100+) to enable WorkGraph feature detection.
+            isWorkgraphSupported = false;
 
             m_Limit = new Dx12DeviceLimit(uniformBufferAlignment,
                                           uploadBufferAlignment,

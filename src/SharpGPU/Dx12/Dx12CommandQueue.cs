@@ -60,22 +60,153 @@ namespace Infinity.Graphics
 
         public override void MapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
         {
-            throw new NotImplementedException();
+            Dx12Texture dx12Texture = tiledTextureRegions.Texture as Dx12Texture;
+            int regionCount = tiledTextureRegions.Regions.Length;
+
+            D3D12_TILED_RESOURCE_COORDINATE* coordinates = stackalloc D3D12_TILED_RESOURCE_COORDINATE[regionCount];
+            D3D12_TILE_REGION_SIZE* regionSizes = stackalloc D3D12_TILE_REGION_SIZE[regionCount];
+            D3D12_TILE_RANGE_FLAGS* rangeFlags = stackalloc D3D12_TILE_RANGE_FLAGS[regionCount];
+            uint* heapRangeStartOffsets = stackalloc uint[regionCount];
+            uint* rangeTileCounts = stackalloc uint[regionCount];
+
+            for (int i = 0; i < regionCount; ++i)
+            {
+                ref RHITextureCoordinateRegion region = ref tiledTextureRegions.Regions.Span[i];
+
+                coordinates[i].X = (uint)region.Start.X;
+                coordinates[i].Y = (uint)region.Start.Y;
+                coordinates[i].Z = (uint)region.Start.Z;
+                coordinates[i].Subresource = (uint)(region.Layer + region.MipLevel);
+
+                uint width = (uint)(region.End.X - region.Start.X);
+                uint height = (uint)(region.End.Y - region.Start.Y);
+                uint depth = (uint)(region.End.Z - region.Start.Z);
+                if (width < 1) width = 1;
+                if (height < 1) height = 1;
+                if (depth < 1) depth = 1;
+                uint numTiles = width * height * depth;
+
+                regionSizes[i].NumTiles = numTiles;
+                regionSizes[i].UseBox = true;
+                regionSizes[i].Width = width;
+                regionSizes[i].Height = (ushort)height;
+                regionSizes[i].Depth = (ushort)depth;
+
+                rangeFlags[i] = D3D12_TILE_RANGE_FLAGS.D3D12_TILE_RANGE_FLAG_NONE;
+                heapRangeStartOffsets[i] = 0;
+                rangeTileCounts[i] = numTiles;
+            }
+
+            m_NativeCommandQueue->UpdateTileMappings(
+                (ID3D12Resource*)dx12Texture.NativeResource,
+                (uint)regionCount,
+                coordinates,
+                regionSizes,
+                null,
+                (uint)regionCount,
+                rangeFlags,
+                heapRangeStartOffsets,
+                rangeTileCounts,
+                D3D12_TILE_MAPPING_FLAGS.D3D12_TILE_MAPPING_FLAG_NONE);
         }
 
         public override void UnMapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
         {
-            throw new NotImplementedException();
+            Dx12Texture dx12Texture = tiledTextureRegions.Texture as Dx12Texture;
+            int regionCount = tiledTextureRegions.Regions.Length;
+
+            D3D12_TILED_RESOURCE_COORDINATE* coordinates = stackalloc D3D12_TILED_RESOURCE_COORDINATE[regionCount];
+            D3D12_TILE_REGION_SIZE* regionSizes = stackalloc D3D12_TILE_REGION_SIZE[regionCount];
+            D3D12_TILE_RANGE_FLAGS* rangeFlags = stackalloc D3D12_TILE_RANGE_FLAGS[regionCount];
+            uint* rangeTileCounts = stackalloc uint[regionCount];
+
+            for (int i = 0; i < regionCount; ++i)
+            {
+                ref RHITextureCoordinateRegion region = ref tiledTextureRegions.Regions.Span[i];
+
+                coordinates[i].X = (uint)region.Start.X;
+                coordinates[i].Y = (uint)region.Start.Y;
+                coordinates[i].Z = (uint)region.Start.Z;
+                coordinates[i].Subresource = (uint)(region.Layer + region.MipLevel);
+
+                uint width = (uint)(region.End.X - region.Start.X);
+                uint height = (uint)(region.End.Y - region.Start.Y);
+                uint depth = (uint)(region.End.Z - region.Start.Z);
+                if (width < 1) width = 1;
+                if (height < 1) height = 1;
+                if (depth < 1) depth = 1;
+                uint numTiles = width * height * depth;
+
+                regionSizes[i].NumTiles = numTiles;
+                regionSizes[i].UseBox = true;
+                regionSizes[i].Width = width;
+                regionSizes[i].Height = (ushort)height;
+                regionSizes[i].Depth = (ushort)depth;
+
+                rangeFlags[i] = D3D12_TILE_RANGE_FLAGS.D3D12_TILE_RANGE_FLAG_NULL;
+                rangeTileCounts[i] = numTiles;
+            }
+
+            m_NativeCommandQueue->UpdateTileMappings(
+                (ID3D12Resource*)dx12Texture.NativeResource,
+                (uint)regionCount,
+                coordinates,
+                regionSizes,
+                null,
+                (uint)regionCount,
+                rangeFlags,
+                null,
+                rangeTileCounts,
+                D3D12_TILE_MAPPING_FLAGS.D3D12_TILE_MAPPING_FLAG_NONE);
         }
 
         public override void MapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
         {
-            throw new NotImplementedException();
+            for (int i = 0; i < tiledTexturePackedMips.PackedMips.Length; ++i)
+            {
+                ref RHITiledTexturePackedMip packedMip = ref tiledTexturePackedMips.PackedMips.Span[i];
+                Dx12Texture dx12Texture = packedMip.Texture as Dx12Texture;
+
+                D3D12_TILE_RANGE_FLAGS rangeFlag = D3D12_TILE_RANGE_FLAGS.D3D12_TILE_RANGE_FLAG_NONE;
+                uint startOffset = 0;
+                uint tileCount = 1;
+
+                m_NativeCommandQueue->UpdateTileMappings(
+                    (ID3D12Resource*)dx12Texture.NativeResource,
+                    1,
+                    null,
+                    null,
+                    null,
+                    1,
+                    &rangeFlag,
+                    &startOffset,
+                    &tileCount,
+                    D3D12_TILE_MAPPING_FLAGS.D3D12_TILE_MAPPING_FLAG_NONE);
+            }
         }
 
         public override void UnMapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
         {
-            throw new NotImplementedException();
+            for (int i = 0; i < tiledTexturePackedMips.PackedMips.Length; ++i)
+            {
+                ref RHITiledTexturePackedMip packedMip = ref tiledTexturePackedMips.PackedMips.Span[i];
+                Dx12Texture dx12Texture = packedMip.Texture as Dx12Texture;
+
+                D3D12_TILE_RANGE_FLAGS rangeFlag = D3D12_TILE_RANGE_FLAGS.D3D12_TILE_RANGE_FLAG_NULL;
+                uint tileCount = 1;
+
+                m_NativeCommandQueue->UpdateTileMappings(
+                    (ID3D12Resource*)dx12Texture.NativeResource,
+                    1,
+                    null,
+                    null,
+                    null,
+                    1,
+                    &rangeFlag,
+                    null,
+                    &tileCount,
+                    D3D12_TILE_MAPPING_FLAGS.D3D12_TILE_MAPPING_FLAG_NONE);
+            }
         }
 
         public override void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore)

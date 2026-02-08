@@ -31,18 +31,17 @@ namespace Infinity.Graphics
         public D3D12_CPU_DESCRIPTOR_HANDLE NativeCpuStartHandle => m_NativeDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
         public D3D12_GPU_DESCRIPTOR_HANDLE NativeGpuStartHandle => m_NativeDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
 
+        private int m_Capacity;
         private uint m_DescriptorSize;
-        private TValueArray<int> m_CacheMap;
+        private SortedList<int, int> m_FreeBlocks;
         private D3D12_DESCRIPTOR_HEAP_TYPE m_NativeType;
         private ID3D12DescriptorHeap* m_NativeDescriptorHeap;
 
         public Dx12DescriptorHeap(ID3D12Device10* device, in D3D12_DESCRIPTOR_HEAP_TYPE type, in D3D12_DESCRIPTOR_HEAP_FLAGS flag, in uint count)
         {
-            m_CacheMap = new TValueArray<int>((int)count);
-            for (int i = 0; i < (int)count; ++i)
-            {
-                m_CacheMap.Add(i);
-            }
+            m_Capacity = (int)count;
+            m_FreeBlocks = new SortedList<int, int>(16);
+            m_FreeBlocks.Add(0, m_Capacity);
 
             m_NativeType = type;
             m_DescriptorSize = device->GetDescriptorHandleIncrementSize(m_NativeType);
@@ -63,26 +62,91 @@ namespace Infinity.Graphics
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int Allocate()
         {
-            int index = m_CacheMap[m_CacheMap.length - 1];
-            m_CacheMap.RemoveSwapAtIndex(m_CacheMap.length - 1);
-            return index;
+            return Allocate(1);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int Allocate(in int count)
         {
+            if (count <= 0 || m_FreeBlocks.Count == 0)
+            {
+                return -1;
+            }
+
+            for (int i = 0; i < m_FreeBlocks.Count; ++i)
+            {
+                int blockStart = m_FreeBlocks.Keys[i];
+                int blockSize = m_FreeBlocks.Values[i];
+
+                if (blockSize >= count)
+                {
+                    m_FreeBlocks.RemoveAt(i);
+
+                    if (blockSize > count)
+                    {
+                        m_FreeBlocks.Add(blockStart + count, blockSize - count);
+                    }
+
+                    return blockStart;
+                }
+            }
+
             return -1;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Free(in int index)
         {
-            m_CacheMap.Add(index);
+            Free(index, 1);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Free(in int index, in int count)
+        {
+            if (count <= 0)
+            {
+                return;
+            }
+
+            int newStart = index;
+            int newSize = count;
+
+            // Try to coalesce with the block immediately after
+            if (m_FreeBlocks.TryGetValue(index + count, out int afterSize))
+            {
+                newSize += afterSize;
+                m_FreeBlocks.Remove(index + count);
+            }
+
+            // Try to coalesce with the block immediately before
+            int beforeIndex = -1;
+            for (int i = 0; i < m_FreeBlocks.Count; ++i)
+            {
+                int blockStart = m_FreeBlocks.Keys[i];
+                int blockSize = m_FreeBlocks.Values[i];
+
+                if (blockStart + blockSize == index)
+                {
+                    beforeIndex = i;
+                    break;
+                }
+            }
+
+            if (beforeIndex >= 0)
+            {
+                int blockStart = m_FreeBlocks.Keys[beforeIndex];
+                int blockSize = m_FreeBlocks.Values[beforeIndex];
+                newStart = blockStart;
+                newSize += blockSize;
+                m_FreeBlocks.RemoveAt(beforeIndex);
+            }
+
+            m_FreeBlocks.Add(newStart, newSize);
         }
 
         protected override void Release()
         {
-            m_CacheMap.Dispose();
+            m_FreeBlocks.Clear();
             m_NativeDescriptorHeap->Release();
         }
     }
@@ -94,6 +158,105 @@ namespace Infinity.Graphics
 
         public static void CHECK_HR(int hr, [CallerFilePath] string __FILE__ = "", [CallerLineNumber] int __LINE__ = 0, [CallerArgumentExpression("hr")] string expr = "")
             => Assert.False(FAILED(hr), $"{__FILE__}({__LINE__}): FAILED({(string.IsNullOrEmpty(expr) ? hr.ToString("X8") : expr)})");
+
+        internal static uint GetFormatBytesPerPixel(in ERHIPixelFormat format)
+        {
+            switch (format)
+            {
+                case ERHIPixelFormat.R8_UNorm:
+                case ERHIPixelFormat.R8_SNorm:
+                case ERHIPixelFormat.R8_UInt:
+                case ERHIPixelFormat.R8_SInt:
+                    return 1;
+
+                case ERHIPixelFormat.R16_UInt:
+                case ERHIPixelFormat.R16_SInt:
+                case ERHIPixelFormat.R16_Float:
+                case ERHIPixelFormat.R8G8_UNorm:
+                case ERHIPixelFormat.R8G8_SNorm:
+                case ERHIPixelFormat.R8G8_UInt:
+                case ERHIPixelFormat.R8G8_SInt:
+                case ERHIPixelFormat.D16_UNorm:
+                    return 2;
+
+                case ERHIPixelFormat.R32_UInt:
+                case ERHIPixelFormat.R32_SInt:
+                case ERHIPixelFormat.R32_Float:
+                case ERHIPixelFormat.R16G16_UInt:
+                case ERHIPixelFormat.R16G16_SInt:
+                case ERHIPixelFormat.R16G16_Float:
+                case ERHIPixelFormat.R8G8B8A8_UInt:
+                case ERHIPixelFormat.R8G8B8A8_SInt:
+                case ERHIPixelFormat.R8G8B8A8_UNorm:
+                case ERHIPixelFormat.R8G8B8A8_UNorm_Srgb:
+                case ERHIPixelFormat.R8G8B8A8_SNorm:
+                case ERHIPixelFormat.B8G8R8A8_UNorm:
+                case ERHIPixelFormat.B8G8R8A8_UNorm_Srgb:
+                case ERHIPixelFormat.R10G10B10A2_UInt:
+                case ERHIPixelFormat.R10G10B10A2_UNorm:
+                case ERHIPixelFormat.R11G11B10_Float:
+                case ERHIPixelFormat.R99GB99_E5_Float:
+                case ERHIPixelFormat.D24_UNorm_S8_UInt:
+                case ERHIPixelFormat.D32_Float:
+                    return 4;
+
+                case ERHIPixelFormat.RG32_UInt:
+                case ERHIPixelFormat.RG32_SInt:
+                case ERHIPixelFormat.RG32_Float:
+                case ERHIPixelFormat.R16G16B16A16_UInt:
+                case ERHIPixelFormat.R16G16B16A16_SInt:
+                case ERHIPixelFormat.R16G16B16A16_Float:
+                case ERHIPixelFormat.D32_Float_S8_UInt:
+                    return 8;
+
+                case ERHIPixelFormat.R32G32B32A32_UInt:
+                case ERHIPixelFormat.R32G32B32A32_SInt:
+                case ERHIPixelFormat.R32G32B32A32_Float:
+                    return 16;
+
+                // Block-compressed formats: return 0, use GetBlockCompressedRowPitch instead
+                default:
+                    return 0;
+            }
+        }
+
+        internal static uint ComputeRowPitch(in ERHIPixelFormat format, in uint width)
+        {
+            uint bytesPerPixel = GetFormatBytesPerPixel(format);
+            uint rowPitch;
+
+            if (bytesPerPixel > 0)
+            {
+                rowPitch = width * bytesPerPixel;
+            }
+            else
+            {
+                // Block-compressed formats: 4x4 block size
+                uint blockWidth = (width + 3) / 4;
+                uint bytesPerBlock;
+
+                switch (format)
+                {
+                    case ERHIPixelFormat.RGB_DXT1_UNorm:
+                    case ERHIPixelFormat.RGBA_DXT1_UNorm:
+                    case ERHIPixelFormat.RGBA_DXT1_SRGB:
+                    case ERHIPixelFormat.R_BC4_UNorm:
+                    case ERHIPixelFormat.R_BC4_SNorm:
+                        bytesPerBlock = 8;
+                        break;
+
+                    default:
+                        // BC2, BC3, BC5, BC6H, BC7 all use 16 bytes per block
+                        bytesPerBlock = 16;
+                        break;
+                }
+
+                rowPitch = blockWidth * bytesPerBlock;
+            }
+
+            // Align to D3D12_TEXTURE_DATA_PITCH_ALIGNMENT (256)
+            return ((rowPitch + 255) / 256) * 256;
+        }
 
         internal static D3D12_QUERY_TYPE ConvertToDx12QueryType(in ERHIQueryType queryType)
         {
@@ -1837,6 +2000,26 @@ namespace Infinity.Graphics
             rtv.WSize = descriptor.ArrayCount;
             rtv.MipSlice = descriptor.BaseMipLevel;
             rtv.FirstWSlice = descriptor.BaseArraySlice;
+        }
+
+        internal static void FillTexture2DDSV(ref D3D12_TEX2D_DSV dsv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        {
+            if (!((dimension & ERHITextureDimension.Texture2D) == ERHITextureDimension.Texture2D))
+            {
+                return;
+            }
+            dsv.MipSlice = descriptor.BaseMipLevel;
+        }
+
+        internal static void FillTexture2DArrayDSV(ref D3D12_TEX2D_ARRAY_DSV dsv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        {
+            if (!((dimension & ERHITextureDimension.Texture2DArray) == ERHITextureDimension.Texture2DArray))
+            {
+                return;
+            }
+            dsv.MipSlice = descriptor.BaseMipLevel;
+            dsv.FirstArraySlice = descriptor.BaseArraySlice;
+            dsv.ArraySize = descriptor.ArrayCount;
         }
     }
 #pragma warning restore CS8600, CS8602, CA1416

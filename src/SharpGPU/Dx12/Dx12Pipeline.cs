@@ -763,49 +763,84 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12PipelineLibrary : RHIPipelineLibrary
     {
+        private Dx12Device m_Dx12Device;
+        private ID3D12PipelineLibrary1* m_NativePipelineLibrary;
+
         public Dx12PipelineLibrary(Dx12Device device, in RHIPipelineLibraryDescriptor descriptor) : base(descriptor)
         {
+            m_Dx12Device = device;
 
+            ID3D12PipelineLibrary1* pipelineLibrary;
+            HRESULT hResult = device.NativeDevice->CreatePipelineLibrary(null, 0, __uuidof<ID3D12PipelineLibrary1>(), (void**)&pipelineLibrary);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
+            m_NativePipelineLibrary = pipelineLibrary;
         }
 
-        public Dx12PipelineLibrary(in RHIPipelineLibraryResult pipelineLibraryResult) : base(pipelineLibraryResult)
+        public Dx12PipelineLibrary(Dx12Device device, in RHIPipelineLibraryResult pipelineLibraryResult) : base(pipelineLibraryResult)
         {
+            m_Dx12Device = device;
 
+            ID3D12PipelineLibrary1* pipelineLibrary;
+            HRESULT hResult = device.NativeDevice->CreatePipelineLibrary((void*)pipelineLibraryResult.ByteCode, pipelineLibraryResult.ByteSize, __uuidof<ID3D12PipelineLibrary1>(), (void**)&pipelineLibrary);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
+            m_NativePipelineLibrary = pipelineLibrary;
         }
 
         public override void StoreComputePipeline(string name, RHIComputePipeline computePipeline)
         {
-            throw new NotImplementedException();
+            Dx12ComputePipeline dx12Pipeline = computePipeline as Dx12ComputePipeline;
+            fixed (char* pName = name)
+            {
+                m_NativePipelineLibrary->StorePipeline(pName, dx12Pipeline.NativePipelineState);
+            }
         }
 
         public override void StoreRasterPipeline(string name, RHIRasterPipeline rasterPipeline)
         {
-            throw new NotImplementedException();
+            Dx12RasterPipeline dx12Pipeline = rasterPipeline as Dx12RasterPipeline;
+            fixed (char* pName = name)
+            {
+                m_NativePipelineLibrary->StorePipeline(pName, dx12Pipeline.NativePipelineState);
+            }
         }
 
         public override void StoreRaytracingPipeline(string name, RHIRaytracingPipeline raytracingPipeline)
         {
-            throw new NotImplementedException();
+            throw new System.NotSupportedException("D3D12 PipelineLibrary does not support storing raytracing state objects.");
         }
 
         public override RHIComputePipeline LoadComputePipeline(RHIComputePipelineDescriptor computePipelineDescriptor)
         {
-            throw new NotImplementedException();
+            throw new System.NotImplementedException();
         }
 
         public override RHIRasterPipeline LoadRasterPipeline(RHIRasterPipelineDescriptor rasterPipelineDescriptor)
         {
-            throw new NotImplementedException();
+            throw new System.NotImplementedException();
         }
 
         public override RHIRaytracingPipeline LoadRaytracingPipeline(RHIRaytracingPipelineDescriptor raytracingPipelineDescriptor)
         {
-            throw new NotImplementedException();
+            throw new System.NotSupportedException("D3D12 PipelineLibrary does not support loading raytracing state objects.");
         }
 
         public override RHIPipelineLibraryResult Serialize()
         {
-            throw new NotImplementedException();
+            nuint blobSize = m_NativePipelineLibrary->GetSerializedSize();
+            RHIPipelineLibraryResult result;
+            result.ByteSize = (uint)blobSize;
+            result.ByteCode = System.Runtime.InteropServices.Marshal.AllocHGlobal((int)blobSize);
+            m_NativePipelineLibrary->Serialize(result.ByteCode.ToPointer(), blobSize);
+            return result;
+        }
+
+        protected override void Release()
+        {
+            m_NativePipelineLibrary->Release();
         }
     }
 #pragma warning restore CS0169, CS0649, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416

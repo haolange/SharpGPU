@@ -49,7 +49,7 @@ namespace Infinity.Graphics
 #if DEBUG
             Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
 #endif
-            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
+            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
         }
@@ -270,7 +270,7 @@ namespace Infinity.Graphics
                         Width = (uint)size.x,
                         Height = (uint)size.y,
                         Depth = (uint)size.z,
-                        RowPitch = (uint)(size.x * 4) // Assuming 4 bytes per pixel, adjust as needed
+                        RowPitch = Dx12Utility.ComputeRowPitch(dstTexture.Descriptor.Format, (uint)size.x)
                     }
                 }
             };
@@ -321,7 +321,7 @@ namespace Infinity.Graphics
                         Width = (uint)size.x,
                         Height = (uint)size.y,
                         Depth = (uint)size.z,
-                        RowPitch = (uint)(size.x * 4) // Assuming 4 bytes per pixel, adjust as needed
+                        RowPitch = Dx12Utility.ComputeRowPitch(srcTexture.Descriptor.Format, (uint)size.x)
                     }
                 }
             };
@@ -339,14 +339,14 @@ namespace Infinity.Graphics
             {
                 pResource = srcTexture.NativeResource,
                 Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-                SubresourceIndex = 0 // Assuming the first subresource, adjust as needed
+                SubresourceIndex = src.SliceCount * srcTexture.Descriptor.MipCount + src.MipLevel
             };
 
             D3D12_TEXTURE_COPY_LOCATION dstLocation = new D3D12_TEXTURE_COPY_LOCATION
             {
                 pResource = dstTexture.NativeResource,
                 Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
-                SubresourceIndex = 0 // Assuming the first subresource, adjust as needed
+                SubresourceIndex = dst.SliceCount * dstTexture.Descriptor.MipCount + dst.MipLevel
             };
 
             D3D12_BOX srcBox = new D3D12_BOX
@@ -408,7 +408,7 @@ namespace Infinity.Graphics
 #if DEBUG
             Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
 #endif
-            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
+            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
         }
@@ -520,7 +520,9 @@ namespace Infinity.Graphics
 
         public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
         {
-            throw new NotImplementedException();
+            Dx12ComputeIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12ComputeIndirectCommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
         }
 
         public override void EndPass()
@@ -570,7 +572,7 @@ namespace Infinity.Graphics
 #if DEBUG
             Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
 #endif
-            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
+            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
         }
@@ -723,7 +725,9 @@ namespace Infinity.Graphics
 
         public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
         {
-            throw new NotImplementedException();
+            Dx12RayTracingIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RayTracingIndirectCommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
         }
 
         public override void EndPass()
@@ -821,9 +825,8 @@ namespace Infinity.Graphics
                 //desc.Flags = Dx12Utility.GetDx12DSVFlag(descriptor.DepthStencilAttachment.Value.DepthReadOnly, descriptor.DepthStencilAttachment.Value.StencilReadOnly);
                 desc.Format = Dx12Utility.ConvertToDx12Format(texture.Descriptor.Format);
                 desc.ViewDimension = Dx12Utility.ConvertToDx12TextureDSVDimension(texture.Descriptor.Dimension);
-                /*Dx12Utility.FillTexture2DDSV(ref desc.Texture2D, viewDescriptor);
-                Dx12Utility.FillTexture3DDSV(ref desc.Texture3D, viewDescriptor);
-                Dx12Utility.FillTexture2DArrayDSV(ref desc.Texture2DArray, viewDescriptor);*/
+                Dx12Utility.FillTexture2DDSV(ref desc.Texture2D, viewDescriptor, texture.Descriptor.Dimension);
+                Dx12Utility.FillTexture2DArrayDSV(ref desc.Texture2DArray, viewDescriptor, texture.Descriptor.Dimension);
 
                 Dx12AttachmentInfo dx12AttachmentInfo = new Dx12AttachmentInfo();
                 {
@@ -892,7 +895,7 @@ namespace Infinity.Graphics
 #if DEBUG
             Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
 #endif
-            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
+            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
         }
@@ -902,7 +905,7 @@ namespace Infinity.Graphics
 #if DEBUG
             Debug.Assert(m_CommandBuffer.OcclusionQueryHeap != null, "Current RasterPass OcclusionQuery is null");
 #endif
-            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
+            Dx12Query dx12Query = m_CommandBuffer.OcclusionQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->BeginQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
         }
@@ -912,7 +915,7 @@ namespace Infinity.Graphics
 #if DEBUG
             Debug.Assert(m_CommandBuffer.OcclusionQueryHeap != null, "Current RasterPass OcclusionQuery is null");
 #endif
-            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
+            Dx12Query dx12Query = m_CommandBuffer.OcclusionQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, index);
         }
@@ -1106,7 +1109,7 @@ namespace Infinity.Graphics
 
         public override void NextSubPass()
         {
-            throw new NotImplementedException("Current is not supported");
+            ++m_SubPassIndex;
         }
 
         public override void SetScissor(in Rect rect)
@@ -1118,7 +1121,14 @@ namespace Infinity.Graphics
 
         public override void SetScissors(in Memory<Rect> rects)
         {
-            throw new NotImplementedException();
+            Span<Rect> rectSpan = rects.Span;
+            RECT* tempScissors = stackalloc RECT[rectSpan.Length];
+            for (int i = 0; i < rectSpan.Length; ++i)
+            {
+                tempScissors[i] = new RECT((int)rectSpan[i].left, (int)rectSpan[i].top, (int)rectSpan[i].right, (int)rectSpan[i].bottom);
+            }
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->RSSetScissorRects((uint)rectSpan.Length, tempScissors);
         }
 
         public override void SetViewport(in Viewport viewport)
@@ -1130,7 +1140,14 @@ namespace Infinity.Graphics
 
         public override void SetViewports(in Memory<Viewport> viewports)
         {
-            throw new NotImplementedException();
+            Span<Viewport> viewportSpan = viewports.Span;
+            D3D12_VIEWPORT* tempViewports = stackalloc D3D12_VIEWPORT[viewportSpan.Length];
+            for (int i = 0; i < viewportSpan.Length; ++i)
+            {
+                tempViewports[i] = new D3D12_VIEWPORT(viewportSpan[i].TopLeftX, viewportSpan[i].TopLeftY, viewportSpan[i].Width, viewportSpan[i].Height, viewportSpan[i].MinDepth, viewportSpan[i].MaxDepth);
+            }
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->RSSetViewports((uint)viewportSpan.Length, tempViewports);
         }
 
         public override void SetStencilRef(in uint value)
@@ -1296,7 +1313,9 @@ namespace Infinity.Graphics
 
         public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
         {
-            throw new NotImplementedException();
+            Dx12RasterIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RasterIndirectCommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
         }
 
         public override void EndPass()

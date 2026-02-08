@@ -153,7 +153,7 @@ namespace Infinity.Graphics
 
     public struct RHIComputeIndirectCommandBufferDescription
     {
-
+        public uint MaxCommandCount;
     }
 
     public abstract class RHIComputeIndirectCommandBuffer : Disposal
@@ -163,7 +163,7 @@ namespace Infinity.Graphics
 
     public struct RHIRayTracingIndirectCommandBufferDescription
     {
-
+        public uint MaxCommandCount;
     }
 
     public abstract class RHIRayTracingIndirectCommandBuffer : Disposal
@@ -173,7 +173,7 @@ namespace Infinity.Graphics
 
     public struct RHIRasterIndirectCommandBufferDescription
     {
-
+        public uint MaxCommandCount;
     }
 
     public abstract class RHIRasterIndirectCommandBuffer : Disposal

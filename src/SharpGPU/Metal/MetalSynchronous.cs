@@ -114,17 +114,17 @@ namespace Infinity.Graphics
             throw new NotSupportedException("Metal storage queue is not implemented.");
         }
 
-        public override void QueryFileInfo(in RHIStorageFileHandle fileHandle)
+        public override ulong QueryFileSize(in RHIStorageFileHandle fileHandle)
         {
             throw new NotSupportedException("Metal storage queue is not implemented.");
         }
 
-        public override void RequestBuffer()
+        public override void RequestBuffer(in RHIStorageBufferRequest request)
         {
             throw new NotSupportedException("Metal storage queue is not implemented.");
         }
 
-        public override void RequestTexture()
+        public override void RequestTexture(in RHIStorageTextureRequest request)
         {
             throw new NotSupportedException("Metal storage queue is not implemented.");
         }
