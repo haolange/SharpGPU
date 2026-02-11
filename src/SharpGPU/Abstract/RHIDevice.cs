@@ -197,6 +197,7 @@ namespace Infinity.Graphics
         public abstract RHIResourceTable CreateResourceTable(in RHIResourceTableDescriptor descriptor);
         public abstract RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor);
         public abstract RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor);
+        public abstract RHIFunctionLibrary CreateFunctionLibrary(in RHIFunctionLibraryDescriptor descriptor);
         public abstract RHIFunctionTable CreateFunctionTable();
         public abstract RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor);
         public abstract RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor);

@@ -318,6 +318,11 @@ namespace Infinity.Graphics
             return new Dx12Function(descriptor);
         }
 
+        public override RHIFunctionLibrary CreateFunctionLibrary(in RHIFunctionLibraryDescriptor descriptor)
+        {
+            return new Dx12FunctionLibrary(descriptor);
+        }
+
         public override RHIFunctionTable CreateFunctionTable()
         {
             return new Dx12FunctionTable(this);

@@ -102,12 +102,12 @@ namespace Infinity.Graphics
 
         public override RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
         {
-            throw new NotSupportedException("Metal top-level acceleration structure is not implemented yet.");
+            return new MetalTopLevelAccelStruct(this, descriptor);
         }
 
         public override RHIBottomLevelAccelStruct CreateBottomAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor)
         {
-            throw new NotSupportedException("Metal bottom-level acceleration structure is not implemented yet.");
+            return new MetalBottomLevelAccelStruct(this, descriptor);
         }
 
         public override RHIResourceTableLayout CreateResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor)
@@ -130,6 +130,11 @@ namespace Infinity.Graphics
             return new MetalFunction(this, descriptor);
         }
 
+        public override RHIFunctionLibrary CreateFunctionLibrary(in RHIFunctionLibraryDescriptor descriptor)
+        {
+            return new MetalFunctionLibrary(this, descriptor);
+        }
+
         public override RHIFunctionTable CreateFunctionTable()
         {
             return new MetalFunctionTable();
@@ -142,7 +147,7 @@ namespace Infinity.Graphics
 
         public override RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor)
         {
-            return new MetalRaytracingPipeline(descriptor);
+            return new MetalRaytracingPipeline(this, descriptor);
         }
 
         public override RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor)

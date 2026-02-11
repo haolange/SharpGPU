@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using Infinity.Mathmatics;
 using SharpMetal.Foundation;
 using SharpMetal.Metal;
 using SharpMetal.ObjectiveCCore;
@@ -54,13 +56,201 @@ namespace Infinity.Graphics
 
     internal sealed class MetalRaytracingPipeline : RHIRaytracingPipeline
     {
-        public MetalRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor)
+        internal MTLComputePipelineState NativePipelineState => m_NativePipelineState;
+        internal uint3 ThreadgroupSize => m_ThreadgroupSize;
+        internal string RayGenerationEntryName => m_RayGenerationEntryName;
+        internal int HitGroupCount => m_HitGroups.Length;
+        internal int MissGroupCount => m_MissGroups.Length;
+
+        private readonly MetalFunctionLibrary m_FunctionLibrary;
+        private readonly uint3 m_ThreadgroupSize;
+        private readonly string m_RayGenerationEntryName;
+        private readonly RHIRayHitGroupDescriptor[] m_HitGroups;
+        private readonly RHIRayGeneralGroupDescriptor[] m_MissGroups;
+        private readonly Dictionary<string, MTLFunction> m_VisibleFunctionCache;
+        private readonly Dictionary<string, MTLFunction> m_IntersectionFunctionCache;
+        private readonly MTLFunction m_RayGenerationFunction;
+        private MTLComputePipelineState m_NativePipelineState;
+
+        public MetalRaytracingPipeline(MetalDevice device, in RHIRaytracingPipelineDescriptor descriptor)
         {
             m_Descriptor = descriptor;
+
+            m_FunctionLibrary = descriptor.FunctionLibrary as MetalFunctionLibrary ?? throw new InvalidOperationException("Metal ray tracing pipeline requires a Metal function library.");
+            m_RayGenerationEntryName = descriptor.RayGeneration.General.EntryName;
+            if (string.IsNullOrWhiteSpace(m_RayGenerationEntryName))
+            {
+                throw new InvalidOperationException("Ray generation entry name is empty.");
+            }
+
+            m_ThreadgroupSize = new uint3(Math.Max(1u, descriptor.ThreadSize.x), Math.Max(1u, descriptor.ThreadSize.y), Math.Max(1u, descriptor.ThreadSize.z));
+            m_HitGroups = descriptor.RayHitGroups.Span.ToArray();
+            m_MissGroups = descriptor.RayMissGroups.Span.ToArray();
+            m_VisibleFunctionCache = new Dictionary<string, MTLFunction>(StringComparer.Ordinal);
+            m_IntersectionFunctionCache = new Dictionary<string, MTLFunction>(StringComparer.Ordinal);
+
+            m_RayGenerationFunction = ResolveKernelFunction(m_RayGenerationEntryName);
+
+            List<IntPtr> linkedFunctionPointers = new List<IntPtr>(Math.Max(1, m_MissGroups.Length + m_HitGroups.Length));
+            for (int i = 0; i < m_MissGroups.Length; ++i)
+            {
+                MTLFunction missFunction = ResolveVisibleFunction(m_MissGroups[i].General.EntryName);
+                linkedFunctionPointers.Add(missFunction.NativePtr);
+            }
+
+            for (int i = 0; i < m_HitGroups.Length; ++i)
+            {
+                RHIRayHitGroupDescriptor hitGroup = m_HitGroups[i];
+                if (hitGroup.Type == ERHIHitGroupType.Procedural)
+                {
+                    string? entryName = hitGroup.Intersect?.EntryName;
+                    if (string.IsNullOrWhiteSpace(entryName))
+                    {
+                        throw new InvalidOperationException($"Hit group '{hitGroup.Name}' is procedural but has no intersection function.");
+                    }
+
+                    MTLFunction intersectionFunction = ResolveIntersectionFunction(entryName);
+                    linkedFunctionPointers.Add(intersectionFunction.NativePtr);
+                }
+            }
+
+            MTLComputePipelineDescriptor nativeDescriptor = MTLComputePipelineDescriptor.New();
+            nativeDescriptor.ComputeFunction = m_RayGenerationFunction;
+            if (linkedFunctionPointers.Count > 0)
+            {
+                MTLLinkedFunctions linkedFunctions = MTLLinkedFunctions.New();
+                linkedFunctions.Functions = MetalArrayHelper.CreateNSArrayFromPointers(linkedFunctionPointers.ToArray());
+                nativeDescriptor.LinkedFunctions = linkedFunctions;
+                ObjectiveCRuntime.Release(linkedFunctions.NativePtr);
+            }
+
+            NSError error = default;
+            m_NativePipelineState = device.NativeDevice.NewComputePipelineState(nativeDescriptor, MTLPipelineOption.None, IntPtr.Zero, ref error);
+            ObjectiveCRuntime.Release(nativeDescriptor.NativePtr);
+            if (m_NativePipelineState.NativePtr == IntPtr.Zero)
+            {
+                string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
+                throw new InvalidOperationException($"Failed to create Metal ray tracing compute pipeline state: {errorText}");
+            }
+        }
+
+        internal RHIRayHitGroupDescriptor GetHitGroupDescriptor(int index)
+        {
+            if ((uint)index >= (uint)m_HitGroups.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            return m_HitGroups[index];
+        }
+
+        internal RHIRayGeneralGroupDescriptor GetMissGroupDescriptor(int index)
+        {
+            if ((uint)index >= (uint)m_MissGroups.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            return m_MissGroups[index];
+        }
+
+        internal MTLFunction ResolveVisibleFunction(string entryName)
+        {
+            if (string.IsNullOrWhiteSpace(entryName))
+            {
+                throw new ArgumentException("Visible function entry name is empty.", nameof(entryName));
+            }
+
+            if (m_VisibleFunctionCache.TryGetValue(entryName, out MTLFunction cached))
+            {
+                return cached;
+            }
+
+            MTLFunction function = m_FunctionLibrary.NativeLibrary.NewFunction(new NSString(entryName));
+            if (function.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException($"Failed to resolve visible function '{entryName}' from Metal function library.");
+            }
+
+            m_VisibleFunctionCache.Add(entryName, function);
+            return function;
+        }
+
+        internal MTLFunction ResolveIntersectionFunction(string entryName)
+        {
+            if (string.IsNullOrWhiteSpace(entryName))
+            {
+                throw new ArgumentException("Intersection function entry name is empty.", nameof(entryName));
+            }
+
+            if (m_IntersectionFunctionCache.TryGetValue(entryName, out MTLFunction cached))
+            {
+                return cached;
+            }
+
+            MTLIntersectionFunctionDescriptor descriptor = MTLIntersectionFunctionDescriptor.New();
+            descriptor.Name = new NSString(entryName);
+
+            NSError error = default;
+            MTLFunction function = m_FunctionLibrary.NativeLibrary.NewIntersectionFunction(descriptor, ref error);
+            ObjectiveCRuntime.Release(descriptor.NativePtr);
+            if (function.NativePtr == IntPtr.Zero)
+            {
+                string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
+                throw new InvalidOperationException($"Failed to resolve intersection function '{entryName}': {errorText}");
+            }
+
+            m_IntersectionFunctionCache.Add(entryName, function);
+            return function;
+        }
+
+        private MTLFunction ResolveKernelFunction(string entryName)
+        {
+            MTLFunction function = m_FunctionLibrary.NativeLibrary.NewFunction(new NSString(entryName));
+            if (function.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException($"Failed to resolve kernel function '{entryName}' from Metal function library.");
+            }
+
+            if (function.FunctionType != MTLFunctionType.Kernel)
+            {
+                throw new InvalidOperationException($"Ray generation entry '{entryName}' is not a compute kernel function.");
+            }
+
+            return function;
         }
 
         protected override void Release()
         {
+            if (m_NativePipelineState.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_NativePipelineState);
+                m_NativePipelineState = default;
+            }
+
+            if (m_RayGenerationFunction.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_RayGenerationFunction);
+            }
+
+            foreach (KeyValuePair<string, MTLFunction> pair in m_VisibleFunctionCache)
+            {
+                if (pair.Value.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(pair.Value);
+                }
+            }
+
+            foreach (KeyValuePair<string, MTLFunction> pair in m_IntersectionFunctionCache)
+            {
+                if (pair.Value.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(pair.Value);
+                }
+            }
+
+            m_VisibleFunctionCache.Clear();
+            m_IntersectionFunctionCache.Clear();
         }
     }
 

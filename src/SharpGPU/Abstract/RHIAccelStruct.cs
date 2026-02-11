@@ -39,10 +39,32 @@ namespace Infinity.Graphics
         Triangle
     }
 
+    public enum EAccelStructCurveType : byte
+    {
+        Round = 0,
+        Flat = 1
+    }
+
+    public enum EAccelStructCurveBasis : byte
+    {
+        BSpline = 0,
+        CatmullRom = 1,
+        Linear = 2,
+        Bezier = 3
+    }
+
+    public enum EAccelStructCurveEndCaps : byte
+    {
+        None = 0,
+        Disk = 1,
+        Sphere = 2
+    }
+
     public class RHIAccelStructGeometry
     {
         public EAccelStructGeometryType GeometryType;
         public EAccelStructGeometryFlag GeometryFlag;
+        public uint FunctionTableOffset;
     }
 
     public class RHIAccelStructAABBs : RHIAccelStructGeometry
@@ -55,10 +77,26 @@ namespace Infinity.Graphics
 
     public class RHIAccelStructCurves : RHIAccelStructGeometry
     {
-        public uint Count;
-        public uint Stride;
-        public uint Offset;
-        public RHIBuffer? AABBBuffer;
+        public RHIBuffer? ControlPointBuffer;
+        public uint ControlPointOffset;
+        public uint ControlPointCount;
+        public uint ControlPointStride;
+        public ERHIPixelFormat ControlPointFormat;
+
+        public RHIBuffer? RadiusBuffer;
+        public uint RadiusOffset;
+        public uint RadiusStride;
+        public ERHIPixelFormat RadiusFormat;
+
+        public RHIBuffer? IndexBuffer;
+        public uint IndexOffset;
+        public ERHIBufferFormat IndexFormat;
+
+        public uint SegmentCount;
+        public uint SegmentControlPointCount;
+        public EAccelStructCurveType CurveType;
+        public EAccelStructCurveBasis CurveBasis;
+        public EAccelStructCurveEndCaps CurveEndCaps;
     }
 
     public class RHIAccelStructTriangles : RHIAccelStructGeometry

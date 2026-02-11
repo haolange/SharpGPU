@@ -143,6 +143,7 @@ namespace Infinity.Graphics
 
     public struct RHIRaytracingPipelineDescriptor
     {
+        public uint3 ThreadSize;
         public uint MaxPayloadSize;
         public uint MaxAttributeSize;
         public uint MaxRecursionDepth;

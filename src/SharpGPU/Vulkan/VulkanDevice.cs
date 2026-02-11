@@ -105,6 +105,11 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
+        public override RHIFunctionLibrary CreateFunctionLibrary(in RHIFunctionLibraryDescriptor descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
         public override RHIFunctionTable CreateFunctionTable()
         {
             throw new NotImplementedException();

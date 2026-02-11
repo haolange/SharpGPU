@@ -233,6 +233,9 @@ namespace Infinity.Graphics
                         nativeTriangleGeometry.VertexBuffer.StrideInBytes = triangleGeometry.VertexStride;
                         nativeTriangleGeometry.VertexFormat = Dx12Utility.ConvertToDx12Format(triangleGeometry.VertexFormat);
                         break;
+
+                    case EAccelStructGeometryType.Curves:
+                        throw new NotSupportedException("DX12 backend does not implement curve BLAS geometry in current implementation.");
                 }
             }
 

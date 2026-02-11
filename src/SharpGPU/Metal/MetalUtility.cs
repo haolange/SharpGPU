@@ -1,3 +1,4 @@
+using System;
 using Infinity.Mathmatics;
 using SharpMetal.Metal;
 
@@ -463,6 +464,122 @@ namespace Infinity.Graphics
         internal static MTLIndexType ConvertToMetalIndexType(in ERHIBufferFormat format)
         {
             return format == ERHIBufferFormat.UInt32 ? MTLIndexType.UInt32 : MTLIndexType.UInt16;
+        }
+
+        internal static MTLAttributeFormat ConvertToMetalAttributeFormat(in ERHIPixelFormat format)
+        {
+            switch (format)
+            {
+                case ERHIPixelFormat.R32_Float:
+                    return MTLAttributeFormat.Float;
+                case ERHIPixelFormat.R16_Float:
+                    return MTLAttributeFormat.Half;
+                case ERHIPixelFormat.R16G16_Float:
+                    return MTLAttributeFormat.Half2;
+                case ERHIPixelFormat.R16G16B16A16_Float:
+                    return MTLAttributeFormat.Half4;
+                case ERHIPixelFormat.R32G32B32A32_Float:
+                    return MTLAttributeFormat.Float4;
+                default:
+                    throw new NotSupportedException($"Unsupported RT attribute format '{format}' for Metal acceleration structure.");
+            }
+        }
+
+        internal static MTLAccelerationStructureUsage ConvertToMetalAccelerationStructureUsage(in EAccelStructFlag flag)
+        {
+            MTLAccelerationStructureUsage usage = MTLAccelerationStructureUsage.None;
+            if ((flag & EAccelStructFlag.AllowUpdate) != 0 || (flag & EAccelStructFlag.PerformUpdate) != 0)
+            {
+                usage |= MTLAccelerationStructureUsage.Refit;
+            }
+
+            if ((flag & EAccelStructFlag.PreferFastBuild) != 0)
+            {
+                usage |= MTLAccelerationStructureUsage.PreferFastBuild;
+            }
+
+            return usage;
+        }
+
+        internal static MTLAccelerationStructureInstanceOptions ConvertToMetalAccelerationStructureInstanceOptions(in EAccelStructInstanceFlag flag)
+        {
+            MTLAccelerationStructureInstanceOptions options = MTLAccelerationStructureInstanceOptions.None;
+            if ((flag & EAccelStructInstanceFlag.TriangleCullDisable) != 0)
+            {
+                options |= MTLAccelerationStructureInstanceOptions.DisableTriangleCulling;
+            }
+
+            if ((flag & EAccelStructInstanceFlag.TriangleFrontCounterclockwise) != 0)
+            {
+                options |= MTLAccelerationStructureInstanceOptions.TriangleFrontFacingWindingCounterClockwise;
+            }
+
+            if ((flag & EAccelStructInstanceFlag.ForceOpaque) != 0)
+            {
+                options |= MTLAccelerationStructureInstanceOptions.Opaque;
+            }
+
+            if ((flag & EAccelStructInstanceFlag.ForceNonOpaque) != 0)
+            {
+                options |= MTLAccelerationStructureInstanceOptions.NonOpaque;
+            }
+
+            return options;
+        }
+
+        internal static bool IsMetalGeometryOpaque(in EAccelStructGeometryFlag flag)
+        {
+            return (flag & EAccelStructGeometryFlag.Opaque) != 0;
+        }
+
+        internal static bool AllowMetalDuplicateIntersectionInvocation(in EAccelStructGeometryFlag flag)
+        {
+            return (flag & EAccelStructGeometryFlag.NoDuplicateAnyhitInverseOcation) == 0;
+        }
+
+        internal static MTLCurveType ConvertToMetalCurveType(in EAccelStructCurveType curveType)
+        {
+            switch (curveType)
+            {
+                case EAccelStructCurveType.Round:
+                    return MTLCurveType.Round;
+                case EAccelStructCurveType.Flat:
+                    return MTLCurveType.Flat;
+                default:
+                    throw new NotSupportedException($"Unsupported curve type '{curveType}'.");
+            }
+        }
+
+        internal static MTLCurveBasis ConvertToMetalCurveBasis(in EAccelStructCurveBasis curveBasis)
+        {
+            switch (curveBasis)
+            {
+                case EAccelStructCurveBasis.BSpline:
+                    return MTLCurveBasis.BSpline;
+                case EAccelStructCurveBasis.CatmullRom:
+                    return MTLCurveBasis.CatmullRom;
+                case EAccelStructCurveBasis.Linear:
+                    return MTLCurveBasis.Linear;
+                case EAccelStructCurveBasis.Bezier:
+                    return MTLCurveBasis.Bezier;
+                default:
+                    throw new NotSupportedException($"Unsupported curve basis '{curveBasis}'.");
+            }
+        }
+
+        internal static MTLCurveEndCaps ConvertToMetalCurveEndCaps(in EAccelStructCurveEndCaps curveEndCaps)
+        {
+            switch (curveEndCaps)
+            {
+                case EAccelStructCurveEndCaps.None:
+                    return MTLCurveEndCaps.None;
+                case EAccelStructCurveEndCaps.Disk:
+                    return MTLCurveEndCaps.Disk;
+                case EAccelStructCurveEndCaps.Sphere:
+                    return MTLCurveEndCaps.Sphere;
+                default:
+                    throw new NotSupportedException($"Unsupported curve end caps '{curveEndCaps}'.");
+            }
         }
 
         internal static MTLSamplerMinMagFilter ConvertToMetalFilter(in ERHIFilterMode filterMode)

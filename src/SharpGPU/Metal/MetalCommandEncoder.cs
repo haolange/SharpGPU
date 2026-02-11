@@ -38,10 +38,12 @@ namespace Infinity.Graphics
 
             if ((stages & (1UL << 1)) != 0)
             {
-                result |= MTLRenderStages.RenderStageFragment;
+                // Some Apple GPUs reject fragment-stage memory barriers in render encoders.
+                // Map fragment barriers to vertex stage to preserve ordering without runtime asserts.
+                result |= MTLRenderStages.RenderStageVertex;
             }
 
-            return result == 0 ? (MTLRenderStages.RenderStageVertex | MTLRenderStages.RenderStageFragment) : result;
+            return result == 0 ? MTLRenderStages.RenderStageVertex : result;
         }
     }
 
@@ -357,6 +359,14 @@ namespace Infinity.Graphics
                     }
 
                     break;
+
+                case ERHIBindType.AccelStruct:
+                    if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
+                    {
+                        m_NativeEncoder.SetAccelerationStructure(topLevel.NativeAccelerationStructure, bind.Slot);
+                    }
+
+                    break;
             }
         }
 
@@ -407,92 +417,340 @@ namespace Infinity.Graphics
 
     internal sealed class MetalRaytracingEncoder : RHIRaytracingEncoder
     {
+        private const ulong IntersectionFunctionTableSlot = 30;
+        private const ulong VisibleFunctionTableSlot = 31;
+
+        private MTLComputeCommandEncoder m_NativeEncoder;
+        private MTLAccelerationStructureCommandEncoder m_NativeAccelEncoder;
+
         internal MetalRaytracingEncoder(MetalCommandBuffer commandBuffer)
         {
             m_CommandBuffer = commandBuffer;
+            m_NativeEncoder = default;
+            m_NativeAccelEncoder = default;
         }
 
         internal override void BeginPass(in RHIRayTracingPassDescriptor descriptor)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            m_NativeEncoder = commandBuffer.NativeCommandBuffer.ComputeCommandEncoder();
+            if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create Metal ray tracing compute encoder.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(descriptor.Name))
+            {
+                PushDebugGroup(descriptor.Name);
+            }
         }
 
         public override void PushDebugGroup(string name)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
+            if (m_NativeAccelEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeAccelEncoder.PushDebugGroup(new NSString(name));
+            }
+            else if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.PushDebugGroup(new NSString(name));
+            }
         }
 
         public override void PopDebugGroup()
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
+            if (m_NativeAccelEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeAccelEncoder.PopDebugGroup();
+            }
+            else if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.PopDebugGroup();
+            }
         }
 
         public override void WriteTimestamp(in uint index)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
         }
 
         public override void BeginStatistics(in uint index)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
         }
 
         public override void EndStatistics(in uint index)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
         }
 
         public override void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
+            ApplyImmediateBarrier(MTLBarrierScope.Buffers, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing));
         }
 
         public override void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
+            ApplyImmediateBarrier(MTLBarrierScope.Textures, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing));
         }
 
         public override void SetPipeline(RHIRaytracingPipeline pipeline)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
+            EnsureComputeEncoder();
+            m_CachedPipeline = pipeline;
+            MetalRaytracingPipeline metalPipeline = pipeline as MetalRaytracingPipeline ?? throw new InvalidOperationException("Ray tracing pipeline must be a MetalRaytracingPipeline.");
+            m_NativeEncoder.SetComputePipelineState(metalPipeline.NativePipelineState);
         }
 
         public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
+            EnsureComputeEncoder();
+
+            MetalResourceTable table = (MetalResourceTable)resourceTable;
+            MetalResourceTableLayout layout = table.ResourceTableLayout;
+            if (layout.Index != tableIndex)
+            {
+                throw new InvalidOperationException($"Ray tracing resource table index mismatch. expected={layout.Index}, actual={tableIndex}");
+            }
+
+            MetalBindInfo[] binds = layout.BindInfos;
+            RHIResourceTableElement[] elements = table.Elements;
+            for (int i = 0; i < binds.Length && i < elements.Length; ++i)
+            {
+                ref readonly MetalBindInfo bind = ref binds[i];
+                ref RHIResourceTableElement element = ref elements[i];
+                BindRaytracingElement(bind, element);
+            }
         }
 
         public override void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
+            EnsureAccelerationEncoder();
+            MetalTopLevelAccelStruct metalTlas = topLevelAccelStruct as MetalTopLevelAccelStruct ?? throw new InvalidOperationException("TLAS must be a MetalTopLevelAccelStruct.");
+            m_NativeAccelEncoder.BuildAccelerationStructure(metalTlas.NativeAccelerationStructure, metalTlas.NativeDescriptor, metalTlas.NativeScratchBuffer, 0);
         }
 
         public override void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
+            EnsureAccelerationEncoder();
+            MetalBottomLevelAccelStruct metalBlas = bottomLevelAccelStruct as MetalBottomLevelAccelStruct ?? throw new InvalidOperationException("BLAS must be a MetalBottomLevelAccelStruct.");
+            m_NativeAccelEncoder.BuildAccelerationStructure(metalBlas.NativeAccelerationStructure, metalBlas.NativeDescriptor, metalBlas.NativeScratchBuffer, 0);
         }
 
         public override void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
+            EnsureComputeEncoder();
+            if (m_CachedPipeline is not MetalRaytracingPipeline pipeline)
+            {
+                throw new InvalidOperationException("Ray tracing pipeline must be set before dispatch.");
+            }
+
+            MetalFunctionTable table = functionTable as MetalFunctionTable ?? throw new InvalidOperationException("Ray tracing dispatch requires a MetalFunctionTable.");
+            if (!table.IsGenerated)
+            {
+                table.Generate(pipeline);
+            }
+
+            BindFunctionTables(table);
+            m_NativeEncoder.DispatchThreadgroups(new MTLSize(width, height, depth), new MTLSize(pipeline.ThreadgroupSize.x, pipeline.ThreadgroupSize.y, pipeline.ThreadgroupSize.z));
         }
 
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
+            EnsureComputeEncoder();
+            if (m_CachedPipeline is not MetalRaytracingPipeline pipeline)
+            {
+                throw new InvalidOperationException("Ray tracing pipeline must be set before indirect dispatch.");
+            }
+
+            MetalFunctionTable table = functionTable as MetalFunctionTable ?? throw new InvalidOperationException("Ray tracing indirect dispatch requires a MetalFunctionTable.");
+            if (!table.IsGenerated)
+            {
+                table.Generate(pipeline);
+            }
+
+            BindFunctionTables(table);
+            MetalBuffer indirectBuffer = argsBuffer as MetalBuffer ?? throw new InvalidOperationException("Ray tracing indirect args must be a MetalBuffer.");
+            m_NativeEncoder.DispatchThreadgroups(indirectBuffer.NativeBuffer, argsOffset, new MTLSize(pipeline.ThreadgroupSize.x, pipeline.ThreadgroupSize.y, pipeline.ThreadgroupSize.z));
         }
 
         public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
         {
-            throw new NotSupportedException("Ray tracing command encoding is not implemented in Metal backend.");
+            throw new NotSupportedException("Ray tracing indirect command buffer execution is not implemented in Metal backend.");
         }
 
         public override void EndPass()
         {
+            if (m_NativeAccelEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeAccelEncoder.EndEncoding();
+                m_NativeAccelEncoder = default;
+            }
+
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.EndEncoding();
+                m_NativeEncoder = default;
+            }
+
+            m_CachedPipeline = null;
+        }
+
+        internal void WaitForFence(in MTLFence fence)
+        {
+            if (fence.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (m_NativeAccelEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeAccelEncoder.WaitForFence(fence);
+            }
+            else if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.WaitForFence(fence);
+            }
+        }
+
+        internal void SignalFence(in MTLFence fence)
+        {
+            if (fence.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (m_NativeAccelEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeAccelEncoder.UpdateFence(fence);
+            }
+            else if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.UpdateFence(fence);
+            }
+        }
+
+        internal void ApplyImmediateBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
+        {
+            if (scope != 0)
+            {
+                EnsureComputeEncoder();
+                m_NativeEncoder.MemoryBarrier(scope);
+            }
+
+            MetalCommandBuffer cmd = (MetalCommandBuffer)m_CommandBuffer!;
+            if (cmd.EnableMetal4Barriers)
+            {
+                IntPtr encoderPtr = m_NativeAccelEncoder.NativePtr != IntPtr.Zero ? m_NativeAccelEncoder.NativePtr : m_NativeEncoder.NativePtr;
+                MetalBarrierHelper.TryBarrierAfterEncoderStages(encoderPtr, afterStages, beforeStages);
+            }
         }
 
         protected override void Release()
         {
+        }
+
+        private void BindFunctionTables(MetalFunctionTable table)
+        {
+            if (table.IntersectionFunctionTable.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.SetIntersectionFunctionTable(table.IntersectionFunctionTable, IntersectionFunctionTableSlot);
+            }
+
+            if (table.VisibleFunctionTable.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.SetVisibleFunctionTable(table.VisibleFunctionTable, VisibleFunctionTableSlot);
+            }
+        }
+
+        private void BindRaytracingElement(in MetalBindInfo bind, in RHIResourceTableElement element)
+        {
+            switch (bind.Type)
+            {
+                case ERHIBindType.Buffer:
+                case ERHIBindType.StorageBuffer:
+                case ERHIBindType.UniformBuffer:
+                    if (element.BufferView is MetalBufferView bufferView)
+                    {
+                        m_NativeEncoder.SetBuffer(bufferView.Buffer.NativeBuffer, (ulong)Math.Max(0, bufferView.Descriptor.Offset), bind.Slot);
+                    }
+
+                    break;
+                case ERHIBindType.Texture2D:
+                case ERHIBindType.Texture2DMS:
+                case ERHIBindType.Texture2DArray:
+                case ERHIBindType.Texture2DArrayMS:
+                case ERHIBindType.TextureCube:
+                case ERHIBindType.TextureCubeArray:
+                case ERHIBindType.Texture3D:
+                case ERHIBindType.StorageTexture2D:
+                case ERHIBindType.StorageTexture2DMS:
+                case ERHIBindType.StorageTexture2DArray:
+                case ERHIBindType.StorageTexture2DArrayMS:
+                case ERHIBindType.StorageTextureCube:
+                case ERHIBindType.StorageTextureCubeArray:
+                case ERHIBindType.StorageTexture3D:
+                    if (element.TextureView is MetalTextureView textureView)
+                    {
+                        m_NativeEncoder.SetTexture(textureView.NativeTexture, bind.Slot);
+                    }
+
+                    break;
+                case ERHIBindType.Sampler:
+                    if (element.Sampler is MetalSampler sampler)
+                    {
+                        m_NativeEncoder.SetSamplerState(sampler.NativeSampler, bind.Slot);
+                    }
+
+                    break;
+                case ERHIBindType.AccelStruct:
+                    if (element.AccelStruct is not MetalTopLevelAccelStruct accelStruct)
+                    {
+                        throw new InvalidOperationException("Ray tracing acceleration-structure binding expects a Metal TLAS.");
+                    }
+
+                    m_NativeEncoder.SetAccelerationStructure(accelStruct.NativeAccelerationStructure, bind.Slot);
+                    break;
+            }
+        }
+
+        private void EnsureComputeEncoder()
+        {
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (m_NativeAccelEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeAccelEncoder.EndEncoding();
+                m_NativeAccelEncoder = default;
+            }
+
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            m_NativeEncoder = commandBuffer.NativeCommandBuffer.ComputeCommandEncoder();
+            if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create Metal ray tracing compute encoder.");
+            }
+        }
+
+        private void EnsureAccelerationEncoder()
+        {
+            if (m_NativeAccelEncoder.NativePtr != IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.EndEncoding();
+                m_NativeEncoder = default;
+            }
+
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            m_NativeAccelEncoder = commandBuffer.NativeCommandBuffer.AccelerationStructureCommandEncoder();
+            if (m_NativeAccelEncoder.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create Metal acceleration-structure encoder.");
+            }
         }
     }
 
@@ -820,6 +1078,9 @@ namespace Infinity.Graphics
                     }
 
                     break;
+
+                case ERHIBindType.AccelStruct:
+                    throw new NotSupportedException("Raster encoder does not support acceleration structure bindings on Metal backend.");
             }
         }
 

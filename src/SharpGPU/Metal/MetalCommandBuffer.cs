@@ -138,6 +138,7 @@ namespace Infinity.Graphics
         public override RHIRaytracingEncoder BeginRaytracingPass(in RHIRayTracingPassDescriptor descriptor)
         {
             m_RaytracingEncoder.BeginPass(descriptor);
+            ApplyPendingBarrierToRaytracing();
             m_ActiveEncoder = MetalActiveEncoderType.Raytracing;
             return m_RaytracingEncoder;
         }
@@ -149,6 +150,7 @@ namespace Infinity.Graphics
                 return;
             }
 
+            m_RaytracingEncoder.SignalFence(m_BarrierFence);
             m_RaytracingEncoder.EndPass();
             m_LastCompletedEncoder = MetalActiveEncoderType.Raytracing;
             m_ActiveEncoder = MetalActiveEncoderType.None;
@@ -236,6 +238,12 @@ namespace Infinity.Graphics
                 return;
             }
 
+            if (m_ActiveEncoder == MetalActiveEncoderType.Raytracing)
+            {
+                m_RaytracingEncoder.ApplyImmediateBarrier(scope, afterStages, beforeStages);
+                return;
+            }
+
             m_HasPendingBarrier = true;
             m_PendingBarrierScope |= scope;
             m_PendingAfterStages = afterStages;
@@ -286,6 +294,22 @@ namespace Infinity.Graphics
             }
 
             m_RasterEncoder.ApplyImmediateBarrier(m_PendingBarrierScope, m_PendingAfterStages, m_PendingBeforeStages);
+            ClearPendingBarrier();
+        }
+
+        private void ApplyPendingBarrierToRaytracing()
+        {
+            if (!m_HasPendingBarrier)
+            {
+                return;
+            }
+
+            if (m_BarrierFence.NativePtr != IntPtr.Zero && m_LastCompletedEncoder != MetalActiveEncoderType.None)
+            {
+                m_RaytracingEncoder.WaitForFence(m_BarrierFence);
+            }
+
+            m_RaytracingEncoder.ApplyImmediateBarrier(m_PendingBarrierScope, m_PendingAfterStages, m_PendingBeforeStages);
             ClearPendingBarrier();
         }
 
