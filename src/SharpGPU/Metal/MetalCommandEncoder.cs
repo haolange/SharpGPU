@@ -206,12 +206,16 @@ namespace Infinity.Graphics
     {
         internal MTLComputeCommandEncoder NativeEncoder => m_NativeEncoder;
 
+        private readonly MetalDevice m_MetalDevice;
         private MTLComputeCommandEncoder m_NativeEncoder;
+        private IMetalBindingBackend? m_BindingBackend;
 
         internal MetalComputeEncoder(MetalCommandBuffer commandBuffer)
         {
             m_CommandBuffer = commandBuffer;
+            m_MetalDevice = ((MetalCommandQueue)commandBuffer.CommandQueue).MetalDevice;
             m_NativeEncoder = default;
+            m_BindingBackend = null;
         }
 
         internal override void BeginPass(in RHIComputePassDescriptor descriptor)
@@ -306,79 +310,20 @@ namespace Infinity.Graphics
         {
             m_CachedPipeline = pipeline;
             MetalComputePipeline metalPipeline = (MetalComputePipeline)pipeline;
+            MetalPipelineLayout pipelineLayout = pipeline.Descriptor.PipelineLayout as MetalPipelineLayout ?? throw new InvalidOperationException("Compute pipeline layout must be a MetalPipelineLayout.");
+            ConfigureBindingBackend(pipelineLayout);
             m_NativeEncoder.SetComputePipelineState(metalPipeline.NativePipelineState);
         }
 
         public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
         {
+            if (m_BindingBackend == null)
+            {
+                throw new InvalidOperationException("Compute pipeline must be set before binding resource tables.");
+            }
+
             MetalResourceTable table = (MetalResourceTable)resourceTable;
-            MetalResourceTableLayout layout = table.ResourceTableLayout;
-            if (layout.Index != tableIndex)
-            {
-                throw new InvalidOperationException($"Compute resource table index mismatch. expected={layout.Index}, actual={tableIndex}");
-            }
-
-            MetalBindInfo[] binds = layout.BindInfos;
-            RHIResourceTableElement[] elements = table.Elements;
-            for (int i = 0; i < binds.Length && i < elements.Length; ++i)
-            {
-                ref readonly MetalBindInfo bind = ref binds[i];
-                ref RHIResourceTableElement element = ref elements[i];
-                BindComputeElement(bind, element);
-            }
-        }
-
-        private void BindComputeElement(in MetalBindInfo bind, in RHIResourceTableElement element)
-        {
-            switch (bind.Type)
-            {
-                case ERHIBindType.Buffer:
-                case ERHIBindType.StorageBuffer:
-                case ERHIBindType.UniformBuffer:
-                    if (element.BufferView is MetalBufferView bufferView)
-                    {
-                        m_NativeEncoder.SetBuffer(bufferView.Buffer.NativeBuffer, (ulong)Math.Max(0, bufferView.Descriptor.Offset), bind.Slot);
-                    }
-
-                    break;
-
-                case ERHIBindType.Texture2D:
-                case ERHIBindType.Texture2DMS:
-                case ERHIBindType.Texture2DArray:
-                case ERHIBindType.Texture2DArrayMS:
-                case ERHIBindType.TextureCube:
-                case ERHIBindType.TextureCubeArray:
-                case ERHIBindType.Texture3D:
-                case ERHIBindType.StorageTexture2D:
-                case ERHIBindType.StorageTexture2DMS:
-                case ERHIBindType.StorageTexture2DArray:
-                case ERHIBindType.StorageTexture2DArrayMS:
-                case ERHIBindType.StorageTextureCube:
-                case ERHIBindType.StorageTextureCubeArray:
-                case ERHIBindType.StorageTexture3D:
-                    if (element.TextureView is MetalTextureView textureView)
-                    {
-                        m_NativeEncoder.SetTexture(textureView.NativeTexture, bind.Slot);
-                    }
-
-                    break;
-
-                case ERHIBindType.Sampler:
-                    if (element.Sampler is MetalSampler sampler)
-                    {
-                        m_NativeEncoder.SetSamplerState(sampler.NativeSampler, bind.Slot);
-                    }
-
-                    break;
-
-                case ERHIBindType.AccelStruct:
-                    if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
-                    {
-                        m_NativeEncoder.SetAccelerationStructure(topLevel.NativeAccelerationStructure, bind.Slot);
-                    }
-
-                    break;
-            }
+            m_BindingBackend.SetResourceTable(table, tableIndex);
         }
 
         public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
@@ -388,6 +333,7 @@ namespace Infinity.Graphics
                 throw new InvalidOperationException("Compute pipeline must be set before dispatch.");
             }
 
+            m_BindingBackend?.CommitCompute(m_NativeEncoder);
             m_NativeEncoder.DispatchThreadgroups(
                 new MTLSize(groupCountX, groupCountY, groupCountZ),
                 new MTLSize(computePipeline.ThreadgroupSize.x, computePipeline.ThreadgroupSize.y, computePipeline.ThreadgroupSize.z));
@@ -400,6 +346,7 @@ namespace Infinity.Graphics
                 throw new InvalidOperationException("Compute pipeline must be set before dispatch.");
             }
 
+            m_BindingBackend?.CommitCompute(m_NativeEncoder);
             MetalBuffer indirectBuffer = (MetalBuffer)argsBuffer;
             m_NativeEncoder.DispatchThreadgroups(
                 indirectBuffer.NativeBuffer,
@@ -419,26 +366,43 @@ namespace Infinity.Graphics
                 m_NativeEncoder.EndEncoding();
                 m_NativeEncoder = default;
             }
+
+            m_CachedPipeline = null;
         }
 
         protected override void Release()
         {
+            m_BindingBackend?.Dispose();
+            m_BindingBackend = null;
+        }
+
+        private void ConfigureBindingBackend(MetalPipelineLayout pipelineLayout)
+        {
+            MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ResourceTableLayoutCount);
+            if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
+            {
+                m_BindingBackend?.Dispose();
+                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Compute);
+            }
+
+            m_BindingBackend.ResetForPipeline(pipelineLayout);
         }
     }
 
     internal sealed class MetalRaytracingEncoder : RHIRaytracingEncoder
     {
-        private const ulong IntersectionFunctionTableSlot = 30;
-        private const ulong VisibleFunctionTableSlot = 31;
-
+        private readonly MetalDevice m_MetalDevice;
         private MTLComputeCommandEncoder m_NativeEncoder;
         private MTLAccelerationStructureCommandEncoder m_NativeAccelEncoder;
+        private IMetalBindingBackend? m_BindingBackend;
 
         internal MetalRaytracingEncoder(MetalCommandBuffer commandBuffer)
         {
             m_CommandBuffer = commandBuffer;
+            m_MetalDevice = ((MetalCommandQueue)commandBuffer.CommandQueue).MetalDevice;
             m_NativeEncoder = default;
             m_NativeAccelEncoder = default;
+            m_BindingBackend = null;
         }
 
         internal override void BeginPass(in RHIRayTracingPassDescriptor descriptor)
@@ -507,28 +471,26 @@ namespace Infinity.Graphics
             EnsureComputeEncoder();
             m_CachedPipeline = pipeline;
             MetalRaytracingPipeline metalPipeline = pipeline as MetalRaytracingPipeline ?? throw new InvalidOperationException("Ray tracing pipeline must be a MetalRaytracingPipeline.");
+            MetalPipelineLayout pipelineLayout = pipeline.Descriptor.PipelineLayout as MetalPipelineLayout ?? throw new InvalidOperationException("Ray tracing pipeline layout must be a MetalPipelineLayout.");
+            ConfigureBindingBackend(pipelineLayout);
             m_NativeEncoder.SetComputePipelineState(metalPipeline.NativePipelineState);
         }
 
         public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
         {
             EnsureComputeEncoder();
+            if (m_BindingBackend == null)
+            {
+                throw new InvalidOperationException("Ray tracing pipeline must be set before binding resource tables.");
+            }
 
             MetalResourceTable table = (MetalResourceTable)resourceTable;
-            MetalResourceTableLayout layout = table.ResourceTableLayout;
-            if (layout.Index != tableIndex)
+            if (m_BindingBackend.UsesReservedRayFunctionTableSlots && MetalBindingHelpers.HasRayFunctionTableSlotConflict(table))
             {
-                throw new InvalidOperationException($"Ray tracing resource table index mismatch. expected={layout.Index}, actual={tableIndex}");
+                throw new InvalidOperationException($"Ray tracing resource table conflicts with reserved Metal function-table slots ({MetalBindingHelpers.RtVisibleFunctionTableSlot}/{MetalBindingHelpers.RtIntersectionFunctionTableSlot}). Use another slot or disable legacy compatibility binding mode.");
             }
 
-            MetalBindInfo[] binds = layout.BindInfos;
-            RHIResourceTableElement[] elements = table.Elements;
-            for (int i = 0; i < binds.Length && i < elements.Length; ++i)
-            {
-                ref readonly MetalBindInfo bind = ref binds[i];
-                ref RHIResourceTableElement element = ref elements[i];
-                BindRaytracingElement(bind, element);
-            }
+            m_BindingBackend.SetResourceTable(table, tableIndex);
         }
 
         public override void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct)
@@ -559,7 +521,7 @@ namespace Infinity.Graphics
                 table.Generate(pipeline);
             }
 
-            BindFunctionTables(table);
+            m_BindingBackend?.CommitRaytracing(m_NativeEncoder, table);
             m_NativeEncoder.DispatchThreadgroups(new MTLSize(width, height, depth), new MTLSize(pipeline.ThreadgroupSize.x, pipeline.ThreadgroupSize.y, pipeline.ThreadgroupSize.z));
         }
 
@@ -577,7 +539,7 @@ namespace Infinity.Graphics
                 table.Generate(pipeline);
             }
 
-            BindFunctionTables(table);
+            m_BindingBackend?.CommitRaytracing(m_NativeEncoder, table);
             MetalBuffer indirectBuffer = argsBuffer as MetalBuffer ?? throw new InvalidOperationException("Ray tracing indirect args must be a MetalBuffer.");
             m_NativeEncoder.DispatchThreadgroups(indirectBuffer.NativeBuffer, argsOffset, new MTLSize(pipeline.ThreadgroupSize.x, pipeline.ThreadgroupSize.y, pipeline.ThreadgroupSize.z));
         }
@@ -656,70 +618,20 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
+            m_BindingBackend?.Dispose();
+            m_BindingBackend = null;
         }
 
-        private void BindFunctionTables(MetalFunctionTable table)
+        private void ConfigureBindingBackend(MetalPipelineLayout pipelineLayout)
         {
-            if (table.IntersectionFunctionTable.NativePtr != IntPtr.Zero)
+            MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ResourceTableLayoutCount);
+            if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
             {
-                m_NativeEncoder.SetIntersectionFunctionTable(table.IntersectionFunctionTable, IntersectionFunctionTableSlot);
+                m_BindingBackend?.Dispose();
+                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raytracing);
             }
 
-            if (table.VisibleFunctionTable.NativePtr != IntPtr.Zero)
-            {
-                m_NativeEncoder.SetVisibleFunctionTable(table.VisibleFunctionTable, VisibleFunctionTableSlot);
-            }
-        }
-
-        private void BindRaytracingElement(in MetalBindInfo bind, in RHIResourceTableElement element)
-        {
-            switch (bind.Type)
-            {
-                case ERHIBindType.Buffer:
-                case ERHIBindType.StorageBuffer:
-                case ERHIBindType.UniformBuffer:
-                    if (element.BufferView is MetalBufferView bufferView)
-                    {
-                        m_NativeEncoder.SetBuffer(bufferView.Buffer.NativeBuffer, (ulong)Math.Max(0, bufferView.Descriptor.Offset), bind.Slot);
-                    }
-
-                    break;
-                case ERHIBindType.Texture2D:
-                case ERHIBindType.Texture2DMS:
-                case ERHIBindType.Texture2DArray:
-                case ERHIBindType.Texture2DArrayMS:
-                case ERHIBindType.TextureCube:
-                case ERHIBindType.TextureCubeArray:
-                case ERHIBindType.Texture3D:
-                case ERHIBindType.StorageTexture2D:
-                case ERHIBindType.StorageTexture2DMS:
-                case ERHIBindType.StorageTexture2DArray:
-                case ERHIBindType.StorageTexture2DArrayMS:
-                case ERHIBindType.StorageTextureCube:
-                case ERHIBindType.StorageTextureCubeArray:
-                case ERHIBindType.StorageTexture3D:
-                    if (element.TextureView is MetalTextureView textureView)
-                    {
-                        m_NativeEncoder.SetTexture(textureView.NativeTexture, bind.Slot);
-                    }
-
-                    break;
-                case ERHIBindType.Sampler:
-                    if (element.Sampler is MetalSampler sampler)
-                    {
-                        m_NativeEncoder.SetSamplerState(sampler.NativeSampler, bind.Slot);
-                    }
-
-                    break;
-                case ERHIBindType.AccelStruct:
-                    if (element.AccelStruct is not MetalTopLevelAccelStruct accelStruct)
-                    {
-                        throw new InvalidOperationException("Ray tracing acceleration-structure binding expects a Metal TLAS.");
-                    }
-
-                    m_NativeEncoder.SetAccelerationStructure(accelStruct.NativeAccelerationStructure, bind.Slot);
-                    break;
-            }
+            m_BindingBackend.ResetForPipeline(pipelineLayout);
         }
 
         private void EnsureComputeEncoder()
@@ -772,18 +684,22 @@ namespace Infinity.Graphics
 
         internal MTLRenderCommandEncoder NativeEncoder => m_NativeEncoder;
 
+        private readonly MetalDevice m_MetalDevice;
         private MTLRenderCommandEncoder m_NativeEncoder;
         private MTLBuffer m_IndexBuffer;
         private ulong m_IndexBufferOffset;
         private MTLIndexType m_IndexType;
+        private IMetalBindingBackend? m_BindingBackend;
 
         internal MetalRasterEncoder(MetalCommandBuffer commandBuffer)
         {
             m_CommandBuffer = commandBuffer;
+            m_MetalDevice = ((MetalCommandQueue)commandBuffer.CommandQueue).MetalDevice;
             m_NativeEncoder = default;
             m_IndexBuffer = default;
             m_IndexBufferOffset = 0;
             m_IndexType = MTLIndexType.UInt16;
+            m_BindingBackend = null;
         }
 
         internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
@@ -993,6 +909,8 @@ namespace Infinity.Graphics
         {
             m_CachedPipeline = pipeline;
             MetalRasterPipeline metalPipeline = (MetalRasterPipeline)pipeline;
+            MetalPipelineLayout pipelineLayout = pipeline.Descriptor.PipelineLayout as MetalPipelineLayout ?? throw new InvalidOperationException("Raster pipeline layout must be a MetalPipelineLayout.");
+            ConfigureBindingBackend(pipelineLayout);
             m_NativeEncoder.SetRenderPipelineState(metalPipeline.NativePipelineState);
             if (metalPipeline.DepthStencilState.NativePtr != IntPtr.Zero)
             {
@@ -1006,96 +924,13 @@ namespace Infinity.Graphics
 
         public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
         {
+            if (m_BindingBackend == null)
+            {
+                throw new InvalidOperationException("Raster pipeline must be set before binding resource tables.");
+            }
+
             MetalResourceTable table = (MetalResourceTable)resourceTable;
-            MetalResourceTableLayout layout = table.ResourceTableLayout;
-            if (layout.Index != tableIndex)
-            {
-                throw new InvalidOperationException($"Raster resource table index mismatch. expected={layout.Index}, actual={tableIndex}");
-            }
-
-            MetalBindInfo[] binds = layout.BindInfos;
-            RHIResourceTableElement[] elements = table.Elements;
-            for (int i = 0; i < binds.Length && i < elements.Length; ++i)
-            {
-                ref readonly MetalBindInfo bind = ref binds[i];
-                ref RHIResourceTableElement element = ref elements[i];
-                BindRasterElement(bind, element);
-            }
-        }
-
-        private void BindRasterElement(in MetalBindInfo bind, in RHIResourceTableElement element)
-        {
-            bool bindVertex = (bind.Stage & ERHIShaderStage.Vertex) == ERHIShaderStage.Vertex || (bind.Stage & ERHIShaderStage.All) == ERHIShaderStage.All;
-            bool bindFragment = (bind.Stage & ERHIShaderStage.Fragment) == ERHIShaderStage.Fragment || (bind.Stage & ERHIShaderStage.All) == ERHIShaderStage.All;
-
-            switch (bind.Type)
-            {
-                case ERHIBindType.Buffer:
-                case ERHIBindType.StorageBuffer:
-                case ERHIBindType.UniformBuffer:
-                    if (element.BufferView is MetalBufferView bufferView)
-                    {
-                        if (bindVertex)
-                        {
-                            m_NativeEncoder.SetVertexBuffer(bufferView.Buffer.NativeBuffer, (ulong)Math.Max(0, bufferView.Descriptor.Offset), bind.Slot);
-                        }
-
-                        if (bindFragment)
-                        {
-                            m_NativeEncoder.SetFragmentBuffer(bufferView.Buffer.NativeBuffer, (ulong)Math.Max(0, bufferView.Descriptor.Offset), bind.Slot);
-                        }
-                    }
-
-                    break;
-
-                case ERHIBindType.Texture2D:
-                case ERHIBindType.Texture2DMS:
-                case ERHIBindType.Texture2DArray:
-                case ERHIBindType.Texture2DArrayMS:
-                case ERHIBindType.TextureCube:
-                case ERHIBindType.TextureCubeArray:
-                case ERHIBindType.Texture3D:
-                case ERHIBindType.StorageTexture2D:
-                case ERHIBindType.StorageTexture2DMS:
-                case ERHIBindType.StorageTexture2DArray:
-                case ERHIBindType.StorageTexture2DArrayMS:
-                case ERHIBindType.StorageTextureCube:
-                case ERHIBindType.StorageTextureCubeArray:
-                case ERHIBindType.StorageTexture3D:
-                    if (element.TextureView is MetalTextureView textureView)
-                    {
-                        if (bindVertex)
-                        {
-                            m_NativeEncoder.SetVertexTexture(textureView.NativeTexture, bind.Slot);
-                        }
-
-                        if (bindFragment)
-                        {
-                            m_NativeEncoder.SetFragmentTexture(textureView.NativeTexture, bind.Slot);
-                        }
-                    }
-
-                    break;
-
-                case ERHIBindType.Sampler:
-                    if (element.Sampler is MetalSampler sampler)
-                    {
-                        if (bindVertex)
-                        {
-                            m_NativeEncoder.SetVertexSamplerState(sampler.NativeSampler, bind.Slot);
-                        }
-
-                        if (bindFragment)
-                        {
-                            m_NativeEncoder.SetFragmentSamplerState(sampler.NativeSampler, bind.Slot);
-                        }
-                    }
-
-                    break;
-
-                case ERHIBindType.AccelStruct:
-                    throw new NotSupportedException("Raster encoder does not support acceleration structure bindings on Metal backend.");
-            }
+            m_BindingBackend.SetResourceTable(table, tableIndex);
         }
 
         public override void SetIndexBuffer(RHIBuffer buffer, in uint offset)
@@ -1118,16 +953,19 @@ namespace Infinity.Graphics
 
         public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
         {
+            m_BindingBackend?.CommitRaster(m_NativeEncoder);
             m_NativeEncoder.DrawPrimitives(MTLPrimitiveType.Triangle, firstVertex, vertexCount, instanceCount, firstInstance);
         }
 
         public override void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
         {
+            m_BindingBackend?.CommitRaster(m_NativeEncoder);
             m_NativeEncoder.DrawIndexedPrimitives(MTLPrimitiveType.Triangle, indexCount, m_IndexType, m_IndexBuffer, m_IndexBufferOffset + firstIndex * (m_IndexType == MTLIndexType.UInt16 ? 2UL : 4UL), instanceCount, baseVertex, firstInstance);
         }
 
         public override void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
+            m_BindingBackend?.CommitRaster(m_NativeEncoder);
             MetalBuffer metalBuffer = (MetalBuffer)argsBuffer;
             for (uint i = 0; i < drawCount; ++i)
             {
@@ -1137,6 +975,7 @@ namespace Infinity.Graphics
 
         public override void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
+            m_BindingBackend?.CommitRaster(m_NativeEncoder);
             MetalBuffer metalBuffer = (MetalBuffer)argsBuffer;
             for (uint i = 0; i < drawCount; ++i)
             {
@@ -1146,11 +985,13 @@ namespace Infinity.Graphics
 
         public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
+            m_BindingBackend?.CommitRaster(m_NativeEncoder);
             m_NativeEncoder.DrawMeshThreadgroups(new MTLSize(groupCountX, groupCountY, groupCountZ), new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
         }
 
         public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
+            m_BindingBackend?.CommitRaster(m_NativeEncoder);
             MetalBuffer metalBuffer = (MetalBuffer)argsBuffer;
             m_NativeEncoder.DrawMeshThreadgroups(metalBuffer.NativeBuffer, argsOffset, new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
         }
@@ -1172,10 +1013,26 @@ namespace Infinity.Graphics
                 m_NativeEncoder.EndEncoding();
                 m_NativeEncoder = default;
             }
+
+            m_CachedPipeline = null;
         }
 
         protected override void Release()
         {
+            m_BindingBackend?.Dispose();
+            m_BindingBackend = null;
+        }
+
+        private void ConfigureBindingBackend(MetalPipelineLayout pipelineLayout)
+        {
+            MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ResourceTableLayoutCount);
+            if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
+            {
+                m_BindingBackend?.Dispose();
+                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raster);
+            }
+
+            m_BindingBackend.ResetForPipeline(pipelineLayout);
         }
     }
 }

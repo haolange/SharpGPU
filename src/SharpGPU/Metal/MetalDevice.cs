@@ -12,10 +12,19 @@ namespace Infinity.Graphics
         public MTLDevice NativeDevice => m_NativeDevice;
         public MetalInstance MetalInstance => m_MetalInstance;
         internal bool SupportsMetal4Barriers => m_SupportsMetal4Barriers;
+        internal MetalBindingCapabilities BindingCapabilities => m_BindingCapabilities;
 
         private readonly MTLDevice m_NativeDevice;
         private readonly MetalInstance m_MetalInstance;
         private readonly bool m_SupportsMetal4Barriers;
+        private readonly bool m_SupportsMetal3;
+        private readonly bool m_SupportsMetal4;
+        private readonly MTLArgumentBuffersTier m_ArgumentBuffersTier;
+        private readonly bool m_SupportsArgumentTable;
+        private readonly MetalBindingCapabilities m_BindingCapabilities;
+
+        private static readonly Selector s_RespondsToSelector = "respondsToSelector:";
+        private static readonly Selector s_NewArgumentTableWithDescriptorError = "newArgumentTableWithDescriptor:error:";
 
         public MetalDevice(MetalInstance instance, in MTLDevice device, in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
         {
@@ -31,7 +40,16 @@ namespace Infinity.Graphics
             m_Type = m_NativeDevice.IsHeadless ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
             m_VendorId.IntValue = (uint)ERHIVendorType.Apple;
             m_DeviceId.IntValue = (uint)(m_NativeDevice.RegistryID & uint.MaxValue);
-            m_SupportsMetal4Barriers = SafeSupportsFamily(MTLGPUFamily.Metal4);
+            m_SupportsMetal3 = SafeSupportsFamily(MTLGPUFamily.Metal3);
+            m_SupportsMetal4 = SafeSupportsFamily(MTLGPUFamily.Metal4);
+            m_ArgumentBuffersTier = SafeArgumentBuffersTier();
+            m_SupportsArgumentTable = m_SupportsMetal4 && SafeSupportsSelector(s_NewArgumentTableWithDescriptorError);
+            m_SupportsMetal4Barriers = m_SupportsMetal4;
+            m_BindingCapabilities = new MetalBindingCapabilities(
+                supportsMetal3: m_SupportsMetal3,
+                supportsMetal4: m_SupportsMetal4,
+                supportsArgumentBuffer: m_ArgumentBuffersTier == MTLArgumentBuffersTier.Tier1 || m_ArgumentBuffersTier == MTLArgumentBuffersTier.Tier2,
+                supportsArgumentTable: m_SupportsArgumentTable);
 
             BuildLimitAndFeature();
             CreateCommandQueues(computeQueueCount, transferQueueCount, graphicsQueueCount);
@@ -197,7 +215,7 @@ namespace Infinity.Graphics
                 maxTextureCubeSize: maxCubeTextureSize);
 
             bool isRayTracingSupported = m_NativeDevice.SupportsRaytracing;
-            bool isMetal3 = SafeSupportsFamily(MTLGPUFamily.Metal3);
+            bool isMetal3 = m_SupportsMetal3;
             bool isTimestampSupported = m_NativeDevice.CounterSets.Count > 0;
 
             m_Feature = new RHIDeviceFeature(
@@ -277,6 +295,30 @@ namespace Infinity.Graphics
             try
             {
                 return m_NativeDevice.SupportsFamily(family);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private MTLArgumentBuffersTier SafeArgumentBuffersTier()
+        {
+            try
+            {
+                return m_NativeDevice.ArgumentBuffersSupport;
+            }
+            catch
+            {
+                return unchecked((MTLArgumentBuffersTier)ulong.MaxValue);
+            }
+        }
+
+        private bool SafeSupportsSelector(in Selector selector)
+        {
+            try
+            {
+                return ObjectiveCRuntime.bool_objc_msgSend(m_NativeDevice.NativePtr, s_RespondsToSelector, selector);
             }
             catch
             {

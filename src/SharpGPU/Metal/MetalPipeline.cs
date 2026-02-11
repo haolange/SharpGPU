@@ -10,6 +10,7 @@ namespace Infinity.Graphics
     internal sealed class MetalPipelineLayout : RHIPipelineLayout
     {
         public RHIPipelineLayoutDescriptor Descriptor => m_Descriptor;
+        internal int ResourceTableLayoutCount => m_Descriptor.ResourceTableLayouts?.Length ?? 0;
 
         private readonly RHIPipelineLayoutDescriptor m_Descriptor;
 
@@ -67,6 +68,8 @@ namespace Infinity.Graphics
         private readonly string m_RayGenerationEntryName;
         private readonly RHIRayHitGroupDescriptor[] m_HitGroups;
         private readonly RHIRayGeneralGroupDescriptor[] m_MissGroups;
+        private readonly Dictionary<string, RHIRayHitGroupDescriptor> m_HitGroupsByName;
+        private readonly HashSet<string> m_MissEntryNames;
         private readonly Dictionary<string, MTLFunction> m_VisibleFunctionCache;
         private readonly Dictionary<string, MTLFunction> m_IntersectionFunctionCache;
         private readonly MTLFunction m_RayGenerationFunction;
@@ -86,10 +89,37 @@ namespace Infinity.Graphics
             m_ThreadgroupSize = new uint3(Math.Max(1u, descriptor.ThreadSize.x), Math.Max(1u, descriptor.ThreadSize.y), Math.Max(1u, descriptor.ThreadSize.z));
             m_HitGroups = descriptor.RayHitGroups.Span.ToArray();
             m_MissGroups = descriptor.RayMissGroups.Span.ToArray();
+            m_HitGroupsByName = new Dictionary<string, RHIRayHitGroupDescriptor>(m_HitGroups.Length, StringComparer.Ordinal);
+            m_MissEntryNames = new HashSet<string>(StringComparer.Ordinal);
             m_VisibleFunctionCache = new Dictionary<string, MTLFunction>(StringComparer.Ordinal);
             m_IntersectionFunctionCache = new Dictionary<string, MTLFunction>(StringComparer.Ordinal);
 
             m_RayGenerationFunction = ResolveKernelFunction(m_RayGenerationEntryName);
+
+            for (int i = 0; i < m_HitGroups.Length; ++i)
+            {
+                RHIRayHitGroupDescriptor hitGroup = m_HitGroups[i];
+                if (string.IsNullOrWhiteSpace(hitGroup.Name))
+                {
+                    throw new InvalidOperationException($"Ray hit-group[{i}] has an empty name.");
+                }
+
+                if (!m_HitGroupsByName.TryAdd(hitGroup.Name, hitGroup))
+                {
+                    throw new InvalidOperationException($"Duplicate ray hit-group name '{hitGroup.Name}' in pipeline descriptor.");
+                }
+            }
+
+            for (int i = 0; i < m_MissGroups.Length; ++i)
+            {
+                string entryName = m_MissGroups[i].General.EntryName;
+                if (string.IsNullOrWhiteSpace(entryName))
+                {
+                    throw new InvalidOperationException($"Ray miss-group[{i}] has an empty function entry.");
+                }
+
+                m_MissEntryNames.Add(entryName);
+            }
 
             List<IntPtr> linkedFunctionPointers = new List<IntPtr>(Math.Max(1, m_MissGroups.Length + m_HitGroups.Length));
             for (int i = 0; i < m_MissGroups.Length; ++i)
@@ -142,6 +172,41 @@ namespace Infinity.Graphics
             }
 
             return m_HitGroups[index];
+        }
+
+        internal RHIRayHitGroupDescriptor GetHitGroupDescriptor(string hitGroupName)
+        {
+            if (string.IsNullOrWhiteSpace(hitGroupName))
+            {
+                throw new ArgumentException("Hit-group name is empty.", nameof(hitGroupName));
+            }
+
+            if (!m_HitGroupsByName.TryGetValue(hitGroupName, out RHIRayHitGroupDescriptor hitGroup))
+            {
+                throw new InvalidOperationException($"Hit-group '{hitGroupName}' does not exist in the ray tracing pipeline.");
+            }
+
+            return hitGroup;
+        }
+
+        internal bool ContainsHitGroup(string hitGroupName)
+        {
+            if (string.IsNullOrWhiteSpace(hitGroupName))
+            {
+                return false;
+            }
+
+            return m_HitGroupsByName.ContainsKey(hitGroupName);
+        }
+
+        internal bool ContainsMissEntry(string entryName)
+        {
+            if (string.IsNullOrWhiteSpace(entryName))
+            {
+                return false;
+            }
+
+            return m_MissEntryNames.Contains(entryName);
         }
 
         internal RHIRayGeneralGroupDescriptor GetMissGroupDescriptor(int index)
@@ -251,6 +316,8 @@ namespace Infinity.Graphics
 
             m_VisibleFunctionCache.Clear();
             m_IntersectionFunctionCache.Clear();
+            m_HitGroupsByName.Clear();
+            m_MissEntryNames.Clear();
         }
     }
 

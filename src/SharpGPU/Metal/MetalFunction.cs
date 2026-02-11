@@ -50,6 +50,69 @@ namespace Infinity.Graphics
         }
     }
 
+    internal static class MetalRayFunctionTableValidator
+    {
+        internal static void ValidateHitGroupExports(IReadOnlyList<string> exports, Func<string, bool> pipelineContainsHitGroup)
+        {
+            if (exports == null)
+            {
+                throw new ArgumentNullException(nameof(exports));
+            }
+
+            if (pipelineContainsHitGroup == null)
+            {
+                throw new ArgumentNullException(nameof(pipelineContainsHitGroup));
+            }
+
+            HashSet<string> uniqueExports = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < exports.Count; ++i)
+            {
+                string exportName = exports[i];
+                if (string.IsNullOrWhiteSpace(exportName))
+                {
+                    throw new InvalidOperationException($"Hit-group program[{i}] has an empty export name.");
+                }
+
+                if (!uniqueExports.Add(exportName))
+                {
+                    throw new InvalidOperationException($"Duplicate hit-group export '{exportName}' in function table.");
+                }
+
+                if (!pipelineContainsHitGroup(exportName))
+                {
+                    throw new InvalidOperationException($"Hit-group '{exportName}' is not declared by the ray-tracing pipeline hit groups.");
+                }
+            }
+        }
+
+        internal static void ValidateMissExports(IReadOnlyList<string> exports, Func<string, bool> pipelineContainsMissEntry)
+        {
+            if (exports == null)
+            {
+                throw new ArgumentNullException(nameof(exports));
+            }
+
+            if (pipelineContainsMissEntry == null)
+            {
+                throw new ArgumentNullException(nameof(pipelineContainsMissEntry));
+            }
+
+            for (int i = 0; i < exports.Count; ++i)
+            {
+                string exportName = exports[i];
+                if (string.IsNullOrWhiteSpace(exportName))
+                {
+                    throw new InvalidOperationException($"Miss program[{i}] has an empty export name.");
+                }
+
+                if (!pipelineContainsMissEntry(exportName))
+                {
+                    throw new InvalidOperationException($"Miss export '{exportName}' is not declared by the ray-tracing pipeline miss entries.");
+                }
+            }
+        }
+    }
+
     internal sealed class MetalFunction : RHIFunction
     {
         public MTLLibrary NativeLibrary => m_NativeLibrary;
@@ -271,6 +334,20 @@ namespace Infinity.Graphics
                 throw new InvalidOperationException($"Function table miss count ({m_MissPrograms.Count}) exceeds pipeline miss-group count ({metalPipeline.MissGroupCount}).");
             }
 
+            string[] hitGroupExports = new string[m_HitGroupPrograms.Count];
+            for (int i = 0; i < m_HitGroupPrograms.Count; ++i)
+            {
+                hitGroupExports[i] = m_HitGroupPrograms[i].ExportName;
+            }
+            MetalRayFunctionTableValidator.ValidateHitGroupExports(hitGroupExports, metalPipeline.ContainsHitGroup);
+
+            string[] missExports = new string[m_MissPrograms.Count];
+            for (int i = 0; i < m_MissPrograms.Count; ++i)
+            {
+                missExports[i] = m_MissPrograms[i].ExportName;
+            }
+            MetalRayFunctionTableValidator.ValidateMissExports(missExports, metalPipeline.ContainsMissEntry);
+
             ReleaseGeneratedTables();
 
             if (m_HitGroupPrograms.Count > 0)
@@ -285,7 +362,8 @@ namespace Infinity.Graphics
 
                 for (int i = 0; i < m_HitGroupPrograms.Count; ++i)
                 {
-                    RHIRayHitGroupDescriptor hitGroup = metalPipeline.GetHitGroupDescriptor(i);
+                    string hitGroupExport = m_HitGroupPrograms[i].ExportName;
+                    RHIRayHitGroupDescriptor hitGroup = metalPipeline.GetHitGroupDescriptor(hitGroupExport);
                     switch (hitGroup.Type)
                     {
                         case ERHIHitGroupType.Triangles:
@@ -299,7 +377,7 @@ namespace Infinity.Graphics
                             string? intersectionName = hitGroup.Intersect?.EntryName;
                             if (string.IsNullOrWhiteSpace(intersectionName))
                             {
-                                throw new InvalidOperationException($"Hit group[{i}] is procedural but has no intersection function.");
+                                throw new InvalidOperationException($"Hit group '{hitGroupExport}' is procedural but has no intersection function.");
                             }
 
                             MTLFunction function = metalPipeline.ResolveIntersectionFunction(intersectionName);
