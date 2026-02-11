@@ -11,10 +11,16 @@ namespace Infinity.Graphics
     {
         private static readonly Selector s_RespondsToSelector = "respondsToSelector:";
         private static readonly Selector s_BarrierAfterEncoderStages = "barrierAfterEncoderStages:beforeEncoderStages:visibilityOptions:";
+        private const ulong s_ValidMetal4StageMask = (1UL << 0) | (1UL << 1) | (1UL << 27) | (1UL << 29);
 
         internal static void TryBarrierAfterEncoderStages(in IntPtr encoderPtr, in ulong afterStages, in ulong beforeStages)
         {
             if (encoderPtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (!IsValidMetal4StageMask(afterStages) || !IsValidMetal4StageMask(beforeStages))
             {
                 return;
             }
@@ -26,6 +32,11 @@ namespace Infinity.Graphics
 
             MTL4CommandEncoder encoder = new MTL4CommandEncoder(encoderPtr);
             encoder.BarrierAfterEncoderStages(afterStages, beforeStages, MTL4VisibilityOptions.Device);
+        }
+
+        private static bool IsValidMetal4StageMask(in ulong stages)
+        {
+            return stages != 0 && (stages & ~s_ValidMetal4StageMask) == 0;
         }
 
         internal static MTLRenderStages ConvertToRenderStages(in ulong stages)
@@ -43,7 +54,7 @@ namespace Infinity.Graphics
                 result |= MTLRenderStages.RenderStageVertex;
             }
 
-            return result == 0 ? MTLRenderStages.RenderStageVertex : result;
+            return result;
         }
     }
 
@@ -868,7 +879,10 @@ namespace Infinity.Graphics
             {
                 MTLRenderStages after = MetalBarrierHelper.ConvertToRenderStages(afterStages);
                 MTLRenderStages before = MetalBarrierHelper.ConvertToRenderStages(beforeStages);
-                m_NativeEncoder.MemoryBarrier(scope, after, before);
+                if (after != 0 && before != 0)
+                {
+                    m_NativeEncoder.MemoryBarrier(scope, after, before);
+                }
             }
 
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;

@@ -310,7 +310,6 @@ namespace Infinity.Graphics
                             }
 
                             m_IntersectionFunctionTable.SetFunction(handle, (ulong)i);
-                            ObjectiveCRuntime.Release(handle.NativePtr);
                             break;
                         }
                         default:
@@ -339,7 +338,6 @@ namespace Infinity.Graphics
                     }
 
                     m_VisibleFunctionTable.SetFunction(handle, (ulong)i);
-                    ObjectiveCRuntime.Release(handle.NativePtr);
                 }
             }
 

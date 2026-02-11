@@ -646,7 +646,7 @@ namespace Infinity.Graphics
                     return 1UL << 29;
                 case ERHIPipelineStage.Common:
                 default:
-                    return (ulong)long.MaxValue;
+                    return 0;
             }
         }
 

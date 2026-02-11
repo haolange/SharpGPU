@@ -64,8 +64,8 @@ namespace Infinity.Graphics
         public override void ResourceBarrier(in RHIResourceBarrier barrier)
         {
             MTLBarrierScope scope = MetalUtility.ConvertToMetalBarrierScope(barrier.ResourceType);
-            ulong afterStages = (ulong)long.MaxValue;
-            ulong beforeStages = afterStages;
+            ulong afterStages = 0;
+            ulong beforeStages = 0;
 
             if (barrier.ResourceBarrierType == ERHIResourceBarrierType.Triansition)
             {
