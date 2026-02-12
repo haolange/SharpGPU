@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Infinity.Mathmatics;
 using SharpMetal.Foundation;
 using SharpMetal.Metal;
@@ -7,6 +8,26 @@ using SharpMetal.QuartzCore;
 
 namespace Infinity.Graphics
 {
+    internal static class MetalBindingLogHelper
+    {
+        private static readonly object s_LogLock = new object();
+        private static readonly HashSet<string> s_LoggedPipelineModeKeys = new HashSet<string>(StringComparer.Ordinal);
+
+        internal static void LogPipelineModeOnce(string pipelineType, in IntPtr pipelineStatePtr, in MetalBindingMode mode, in MetalCommandEncodingPath path)
+        {
+            string key = $"{pipelineType}:{pipelineStatePtr}:{mode}:{path}";
+            lock (s_LogLock)
+            {
+                if (!s_LoggedPipelineModeKeys.Add(key))
+                {
+                    return;
+                }
+            }
+
+            Console.WriteLine($"[MetalBinding] {pipelineType} pipeline mode={mode}, encodingPath={path}, pipeline=0x{pipelineStatePtr.ToString("x")}.");
+        }
+    }
+
     internal static class MetalBarrierHelper
     {
         private static readonly Selector s_RespondsToSelector = "respondsToSelector:";
@@ -73,7 +94,7 @@ namespace Infinity.Graphics
         internal override void BeginPass(in RHITransferPassDescriptor descriptor)
         {
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-            m_NativeEncoder = commandBuffer.NativeCommandBuffer.BlitCommandEncoder();
+            m_NativeEncoder = commandBuffer.EnsureClassicCommandBuffer().BlitCommandEncoder();
             if (m_NativeEncoder.NativePtr == IntPtr.Zero)
             {
                 throw new InvalidOperationException("Failed to create MTLBlitCommandEncoder.");
@@ -208,63 +229,115 @@ namespace Infinity.Graphics
 
         private readonly MetalDevice m_MetalDevice;
         private MTLComputeCommandEncoder m_NativeEncoder;
+        private MTL4ComputeCommandEncoder m_NativeEncoder4;
         private IMetalBindingBackend? m_BindingBackend;
+        private string? m_PendingPassDebugGroup;
 
         internal MetalComputeEncoder(MetalCommandBuffer commandBuffer)
         {
             m_CommandBuffer = commandBuffer;
             m_MetalDevice = ((MetalCommandQueue)commandBuffer.CommandQueue).MetalDevice;
             m_NativeEncoder = default;
+            m_NativeEncoder4 = default;
             m_BindingBackend = null;
+            m_PendingPassDebugGroup = null;
         }
 
         internal override void BeginPass(in RHIComputePassDescriptor descriptor)
         {
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-            m_NativeEncoder = commandBuffer.NativeCommandBuffer.ComputeCommandEncoder();
-            if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+            m_NativeEncoder = default;
+            m_NativeEncoder4 = default;
+            m_PendingPassDebugGroup = null;
+
+            if (commandBuffer.EncodingPath == MetalCommandEncodingPath.Classic)
             {
-                throw new InvalidOperationException("Failed to create MTLComputeCommandEncoder.");
+                EnsureEncoderForPath(MetalCommandEncodingPath.Classic);
+            }
+            else if (commandBuffer.EncodingPath == MetalCommandEncodingPath.MTL4)
+            {
+                EnsureEncoderForPath(MetalCommandEncodingPath.MTL4);
             }
 
             if (!string.IsNullOrWhiteSpace(descriptor.Name))
             {
-                PushDebugGroup(descriptor.Name);
+                if (HasNativeEncoder)
+                {
+                    PushDebugGroup(descriptor.Name);
+                }
+                else
+                {
+                    m_PendingPassDebugGroup = descriptor.Name;
+                }
             }
         }
 
         internal void WaitForFence(in MTLFence fence)
         {
-            if (fence.NativePtr != IntPtr.Zero && m_NativeEncoder.NativePtr != IntPtr.Zero)
+            if (fence.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.WaitForFence(fence);
+                return;
+            }
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute);
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.WaitForFence(fence, stage);
             }
         }
 
         internal void SignalFence(in MTLFence fence)
         {
-            if (fence.NativePtr != IntPtr.Zero && m_NativeEncoder.NativePtr != IntPtr.Zero)
+            if (fence.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.UpdateFence(fence);
+                return;
+            }
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute);
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.UpdateFence(fence, stage);
             }
         }
 
         internal void ApplyImmediateBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
         {
-            if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
+                if (scope != 0)
+                {
+                    m_NativeEncoder.MemoryBarrier(scope);
+                }
+
+                MetalCommandBuffer cmd = (MetalCommandBuffer)m_CommandBuffer!;
+                if (cmd.EnableMetal4Barriers)
+                {
+                    MetalBarrierHelper.TryBarrierAfterEncoderStages(m_NativeEncoder.NativePtr, afterStages, beforeStages);
+                }
+
                 return;
             }
 
-            if (scope != 0)
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
             {
-                m_NativeEncoder.MemoryBarrier(scope);
-            }
-
-            MetalCommandBuffer cmd = (MetalCommandBuffer)m_CommandBuffer!;
-            if (cmd.EnableMetal4Barriers)
-            {
-                MetalBarrierHelper.TryBarrierAfterEncoderStages(m_NativeEncoder.NativePtr, afterStages, beforeStages);
+                ulong resolvedAfter = afterStages != 0 ? afterStages : MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute);
+                ulong resolvedBefore = beforeStages != 0 ? beforeStages : resolvedAfter;
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.BarrierAfterEncoderStages(resolvedAfter, resolvedBefore, MTL4VisibilityOptions.Device);
             }
         }
 
@@ -273,7 +346,17 @@ namespace Infinity.Graphics
             if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.PushDebugGroup(new NSString(name));
+                return;
             }
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.PushDebugGroup(new NSString(name));
+                return;
+            }
+
+            throw new InvalidOperationException("Compute encoder is not created yet. Set pipeline before using debug groups.");
         }
 
         public override void PopDebugGroup()
@@ -281,6 +364,13 @@ namespace Infinity.Graphics
             if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.PopDebugGroup();
+                return;
+            }
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.PopDebugGroup();
             }
         }
 
@@ -311,8 +401,21 @@ namespace Infinity.Graphics
             m_CachedPipeline = pipeline;
             MetalComputePipeline metalPipeline = (MetalComputePipeline)pipeline;
             MetalPipelineLayout pipelineLayout = pipeline.Descriptor.PipelineLayout as MetalPipelineLayout ?? throw new InvalidOperationException("Compute pipeline layout must be a MetalPipelineLayout.");
-            ConfigureBindingBackend(pipelineLayout);
-            m_NativeEncoder.SetComputePipelineState(metalPipeline.NativePipelineState);
+            MetalBindingMode mode = ConfigureBindingBackend(pipelineLayout, out MetalCommandEncodingPath path);
+            EnsureEncoderForPath(path);
+            ApplyPendingPassDebugGroup();
+            ((MetalCommandBuffer)m_CommandBuffer!).ApplyPendingBarrierForActiveEncoderIfNeeded();
+
+            if (path == MetalCommandEncodingPath.Classic)
+            {
+                m_NativeEncoder.SetComputePipelineState(metalPipeline.NativePipelineState);
+            }
+            else
+            {
+                m_NativeEncoder4.SetComputePipelineState(metalPipeline.NativePipelineState);
+            }
+
+            MetalBindingLogHelper.LogPipelineModeOnce("Compute", metalPipeline.NativePipelineState.NativePtr, mode, path);
         }
 
         public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
@@ -333,10 +436,18 @@ namespace Infinity.Graphics
                 throw new InvalidOperationException("Compute pipeline must be set before dispatch.");
             }
 
-            m_BindingBackend?.CommitCompute(m_NativeEncoder);
-            m_NativeEncoder.DispatchThreadgroups(
-                new MTLSize(groupCountX, groupCountY, groupCountZ),
-                new MTLSize(computePipeline.ThreadgroupSize.x, computePipeline.ThreadgroupSize.y, computePipeline.ThreadgroupSize.z));
+            MTLSize threadGroupCount = new MTLSize(groupCountX, groupCountY, groupCountZ);
+            MTLSize threadsPerGroup = new MTLSize(computePipeline.ThreadgroupSize.x, computePipeline.ThreadgroupSize.y, computePipeline.ThreadgroupSize.z);
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_BindingBackend?.CommitCompute(m_NativeEncoder);
+                m_NativeEncoder.DispatchThreadgroups(threadGroupCount, threadsPerGroup);
+            }
+            else
+            {
+                m_BindingBackend?.CommitCompute(m_NativeEncoder4);
+                m_NativeEncoder4.DispatchThreadgroups(threadGroupCount, threadsPerGroup);
+            }
         }
 
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset)
@@ -346,12 +457,18 @@ namespace Infinity.Graphics
                 throw new InvalidOperationException("Compute pipeline must be set before dispatch.");
             }
 
-            m_BindingBackend?.CommitCompute(m_NativeEncoder);
             MetalBuffer indirectBuffer = (MetalBuffer)argsBuffer;
-            m_NativeEncoder.DispatchThreadgroups(
-                indirectBuffer.NativeBuffer,
-                argsOffset,
-                new MTLSize(computePipeline.ThreadgroupSize.x, computePipeline.ThreadgroupSize.y, computePipeline.ThreadgroupSize.z));
+            MTLSize threadsPerGroup = new MTLSize(computePipeline.ThreadgroupSize.x, computePipeline.ThreadgroupSize.y, computePipeline.ThreadgroupSize.z);
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_BindingBackend?.CommitCompute(m_NativeEncoder);
+                m_NativeEncoder.DispatchThreadgroups(indirectBuffer.NativeBuffer, argsOffset, threadsPerGroup);
+            }
+            else
+            {
+                m_BindingBackend?.CommitCompute(m_NativeEncoder4);
+                m_NativeEncoder4.DispatchThreadgroupsWithIndirectBuffer(indirectBuffer.NativeBuffer.GpuAddress + argsOffset, threadsPerGroup);
+            }
         }
 
         public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
@@ -367,6 +484,14 @@ namespace Infinity.Graphics
                 m_NativeEncoder = default;
             }
 
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.EndEncoding();
+                m_NativeEncoder4 = default;
+            }
+
+            m_PendingPassDebugGroup = null;
             m_CachedPipeline = null;
         }
 
@@ -376,9 +501,13 @@ namespace Infinity.Graphics
             m_BindingBackend = null;
         }
 
-        private void ConfigureBindingBackend(MetalPipelineLayout pipelineLayout)
+        private MetalBindingMode ConfigureBindingBackend(MetalPipelineLayout pipelineLayout, out MetalCommandEncodingPath path)
         {
             MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ResourceTableLayoutCount);
+            path = mode == MetalBindingMode.ArgumentTable ? MetalCommandEncodingPath.MTL4 : MetalCommandEncodingPath.Classic;
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            commandBuffer.LockEncodingPath(path, "compute pipeline set");
+
             if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
             {
                 m_BindingBackend?.Dispose();
@@ -386,37 +515,97 @@ namespace Infinity.Graphics
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
+            return mode;
         }
+
+        private void EnsureEncoderForPath(in MetalCommandEncodingPath path)
+        {
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            if (path == MetalCommandEncodingPath.Classic)
+            {
+                if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+                {
+                    m_NativeEncoder = commandBuffer.EnsureClassicCommandBuffer().ComputeCommandEncoder();
+                    if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+                    {
+                        throw new InvalidOperationException("Failed to create MTLComputeCommandEncoder.");
+                    }
+                }
+
+                return;
+            }
+
+            if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
+            {
+                m_NativeEncoder4 = commandBuffer.EnsureMtl4CommandBuffer().ComputeCommandEncoder();
+                if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("Failed to create MTL4ComputeCommandEncoder.");
+                }
+            }
+        }
+
+        private void ApplyPendingPassDebugGroup()
+        {
+            if (string.IsNullOrWhiteSpace(m_PendingPassDebugGroup))
+            {
+                return;
+            }
+
+            PushDebugGroup(m_PendingPassDebugGroup);
+            m_PendingPassDebugGroup = null;
+        }
+
+        private bool HasNativeEncoder => m_NativeEncoder.NativePtr != IntPtr.Zero || m_NativeEncoder4.NativePtr != IntPtr.Zero;
     }
 
     internal sealed class MetalRaytracingEncoder : RHIRaytracingEncoder
     {
         private readonly MetalDevice m_MetalDevice;
         private MTLComputeCommandEncoder m_NativeEncoder;
+        private MTL4ComputeCommandEncoder m_NativeEncoder4;
         private MTLAccelerationStructureCommandEncoder m_NativeAccelEncoder;
         private IMetalBindingBackend? m_BindingBackend;
+        private string? m_PendingPassDebugGroup;
 
         internal MetalRaytracingEncoder(MetalCommandBuffer commandBuffer)
         {
             m_CommandBuffer = commandBuffer;
             m_MetalDevice = ((MetalCommandQueue)commandBuffer.CommandQueue).MetalDevice;
             m_NativeEncoder = default;
+            m_NativeEncoder4 = default;
             m_NativeAccelEncoder = default;
             m_BindingBackend = null;
+            m_PendingPassDebugGroup = null;
         }
 
         internal override void BeginPass(in RHIRayTracingPassDescriptor descriptor)
         {
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-            m_NativeEncoder = commandBuffer.NativeCommandBuffer.ComputeCommandEncoder();
-            if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+            m_NativeEncoder = default;
+            m_NativeEncoder4 = default;
+            m_NativeAccelEncoder = default;
+            m_PendingPassDebugGroup = null;
+
+            if (commandBuffer.EncodingPath == MetalCommandEncodingPath.Classic)
             {
-                throw new InvalidOperationException("Failed to create Metal ray tracing compute encoder.");
+                EnsureComputeEncoder(MetalCommandEncodingPath.Classic);
+            }
+            else if (commandBuffer.EncodingPath == MetalCommandEncodingPath.MTL4)
+            {
+                EnsureComputeEncoder(MetalCommandEncodingPath.MTL4);
             }
 
             if (!string.IsNullOrWhiteSpace(descriptor.Name))
             {
-                PushDebugGroup(descriptor.Name);
+                if (HasNativeEncoder)
+                {
+                    PushDebugGroup(descriptor.Name);
+                }
+                else
+                {
+                    m_PendingPassDebugGroup = descriptor.Name;
+                }
             }
         }
 
@@ -425,11 +614,23 @@ namespace Infinity.Graphics
             if (m_NativeAccelEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeAccelEncoder.PushDebugGroup(new NSString(name));
+                return;
             }
-            else if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.PushDebugGroup(new NSString(name));
+                return;
             }
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.PushDebugGroup(new NSString(name));
+                return;
+            }
+
+            throw new InvalidOperationException("Ray tracing encoder is not created yet. Set pipeline before using debug groups.");
         }
 
         public override void PopDebugGroup()
@@ -437,10 +638,19 @@ namespace Infinity.Graphics
             if (m_NativeAccelEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeAccelEncoder.PopDebugGroup();
+                return;
             }
-            else if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.PopDebugGroup();
+                return;
+            }
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.PopDebugGroup();
             }
         }
 
@@ -468,17 +678,28 @@ namespace Infinity.Graphics
 
         public override void SetPipeline(RHIRaytracingPipeline pipeline)
         {
-            EnsureComputeEncoder();
             m_CachedPipeline = pipeline;
             MetalRaytracingPipeline metalPipeline = pipeline as MetalRaytracingPipeline ?? throw new InvalidOperationException("Ray tracing pipeline must be a MetalRaytracingPipeline.");
             MetalPipelineLayout pipelineLayout = pipeline.Descriptor.PipelineLayout as MetalPipelineLayout ?? throw new InvalidOperationException("Ray tracing pipeline layout must be a MetalPipelineLayout.");
-            ConfigureBindingBackend(pipelineLayout);
-            m_NativeEncoder.SetComputePipelineState(metalPipeline.NativePipelineState);
+            MetalBindingMode mode = ConfigureBindingBackend(pipelineLayout, out MetalCommandEncodingPath path);
+            EnsureComputeEncoder(path);
+            ApplyPendingPassDebugGroup();
+            ((MetalCommandBuffer)m_CommandBuffer!).ApplyPendingBarrierForActiveEncoderIfNeeded();
+
+            if (path == MetalCommandEncodingPath.Classic)
+            {
+                m_NativeEncoder.SetComputePipelineState(metalPipeline.NativePipelineState);
+            }
+            else
+            {
+                m_NativeEncoder4.SetComputePipelineState(metalPipeline.NativePipelineState);
+            }
+
+            MetalBindingLogHelper.LogPipelineModeOnce("Ray", metalPipeline.NativePipelineState.NativePtr, mode, path);
         }
 
         public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
         {
-            EnsureComputeEncoder();
             if (m_BindingBackend == null)
             {
                 throw new InvalidOperationException("Ray tracing pipeline must be set before binding resource tables.");
@@ -495,25 +716,64 @@ namespace Infinity.Graphics
 
         public override void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct)
         {
-            EnsureAccelerationEncoder();
-            MetalTopLevelAccelStruct metalTlas = topLevelAccelStruct as MetalTopLevelAccelStruct ?? throw new InvalidOperationException("TLAS must be a MetalTopLevelAccelStruct.");
-            m_NativeAccelEncoder.BuildAccelerationStructure(metalTlas.NativeAccelerationStructure, metalTlas.NativeDescriptor, metalTlas.NativeScratchBuffer, 0);
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MetalTopLevelAccelStruct metalTlas = topLevelAccelStruct as MetalTopLevelAccelStruct ?? throw new InvalidOperationException("TLAS must be a MetalTopLevelAccelStruct.");
+                try
+                {
+                    MTL4BufferRange scratchRange = MTL4BufferRange.Make(metalTlas.NativeScratchBuffer.GpuAddress, metalTlas.NativeScratchBuffer.Length);
+                    m_NativeEncoder4.BuildAccelerationStructure(metalTlas.NativeAccelerationStructure, metalTlas.NativeDescriptor.NativePtr, scratchRange);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"MTL4 TLAS build failed in ray-tracing pass. Build in classic init phase or force setbytes mode. detail={ex.Message}");
+                }
+
+                return;
+            }
+
+            EnsureAccelerationEncoderClassic();
+            MetalTopLevelAccelStruct classicTlas = topLevelAccelStruct as MetalTopLevelAccelStruct ?? throw new InvalidOperationException("TLAS must be a MetalTopLevelAccelStruct.");
+            m_NativeAccelEncoder.BuildAccelerationStructure(classicTlas.NativeAccelerationStructure, classicTlas.NativeDescriptor, classicTlas.NativeScratchBuffer, 0);
         }
 
         public override void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct)
         {
-            EnsureAccelerationEncoder();
-            MetalBottomLevelAccelStruct metalBlas = bottomLevelAccelStruct as MetalBottomLevelAccelStruct ?? throw new InvalidOperationException("BLAS must be a MetalBottomLevelAccelStruct.");
-            m_NativeAccelEncoder.BuildAccelerationStructure(metalBlas.NativeAccelerationStructure, metalBlas.NativeDescriptor, metalBlas.NativeScratchBuffer, 0);
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MetalBottomLevelAccelStruct metalBlas = bottomLevelAccelStruct as MetalBottomLevelAccelStruct ?? throw new InvalidOperationException("BLAS must be a MetalBottomLevelAccelStruct.");
+                try
+                {
+                    MTL4BufferRange scratchRange = MTL4BufferRange.Make(metalBlas.NativeScratchBuffer.GpuAddress, metalBlas.NativeScratchBuffer.Length);
+                    m_NativeEncoder4.BuildAccelerationStructure(metalBlas.NativeAccelerationStructure, metalBlas.NativeDescriptor.NativePtr, scratchRange);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"MTL4 BLAS build failed in ray-tracing pass. Build in classic init phase or force setbytes mode. detail={ex.Message}");
+                }
+
+                return;
+            }
+
+            EnsureAccelerationEncoderClassic();
+            MetalBottomLevelAccelStruct classicBlas = bottomLevelAccelStruct as MetalBottomLevelAccelStruct ?? throw new InvalidOperationException("BLAS must be a MetalBottomLevelAccelStruct.");
+            m_NativeAccelEncoder.BuildAccelerationStructure(classicBlas.NativeAccelerationStructure, classicBlas.NativeDescriptor, classicBlas.NativeScratchBuffer, 0);
         }
 
         public override void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable)
         {
-            EnsureComputeEncoder();
             if (m_CachedPipeline is not MetalRaytracingPipeline pipeline)
             {
                 throw new InvalidOperationException("Ray tracing pipeline must be set before dispatch.");
             }
+
+            MetalCommandEncodingPath path = ((MetalCommandBuffer)m_CommandBuffer!).EncodingPath;
+            if (path == MetalCommandEncodingPath.Unknown)
+            {
+                throw new InvalidOperationException("Ray tracing command buffer encoding path is not locked. Set pipeline before dispatch.");
+            }
+
+            EnsureComputeEncoder(path);
 
             MetalFunctionTable table = functionTable as MetalFunctionTable ?? throw new InvalidOperationException("Ray tracing dispatch requires a MetalFunctionTable.");
             if (!table.IsGenerated)
@@ -521,17 +781,34 @@ namespace Infinity.Graphics
                 table.Generate(pipeline);
             }
 
-            m_BindingBackend?.CommitRaytracing(m_NativeEncoder, table);
-            m_NativeEncoder.DispatchThreadgroups(new MTLSize(width, height, depth), new MTLSize(pipeline.ThreadgroupSize.x, pipeline.ThreadgroupSize.y, pipeline.ThreadgroupSize.z));
+            MTLSize threadgroupCount = new MTLSize(width, height, depth);
+            MTLSize threadsPerGroup = new MTLSize(pipeline.ThreadgroupSize.x, pipeline.ThreadgroupSize.y, pipeline.ThreadgroupSize.z);
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_BindingBackend?.CommitRaytracing(m_NativeEncoder, table);
+                m_NativeEncoder.DispatchThreadgroups(threadgroupCount, threadsPerGroup);
+            }
+            else
+            {
+                m_BindingBackend?.CommitRaytracing(m_NativeEncoder4, table);
+                m_NativeEncoder4.DispatchThreadgroups(threadgroupCount, threadsPerGroup);
+            }
         }
 
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable)
         {
-            EnsureComputeEncoder();
             if (m_CachedPipeline is not MetalRaytracingPipeline pipeline)
             {
                 throw new InvalidOperationException("Ray tracing pipeline must be set before indirect dispatch.");
             }
+
+            MetalCommandEncodingPath path = ((MetalCommandBuffer)m_CommandBuffer!).EncodingPath;
+            if (path == MetalCommandEncodingPath.Unknown)
+            {
+                throw new InvalidOperationException("Ray tracing command buffer encoding path is not locked. Set pipeline before indirect dispatch.");
+            }
+
+            EnsureComputeEncoder(path);
 
             MetalFunctionTable table = functionTable as MetalFunctionTable ?? throw new InvalidOperationException("Ray tracing indirect dispatch requires a MetalFunctionTable.");
             if (!table.IsGenerated)
@@ -539,9 +816,18 @@ namespace Infinity.Graphics
                 table.Generate(pipeline);
             }
 
-            m_BindingBackend?.CommitRaytracing(m_NativeEncoder, table);
             MetalBuffer indirectBuffer = argsBuffer as MetalBuffer ?? throw new InvalidOperationException("Ray tracing indirect args must be a MetalBuffer.");
-            m_NativeEncoder.DispatchThreadgroups(indirectBuffer.NativeBuffer, argsOffset, new MTLSize(pipeline.ThreadgroupSize.x, pipeline.ThreadgroupSize.y, pipeline.ThreadgroupSize.z));
+            MTLSize threadsPerGroup = new MTLSize(pipeline.ThreadgroupSize.x, pipeline.ThreadgroupSize.y, pipeline.ThreadgroupSize.z);
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_BindingBackend?.CommitRaytracing(m_NativeEncoder, table);
+                m_NativeEncoder.DispatchThreadgroups(indirectBuffer.NativeBuffer, argsOffset, threadsPerGroup);
+            }
+            else
+            {
+                m_BindingBackend?.CommitRaytracing(m_NativeEncoder4, table);
+                m_NativeEncoder4.DispatchThreadgroupsWithIndirectBuffer(indirectBuffer.NativeBuffer.GpuAddress + argsOffset, threadsPerGroup);
+            }
         }
 
         public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
@@ -563,6 +849,14 @@ namespace Infinity.Graphics
                 m_NativeEncoder = default;
             }
 
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.EndEncoding();
+                m_NativeEncoder4 = default;
+            }
+
+            m_PendingPassDebugGroup = null;
             m_CachedPipeline = null;
         }
 
@@ -581,6 +875,12 @@ namespace Infinity.Graphics
             {
                 m_NativeEncoder.WaitForFence(fence);
             }
+            else if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing);
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.WaitForFence(fence, stage);
+            }
         }
 
         internal void SignalFence(in MTLFence fence)
@@ -598,21 +898,46 @@ namespace Infinity.Graphics
             {
                 m_NativeEncoder.UpdateFence(fence);
             }
+            else if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing);
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.UpdateFence(fence, stage);
+            }
         }
 
         internal void ApplyImmediateBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
         {
-            if (scope != 0)
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
-                EnsureComputeEncoder();
-                m_NativeEncoder.MemoryBarrier(scope);
+                if (scope != 0)
+                {
+                    m_NativeEncoder.MemoryBarrier(scope);
+                }
+
+                MetalCommandBuffer cmd = (MetalCommandBuffer)m_CommandBuffer!;
+                if (cmd.EnableMetal4Barriers)
+                {
+                    IntPtr encoderPtr = m_NativeAccelEncoder.NativePtr != IntPtr.Zero ? m_NativeAccelEncoder.NativePtr : m_NativeEncoder.NativePtr;
+                    MetalBarrierHelper.TryBarrierAfterEncoderStages(encoderPtr, afterStages, beforeStages);
+                }
+
+                return;
             }
 
-            MetalCommandBuffer cmd = (MetalCommandBuffer)m_CommandBuffer!;
-            if (cmd.EnableMetal4Barriers)
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
             {
-                IntPtr encoderPtr = m_NativeAccelEncoder.NativePtr != IntPtr.Zero ? m_NativeAccelEncoder.NativePtr : m_NativeEncoder.NativePtr;
-                MetalBarrierHelper.TryBarrierAfterEncoderStages(encoderPtr, afterStages, beforeStages);
+                ulong resolvedAfter = afterStages != 0 ? afterStages : MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing);
+                ulong resolvedBefore = beforeStages != 0 ? beforeStages : resolvedAfter;
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.BarrierAfterEncoderStages(resolvedAfter, resolvedBefore, MTL4VisibilityOptions.Device);
+                return;
+            }
+
+            if (scope != 0)
+            {
+                EnsureComputeEncoder(MetalCommandEncodingPath.Classic);
+                m_NativeEncoder.MemoryBarrier(scope);
             }
         }
 
@@ -622,9 +947,13 @@ namespace Infinity.Graphics
             m_BindingBackend = null;
         }
 
-        private void ConfigureBindingBackend(MetalPipelineLayout pipelineLayout)
+        private MetalBindingMode ConfigureBindingBackend(MetalPipelineLayout pipelineLayout, out MetalCommandEncodingPath path)
         {
             MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ResourceTableLayoutCount);
+            path = mode == MetalBindingMode.ArgumentTable ? MetalCommandEncodingPath.MTL4 : MetalCommandEncodingPath.Classic;
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            commandBuffer.LockEncodingPath(path, "ray tracing pipeline set");
+
             if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
             {
                 m_BindingBackend?.Dispose();
@@ -632,10 +961,34 @@ namespace Infinity.Graphics
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
+            return mode;
         }
 
-        private void EnsureComputeEncoder()
+        private void EnsureComputeEncoder(in MetalCommandEncodingPath path)
         {
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            if (path == MetalCommandEncodingPath.MTL4)
+            {
+                if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+                {
+                    return;
+                }
+
+                if (m_NativeAccelEncoder.NativePtr != IntPtr.Zero)
+                {
+                    m_NativeAccelEncoder.EndEncoding();
+                    m_NativeAccelEncoder = default;
+                }
+
+                m_NativeEncoder4 = commandBuffer.EnsureMtl4CommandBuffer().ComputeCommandEncoder();
+                if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("Failed to create MTL4 ray tracing compute encoder.");
+                }
+
+                return;
+            }
+
             if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 return;
@@ -647,19 +1000,25 @@ namespace Infinity.Graphics
                 m_NativeAccelEncoder = default;
             }
 
-            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-            m_NativeEncoder = commandBuffer.NativeCommandBuffer.ComputeCommandEncoder();
+            m_NativeEncoder = commandBuffer.EnsureClassicCommandBuffer().ComputeCommandEncoder();
             if (m_NativeEncoder.NativePtr == IntPtr.Zero)
             {
                 throw new InvalidOperationException("Failed to create Metal ray tracing compute encoder.");
             }
         }
 
-        private void EnsureAccelerationEncoder()
+        private void EnsureAccelerationEncoderClassic()
         {
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            commandBuffer.LockEncodingPath(MetalCommandEncodingPath.Classic, "ray tracing acceleration-structure build");
             if (m_NativeAccelEncoder.NativePtr != IntPtr.Zero)
             {
                 return;
+            }
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Ray tracing acceleration-structure build cannot switch to classic path after MTL4 encoding has started.");
             }
 
             if (m_NativeEncoder.NativePtr != IntPtr.Zero)
@@ -668,13 +1027,25 @@ namespace Infinity.Graphics
                 m_NativeEncoder = default;
             }
 
-            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-            m_NativeAccelEncoder = commandBuffer.NativeCommandBuffer.AccelerationStructureCommandEncoder();
+            m_NativeAccelEncoder = commandBuffer.EnsureClassicCommandBuffer().AccelerationStructureCommandEncoder();
             if (m_NativeAccelEncoder.NativePtr == IntPtr.Zero)
             {
                 throw new InvalidOperationException("Failed to create Metal acceleration-structure encoder.");
             }
         }
+
+        private void ApplyPendingPassDebugGroup()
+        {
+            if (string.IsNullOrWhiteSpace(m_PendingPassDebugGroup))
+            {
+                return;
+            }
+
+            PushDebugGroup(m_PendingPassDebugGroup);
+            m_PendingPassDebugGroup = null;
+        }
+
+        private bool HasNativeEncoder => m_NativeEncoder.NativePtr != IntPtr.Zero || m_NativeEncoder4.NativePtr != IntPtr.Zero || m_NativeAccelEncoder.NativePtr != IntPtr.Zero;
     }
 
     internal sealed class MetalRasterEncoder : RHIRasterEncoder
@@ -686,125 +1057,134 @@ namespace Infinity.Graphics
 
         private readonly MetalDevice m_MetalDevice;
         private MTLRenderCommandEncoder m_NativeEncoder;
+        private MTL4RenderCommandEncoder m_NativeEncoder4;
         private MTLBuffer m_IndexBuffer;
         private ulong m_IndexBufferOffset;
         private MTLIndexType m_IndexType;
         private IMetalBindingBackend? m_BindingBackend;
+        private string? m_PendingPassDebugGroup;
+        private RHIRasterPassDescriptor m_PendingPassDescriptor;
+        private bool m_HasPendingPassDescriptor;
+        private readonly Dictionary<uint, uint> m_VertexStrides;
 
         internal MetalRasterEncoder(MetalCommandBuffer commandBuffer)
         {
             m_CommandBuffer = commandBuffer;
             m_MetalDevice = ((MetalCommandQueue)commandBuffer.CommandQueue).MetalDevice;
             m_NativeEncoder = default;
+            m_NativeEncoder4 = default;
             m_IndexBuffer = default;
             m_IndexBufferOffset = 0;
             m_IndexType = MTLIndexType.UInt16;
             m_BindingBackend = null;
+            m_PendingPassDebugGroup = null;
+            m_PendingPassDescriptor = default;
+            m_HasPendingPassDescriptor = false;
+            m_VertexStrides = new Dictionary<uint, uint>();
         }
 
         internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
         {
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-            MTLRenderPassDescriptor nativePassDescriptor = MTLRenderPassDescriptor.New();
-            nativePassDescriptor.RenderTargetArrayLength = descriptor.ArrayLength;
+            m_NativeEncoder = default;
+            m_NativeEncoder4 = default;
+            m_PendingPassDescriptor = descriptor;
+            m_HasPendingPassDescriptor = true;
+            m_PendingPassDebugGroup = null;
 
-            for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
+            if (commandBuffer.EncodingPath == MetalCommandEncodingPath.Classic)
             {
-                ref RHIColorAttachmentDescriptor colorAttachment = ref descriptor.ColorAttachments.Span[i];
-                MetalTexture colorTexture = (MetalTexture)colorAttachment.RenderTarget;
-                MTLRenderPassColorAttachmentDescriptor nativeColor = nativePassDescriptor.ColorAttachments[(uint)i];
-                nativeColor.Texture = colorTexture.NativeTexture;
-                nativeColor.Level = colorAttachment.MipLevel;
-                nativeColor.Slice = colorAttachment.ArraySlice;
-                nativeColor.LoadAction = MetalUtility.ConvertToMetalLoadAction(colorAttachment.LoadAction);
-                nativeColor.StoreAction = MetalUtility.ConvertToMetalStoreAction(colorAttachment.StoreAction);
-                nativeColor.ClearColor = new MTLClearColor(colorAttachment.ClearValue.x, colorAttachment.ClearValue.y, colorAttachment.ClearValue.z, colorAttachment.ClearValue.w);
-
-                if (colorAttachment.ResolveTarget != null)
-                {
-                    MetalTexture resolveTexture = (MetalTexture)colorAttachment.ResolveTarget;
-                    nativeColor.ResolveTexture = resolveTexture.NativeTexture;
-                    nativeColor.ResolveLevel = colorAttachment.ResolveMipLevel;
-                    nativeColor.ResolveSlice = colorAttachment.ResolveArraySlice;
-                }
-
-                if (i == 0 && colorTexture.HasBackingDrawable)
-                {
-                    commandBuffer.SetPresentDrawable(colorTexture.BackingDrawable);
-                }
+                EnsureEncoderForPath(MetalCommandEncodingPath.Classic);
             }
-
-            if (descriptor.DepthStencilAttachment.HasValue)
+            else if (commandBuffer.EncodingPath == MetalCommandEncodingPath.MTL4)
             {
-                RHIDepthStencilAttachmentDescriptor depthStencil = descriptor.DepthStencilAttachment.Value;
-                MetalTexture depthTexture = (MetalTexture)depthStencil.RenderTarget;
-
-                MTLRenderPassDepthAttachmentDescriptor depthAttachment = nativePassDescriptor.DepthAttachment;
-                depthAttachment.Texture = depthTexture.NativeTexture;
-                depthAttachment.Level = depthStencil.MipLevel;
-                depthAttachment.Slice = depthStencil.ArraySlice;
-                depthAttachment.LoadAction = MetalUtility.ConvertToMetalLoadAction(depthStencil.DepthLoadOp);
-                depthAttachment.StoreAction = MetalUtility.ConvertToMetalStoreAction(depthStencil.DepthStoreOp);
-                depthAttachment.ClearDepth = depthStencil.DepthClearValue;
-
-                MTLRenderPassStencilAttachmentDescriptor stencilAttachment = nativePassDescriptor.StencilAttachment;
-                stencilAttachment.Texture = depthTexture.NativeTexture;
-                stencilAttachment.Level = depthStencil.MipLevel;
-                stencilAttachment.Slice = depthStencil.ArraySlice;
-                stencilAttachment.LoadAction = MetalUtility.ConvertToMetalLoadAction(depthStencil.StencilLoadOp);
-                stencilAttachment.StoreAction = MetalUtility.ConvertToMetalStoreAction(depthStencil.StencilStoreOp);
-                stencilAttachment.ClearStencil = (uint)depthStencil.StencilClearValue;
-            }
-
-            m_NativeEncoder = commandBuffer.NativeCommandBuffer.RenderCommandEncoder(nativePassDescriptor);
-            if (m_NativeEncoder.NativePtr == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("Failed to create MTLRenderCommandEncoder.");
+                EnsureEncoderForPath(MetalCommandEncodingPath.MTL4);
             }
 
             if (!string.IsNullOrWhiteSpace(descriptor.Name))
             {
-                PushDebugGroup(descriptor.Name);
+                if (HasNativeEncoder)
+                {
+                    PushDebugGroup(descriptor.Name);
+                }
+                else
+                {
+                    m_PendingPassDebugGroup = descriptor.Name;
+                }
             }
         }
 
         internal void WaitForFence(in MTLFence fence)
         {
-            if (fence.NativePtr != IntPtr.Zero && m_NativeEncoder.NativePtr != IntPtr.Zero)
+            if (fence.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.WaitForFence(fence, MTLRenderStages.RenderStageVertex | MTLRenderStages.RenderStageFragment);
+                return;
+            }
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Vertex) | MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Fragment);
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.WaitForFence(fence, stage);
             }
         }
 
         internal void SignalFence(in MTLFence fence)
         {
-            if (fence.NativePtr != IntPtr.Zero && m_NativeEncoder.NativePtr != IntPtr.Zero)
+            if (fence.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.UpdateFence(fence, MTLRenderStages.RenderStageVertex | MTLRenderStages.RenderStageFragment);
+                return;
+            }
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Vertex) | MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Fragment);
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.UpdateFence(fence, stage);
             }
         }
 
         internal void ApplyImmediateBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
         {
-            if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
+                if (scope != 0)
+                {
+                    MTLRenderStages after = MetalBarrierHelper.ConvertToRenderStages(afterStages);
+                    MTLRenderStages before = MetalBarrierHelper.ConvertToRenderStages(beforeStages);
+                    if (after != 0 && before != 0)
+                    {
+                        m_NativeEncoder.MemoryBarrier(scope, after, before);
+                    }
+                }
+
+                MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+                if (commandBuffer.EnableMetal4Barriers)
+                {
+                    MetalBarrierHelper.TryBarrierAfterEncoderStages(m_NativeEncoder.NativePtr, afterStages, beforeStages);
+                }
+
                 return;
             }
 
-            if (scope != 0)
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
             {
-                MTLRenderStages after = MetalBarrierHelper.ConvertToRenderStages(afterStages);
-                MTLRenderStages before = MetalBarrierHelper.ConvertToRenderStages(beforeStages);
-                if (after != 0 && before != 0)
-                {
-                    m_NativeEncoder.MemoryBarrier(scope, after, before);
-                }
-            }
-
-            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-            if (commandBuffer.EnableMetal4Barriers)
-            {
-                MetalBarrierHelper.TryBarrierAfterEncoderStages(m_NativeEncoder.NativePtr, afterStages, beforeStages);
+                ulong resolvedAfter = afterStages != 0 ? afterStages : (MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Vertex) | MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Fragment));
+                ulong resolvedBefore = beforeStages != 0 ? beforeStages : resolvedAfter;
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.BarrierAfterEncoderStages(resolvedAfter, resolvedBefore, MTL4VisibilityOptions.Device);
             }
         }
 
@@ -813,7 +1193,17 @@ namespace Infinity.Graphics
             if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.PushDebugGroup(new NSString(name));
+                return;
             }
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.PushDebugGroup(new NSString(name));
+                return;
+            }
+
+            throw new InvalidOperationException("Raster encoder is not created yet. Set pipeline before using debug groups.");
         }
 
         public override void PopDebugGroup()
@@ -821,6 +1211,13 @@ namespace Infinity.Graphics
             if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.PopDebugGroup();
+                return;
+            }
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.PopDebugGroup();
             }
         }
 
@@ -851,6 +1248,7 @@ namespace Infinity.Graphics
 
         public override void SetScissor(in Rect rect)
         {
+            RequireEncoderForState("SetScissor");
             MTLScissorRect nativeRect = new MTLScissorRect
             {
                 x = (ulong)Math.Max(0, rect.left),
@@ -858,7 +1256,14 @@ namespace Infinity.Graphics
                 width = (ulong)Math.Max(0, rect.right - rect.left),
                 height = (ulong)Math.Max(0, rect.bottom - rect.top)
             };
-            m_NativeEncoder.SetScissorRect(nativeRect);
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.SetScissorRect(nativeRect);
+            }
+            else
+            {
+                m_NativeEncoder4.SetScissorRect(nativeRect);
+            }
         }
 
         public override void SetScissors(in Memory<Rect> rects)
@@ -873,6 +1278,7 @@ namespace Infinity.Graphics
 
         public override void SetViewport(in Viewport viewport)
         {
+            RequireEncoderForState("SetViewport");
             MTLViewport nativeViewport = new MTLViewport
             {
                 originX = viewport.TopLeftX,
@@ -882,7 +1288,14 @@ namespace Infinity.Graphics
                 znear = viewport.MinDepth,
                 zfar = viewport.MaxDepth
             };
-            m_NativeEncoder.SetViewport(nativeViewport);
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.SetViewport(nativeViewport);
+            }
+            else
+            {
+                m_NativeEncoder4.SetViewport(nativeViewport);
+            }
         }
 
         public override void SetViewports(in Memory<Viewport> viewports)
@@ -897,12 +1310,28 @@ namespace Infinity.Graphics
 
         public override void SetStencilRef(in uint value)
         {
-            m_NativeEncoder.SetStencilReferenceValue(value);
+            RequireEncoderForState("SetStencilRef");
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.SetStencilReferenceValue(value);
+            }
+            else
+            {
+                m_NativeEncoder4.SetStencilReferenceValue(value);
+            }
         }
 
         public override void SetBlendFactor(in float4 value)
         {
-            m_NativeEncoder.SetBlendColor(value.x, value.y, value.z, value.w);
+            RequireEncoderForState("SetBlendFactor");
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.SetBlendColor(value.x, value.y, value.z, value.w);
+            }
+            else
+            {
+                m_NativeEncoder4.SetBlendColor(value.x, value.y, value.z, value.w);
+            }
         }
 
         public override void SetPipeline(RHIRasterPipeline pipeline)
@@ -910,16 +1339,38 @@ namespace Infinity.Graphics
             m_CachedPipeline = pipeline;
             MetalRasterPipeline metalPipeline = (MetalRasterPipeline)pipeline;
             MetalPipelineLayout pipelineLayout = pipeline.Descriptor.PipelineLayout as MetalPipelineLayout ?? throw new InvalidOperationException("Raster pipeline layout must be a MetalPipelineLayout.");
-            ConfigureBindingBackend(pipelineLayout);
-            m_NativeEncoder.SetRenderPipelineState(metalPipeline.NativePipelineState);
-            if (metalPipeline.DepthStencilState.NativePtr != IntPtr.Zero)
+            MetalBindingMode mode = ConfigureBindingBackend(pipelineLayout, out MetalCommandEncodingPath path);
+            EnsureEncoderForPath(path);
+            ApplyPendingPassDebugGroup();
+            ((MetalCommandBuffer)m_CommandBuffer!).ApplyPendingBarrierForActiveEncoderIfNeeded();
+            BuildVertexStrideMap(metalPipeline);
+
+            if (path == MetalCommandEncodingPath.Classic)
             {
-                m_NativeEncoder.SetDepthStencilState(metalPipeline.DepthStencilState);
+                m_NativeEncoder.SetRenderPipelineState(metalPipeline.NativePipelineState);
+                if (metalPipeline.DepthStencilState.NativePtr != IntPtr.Zero)
+                {
+                    m_NativeEncoder.SetDepthStencilState(metalPipeline.DepthStencilState);
+                }
+
+                m_NativeEncoder.SetCullMode(metalPipeline.CullMode);
+                m_NativeEncoder.SetTriangleFillMode(metalPipeline.FillMode);
+                m_NativeEncoder.SetFrontFacingWinding(metalPipeline.Winding);
+            }
+            else
+            {
+                m_NativeEncoder4.SetRenderPipelineState(metalPipeline.NativePipelineState);
+                if (metalPipeline.DepthStencilState.NativePtr != IntPtr.Zero)
+                {
+                    m_NativeEncoder4.SetDepthStencilState(metalPipeline.DepthStencilState.NativePtr);
+                }
+
+                m_NativeEncoder4.SetCullMode(metalPipeline.CullMode);
+                m_NativeEncoder4.SetTriangleFillMode(metalPipeline.FillMode);
+                m_NativeEncoder4.SetFrontFacingWinding(metalPipeline.Winding);
             }
 
-            m_NativeEncoder.SetCullMode(metalPipeline.CullMode);
-            m_NativeEncoder.SetTriangleFillMode(metalPipeline.FillMode);
-            m_NativeEncoder.SetFrontFacingWinding(metalPipeline.Winding);
+            MetalBindingLogHelper.LogPipelineModeOnce("Raster", metalPipeline.NativePipelineState.NativePtr, mode, path);
         }
 
         public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
@@ -944,7 +1395,20 @@ namespace Infinity.Graphics
         public override void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset)
         {
             MetalBuffer metalBuffer = (MetalBuffer)buffer;
-            m_NativeEncoder.SetVertexBuffer(metalBuffer.NativeBuffer, offset, slot);
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.SetVertexBuffer(metalBuffer.NativeBuffer, offset, slot);
+                return;
+            }
+
+            if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Raster encoder is not created yet. Set pipeline before binding vertex buffers.");
+            }
+
+            ulong address = metalBuffer.NativeBuffer.GpuAddress + offset;
+            m_VertexStrides.TryGetValue(slot, out uint stride);
+            m_BindingBackend?.SetRasterVertexBuffer(slot, address, stride);
         }
 
         public override void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner)
@@ -953,47 +1417,116 @@ namespace Infinity.Graphics
 
         public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
         {
-            m_BindingBackend?.CommitRaster(m_NativeEncoder);
-            m_NativeEncoder.DrawPrimitives(MTLPrimitiveType.Triangle, firstVertex, vertexCount, instanceCount, firstInstance);
+            MTLPrimitiveType primitiveType = ResolvePrimitiveType();
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_BindingBackend?.CommitRaster(m_NativeEncoder);
+                m_NativeEncoder.DrawPrimitives(primitiveType, firstVertex, vertexCount, instanceCount, firstInstance);
+            }
+            else
+            {
+                m_BindingBackend?.CommitRaster(m_NativeEncoder4);
+                m_NativeEncoder4.DrawPrimitives(primitiveType, firstVertex, vertexCount, instanceCount, firstInstance);
+            }
         }
 
         public override void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
         {
-            m_BindingBackend?.CommitRaster(m_NativeEncoder);
-            m_NativeEncoder.DrawIndexedPrimitives(MTLPrimitiveType.Triangle, indexCount, m_IndexType, m_IndexBuffer, m_IndexBufferOffset + firstIndex * (m_IndexType == MTLIndexType.UInt16 ? 2UL : 4UL), instanceCount, baseVertex, firstInstance);
+            MTLPrimitiveType primitiveType = ResolvePrimitiveType();
+            ulong indexOffset = m_IndexBufferOffset + firstIndex * (m_IndexType == MTLIndexType.UInt16 ? 2UL : 4UL);
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_BindingBackend?.CommitRaster(m_NativeEncoder);
+                m_NativeEncoder.DrawIndexedPrimitives(primitiveType, indexCount, m_IndexType, m_IndexBuffer, indexOffset, instanceCount, baseVertex, firstInstance);
+                return;
+            }
+
+            if (m_IndexBuffer.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Index buffer must be bound before DrawIndexed.");
+            }
+
+            ulong indexAddress = m_IndexBuffer.GpuAddress + indexOffset;
+            ulong indexLength = indexOffset < m_IndexBuffer.Length ? m_IndexBuffer.Length - indexOffset : 0;
+            m_BindingBackend?.CommitRaster(m_NativeEncoder4);
+            m_NativeEncoder4.DrawIndexedPrimitives(primitiveType, indexCount, m_IndexType, indexAddress, indexLength, instanceCount, baseVertex, firstInstance);
         }
 
         public override void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
-            m_BindingBackend?.CommitRaster(m_NativeEncoder);
             MetalBuffer metalBuffer = (MetalBuffer)argsBuffer;
+            MTLPrimitiveType primitiveType = ResolvePrimitiveType();
             for (uint i = 0; i < drawCount; ++i)
             {
-                m_NativeEncoder.DrawPrimitives(MTLPrimitiveType.Triangle, metalBuffer.NativeBuffer, offset + i * DrawIndirectArgsStride);
+                if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+                {
+                    m_BindingBackend?.CommitRaster(m_NativeEncoder);
+                    m_NativeEncoder.DrawPrimitives(primitiveType, metalBuffer.NativeBuffer, offset + i * DrawIndirectArgsStride);
+                }
+                else
+                {
+                    m_BindingBackend?.CommitRaster(m_NativeEncoder4);
+                    ulong indirectAddress = metalBuffer.NativeBuffer.GpuAddress + offset + i * DrawIndirectArgsStride;
+                    m_NativeEncoder4.DrawPrimitives(primitiveType, indirectAddress);
+                }
             }
         }
 
         public override void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
-            m_BindingBackend?.CommitRaster(m_NativeEncoder);
             MetalBuffer metalBuffer = (MetalBuffer)argsBuffer;
+            MTLPrimitiveType primitiveType = ResolvePrimitiveType();
+            if (m_IndexBuffer.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Index buffer must be bound before DrawIndexedIndirect.");
+            }
+
+            ulong indexLength = m_IndexBufferOffset < m_IndexBuffer.Length ? m_IndexBuffer.Length - m_IndexBufferOffset : 0;
+            ulong indexAddress = m_IndexBuffer.GpuAddress + m_IndexBufferOffset;
             for (uint i = 0; i < drawCount; ++i)
             {
-                m_NativeEncoder.DrawIndexedPrimitives(MTLPrimitiveType.Triangle, m_IndexType, m_IndexBuffer, m_IndexBufferOffset, metalBuffer.NativeBuffer, offset + i * DrawIndexedIndirectArgsStride);
+                if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+                {
+                    m_BindingBackend?.CommitRaster(m_NativeEncoder);
+                    m_NativeEncoder.DrawIndexedPrimitives(primitiveType, m_IndexType, m_IndexBuffer, m_IndexBufferOffset, metalBuffer.NativeBuffer, offset + i * DrawIndexedIndirectArgsStride);
+                }
+                else
+                {
+                    m_BindingBackend?.CommitRaster(m_NativeEncoder4);
+                    ulong indirectAddress = metalBuffer.NativeBuffer.GpuAddress + offset + i * DrawIndexedIndirectArgsStride;
+                    m_NativeEncoder4.DrawIndexedPrimitives(primitiveType, m_IndexType, indexAddress, indexLength, indirectAddress);
+                }
             }
         }
 
         public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
-            m_BindingBackend?.CommitRaster(m_NativeEncoder);
-            m_NativeEncoder.DrawMeshThreadgroups(new MTLSize(groupCountX, groupCountY, groupCountZ), new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_BindingBackend?.CommitRaster(m_NativeEncoder);
+                m_NativeEncoder.DrawMeshThreadgroups(new MTLSize(groupCountX, groupCountY, groupCountZ), new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
+            }
+            else
+            {
+                m_BindingBackend?.CommitRaster(m_NativeEncoder4);
+                m_NativeEncoder4.DrawMeshThreadgroups(new MTLSize(groupCountX, groupCountY, groupCountZ), new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
+            }
         }
 
         public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
-            m_BindingBackend?.CommitRaster(m_NativeEncoder);
             MetalBuffer metalBuffer = (MetalBuffer)argsBuffer;
-            m_NativeEncoder.DrawMeshThreadgroups(metalBuffer.NativeBuffer, argsOffset, new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_BindingBackend?.CommitRaster(m_NativeEncoder);
+                m_NativeEncoder.DrawMeshThreadgroups(metalBuffer.NativeBuffer, argsOffset, new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
+            }
+            else
+            {
+                m_BindingBackend?.CommitRaster(m_NativeEncoder4);
+                ulong indirectAddress = metalBuffer.NativeBuffer.GpuAddress + argsOffset;
+                m_NativeEncoder4.DrawMeshThreadgroupsWithIndirectBuffer(indirectAddress, new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
+            }
         }
 
         public override void DispatchGraph()
@@ -1014,6 +1547,17 @@ namespace Infinity.Graphics
                 m_NativeEncoder = default;
             }
 
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.EndEncoding();
+                m_NativeEncoder4 = default;
+            }
+
+            m_PendingPassDescriptor = default;
+            m_HasPendingPassDescriptor = false;
+            m_PendingPassDebugGroup = null;
+            m_VertexStrides.Clear();
             m_CachedPipeline = null;
         }
 
@@ -1023,9 +1567,13 @@ namespace Infinity.Graphics
             m_BindingBackend = null;
         }
 
-        private void ConfigureBindingBackend(MetalPipelineLayout pipelineLayout)
+        private MetalBindingMode ConfigureBindingBackend(MetalPipelineLayout pipelineLayout, out MetalCommandEncodingPath path)
         {
             MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ResourceTableLayoutCount);
+            path = mode == MetalBindingMode.ArgumentTable ? MetalCommandEncodingPath.MTL4 : MetalCommandEncodingPath.Classic;
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            commandBuffer.LockEncodingPath(path, "raster pipeline set");
+
             if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
             {
                 m_BindingBackend?.Dispose();
@@ -1033,6 +1581,219 @@ namespace Infinity.Graphics
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
+            return mode;
         }
+
+        private void EnsureEncoderForPath(in MetalCommandEncodingPath path)
+        {
+            if (!m_HasPendingPassDescriptor)
+            {
+                throw new InvalidOperationException("Raster pass descriptor is not set before encoder creation.");
+            }
+
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            if (path == MetalCommandEncodingPath.Classic)
+            {
+                if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+                {
+                    return;
+                }
+
+                MTLRenderPassDescriptor passDescriptor = BuildClassicRenderPassDescriptor(commandBuffer, m_PendingPassDescriptor);
+                m_NativeEncoder = commandBuffer.EnsureClassicCommandBuffer().RenderCommandEncoder(passDescriptor);
+                if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("Failed to create MTLRenderCommandEncoder.");
+                }
+
+                return;
+            }
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                return;
+            }
+
+            MTL4RenderPassDescriptor passDescriptor4 = BuildMtl4RenderPassDescriptor(commandBuffer, m_PendingPassDescriptor);
+            m_NativeEncoder4 = commandBuffer.EnsureMtl4CommandBuffer().RenderCommandEncoder(passDescriptor4);
+            if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create MTL4RenderCommandEncoder.");
+            }
+        }
+
+        private static MTLRenderPassDescriptor BuildClassicRenderPassDescriptor(MetalCommandBuffer commandBuffer, in RHIRasterPassDescriptor descriptor)
+        {
+            MTLRenderPassDescriptor passDescriptor = MTLRenderPassDescriptor.New();
+            PopulateRenderPassDescriptor(commandBuffer, descriptor, passDescriptor);
+            return passDescriptor;
+        }
+
+        private static MTL4RenderPassDescriptor BuildMtl4RenderPassDescriptor(MetalCommandBuffer commandBuffer, in RHIRasterPassDescriptor descriptor)
+        {
+            MTL4RenderPassDescriptor passDescriptor = MTL4RenderPassDescriptor.New();
+            PopulateRenderPassDescriptor(commandBuffer, descriptor, passDescriptor);
+            return passDescriptor;
+        }
+
+        private static void PopulateRenderPassDescriptor(MetalCommandBuffer commandBuffer, in RHIRasterPassDescriptor descriptor, MTLRenderPassDescriptor passDescriptor)
+        {
+            passDescriptor.RenderTargetArrayLength = descriptor.ArrayLength;
+
+            for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
+            {
+                ref RHIColorAttachmentDescriptor colorAttachment = ref descriptor.ColorAttachments.Span[i];
+                MetalTexture colorTexture = (MetalTexture)colorAttachment.RenderTarget;
+                MTLRenderPassColorAttachmentDescriptor nativeColor = passDescriptor.ColorAttachments[(uint)i];
+                nativeColor.Texture = colorTexture.NativeTexture;
+                nativeColor.Level = colorAttachment.MipLevel;
+                nativeColor.Slice = colorAttachment.ArraySlice;
+                nativeColor.LoadAction = MetalUtility.ConvertToMetalLoadAction(colorAttachment.LoadAction);
+                nativeColor.StoreAction = MetalUtility.ConvertToMetalStoreAction(colorAttachment.StoreAction);
+                nativeColor.ClearColor = new MTLClearColor(colorAttachment.ClearValue.x, colorAttachment.ClearValue.y, colorAttachment.ClearValue.z, colorAttachment.ClearValue.w);
+
+                if (colorAttachment.ResolveTarget != null)
+                {
+                    MetalTexture resolveTexture = (MetalTexture)colorAttachment.ResolveTarget;
+                    nativeColor.ResolveTexture = resolveTexture.NativeTexture;
+                    nativeColor.ResolveLevel = colorAttachment.ResolveMipLevel;
+                    nativeColor.ResolveSlice = colorAttachment.ResolveArraySlice;
+                }
+
+                if (i == 0 && colorTexture.HasBackingDrawable)
+                {
+                    commandBuffer.SetPresentDrawable(colorTexture.BackingDrawable);
+                }
+            }
+
+            if (!descriptor.DepthStencilAttachment.HasValue)
+            {
+                return;
+            }
+
+            RHIDepthStencilAttachmentDescriptor depthStencil = descriptor.DepthStencilAttachment.Value;
+            MetalTexture depthTexture = (MetalTexture)depthStencil.RenderTarget;
+
+            MTLRenderPassDepthAttachmentDescriptor depthAttachment = passDescriptor.DepthAttachment;
+            depthAttachment.Texture = depthTexture.NativeTexture;
+            depthAttachment.Level = depthStencil.MipLevel;
+            depthAttachment.Slice = depthStencil.ArraySlice;
+            depthAttachment.LoadAction = MetalUtility.ConvertToMetalLoadAction(depthStencil.DepthLoadOp);
+            depthAttachment.StoreAction = MetalUtility.ConvertToMetalStoreAction(depthStencil.DepthStoreOp);
+            depthAttachment.ClearDepth = depthStencil.DepthClearValue;
+
+            MTLRenderPassStencilAttachmentDescriptor stencilAttachment = passDescriptor.StencilAttachment;
+            stencilAttachment.Texture = depthTexture.NativeTexture;
+            stencilAttachment.Level = depthStencil.MipLevel;
+            stencilAttachment.Slice = depthStencil.ArraySlice;
+            stencilAttachment.LoadAction = MetalUtility.ConvertToMetalLoadAction(depthStencil.StencilLoadOp);
+            stencilAttachment.StoreAction = MetalUtility.ConvertToMetalStoreAction(depthStencil.StencilStoreOp);
+            stencilAttachment.ClearStencil = (uint)depthStencil.StencilClearValue;
+        }
+
+        private static void PopulateRenderPassDescriptor(MetalCommandBuffer commandBuffer, in RHIRasterPassDescriptor descriptor, MTL4RenderPassDescriptor passDescriptor)
+        {
+            passDescriptor.RenderTargetArrayLength = descriptor.ArrayLength;
+
+            for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
+            {
+                ref RHIColorAttachmentDescriptor colorAttachment = ref descriptor.ColorAttachments.Span[i];
+                MetalTexture colorTexture = (MetalTexture)colorAttachment.RenderTarget;
+                MTLRenderPassColorAttachmentDescriptor nativeColor = passDescriptor.ColorAttachments[(uint)i];
+                nativeColor.Texture = colorTexture.NativeTexture;
+                nativeColor.Level = colorAttachment.MipLevel;
+                nativeColor.Slice = colorAttachment.ArraySlice;
+                nativeColor.LoadAction = MetalUtility.ConvertToMetalLoadAction(colorAttachment.LoadAction);
+                nativeColor.StoreAction = MetalUtility.ConvertToMetalStoreAction(colorAttachment.StoreAction);
+                nativeColor.ClearColor = new MTLClearColor(colorAttachment.ClearValue.x, colorAttachment.ClearValue.y, colorAttachment.ClearValue.z, colorAttachment.ClearValue.w);
+
+                if (colorAttachment.ResolveTarget != null)
+                {
+                    MetalTexture resolveTexture = (MetalTexture)colorAttachment.ResolveTarget;
+                    nativeColor.ResolveTexture = resolveTexture.NativeTexture;
+                    nativeColor.ResolveLevel = colorAttachment.ResolveMipLevel;
+                    nativeColor.ResolveSlice = colorAttachment.ResolveArraySlice;
+                }
+
+                if (i == 0 && colorTexture.HasBackingDrawable)
+                {
+                    commandBuffer.SetPresentDrawable(colorTexture.BackingDrawable);
+                }
+            }
+
+            if (!descriptor.DepthStencilAttachment.HasValue)
+            {
+                return;
+            }
+
+            RHIDepthStencilAttachmentDescriptor depthStencil = descriptor.DepthStencilAttachment.Value;
+            MetalTexture depthTexture = (MetalTexture)depthStencil.RenderTarget;
+
+            MTLRenderPassDepthAttachmentDescriptor depthAttachment = passDescriptor.DepthAttachment;
+            depthAttachment.Texture = depthTexture.NativeTexture;
+            depthAttachment.Level = depthStencil.MipLevel;
+            depthAttachment.Slice = depthStencil.ArraySlice;
+            depthAttachment.LoadAction = MetalUtility.ConvertToMetalLoadAction(depthStencil.DepthLoadOp);
+            depthAttachment.StoreAction = MetalUtility.ConvertToMetalStoreAction(depthStencil.DepthStoreOp);
+            depthAttachment.ClearDepth = depthStencil.DepthClearValue;
+
+            MTLRenderPassStencilAttachmentDescriptor stencilAttachment = passDescriptor.StencilAttachment;
+            stencilAttachment.Texture = depthTexture.NativeTexture;
+            stencilAttachment.Level = depthStencil.MipLevel;
+            stencilAttachment.Slice = depthStencil.ArraySlice;
+            stencilAttachment.LoadAction = MetalUtility.ConvertToMetalLoadAction(depthStencil.StencilLoadOp);
+            stencilAttachment.StoreAction = MetalUtility.ConvertToMetalStoreAction(depthStencil.StencilStoreOp);
+            stencilAttachment.ClearStencil = (uint)depthStencil.StencilClearValue;
+        }
+
+        private void ApplyPendingPassDebugGroup()
+        {
+            if (string.IsNullOrWhiteSpace(m_PendingPassDebugGroup))
+            {
+                return;
+            }
+
+            PushDebugGroup(m_PendingPassDebugGroup);
+            m_PendingPassDebugGroup = null;
+        }
+
+        private void BuildVertexStrideMap(MetalRasterPipeline pipeline)
+        {
+            m_VertexStrides.Clear();
+            RHIVertexAssemblerDescriptor? vertexAssembler = pipeline.Descriptor.PrimitiveAssembler.VertexAssembler;
+            if (!vertexAssembler.HasValue)
+            {
+                return;
+            }
+
+            Span<RHIVertexLayoutDescriptor> layouts = vertexAssembler.Value.VertexLayouts.Span;
+            for (int i = 0; i < layouts.Length; ++i)
+            {
+                ref readonly RHIVertexLayoutDescriptor layout = ref layouts[i];
+                m_VertexStrides[layout.Index] = layout.Stride;
+            }
+        }
+
+        private MTLPrimitiveType ResolvePrimitiveType()
+        {
+            if (m_CachedPipeline is MetalRasterPipeline rasterPipeline)
+            {
+                return rasterPipeline.PrimitiveType;
+            }
+
+            return MTLPrimitiveType.Triangle;
+        }
+
+        private void RequireEncoderForState(string operation)
+        {
+            if (HasNativeEncoder)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException($"{operation} requires an active raster encoder. Set pipeline first so encoding path can be resolved.");
+        }
+
+        private bool HasNativeEncoder => m_NativeEncoder.NativePtr != IntPtr.Zero || m_NativeEncoder4.NativePtr != IntPtr.Zero;
     }
 }

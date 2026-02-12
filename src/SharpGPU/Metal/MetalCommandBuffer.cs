@@ -14,11 +14,38 @@ namespace Infinity.Graphics
         Raytracing
     }
 
+    internal enum MetalCommandEncodingPath : byte
+    {
+        Unknown = 0,
+        Classic = 1,
+        MTL4 = 2
+    }
+
+    internal static class MetalCommandEncodingPathLock
+    {
+        internal static MetalCommandEncodingPath Lock(in MetalCommandEncodingPath current, in MetalCommandEncodingPath requested, string scope)
+        {
+            if (requested == MetalCommandEncodingPath.Unknown)
+            {
+                throw new InvalidOperationException("Requested command-buffer encoding path must not be Unknown.");
+            }
+
+            if (current == MetalCommandEncodingPath.Unknown || current == requested)
+            {
+                return requested;
+            }
+
+            throw new InvalidOperationException($"Metal command buffer encoding-path conflict in {scope}. current={current}, requested={requested}. Split command buffers or override INFINITY_METAL_BINDING_MODE.");
+        }
+    }
+
     internal sealed class MetalCommandBuffer : RHICommandBuffer
     {
         internal MTLCommandBuffer NativeCommandBuffer => m_NativeCommandBuffer;
+        internal MTL4CommandBuffer NativeCommandBuffer4 => m_NativeCommandBuffer4;
         internal CAMetalDrawable PresentDrawable => m_PresentDrawable;
         internal bool EnableMetal4Barriers => m_EnableMetal4Barriers;
+        internal MetalCommandEncodingPath EncodingPath => m_EncodingPath;
 
         private readonly MetalTransferEncoder m_TransferEncoder;
         private readonly MetalComputeEncoder m_ComputeEncoder;
@@ -28,9 +55,13 @@ namespace Infinity.Graphics
         private readonly bool m_EnableMetal4Barriers;
 
         private MTLCommandBuffer m_NativeCommandBuffer;
+        private MTL4CommandBuffer m_NativeCommandBuffer4;
         private CAMetalDrawable m_PresentDrawable;
         private MetalActiveEncoderType m_ActiveEncoder;
         private MetalActiveEncoderType m_LastCompletedEncoder;
+        private MetalCommandEncodingPath m_EncodingPath;
+        private bool m_Mtl4CommandBufferEnded;
+        private string m_CommandBufferName = string.Empty;
         private bool m_HasPendingBarrier;
         private ulong m_PendingAfterStages;
         private ulong m_PendingBeforeStages;
@@ -51,13 +82,7 @@ namespace Infinity.Graphics
 
         public override void Begin(string name)
         {
-            m_NativeCommandBuffer = ((MetalCommandQueue)m_CommandQueue).NativeQueue.CommandBuffer();
-            if (m_NativeCommandBuffer.NativePtr == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("Failed to create MTLCommandBuffer.");
-            }
-
-            m_NativeCommandBuffer.Label = new SharpMetal.Foundation.NSString(name);
+            m_CommandBufferName = string.IsNullOrWhiteSpace(name) ? "MetalCommandBuffer" : name;
             ResetState();
         }
 
@@ -95,6 +120,7 @@ namespace Infinity.Graphics
 
         public override RHITransferEncoder BeginTransferPass(in RHITransferPassDescriptor descriptor)
         {
+            LockEncodingPath(MetalCommandEncodingPath.Classic, "transfer pass");
             m_TransferEncoder.BeginPass(descriptor);
             ApplyPendingBarrierToTransfer();
             m_ActiveEncoder = MetalActiveEncoderType.Transfer;
@@ -117,8 +143,12 @@ namespace Infinity.Graphics
         public override RHIComputeEncoder BeginComputePass(in RHIComputePassDescriptor descriptor)
         {
             m_ComputeEncoder.BeginPass(descriptor);
-            ApplyPendingBarrierToCompute();
             m_ActiveEncoder = MetalActiveEncoderType.Compute;
+            if (m_EncodingPath != MetalCommandEncodingPath.Unknown)
+            {
+                ApplyPendingBarrierToCompute();
+            }
+
             return m_ComputeEncoder;
         }
 
@@ -138,8 +168,12 @@ namespace Infinity.Graphics
         public override RHIRaytracingEncoder BeginRaytracingPass(in RHIRayTracingPassDescriptor descriptor)
         {
             m_RaytracingEncoder.BeginPass(descriptor);
-            ApplyPendingBarrierToRaytracing();
             m_ActiveEncoder = MetalActiveEncoderType.Raytracing;
+            if (m_EncodingPath != MetalCommandEncodingPath.Unknown)
+            {
+                ApplyPendingBarrierToRaytracing();
+            }
+
             return m_RaytracingEncoder;
         }
 
@@ -159,8 +193,12 @@ namespace Infinity.Graphics
         public override RHIRasterEncoder BeginRasterPass(in RHIRasterPassDescriptor descriptor)
         {
             m_RasterEncoder.BeginPass(descriptor);
-            ApplyPendingBarrierToRaster();
             m_ActiveEncoder = MetalActiveEncoderType.Raster;
+            if (m_EncodingPath != MetalCommandEncodingPath.Unknown)
+            {
+                ApplyPendingBarrierToRaster();
+            }
+
             return m_RasterEncoder;
         }
 
@@ -194,6 +232,14 @@ namespace Infinity.Graphics
                     EndRaytracingPass();
                     break;
             }
+
+            if (m_EncodingPath == MetalCommandEncodingPath.MTL4 &&
+                m_NativeCommandBuffer4.NativePtr != IntPtr.Zero &&
+                !m_Mtl4CommandBufferEnded)
+            {
+                m_NativeCommandBuffer4.EndCommandBuffer();
+                m_Mtl4CommandBufferEnded = true;
+            }
         }
 
         public override RHITransferEncoder GetTransferEncoder()
@@ -222,6 +268,94 @@ namespace Infinity.Graphics
             {
                 m_PresentDrawable = drawable;
             }
+        }
+
+        internal MTLCommandBuffer EnsureClassicCommandBuffer()
+        {
+            if (m_EncodingPath == MetalCommandEncodingPath.MTL4)
+            {
+                throw new InvalidOperationException("Classic command-buffer path is unavailable after command buffer is locked to MTL4.");
+            }
+
+            if (m_NativeCommandBuffer.NativePtr != IntPtr.Zero)
+            {
+                return m_NativeCommandBuffer;
+            }
+
+            MetalCommandQueue queue = (MetalCommandQueue)m_CommandQueue!;
+            m_NativeCommandBuffer = queue.NativeQueue.CommandBuffer();
+            if (m_NativeCommandBuffer.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create MTLCommandBuffer.");
+            }
+
+            m_NativeCommandBuffer.Label = new SharpMetal.Foundation.NSString(m_CommandBufferName);
+            return m_NativeCommandBuffer;
+        }
+
+        internal MTL4CommandBuffer EnsureMtl4CommandBuffer()
+        {
+            if (m_EncodingPath == MetalCommandEncodingPath.Classic)
+            {
+                throw new InvalidOperationException("MTL4 command-buffer path is unavailable after command buffer is locked to Classic.");
+            }
+
+            if (m_NativeCommandBuffer4.NativePtr != IntPtr.Zero)
+            {
+                return m_NativeCommandBuffer4;
+            }
+
+            MetalCommandQueue queue = (MetalCommandQueue)m_CommandQueue!;
+            if (!queue.SupportsMtl4Submission)
+            {
+                throw new InvalidOperationException("MTL4 command submission is unavailable on current queue/device.");
+            }
+
+            m_NativeCommandBuffer4 = queue.MetalDevice.NativeDevice.NewMTL4CommandBuffer();
+            if (m_NativeCommandBuffer4.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create MTL4CommandBuffer.");
+            }
+
+            m_NativeCommandBuffer4.BeginCommandBuffer(queue.NativeMtl4CommandAllocator);
+            m_NativeCommandBuffer4.Label = new SharpMetal.Foundation.NSString(m_CommandBufferName);
+            m_Mtl4CommandBufferEnded = false;
+            return m_NativeCommandBuffer4;
+        }
+
+        internal void LockEncodingPath(in MetalCommandEncodingPath requestedPath, string scope)
+        {
+            MetalCommandEncodingPath lockedPath = MetalCommandEncodingPathLock.Lock(m_EncodingPath, requestedPath, scope);
+            m_EncodingPath = lockedPath;
+        }
+
+        internal void ApplyPendingBarrierForActiveEncoderIfNeeded()
+        {
+            if (!m_HasPendingBarrier)
+            {
+                return;
+            }
+
+            switch (m_ActiveEncoder)
+            {
+                case MetalActiveEncoderType.Transfer:
+                    ApplyPendingBarrierToTransfer();
+                    break;
+                case MetalActiveEncoderType.Compute:
+                    ApplyPendingBarrierToCompute();
+                    break;
+                case MetalActiveEncoderType.Raster:
+                    ApplyPendingBarrierToRaster();
+                    break;
+                case MetalActiveEncoderType.Raytracing:
+                    ApplyPendingBarrierToRaytracing();
+                    break;
+            }
+        }
+
+        internal void FinalizeForSubmit()
+        {
+            End();
         }
 
         private void ApplyBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
@@ -323,9 +457,13 @@ namespace Infinity.Graphics
 
         private void ResetState()
         {
+            m_NativeCommandBuffer = default;
+            m_NativeCommandBuffer4 = default;
             m_PresentDrawable = default;
             m_ActiveEncoder = MetalActiveEncoderType.None;
             m_LastCompletedEncoder = MetalActiveEncoderType.None;
+            m_EncodingPath = MetalCommandEncodingPath.Unknown;
+            m_Mtl4CommandBufferEnded = false;
             ClearPendingBarrier();
         }
 

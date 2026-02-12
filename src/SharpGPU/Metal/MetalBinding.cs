@@ -74,10 +74,10 @@ namespace Infinity.Graphics
             string? value = Environment.GetEnvironmentVariable(LegacyCompatibilityEnv);
             if (string.IsNullOrWhiteSpace(value))
             {
-                return true;
+                return false;
             }
 
-            return ParseBooleanValue(value.Trim(), fallback: true);
+            return ParseBooleanValue(value.Trim(), fallback: false);
         }
 
         private static bool TryResolveOverride(in MetalBindingCapabilities capabilities, out MetalBindingMode mode)
@@ -151,9 +151,14 @@ namespace Infinity.Graphics
 
         void ResetForPipeline(MetalPipelineLayout pipelineLayout);
         void SetResourceTable(MetalResourceTable resourceTable, in uint tableIndex);
+        void SetRasterVertexBuffer(in uint slot, in ulong address, in ulong stride);
+
         void CommitCompute(in MTLComputeCommandEncoder encoder);
+        void CommitCompute(in MTL4ComputeCommandEncoder encoder);
         void CommitRaytracing(in MTLComputeCommandEncoder encoder, MetalFunctionTable? functionTable);
+        void CommitRaytracing(in MTL4ComputeCommandEncoder encoder, MetalFunctionTable? functionTable);
         void CommitRaster(in MTLRenderCommandEncoder encoder);
+        void CommitRaster(in MTL4RenderCommandEncoder encoder);
     }
 
     internal static class MetalBindingBackendFactory
@@ -494,8 +499,11 @@ namespace Infinity.Graphics
         }
 
         public abstract void CommitCompute(in MTLComputeCommandEncoder encoder);
+        public abstract void CommitCompute(in MTL4ComputeCommandEncoder encoder);
         public abstract void CommitRaytracing(in MTLComputeCommandEncoder encoder, MetalFunctionTable? functionTable);
+        public abstract void CommitRaytracing(in MTL4ComputeCommandEncoder encoder, MetalFunctionTable? functionTable);
         public abstract void CommitRaster(in MTLRenderCommandEncoder encoder);
+        public abstract void CommitRaster(in MTL4RenderCommandEncoder encoder);
 
         public void Dispose()
         {
@@ -503,6 +511,10 @@ namespace Infinity.Graphics
         }
 
         protected virtual void OnResourceTableUpdated(MetalResourceTable resourceTable, in uint tableIndex)
+        {
+        }
+
+        public virtual void SetRasterVertexBuffer(in uint slot, in ulong address, in ulong stride)
         {
         }
 
@@ -595,18 +607,33 @@ namespace Infinity.Graphics
             BindLegacyResourcesForCompute(encoder);
         }
 
+        public override void CommitCompute(in MTL4ComputeCommandEncoder encoder)
+        {
+            throw new InvalidOperationException("Legacy binding backend requires classic Metal encoder path.");
+        }
+
         public override void CommitRaytracing(in MTLComputeCommandEncoder encoder, MetalFunctionTable? functionTable)
         {
             BindLegacyResourcesForCompute(encoder);
-            if (functionTable != null)
+            if (LegacyCompatibilityEnabled && functionTable != null)
             {
                 MetalBindingHelpers.BindRayFunctionTables(encoder, functionTable);
             }
         }
 
+        public override void CommitRaytracing(in MTL4ComputeCommandEncoder encoder, MetalFunctionTable? functionTable)
+        {
+            throw new InvalidOperationException("Legacy binding backend requires classic Metal encoder path.");
+        }
+
         public override void CommitRaster(in MTLRenderCommandEncoder encoder)
         {
             BindLegacyResourcesForRaster(encoder);
+        }
+
+        public override void CommitRaster(in MTL4RenderCommandEncoder encoder)
+        {
+            throw new InvalidOperationException("Legacy binding backend requires classic Metal encoder path.");
         }
     }
 
@@ -636,7 +663,7 @@ namespace Infinity.Graphics
 
         public override MetalBindingMode Mode => MetalBindingMode.ArgumentBuffer;
 
-        public override bool UsesReservedRayFunctionTableSlots => PipelineType == MetalBindingPipelineType.Raytracing && LegacyCompatibilityEnabled;
+        public override bool UsesReservedRayFunctionTableSlots => PipelineType == MetalBindingPipelineType.Raytracing;
 
         public override void ResetForPipeline(MetalPipelineLayout pipelineLayout)
         {
@@ -663,6 +690,11 @@ namespace Infinity.Graphics
             }
         }
 
+        public override void CommitCompute(in MTL4ComputeCommandEncoder encoder)
+        {
+            throw new InvalidOperationException("Argument-buffer binding backend requires classic Metal encoder path.");
+        }
+
         public override void CommitRaytracing(in MTLComputeCommandEncoder encoder, MetalFunctionTable? functionTable)
         {
             foreach (KeyValuePair<uint, ArgumentBufferState> pair in m_TableStates)
@@ -673,11 +705,17 @@ namespace Infinity.Graphics
             if (LegacyCompatibilityEnabled)
             {
                 BindLegacyResourcesForCompute(encoder);
-                if (functionTable != null)
-                {
-                    MetalBindingHelpers.BindRayFunctionTables(encoder, functionTable);
-                }
             }
+
+            if (functionTable != null)
+            {
+                MetalBindingHelpers.BindRayFunctionTables(encoder, functionTable);
+            }
+        }
+
+        public override void CommitRaytracing(in MTL4ComputeCommandEncoder encoder, MetalFunctionTable? functionTable)
+        {
+            throw new InvalidOperationException("Argument-buffer binding backend requires classic Metal encoder path.");
         }
 
         public override void CommitRaster(in MTLRenderCommandEncoder encoder)
@@ -692,6 +730,11 @@ namespace Infinity.Graphics
             {
                 BindLegacyResourcesForRaster(encoder);
             }
+        }
+
+        public override void CommitRaster(in MTL4RenderCommandEncoder encoder)
+        {
+            throw new InvalidOperationException("Argument-buffer binding backend requires classic Metal encoder path.");
         }
 
         protected override void DisposeBackend()
@@ -854,6 +897,9 @@ namespace Infinity.Graphics
 
     internal sealed class MetalSetBytesBindingBackend : MetalBindingBackendBase
     {
+        private static readonly object s_ZeroAddressLogLock = new object();
+        private static readonly HashSet<string> s_ZeroAddressLogKeys = new HashSet<string>(StringComparer.Ordinal);
+
         [StructLayout(LayoutKind.Sequential)]
         private struct MetalBindlessPayloadHeader
         {
@@ -890,7 +936,12 @@ namespace Infinity.Graphics
 
         public override MetalBindingMode Mode => MetalBindingMode.SetBytes;
 
-        public override bool UsesReservedRayFunctionTableSlots => PipelineType == MetalBindingPipelineType.Raytracing && LegacyCompatibilityEnabled;
+        public override bool UsesReservedRayFunctionTableSlots => PipelineType == MetalBindingPipelineType.Raytracing && UsesReservedRayFunctionTableSlotsForCompatibility(LegacyCompatibilityEnabled);
+
+        internal static bool UsesReservedRayFunctionTableSlotsForCompatibility(bool legacyCompatibilityEnabled)
+        {
+            return legacyCompatibilityEnabled;
+        }
 
         public override void ResetForPipeline(MetalPipelineLayout pipelineLayout)
         {
@@ -925,6 +976,11 @@ namespace Infinity.Graphics
             }
         }
 
+        public override void CommitCompute(in MTL4ComputeCommandEncoder encoder)
+        {
+            throw new InvalidOperationException("SetBytes binding backend requires classic Metal encoder path.");
+        }
+
         public override unsafe void CommitRaytracing(in MTLComputeCommandEncoder encoder, MetalFunctionTable? functionTable)
         {
             foreach (KeyValuePair<uint, MetalResourceTable> pair in m_BoundTables)
@@ -941,11 +997,17 @@ namespace Infinity.Graphics
             if (LegacyCompatibilityEnabled)
             {
                 BindLegacyResourcesForCompute(encoder);
-                if (functionTable != null)
-                {
-                    MetalBindingHelpers.BindRayFunctionTables(encoder, functionTable);
-                }
             }
+
+            if (functionTable != null)
+            {
+                MetalBindingHelpers.BindRayFunctionTables(encoder, functionTable);
+            }
+        }
+
+        public override void CommitRaytracing(in MTL4ComputeCommandEncoder encoder, MetalFunctionTable? functionTable)
+        {
+            throw new InvalidOperationException("SetBytes binding backend requires classic Metal encoder path.");
         }
 
         public override unsafe void CommitRaster(in MTLRenderCommandEncoder encoder)
@@ -969,6 +1031,11 @@ namespace Infinity.Graphics
             {
                 BindLegacyResourcesForRaster(encoder);
             }
+        }
+
+        public override void CommitRaster(in MTL4RenderCommandEncoder encoder)
+        {
+            throw new InvalidOperationException("SetBytes binding backend requires classic Metal encoder path.");
         }
 
         internal static byte[] EncodePayloadForTesting(MetalResourceTable table)
@@ -1070,6 +1137,18 @@ namespace Infinity.Graphics
                     Value0 = value0,
                     Value1 = value1
                 });
+
+                if (value0 == 0 && bind.Type != ERHIBindType.Sampler)
+                {
+                    string logKey = $"{bind.Slot}:{bind.Type}:{bind.Stage}";
+                    lock (s_ZeroAddressLogLock)
+                    {
+                        if (s_ZeroAddressLogKeys.Add(logKey))
+                        {
+                            Console.WriteLine($"[MetalBinding] WARNING: SetBytes payload entry has zero value0. slot={bind.Slot}, type={bind.Type}, stage={bind.Stage}.");
+                        }
+                    }
+                }
             }
 
             if (functionTable != null)
@@ -1137,129 +1216,116 @@ namespace Infinity.Graphics
 
     internal sealed class MetalArgumentTableBindingBackend : MetalBindingBackendBase
     {
-        private static readonly Selector s_RespondsToSelector = "respondsToSelector:";
-        private static readonly Selector s_SetArgumentTableCompute = "setArgumentTable:";
-        private static readonly Selector s_SetArgumentTableRaster = "setArgumentTable:atStages:";
-
         private readonly SortedDictionary<uint, MTL4ArgumentTable> m_ArgumentTables;
-        private readonly MetalSetBytesBindingBackend m_FallbackBackend;
+        private readonly SortedDictionary<uint, RasterVertexBinding> m_RasterVertexBindings;
+        private bool m_HasWarnedLegacyCompatIgnored;
 
-        private bool m_UseFallback;
-        private bool m_HasWarnedFallback;
+        private readonly struct RasterVertexBinding
+        {
+            internal readonly ulong Address;
+            internal readonly ulong Stride;
+
+            internal RasterVertexBinding(in ulong address, in ulong stride)
+            {
+                Address = address;
+                Stride = stride;
+            }
+        }
 
         internal MetalArgumentTableBindingBackend(MetalDevice device, in MetalBindingPipelineType pipelineType)
             : base(device, pipelineType)
         {
             m_ArgumentTables = new SortedDictionary<uint, MTL4ArgumentTable>();
-            m_FallbackBackend = new MetalSetBytesBindingBackend(device, pipelineType, LegacyCompatibilityEnabled);
+            m_RasterVertexBindings = new SortedDictionary<uint, RasterVertexBinding>();
+            m_HasWarnedLegacyCompatIgnored = false;
         }
 
         public override MetalBindingMode Mode => MetalBindingMode.ArgumentTable;
 
-        public override bool UsesReservedRayFunctionTableSlots => PipelineType == MetalBindingPipelineType.Raytracing && LegacyCompatibilityEnabled;
+        public override bool UsesReservedRayFunctionTableSlots => PipelineType == MetalBindingPipelineType.Raytracing;
 
         public override void ResetForPipeline(MetalPipelineLayout pipelineLayout)
         {
             base.ResetForPipeline(pipelineLayout);
-            m_FallbackBackend.ResetForPipeline(pipelineLayout);
             ReleaseArgumentTables();
-            m_UseFallback = false;
-            m_HasWarnedFallback = false;
+            m_RasterVertexBindings.Clear();
+            m_HasWarnedLegacyCompatIgnored = false;
         }
 
         protected override void OnResourceTableUpdated(MetalResourceTable resourceTable, in uint tableIndex)
         {
-            m_FallbackBackend.SetResourceTable(resourceTable, tableIndex);
-            if (m_UseFallback)
+            MTL4ArgumentTable argumentTable = GetOrCreateArgumentTable(resourceTable.ResourceTableLayout, tableIndex);
+            PopulateArgumentTable(argumentTable, resourceTable);
+            ApplyRasterVertexBufferBindings(argumentTable);
+        }
+
+        public override void SetRasterVertexBuffer(in uint slot, in ulong address, in ulong stride)
+        {
+            if (PipelineType != MetalBindingPipelineType.Raster)
             {
                 return;
             }
 
-            try
+            m_RasterVertexBindings[slot] = new RasterVertexBinding(address, stride);
+            foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in m_ArgumentTables)
             {
-                MTL4ArgumentTable argumentTable = GetOrCreateArgumentTable(resourceTable.ResourceTableLayout, tableIndex);
-                PopulateArgumentTable(argumentTable, resourceTable);
-            }
-            catch (Exception ex)
-            {
-                ActivateFallback($"Failed to update Metal argument table for tableIndex={tableIndex}: {ex.Message}");
+                ApplyRasterVertexBufferBinding(pair.Value, slot, m_RasterVertexBindings[slot]);
             }
         }
 
         public override void CommitCompute(in MTLComputeCommandEncoder encoder)
         {
-            if (m_UseFallback || !SupportsComputeArgumentTable(encoder))
-            {
-                m_FallbackBackend.CommitCompute(encoder);
-                return;
-            }
+            ThrowRequiresMtl4Encoder("compute");
+        }
 
-            MTL4ComputeCommandEncoder mtl4Encoder = new MTL4ComputeCommandEncoder(encoder.NativePtr);
+        public override void CommitCompute(in MTL4ComputeCommandEncoder encoder)
+        {
+            WarnLegacyCompatibilityIgnoredOnce();
             foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in m_ArgumentTables)
             {
-                mtl4Encoder.SetArgumentTable(pair.Value.NativePtr);
-            }
-
-            if (LegacyCompatibilityEnabled)
-            {
-                BindLegacyResourcesForCompute(encoder);
+                encoder.SetArgumentTable(pair.Value.NativePtr);
             }
         }
 
         public override void CommitRaytracing(in MTLComputeCommandEncoder encoder, MetalFunctionTable? functionTable)
         {
-            if (m_UseFallback || !SupportsComputeArgumentTable(encoder))
-            {
-                m_FallbackBackend.CommitRaytracing(encoder, functionTable);
-                return;
-            }
+            ThrowRequiresMtl4Encoder("raytracing");
+        }
 
+        public override void CommitRaytracing(in MTL4ComputeCommandEncoder encoder, MetalFunctionTable? functionTable)
+        {
+            WarnLegacyCompatibilityIgnoredOnce();
             if (functionTable != null)
             {
                 PopulateRayFunctionTables(functionTable);
             }
 
-            MTL4ComputeCommandEncoder mtl4Encoder = new MTL4ComputeCommandEncoder(encoder.NativePtr);
             foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in m_ArgumentTables)
             {
-                mtl4Encoder.SetArgumentTable(pair.Value.NativePtr);
-            }
-
-            if (LegacyCompatibilityEnabled)
-            {
-                BindLegacyResourcesForCompute(encoder);
-                if (functionTable != null)
-                {
-                    MetalBindingHelpers.BindRayFunctionTables(encoder, functionTable);
-                }
+                encoder.SetArgumentTable(pair.Value.NativePtr);
             }
         }
 
         public override void CommitRaster(in MTLRenderCommandEncoder encoder)
         {
-            if (m_UseFallback || !SupportsRasterArgumentTable(encoder))
-            {
-                m_FallbackBackend.CommitRaster(encoder);
-                return;
-            }
+            ThrowRequiresMtl4Encoder("raster");
+        }
 
-            MTL4RenderCommandEncoder mtl4Encoder = new MTL4RenderCommandEncoder(encoder.NativePtr);
+        public override void CommitRaster(in MTL4RenderCommandEncoder encoder)
+        {
+            WarnLegacyCompatibilityIgnoredOnce();
             ulong stages = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Vertex) | MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Fragment);
             foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in m_ArgumentTables)
             {
-                mtl4Encoder.SetArgumentTable(pair.Value.NativePtr, stages);
-            }
-
-            if (LegacyCompatibilityEnabled)
-            {
-                BindLegacyResourcesForRaster(encoder);
+                ApplyRasterVertexBufferBindings(pair.Value);
+                encoder.SetArgumentTable(pair.Value.NativePtr, stages);
             }
         }
 
         protected override void DisposeBackend()
         {
             ReleaseArgumentTables();
-            m_FallbackBackend.Dispose();
+            m_RasterVertexBindings.Clear();
         }
 
         private MTL4ArgumentTable GetOrCreateArgumentTable(MetalResourceTableLayout layout, in uint tableIndex)
@@ -1297,12 +1363,17 @@ namespace Infinity.Graphics
                 maxBufferCount = Math.Max(maxBufferCount, MetalBindingHelpers.RtVisibleFunctionTableSlot + 1UL);
             }
 
+            if (PipelineType == MetalBindingPipelineType.Raster)
+            {
+                maxBufferCount = Math.Max(maxBufferCount, 31UL);
+            }
+
             MTL4ArgumentTableDescriptor descriptor = MTL4ArgumentTableDescriptor.New();
             descriptor.MaxBufferBindCount = Math.Max(1UL, maxBufferCount);
             descriptor.MaxTextureBindCount = Math.Max(1UL, maxTextureCount);
             descriptor.MaxSamplerStateBindCount = Math.Max(1UL, maxSamplerCount);
             descriptor.InitializeBindings = true;
-            descriptor.SupportAttributeStrides = false;
+            descriptor.SupportAttributeStrides = PipelineType == MetalBindingPipelineType.Raster;
 
             NSError error = default;
             MTL4ArgumentTable argumentTable = Device.NativeDevice.NewArgumentTable(descriptor, ref error);
@@ -1394,36 +1465,40 @@ namespace Infinity.Graphics
             }
         }
 
-        private bool SupportsComputeArgumentTable(in MTLComputeCommandEncoder encoder)
+        private void ApplyRasterVertexBufferBindings(MTL4ArgumentTable argumentTable)
         {
-            if (ObjectiveCRuntime.bool_objc_msgSend(encoder.NativePtr, s_RespondsToSelector, s_SetArgumentTableCompute))
+            foreach (KeyValuePair<uint, RasterVertexBinding> pair in m_RasterVertexBindings)
             {
-                return true;
+                ApplyRasterVertexBufferBinding(argumentTable, pair.Key, pair.Value);
             }
-
-            ActivateFallback("Compute encoder does not respond to setArgumentTable:. Falling back to SetBytes backend.");
-            return false;
         }
 
-        private bool SupportsRasterArgumentTable(in MTLRenderCommandEncoder encoder)
+        private static void ApplyRasterVertexBufferBinding(MTL4ArgumentTable argumentTable, in uint slot, in RasterVertexBinding binding)
         {
-            if (ObjectiveCRuntime.bool_objc_msgSend(encoder.NativePtr, s_RespondsToSelector, s_SetArgumentTableRaster))
+            if (binding.Stride > 0)
             {
-                return true;
+                argumentTable.SetAddress(binding.Address, binding.Stride, slot);
             }
-
-            ActivateFallback("Render encoder does not respond to setArgumentTable:atStages:. Falling back to SetBytes backend.");
-            return false;
+            else
+            {
+                argumentTable.SetAddress(binding.Address, slot);
+            }
         }
 
-        private void ActivateFallback(string message)
+        private void WarnLegacyCompatibilityIgnoredOnce()
         {
-            m_UseFallback = true;
-            if (!m_HasWarnedFallback)
+            if (!LegacyCompatibilityEnabled || m_HasWarnedLegacyCompatIgnored)
             {
-                Console.WriteLine($"[MetalBinding] {message}");
-                m_HasWarnedFallback = true;
+                return;
             }
+
+            Console.WriteLine("[MetalBinding] INFINITY_METAL_BINDING_LEGACY_COMPAT is enabled, but legacy direct-binding is ignored on MTL4 argument-table backend.");
+            m_HasWarnedLegacyCompatIgnored = true;
+        }
+
+        private static void ThrowRequiresMtl4Encoder(string pipelineType)
+        {
+            throw new InvalidOperationException($"Metal argument-table backend requires MTL4 encoder path for {pipelineType} submissions.");
         }
 
         private void ReleaseArgumentTables()

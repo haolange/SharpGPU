@@ -1,7 +1,7 @@
 ﻿using System;
 using SharpMetal.Metal;
-using SharpMetal.QuartzCore;
 using SharpMetal.ObjectiveCCore;
+using SharpMetal.QuartzCore;
 
 namespace Infinity.Graphics
 {
@@ -11,20 +11,57 @@ namespace Infinity.Graphics
         public MetalDevice MetalDevice => m_MetalDevice;
         public override ulong Frequency => 1_000_000_000UL;
 
+        internal bool SupportsMtl4Submission => m_NativeQueue4.NativePtr != IntPtr.Zero &&
+                                                m_NativeMtl4CommandAllocator.NativePtr != IntPtr.Zero &&
+                                                m_Mtl4CompletionEvent.NativePtr != IntPtr.Zero;
+
+        internal MTL4CommandAllocator NativeMtl4CommandAllocator => m_NativeMtl4CommandAllocator;
+
         private readonly MetalDevice m_MetalDevice;
         private MTLCommandQueue m_NativeQueue;
+        private MTL4CommandQueue m_NativeQueue4;
+        private MTL4CommandAllocator m_NativeMtl4CommandAllocator;
+        private MTLSharedEvent m_Mtl4CompletionEvent;
         private MTLCommandBuffer m_LastSubmittedCommandBuffer;
+        private ulong m_LastSubmittedMtl4Value;
+        private ulong m_NextMtl4CompletionValue;
+        private bool m_HasLoggedMtl4SubmitOrder;
 
         public MetalCommandQueue(MetalDevice device, in ERHIPipelineType pipeline)
         {
             m_MetalDevice = device;
             m_PipelineType = pipeline;
             m_NativeQueue = device.NativeDevice.NewCommandQueue();
+            m_NativeQueue4 = default;
+            m_NativeMtl4CommandAllocator = default;
+            m_Mtl4CompletionEvent = default;
             m_LastSubmittedCommandBuffer = default;
+            m_LastSubmittedMtl4Value = 0;
+            m_NextMtl4CompletionValue = 1;
+            m_HasLoggedMtl4SubmitOrder = false;
 
             if (m_NativeQueue.NativePtr == IntPtr.Zero)
             {
                 throw new InvalidOperationException("Failed to create MTLCommandQueue.");
+            }
+
+            if (device.BindingCapabilities.SupportsArgumentTable)
+            {
+                m_NativeQueue4 = device.NativeDevice.NewMTL4CommandQueue();
+                if (m_NativeQueue4.NativePtr != IntPtr.Zero)
+                {
+                    m_NativeMtl4CommandAllocator = device.NativeDevice.NewMTL4CommandAllocator();
+                    if (m_NativeMtl4CommandAllocator.NativePtr != IntPtr.Zero)
+                    {
+                        m_Mtl4CompletionEvent = device.NativeDevice.NewSharedEvent();
+                    }
+                }
+
+                if (!SupportsMtl4Submission)
+                {
+                    Console.WriteLine("[MetalQueue] MTL4 queue/allocator/event is unavailable. MTL4 command submission is disabled for this queue.");
+                    ReleaseMtl4Handles();
+                }
             }
         }
 
@@ -63,23 +100,18 @@ namespace Infinity.Graphics
             }
 
             MetalCommandBuffer metalCommandBuffer = cmdBuffer as MetalCommandBuffer ?? throw new ArgumentException("Invalid command buffer type for Metal queue.", nameof(cmdBuffer));
-            MTLCommandBuffer nativeCommandBuffer = metalCommandBuffer.NativeCommandBuffer;
-            if (nativeCommandBuffer.NativePtr == IntPtr.Zero)
+            metalCommandBuffer.FinalizeForSubmit();
+
+            switch (metalCommandBuffer.EncodingPath)
             {
-                throw new InvalidOperationException("Command buffer has not begun encoding.");
-            }
-
-            EncodeWait(nativeCommandBuffer, waitSemaphore as MetalSemaphore);
-            EncodeSignal(nativeCommandBuffer, signalSemaphore as MetalSemaphore);
-            PresentDrawable(nativeCommandBuffer, metalCommandBuffer.PresentDrawable);
-
-            nativeCommandBuffer.Commit();
-            m_LastSubmittedCommandBuffer = nativeCommandBuffer;
-
-            if (signalFence != null)
-            {
-                nativeCommandBuffer.WaitUntilCompleted();
-                SignalFence(signalFence as MetalFence);
+                case MetalCommandEncodingPath.Classic:
+                    SubmitClassic(metalCommandBuffer, signalFence as MetalFence, waitSemaphore as MetalSemaphore, signalSemaphore as MetalSemaphore);
+                    break;
+                case MetalCommandEncodingPath.MTL4:
+                    SubmitMtl4(metalCommandBuffer, signalFence as MetalFence, waitSemaphore as MetalSemaphore, signalSemaphore as MetalSemaphore);
+                    break;
+                default:
+                    throw new InvalidOperationException("Command buffer encoding path is unresolved. Set at least one pipeline before submission.");
             }
         }
 
@@ -107,6 +139,67 @@ namespace Infinity.Graphics
             }
         }
 
+        private void SubmitClassic(MetalCommandBuffer metalCommandBuffer, MetalFence? signalFence, MetalSemaphore? waitSemaphore, MetalSemaphore? signalSemaphore)
+        {
+            MTLCommandBuffer nativeCommandBuffer = metalCommandBuffer.NativeCommandBuffer;
+            if (nativeCommandBuffer.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Classic command buffer has not begun encoding.");
+            }
+
+            EncodeWait(nativeCommandBuffer, waitSemaphore);
+            EncodeSignal(nativeCommandBuffer, signalSemaphore);
+            PresentDrawable(nativeCommandBuffer, metalCommandBuffer.PresentDrawable);
+
+            nativeCommandBuffer.Commit();
+            m_LastSubmittedCommandBuffer = nativeCommandBuffer;
+
+            if (signalFence != null)
+            {
+                nativeCommandBuffer.WaitUntilCompleted();
+                SignalFence(signalFence);
+            }
+        }
+
+        private void SubmitMtl4(MetalCommandBuffer metalCommandBuffer, MetalFence? signalFence, MetalSemaphore? waitSemaphore, MetalSemaphore? signalSemaphore)
+        {
+            if (!SupportsMtl4Submission)
+            {
+                throw new InvalidOperationException("MTL4 command submission is unavailable on this queue/device.");
+            }
+
+            MTL4CommandBuffer nativeCommandBuffer = metalCommandBuffer.NativeCommandBuffer4;
+            if (nativeCommandBuffer.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("MTL4 command buffer has not begun encoding.");
+            }
+
+            WaitForDrawable(m_NativeQueue4, metalCommandBuffer.PresentDrawable);
+            EncodeWait(m_NativeQueue4, waitSemaphore);
+
+            CommitMtl4(nativeCommandBuffer);
+
+            if (!m_HasLoggedMtl4SubmitOrder)
+            {
+                Console.WriteLine("[MetalQueue] MTL4 submit order: waitForDrawable -> waitForEvent -> commit -> signalEvent -> signalDrawable -> present.");
+                m_HasLoggedMtl4SubmitOrder = true;
+            }
+
+            EncodeSignal(m_NativeQueue4, signalSemaphore);
+
+            ulong completionValue = m_NextMtl4CompletionValue++;
+            m_NativeQueue4.SignalEvent(m_Mtl4CompletionEvent, completionValue);
+            SignalDrawable(m_NativeQueue4, metalCommandBuffer.PresentDrawable);
+            PresentDrawable(metalCommandBuffer.PresentDrawable);
+            m_LastSubmittedMtl4Value = completionValue;
+
+            if (signalFence != null)
+            {
+                WaitForMtl4Completion(completionValue);
+                SignalFence(signalFence);
+            }
+        }
+
         private void WaitLastSubmission()
         {
             if (m_LastSubmittedCommandBuffer.NativePtr != IntPtr.Zero)
@@ -114,6 +207,29 @@ namespace Infinity.Graphics
                 m_LastSubmittedCommandBuffer.WaitUntilCompleted();
                 m_LastSubmittedCommandBuffer = default;
             }
+
+            if (m_LastSubmittedMtl4Value > 0 && m_Mtl4CompletionEvent.NativePtr != IntPtr.Zero)
+            {
+                WaitForMtl4Completion(m_LastSubmittedMtl4Value);
+                m_LastSubmittedMtl4Value = 0;
+            }
+        }
+
+        private void WaitForMtl4Completion(in ulong completionValue)
+        {
+            if (m_Mtl4CompletionEvent.NativePtr == IntPtr.Zero || completionValue == 0)
+            {
+                return;
+            }
+
+            m_Mtl4CompletionEvent.WaitUntilSignaledValue(completionValue, ulong.MaxValue);
+        }
+
+        private unsafe void CommitMtl4(in MTL4CommandBuffer commandBuffer)
+        {
+            IntPtr* commandBufferArray = stackalloc IntPtr[1];
+            commandBufferArray[0] = commandBuffer.NativePtr;
+            m_NativeQueue4.Commit((IntPtr)commandBufferArray, 1);
         }
 
         private static void PresentDrawable(in MTLCommandBuffer nativeCommandBuffer, in CAMetalDrawable drawable)
@@ -122,6 +238,36 @@ namespace Infinity.Graphics
             {
                 nativeCommandBuffer.PresentDrawable(drawable);
             }
+        }
+
+        private static void SignalDrawable(in MTL4CommandQueue nativeQueue, in CAMetalDrawable drawable)
+        {
+            if (drawable.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            nativeQueue.SignalDrawable(drawable);
+        }
+
+        private static void PresentDrawable(in CAMetalDrawable drawable)
+        {
+            if (drawable.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            drawable.Present();
+        }
+
+        private static void WaitForDrawable(in MTL4CommandQueue nativeQueue, in CAMetalDrawable drawable)
+        {
+            if (drawable.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            nativeQueue.WaitForDrawable(drawable);
         }
 
         private static void EncodeWait(in MTLCommandBuffer nativeCommandBuffer, MetalSemaphore? waitSemaphore)
@@ -138,6 +284,20 @@ namespace Infinity.Graphics
             }
         }
 
+        private static void EncodeWait(in MTL4CommandQueue nativeQueue, MetalSemaphore? waitSemaphore)
+        {
+            if (waitSemaphore == null)
+            {
+                return;
+            }
+
+            ulong waitValue = waitSemaphore.CurrentValue;
+            if (waitValue > 1)
+            {
+                nativeQueue.WaitForEvent(waitSemaphore.NativeEvent, waitValue - 1);
+            }
+        }
+
         private static void EncodeSignal(in MTLCommandBuffer nativeCommandBuffer, MetalSemaphore? signalSemaphore)
         {
             if (signalSemaphore == null)
@@ -149,6 +309,17 @@ namespace Infinity.Graphics
             nativeCommandBuffer.EncodeSignalEvent(signalSemaphore.NativeEvent, signalValue);
         }
 
+        private static void EncodeSignal(in MTL4CommandQueue nativeQueue, MetalSemaphore? signalSemaphore)
+        {
+            if (signalSemaphore == null)
+            {
+                return;
+            }
+
+            ulong signalValue = signalSemaphore.AcquireSignalValue();
+            nativeQueue.SignalEvent(signalSemaphore.NativeEvent, signalValue);
+        }
+
         private static void SignalFence(MetalFence? fence)
         {
             fence?.Signal();
@@ -156,10 +327,33 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
+            ReleaseMtl4Handles();
+
             if (m_NativeQueue.NativePtr != IntPtr.Zero)
             {
                 ObjectiveCRuntime.Release(m_NativeQueue);
                 m_NativeQueue = default;
+            }
+        }
+
+        private void ReleaseMtl4Handles()
+        {
+            if (m_Mtl4CompletionEvent.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_Mtl4CompletionEvent);
+                m_Mtl4CompletionEvent = default;
+            }
+
+            if (m_NativeMtl4CommandAllocator.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_NativeMtl4CommandAllocator.NativePtr);
+                m_NativeMtl4CommandAllocator = default;
+            }
+
+            if (m_NativeQueue4.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_NativeQueue4.NativePtr);
+                m_NativeQueue4 = default;
             }
         }
     }
