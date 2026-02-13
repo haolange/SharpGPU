@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
@@ -6,7 +6,7 @@
 		<AssemblyName>SharpGPU</AssemblyName>
 		<RootNamespace>SharpGPU</RootNamespace>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-		<IntermediateOutputPath>../../../Intermediate/Graphics/SharpGPU/</IntermediateOutputPath>
+		<IntermediateOutputPath>../../../Intermediate/Graphics/SharpGPU/$(Platform)/$(Configuration)/</IntermediateOutputPath>
 		<Nullable>enable</Nullable>
 		<BaseOutputPath>$(ProjectDir)../../../Binaries/Graphics/SharpGPU/</BaseOutputPath>
 	</PropertyGroup>

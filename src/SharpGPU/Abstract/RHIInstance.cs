@@ -26,6 +26,52 @@ namespace Infinity.Graphics
 
         public abstract RHIDevice GetDevice(in int index);
 
+        public static bool IsBackendSupported(in ERHIBackend backend, out string reason)
+        {
+            reason = string.Empty;
+            string platform = ResolveCurrentPlatform();
+
+            switch (backend)
+            {
+                case ERHIBackend.DirectX12:
+                    if (!OperatingSystem.IsWindows())
+                    {
+                        reason = $"DirectX12 is only supported on Windows, but current platform is {platform}.";
+                        return false;
+                    }
+                    break;
+                case ERHIBackend.Metal:
+                    if (!OperatingSystem.IsMacOS() && !OperatingSystem.IsIOS())
+                    {
+                        reason = $"Metal is only supported on macOS/iOS, but current platform is {platform}.";
+                        return false;
+                    }
+                    break;
+                case ERHIBackend.Vulkan:
+                    if (platform == "Unknown")
+                    {
+                        reason = "Vulkan backend support cannot be evaluated on this platform.";
+                        return false;
+                    }
+                    break;
+                default:
+                    reason = $"Backend '{backend}' is not recognized.";
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static string ResolveCurrentPlatform()
+        {
+            if (OperatingSystem.IsWindows()) return "Windows";
+            if (OperatingSystem.IsLinux()) return "Linux";
+            if (OperatingSystem.IsMacOS()) return "macOS";
+            if (OperatingSystem.IsIOS()) return "iOS";
+            if (OperatingSystem.IsAndroid()) return "Android";
+            return "Unknown";
+        }
+
         public static ERHIBackend GetBackendByPlatform(in bool bForceVulkan)
         {
             ERHIBackend backendType = bForceVulkan ? ERHIBackend.Vulkan : ERHIBackend.DirectX12;
@@ -45,6 +91,11 @@ namespace Infinity.Graphics
 
         public static RHIInstance? Create(in RHIInstanceDescriptor descriptor)
         {
+            if (!IsBackendSupported(descriptor.Backend, out string reason))
+            {
+                throw new NotSupportedException(reason);
+            }
+
             switch (descriptor.Backend)
             {
                 case ERHIBackend.Metal:
