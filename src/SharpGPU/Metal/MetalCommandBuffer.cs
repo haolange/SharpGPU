@@ -120,7 +120,11 @@ namespace Infinity.Graphics
 
         public override RHITransferEncoder BeginTransferPass(in RHITransferPassDescriptor descriptor)
         {
-            LockEncodingPath(MetalCommandEncodingPath.Classic, "transfer pass");
+            // Transfer pass can be encoded via classic blit encoder or via MTL4 compute encoder copy APIs.
+            MetalCommandEncodingPath requestedPath = m_EncodingPath == MetalCommandEncodingPath.MTL4
+                ? MetalCommandEncodingPath.MTL4
+                : MetalCommandEncodingPath.Classic;
+            LockEncodingPath(requestedPath, "transfer pass");
             m_TransferEncoder.BeginPass(descriptor);
             ApplyPendingBarrierToTransfer();
             m_ActiveEncoder = MetalActiveEncoderType.Transfer;

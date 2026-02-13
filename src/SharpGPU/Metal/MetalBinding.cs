@@ -51,11 +51,6 @@ namespace Infinity.Graphics
             }
 
             int tableCount = Math.Max(0, resourceTableLayoutCount);
-            if (capabilities.SupportsArgumentTable && tableCount == 1)
-            {
-                return MetalBindingMode.ArgumentTable;
-            }
-
             if (capabilities.SupportsMetal3)
             {
                 return MetalBindingMode.SetBytes;
@@ -78,6 +73,23 @@ namespace Infinity.Graphics
             }
 
             return ParseBooleanValue(value.Trim(), fallback: false);
+        }
+
+        internal static bool IsSetBytesModeForced()
+        {
+            string? mode = Environment.GetEnvironmentVariable(BindingModeOverrideEnv);
+            if (string.IsNullOrWhiteSpace(mode))
+            {
+                return false;
+            }
+
+            string value = mode.Trim().ToLowerInvariant();
+            return value == "set_bytes" || value == "setbytes";
+        }
+
+        internal static bool IsStrictSetBytesModeEnabled()
+        {
+            return !IsLegacyCompatibilityEnabled() && IsSetBytesModeForced();
         }
 
         private static bool TryResolveOverride(in MetalBindingCapabilities capabilities, out MetalBindingMode mode)
@@ -163,13 +175,13 @@ namespace Infinity.Graphics
 
     internal static class MetalBindingBackendFactory
     {
-        internal static IMetalBindingBackend Create(MetalDevice device, in MetalBindingMode mode, in MetalBindingPipelineType pipelineType)
+        internal static IMetalBindingBackend Create(MetalDevice device, in MetalBindingMode mode, in MetalBindingPipelineType pipelineType, in bool? legacyCompatibilityOverride = null)
         {
             return mode switch
             {
                 MetalBindingMode.Legacy => new MetalLegacyBindingBackend(device, pipelineType),
                 MetalBindingMode.ArgumentBuffer => new MetalArgumentBufferBindingBackend(device, pipelineType),
-                MetalBindingMode.SetBytes => new MetalSetBytesBindingBackend(device, pipelineType),
+                MetalBindingMode.SetBytes => new MetalSetBytesBindingBackend(device, pipelineType, legacyCompatibilityOverride),
                 MetalBindingMode.ArgumentTable => new MetalArgumentTableBindingBackend(device, pipelineType),
                 _ => throw new NotSupportedException($"Unsupported Metal binding mode '{mode}'.")
             };

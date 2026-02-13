@@ -84,20 +84,36 @@ namespace Infinity.Graphics
         internal MTLBlitCommandEncoder NativeEncoder => m_NativeEncoder;
 
         private MTLBlitCommandEncoder m_NativeEncoder;
+        private MTL4ComputeCommandEncoder m_NativeEncoder4;
 
         internal MetalTransferEncoder(MetalCommandBuffer commandBuffer)
         {
             m_CommandBuffer = commandBuffer;
             m_NativeEncoder = default;
+            m_NativeEncoder4 = default;
         }
 
         internal override void BeginPass(in RHITransferPassDescriptor descriptor)
         {
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-            m_NativeEncoder = commandBuffer.EnsureClassicCommandBuffer().BlitCommandEncoder();
-            if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+            m_NativeEncoder = default;
+            m_NativeEncoder4 = default;
+
+            if (commandBuffer.EncodingPath == MetalCommandEncodingPath.MTL4)
             {
-                throw new InvalidOperationException("Failed to create MTLBlitCommandEncoder.");
+                m_NativeEncoder4 = commandBuffer.EnsureMtl4CommandBuffer().ComputeCommandEncoder();
+                if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("Failed to create MTL4ComputeCommandEncoder for transfer pass.");
+                }
+            }
+            else
+            {
+                m_NativeEncoder = commandBuffer.EnsureClassicCommandBuffer().BlitCommandEncoder();
+                if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("Failed to create MTLBlitCommandEncoder.");
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(descriptor.Name))
@@ -108,17 +124,37 @@ namespace Infinity.Graphics
 
         internal void WaitForFence(in MTLFence fence)
         {
-            if (fence.NativePtr != IntPtr.Zero && m_NativeEncoder.NativePtr != IntPtr.Zero)
+            if (fence.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.WaitForFence(fence);
+            }
+            else if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.WaitForFence(fence, m_NativeEncoder4.Stages);
             }
         }
 
         internal void SignalFence(in MTLFence fence)
         {
-            if (fence.NativePtr != IntPtr.Zero && m_NativeEncoder.NativePtr != IntPtr.Zero)
+            if (fence.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.UpdateFence(fence);
+            }
+            else if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.UpdateFence(fence, m_NativeEncoder4.Stages);
             }
         }
 
@@ -128,6 +164,11 @@ namespace Infinity.Graphics
             {
                 m_NativeEncoder.PushDebugGroup(new NSString(name));
             }
+            else if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.PushDebugGroup(new NSString(name));
+            }
         }
 
         public override void PopDebugGroup()
@@ -135,6 +176,11 @@ namespace Infinity.Graphics
             if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.PopDebugGroup();
+            }
+            else if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.PopDebugGroup();
             }
         }
 
@@ -150,7 +196,18 @@ namespace Infinity.Graphics
         {
             MetalBuffer src = (MetalBuffer)srcBuffer;
             MetalBuffer dst = (MetalBuffer)dstBuffer;
-            m_NativeEncoder.CopyFromBuffer(src.NativeBuffer, (ulong)srcOffset, dst.NativeBuffer, (ulong)dstOffset, (ulong)size);
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.CopyFromBuffer(src.NativeBuffer, (ulong)srcOffset, dst.NativeBuffer, (ulong)dstOffset, (ulong)size);
+            }
+            else if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder4.CopyFromBuffer(src.NativeBuffer, (ulong)srcOffset, dst.NativeBuffer, (ulong)dstOffset, (ulong)size);
+            }
+            else
+            {
+                throw new InvalidOperationException("Transfer encoder is not initialized.");
+            }
         }
 
         public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
@@ -161,16 +218,36 @@ namespace Infinity.Graphics
             ulong bytesPerPixel = 4;
             ulong rowPitch = src.RowPitch > 0 ? src.RowPitch : (uint)(size.x * (int)bytesPerPixel);
             ulong imagePitch = rowPitch * (ulong)Math.Max(1, size.y);
-            m_NativeEncoder.CopyFromBuffer(
-                srcBuffer.NativeBuffer,
-                src.Offset,
-                rowPitch,
-                imagePitch,
-                new MTLSize((ulong)size.x, (ulong)size.y, (ulong)size.z),
-                dstTexture.NativeTexture,
-                dst.SliceBase,
-                dst.MipLevel,
-                new MTLOrigin(dst.Origin.x, dst.Origin.y, dst.Origin.z));
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.CopyFromBuffer(
+                    srcBuffer.NativeBuffer,
+                    src.Offset,
+                    rowPitch,
+                    imagePitch,
+                    new MTLSize((ulong)size.x, (ulong)size.y, (ulong)size.z),
+                    dstTexture.NativeTexture,
+                    dst.SliceBase,
+                    dst.MipLevel,
+                    new MTLOrigin(dst.Origin.x, dst.Origin.y, dst.Origin.z));
+            }
+            else if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder4.CopyFromBuffer(
+                    srcBuffer.NativeBuffer,
+                    src.Offset,
+                    rowPitch,
+                    imagePitch,
+                    new MTLSize((ulong)size.x, (ulong)size.y, (ulong)size.z),
+                    dstTexture.NativeTexture,
+                    dst.SliceBase,
+                    dst.MipLevel,
+                    new MTLOrigin(dst.Origin.x, dst.Origin.y, dst.Origin.z));
+            }
+            else
+            {
+                throw new InvalidOperationException("Transfer encoder is not initialized.");
+            }
         }
 
         public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size)
@@ -181,32 +258,72 @@ namespace Infinity.Graphics
             ulong bytesPerPixel = 4;
             ulong rowPitch = dst.RowPitch > 0 ? dst.RowPitch : (uint)(size.x * (int)bytesPerPixel);
             ulong imagePitch = rowPitch * (ulong)Math.Max(1, size.y);
-            m_NativeEncoder.CopyFromTexture(
-                srcTexture.NativeTexture,
-                src.SliceBase,
-                src.MipLevel,
-                new MTLOrigin(src.Origin.x, src.Origin.y, src.Origin.z),
-                new MTLSize((ulong)size.x, (ulong)size.y, (ulong)size.z),
-                dstBuffer.NativeBuffer,
-                dst.Offset,
-                rowPitch,
-                imagePitch);
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.CopyFromTexture(
+                    srcTexture.NativeTexture,
+                    src.SliceBase,
+                    src.MipLevel,
+                    new MTLOrigin(src.Origin.x, src.Origin.y, src.Origin.z),
+                    new MTLSize((ulong)size.x, (ulong)size.y, (ulong)size.z),
+                    dstBuffer.NativeBuffer,
+                    dst.Offset,
+                    rowPitch,
+                    imagePitch);
+            }
+            else if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder4.CopyFromTexture(
+                    srcTexture.NativeTexture,
+                    src.SliceBase,
+                    src.MipLevel,
+                    new MTLOrigin(src.Origin.x, src.Origin.y, src.Origin.z),
+                    new MTLSize((ulong)size.x, (ulong)size.y, (ulong)size.z),
+                    dstBuffer.NativeBuffer,
+                    dst.Offset,
+                    rowPitch,
+                    imagePitch);
+            }
+            else
+            {
+                throw new InvalidOperationException("Transfer encoder is not initialized.");
+            }
         }
 
         public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
         {
             MetalTexture srcTexture = (MetalTexture)src.Texture;
             MetalTexture dstTexture = (MetalTexture)dst.Texture;
-            m_NativeEncoder.CopyFromTexture(
-                srcTexture.NativeTexture,
-                src.SliceBase,
-                src.MipLevel,
-                new MTLOrigin(src.Origin.x, src.Origin.y, src.Origin.z),
-                new MTLSize((ulong)size.x, (ulong)size.y, (ulong)size.z),
-                dstTexture.NativeTexture,
-                dst.SliceBase,
-                dst.MipLevel,
-                new MTLOrigin(dst.Origin.x, dst.Origin.y, dst.Origin.z));
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.CopyFromTexture(
+                    srcTexture.NativeTexture,
+                    src.SliceBase,
+                    src.MipLevel,
+                    new MTLOrigin(src.Origin.x, src.Origin.y, src.Origin.z),
+                    new MTLSize((ulong)size.x, (ulong)size.y, (ulong)size.z),
+                    dstTexture.NativeTexture,
+                    dst.SliceBase,
+                    dst.MipLevel,
+                    new MTLOrigin(dst.Origin.x, dst.Origin.y, dst.Origin.z));
+            }
+            else if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder4.CopyFromTexture(
+                    srcTexture.NativeTexture,
+                    src.SliceBase,
+                    src.MipLevel,
+                    new MTLOrigin(src.Origin.x, src.Origin.y, src.Origin.z),
+                    new MTLSize((ulong)size.x, (ulong)size.y, (ulong)size.z),
+                    dstTexture.NativeTexture,
+                    dst.SliceBase,
+                    dst.MipLevel,
+                    new MTLOrigin(dst.Origin.x, dst.Origin.y, dst.Origin.z));
+            }
+            else
+            {
+                throw new InvalidOperationException("Transfer encoder is not initialized.");
+            }
         }
 
         public override void EndPass()
@@ -215,6 +332,12 @@ namespace Infinity.Graphics
             {
                 m_NativeEncoder.EndEncoding();
                 m_NativeEncoder = default;
+            }
+            else if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
+                encoder4.EndEncoding();
+                m_NativeEncoder4 = default;
             }
         }
 
@@ -508,10 +631,16 @@ namespace Infinity.Graphics
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             commandBuffer.LockEncodingPath(path, "compute pipeline set");
 
+            bool? legacyCompatibilityOverride = null;
+            if (mode == MetalBindingMode.SetBytes && !MetalBindingPolicyResolver.IsStrictSetBytesModeEnabled())
+            {
+                legacyCompatibilityOverride = true;
+            }
+
             if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
             {
                 m_BindingBackend?.Dispose();
-                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Compute);
+                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Compute, legacyCompatibilityOverride);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
@@ -954,10 +1083,16 @@ namespace Infinity.Graphics
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             commandBuffer.LockEncodingPath(path, "ray tracing pipeline set");
 
+            bool? legacyCompatibilityOverride = null;
+            if (mode == MetalBindingMode.SetBytes && !MetalBindingPolicyResolver.IsStrictSetBytesModeEnabled())
+            {
+                legacyCompatibilityOverride = true;
+            }
+
             if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
             {
                 m_BindingBackend?.Dispose();
-                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raytracing);
+                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raytracing, legacyCompatibilityOverride);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
@@ -1574,10 +1709,16 @@ namespace Infinity.Graphics
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             commandBuffer.LockEncodingPath(path, "raster pipeline set");
 
+            bool? legacyCompatibilityOverride = null;
+            if (mode == MetalBindingMode.SetBytes && !MetalBindingPolicyResolver.IsStrictSetBytesModeEnabled())
+            {
+                legacyCompatibilityOverride = true;
+            }
+
             if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
             {
                 m_BindingBackend?.Dispose();
-                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raster);
+                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raster, legacyCompatibilityOverride);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
