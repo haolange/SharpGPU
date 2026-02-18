@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Infinity.Collections;
 using TerraFX.Interop.DirectX;
 using TerraFX.Interop.Windows;
@@ -20,16 +21,47 @@ namespace Infinity.Graphics
         }
 
         private D3D12_SHADER_BYTECODE m_NativeShaderBytecode;
+        private IntPtr m_OwnedByteCode;
 
         public Dx12Function(in RHIFunctionDescriptor descriptor)
         {
+            m_OwnedByteCode = CloneShaderByteCode(descriptor.ByteCode, descriptor.ByteSize, nameof(Dx12Function));
             m_Descriptor = descriptor;
-            m_NativeShaderBytecode = new D3D12_SHADER_BYTECODE(descriptor.ByteCode.ToPointer(), new UIntPtr(descriptor.ByteSize));
+            m_Descriptor.ByteCode = m_OwnedByteCode;
+            m_NativeShaderBytecode = new D3D12_SHADER_BYTECODE(m_OwnedByteCode.ToPointer(), new UIntPtr(descriptor.ByteSize));
+        }
+
+        private static IntPtr CloneShaderByteCode(in IntPtr source, in uint byteSize, string context)
+        {
+            if (source == IntPtr.Zero)
+            {
+                throw new ArgumentException($"{context} received null shader bytecode pointer.", nameof(source));
+            }
+
+            if (byteSize == 0)
+            {
+                throw new ArgumentException($"{context} received zero-sized shader bytecode.", nameof(byteSize));
+            }
+
+            if (byteSize > int.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(byteSize), $"{context} bytecode is larger than supported allocation size.");
+            }
+
+            IntPtr destination = Marshal.AllocHGlobal((int)byteSize);
+            Buffer.MemoryCopy(source.ToPointer(), destination.ToPointer(), byteSize, byteSize);
+            return destination;
         }
 
         protected override void Release()
         {
+            if (m_OwnedByteCode != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(m_OwnedByteCode);
+                m_OwnedByteCode = IntPtr.Zero;
+            }
 
+            m_NativeShaderBytecode = default;
         }
     }
 
@@ -44,16 +76,47 @@ namespace Infinity.Graphics
         }
 
         private D3D12_SHADER_BYTECODE m_NativeShaderBytecode;
+        private IntPtr m_OwnedByteCode;
 
         public Dx12FunctionLibrary(in RHIFunctionLibraryDescriptor descriptor)
         {
+            m_OwnedByteCode = CloneShaderByteCode(descriptor.ByteCode, descriptor.ByteSize, nameof(Dx12FunctionLibrary));
             m_Descriptor = descriptor;
-            m_NativeShaderBytecode = new D3D12_SHADER_BYTECODE(descriptor.ByteCode.ToPointer(), new UIntPtr(descriptor.ByteSize));
+            m_Descriptor.ByteCode = m_OwnedByteCode;
+            m_NativeShaderBytecode = new D3D12_SHADER_BYTECODE(m_OwnedByteCode.ToPointer(), new UIntPtr(descriptor.ByteSize));
         }
 
         protected override void Release()
         {
+            if (m_OwnedByteCode != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(m_OwnedByteCode);
+                m_OwnedByteCode = IntPtr.Zero;
+            }
 
+            m_NativeShaderBytecode = default;
+        }
+
+        private static IntPtr CloneShaderByteCode(in IntPtr source, in uint byteSize, string context)
+        {
+            if (source == IntPtr.Zero)
+            {
+                throw new ArgumentException($"{context} received null shader bytecode pointer.", nameof(source));
+            }
+
+            if (byteSize == 0)
+            {
+                throw new ArgumentException($"{context} received zero-sized shader bytecode.", nameof(byteSize));
+            }
+
+            if (byteSize > int.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(byteSize), $"{context} bytecode is larger than supported allocation size.");
+            }
+
+            IntPtr destination = Marshal.AllocHGlobal((int)byteSize);
+            Buffer.MemoryCopy(source.ToPointer(), destination.ToPointer(), byteSize, byteSize);
+            return destination;
         }
     }
 
