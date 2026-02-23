@@ -301,6 +301,27 @@ namespace Infinity.Graphics
         public abstract void EndPass();
     }
     
+    public struct RHIMLPassDescriptor
+    {
+        public string Name;
+        public RHITimestampDescriptor? Timestamp;
+    }
+
+    public abstract class RHIMLEncoder : Disposal
+    {
+        protected RHICommandBuffer? m_CommandBuffer;
+        protected RHIMLPipeline? m_CachedPipeline;
+
+        internal abstract void BeginPass(in RHIMLPassDescriptor descriptor);
+        public abstract void PushDebugGroup(string name);
+        public abstract void PopDebugGroup();
+        public abstract void WriteTimestamp(in uint index);
+        public abstract void SetPipeline(RHIMLPipeline pipeline);
+        public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
+        public abstract void Dispatch(RHIHeap intermediatesHeap);
+        public abstract void EndPass();
+    }
+
     public abstract class RHIRasterEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;

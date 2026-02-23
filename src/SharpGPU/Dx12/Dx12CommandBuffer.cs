@@ -30,6 +30,7 @@ namespace Infinity.Graphics
         private Dx12ComputeEncoder m_ComputeEncoder;
         private Dx12RasterEncoder m_RasterEncoder;
         private Dx12RaytracingEncoder m_RaytracingEncoder;
+        private Dx12MLEncoder m_MLEncoder;
         private ID3D12CommandAllocator* m_NativeCommandAllocator;
         private ID3D12GraphicsCommandList7* m_NativeCommandList;
 
@@ -55,6 +56,7 @@ namespace Infinity.Graphics
             m_ComputeEncoder = new Dx12ComputeEncoder(this);
             m_RasterEncoder = new Dx12RasterEncoder(this);
             m_RaytracingEncoder = new Dx12RaytracingEncoder(this);
+            m_MLEncoder = new Dx12MLEncoder(this);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -294,6 +296,19 @@ namespace Infinity.Graphics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override RHIMLEncoder BeginMLPass(in RHIMLPassDescriptor descriptor)
+        {
+            m_MLEncoder.BeginPass(descriptor);
+            return m_MLEncoder;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override void EndMLPass()
+        {
+            m_MLEncoder.EndPass();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void End()
         {
             m_NativeCommandList->EndEvent();
@@ -322,6 +337,12 @@ namespace Infinity.Graphics
         public override RHIRasterEncoder GetRasterEncoder()
         {
             return m_RasterEncoder;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override RHIMLEncoder GetMLEncoder()
+        {
+            return m_MLEncoder;
         }
 
         /*public override void Commit(RHIFence? fence)

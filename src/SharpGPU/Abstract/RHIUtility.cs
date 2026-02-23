@@ -652,6 +652,21 @@
         Task,
         Mesh,
         RayTracing,
+        MachineLearning,
+        Pending
+    }
+
+    public enum ERHIMLDataType : byte
+    {
+        Float32,
+        Float16,
+        BFloat16,
+        Int32,
+        Int16,
+        Int8,
+        UInt32,
+        UInt16,
+        UInt8,
         Pending
     }
 

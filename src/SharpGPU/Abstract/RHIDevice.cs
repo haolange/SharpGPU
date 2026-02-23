@@ -80,6 +80,7 @@ namespace Infinity.Graphics
         public readonly bool IsHiddenSurfaceRemovalSupported;
         public readonly bool IsBarycentricCoordSupported;
         public readonly bool IsProgrammableSamplePositionSupported;
+        public readonly bool IsMLSupported;
         public readonly ERHIMatrixMajorons MatrixMajorons;
         public readonly ERHIDepthValueRange DepthValueRange;
         public readonly ERHIMultiviewStrategy MultiviewStrategy;
@@ -109,6 +110,7 @@ namespace Infinity.Graphics
                                 in bool isHiddenSurfaceRemovalSupported,
                                 in bool isBarycentricCoordSupported,
                                 in bool isProgrammableSamplePositionSupported,
+                                in bool isMLSupported,
                                 in ERHIMatrixMajorons matrixMajorons,
                                 in ERHIDepthValueRange depthValueRange,
                                 in ERHIMultiviewStrategy multiviewStrategy,
@@ -138,6 +140,7 @@ namespace Infinity.Graphics
             IsHiddenSurfaceRemovalSupported = isHiddenSurfaceRemovalSupported;
             IsBarycentricCoordSupported = isBarycentricCoordSupported;
             IsProgrammableSamplePositionSupported = isProgrammableSamplePositionSupported;
+            IsMLSupported = isMLSupported;
             MatrixMajorons = matrixMajorons;
             DepthValueRange = depthValueRange;
             MultiviewStrategy = multiviewStrategy;
@@ -206,5 +209,6 @@ namespace Infinity.Graphics
         public abstract RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor);
         public abstract RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor);
         public abstract RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor);
+        public abstract RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor);
     }
 }
