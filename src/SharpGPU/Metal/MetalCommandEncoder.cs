@@ -30,32 +30,67 @@ namespace Infinity.Graphics
 
     internal static class MetalBarrierHelper
     {
-        private static readonly Selector s_RespondsToSelector = "respondsToSelector:";
-        private static readonly Selector s_BarrierAfterEncoderStages = "barrierAfterEncoderStages:beforeEncoderStages:visibilityOptions:";
         private const ulong s_ValidMetal4StageMask = (1UL << 0) | (1UL << 1) | (1UL << 27) | (1UL << 29);
 
-        internal static void TryBarrierAfterEncoderStages(in IntPtr encoderPtr, in ulong afterStages, in ulong beforeStages)
+        /// <summary>
+        /// Issues an intra-encoder barrier (producer and consumer are within the same encoder).
+        /// Uses BarrierAfterEncoderStages on MTL4 path, or scope barrier on Classic path.
+        /// </summary>
+        internal static void ApplyEncoderBarrier(in IntPtr encoderPtr, in MetalCommandEncodingPath path, in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
         {
             if (encoderPtr == IntPtr.Zero)
             {
                 return;
             }
 
-            if (!IsValidMetal4StageMask(afterStages) || !IsValidMetal4StageMask(beforeStages))
+            if (path == MetalCommandEncodingPath.MTL4)
             {
-                return;
-            }
+                if (!IsValidMetal4StageMask(afterStages) || !IsValidMetal4StageMask(beforeStages))
+                {
+                    return;
+                }
 
-            if (!ObjectiveCRuntime.bool_objc_msgSend(encoderPtr, s_RespondsToSelector, s_BarrierAfterEncoderStages))
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(encoderPtr);
+                encoder4.BarrierAfterEncoderStages(afterStages, beforeStages, MTL4VisibilityOptions.Device);
+            }
+            else
             {
-                return;
+                // Classic path: try Metal 4 encoder barrier API on classic encoder
+                if (IsValidMetal4StageMask(afterStages) && IsValidMetal4StageMask(beforeStages))
+                {
+                    MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(encoderPtr);
+                    encoder4.BarrierAfterEncoderStages(afterStages, beforeStages, MTL4VisibilityOptions.Device);
+                }
             }
-
-            MTL4CommandEncoder encoder = new MTL4CommandEncoder(encoderPtr);
-            encoder.BarrierAfterEncoderStages(afterStages, beforeStages, MTL4VisibilityOptions.Device);
         }
 
-        private static bool IsValidMetal4StageMask(in ulong stages)
+        /// <summary>
+        /// Issues a cross-encoder barrier (producer is in an earlier encoder on the same queue).
+        /// Uses BarrierAfterQueueStages on MTL4 path.
+        /// On Classic path, fence wait must be done separately; this issues the scope barrier.
+        /// </summary>
+        internal static void ApplyQueueBarrier(in IntPtr encoderPtr, in MetalCommandEncodingPath path, in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
+        {
+            if (encoderPtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (path == MetalCommandEncodingPath.MTL4)
+            {
+                if (!IsValidMetal4StageMask(afterStages) || !IsValidMetal4StageMask(beforeStages))
+                {
+                    return;
+                }
+
+                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(encoderPtr);
+                encoder4.BarrierAfterQueueStages(afterStages, beforeStages, MTL4VisibilityOptions.Device);
+            }
+            // Classic path: fence wait handles cross-encoder ordering (done by caller);
+            // no additional scope barrier needed as the fence provides full visibility.
+        }
+
+        internal static bool IsValidMetal4StageMask(in ulong stages)
         {
             return stages != 0 && (stages & ~s_ValidMetal4StageMask) == 0;
         }
@@ -76,6 +111,30 @@ namespace Infinity.Graphics
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Extracts Metal barrier scope and stage information from an RHIResourceBarrier.
+        /// </summary>
+        internal static void ExtractBarrierInfo(in RHIResourceBarrier barrier, out MTLBarrierScope scope, out ulong afterStages, out ulong beforeStages)
+        {
+            scope = MetalUtility.ConvertToMetalBarrierScope(barrier.ResourceType);
+            afterStages = 0;
+            beforeStages = 0;
+
+            if (barrier.ResourceBarrierType == ERHIResourceBarrierType.Triansition)
+            {
+                if (barrier.ResourceType == ERHIResourceType.Buffer)
+                {
+                    afterStages = MetalUtility.ConvertToMetal4Stages(barrier.BufferBarrierInfo.SrcStage);
+                    beforeStages = MetalUtility.ConvertToMetal4Stages(barrier.BufferBarrierInfo.DstStage);
+                }
+                else
+                {
+                    afterStages = MetalUtility.ConvertToMetal4Stages(barrier.TextureBarrierInfo.SrcStage);
+                    beforeStages = MetalUtility.ConvertToMetal4Stages(barrier.TextureBarrierInfo.DstStage);
+                }
+            }
         }
     }
 
@@ -119,6 +178,41 @@ namespace Infinity.Graphics
             if (!string.IsNullOrWhiteSpace(descriptor.Name))
             {
                 PushDebugGroup(descriptor.Name);
+            }
+        }
+
+        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        {
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            MetalBarrierHelper.ExtractBarrierInfo(barrier, out MTLBarrierScope scope, out ulong afterStages, out ulong beforeStages);
+
+            IntPtr encoderPtr = m_NativeEncoder4.NativePtr != IntPtr.Zero ? m_NativeEncoder4.NativePtr : m_NativeEncoder.NativePtr;
+            MetalCommandEncodingPath path = commandBuffer.EncodingPath;
+
+            if (commandBuffer.IsIntraEncoderBarrier(afterStages))
+            {
+                MetalBarrierHelper.ApplyEncoderBarrier(encoderPtr, path, scope, afterStages, beforeStages);
+            }
+            else if (afterStages != 0)
+            {
+                // Cross-encoder barrier
+                if (path == MetalCommandEncodingPath.Classic && commandBuffer.HasCompletedEncoder && !commandBuffer.HasWaitedForFenceInCurrentEncoder)
+                {
+                    WaitForFence(commandBuffer.BarrierFence);
+                    commandBuffer.HasWaitedForFenceInCurrentEncoder = true;
+                }
+
+                MetalBarrierHelper.ApplyQueueBarrier(encoderPtr, path, scope, afterStages, beforeStages);
+            }
+            // afterStages == 0 (Common stage): no GPU synchronization needed on Metal
+        }
+
+        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        {
+            Span<RHIResourceBarrier> span = barriers.Span;
+            for (int i = 0; i < span.Length; ++i)
+            {
+                ResourceBarrier(span[i]);
             }
         }
 
@@ -208,6 +302,8 @@ namespace Infinity.Graphics
             {
                 throw new InvalidOperationException("Transfer encoder is not initialized.");
             }
+
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
         }
 
         public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
@@ -248,6 +344,8 @@ namespace Infinity.Graphics
             {
                 throw new InvalidOperationException("Transfer encoder is not initialized.");
             }
+
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
         }
 
         public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size)
@@ -288,6 +386,8 @@ namespace Infinity.Graphics
             {
                 throw new InvalidOperationException("Transfer encoder is not initialized.");
             }
+
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
         }
 
         public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
@@ -324,6 +424,8 @@ namespace Infinity.Graphics
             {
                 throw new InvalidOperationException("Transfer encoder is not initialized.");
             }
+
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
         }
 
         public override void EndPass()
@@ -437,31 +539,45 @@ namespace Infinity.Graphics
             }
         }
 
-        internal void ApplyImmediateBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
+        public override void ResourceBarrier(in RHIResourceBarrier barrier)
         {
-            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            MetalBarrierHelper.ExtractBarrierInfo(barrier, out MTLBarrierScope scope, out ulong afterStages, out ulong beforeStages);
+
+            IntPtr encoderPtr = m_NativeEncoder4.NativePtr != IntPtr.Zero ? m_NativeEncoder4.NativePtr : m_NativeEncoder.NativePtr;
+            MetalCommandEncodingPath path = commandBuffer.EncodingPath;
+
+            if (commandBuffer.IsIntraEncoderBarrier(afterStages))
             {
-                if (scope != 0)
+                MetalBarrierHelper.ApplyEncoderBarrier(encoderPtr, path, scope, afterStages, beforeStages);
+            }
+            else if (afterStages != 0)
+            {
+                // Cross-encoder barrier
+                if (path == MetalCommandEncodingPath.Classic && commandBuffer.HasCompletedEncoder && !commandBuffer.HasWaitedForFenceInCurrentEncoder)
                 {
-                    m_NativeEncoder.MemoryBarrier(scope);
+                    WaitForFence(commandBuffer.BarrierFence);
+                    commandBuffer.HasWaitedForFenceInCurrentEncoder = true;
                 }
 
-                MetalCommandBuffer cmd = (MetalCommandBuffer)m_CommandBuffer!;
-                if (cmd.EnableMetal4Barriers)
-                {
-                    MetalBarrierHelper.TryBarrierAfterEncoderStages(m_NativeEncoder.NativePtr, afterStages, beforeStages);
-                }
-
-                return;
+                MetalBarrierHelper.ApplyQueueBarrier(encoderPtr, path, scope, afterStages, beforeStages);
             }
+        }
 
-            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        {
+            Span<RHIResourceBarrier> span = barriers.Span;
+            for (int i = 0; i < span.Length; ++i)
             {
-                ulong resolvedAfter = afterStages != 0 ? afterStages : MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute);
-                ulong resolvedBefore = beforeStages != 0 ? beforeStages : resolvedAfter;
-                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
-                encoder4.BarrierAfterEncoderStages(resolvedAfter, resolvedBefore, MTL4VisibilityOptions.Device);
+                ResourceBarrier(span[i]);
             }
+        }
+
+        internal void ApplyIntraEncoderBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
+        {
+            IntPtr encoderPtr = m_NativeEncoder4.NativePtr != IntPtr.Zero ? m_NativeEncoder4.NativePtr : m_NativeEncoder.NativePtr;
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            MetalBarrierHelper.ApplyEncoderBarrier(encoderPtr, commandBuffer.EncodingPath, scope, afterStages, beforeStages);
         }
 
         public override void PushDebugGroup(string name)
@@ -511,12 +627,12 @@ namespace Infinity.Graphics
 
         public override void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState)
         {
-            ApplyImmediateBarrier(MTLBarrierScope.Buffers, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
+            ApplyIntraEncoderBarrier(MTLBarrierScope.Buffers, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
         }
 
         public override void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState)
         {
-            ApplyImmediateBarrier(MTLBarrierScope.Textures, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
+            ApplyIntraEncoderBarrier(MTLBarrierScope.Textures, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
         }
 
         public override void SetPipeline(RHIComputePipeline pipeline)
@@ -527,7 +643,6 @@ namespace Infinity.Graphics
             MetalBindingMode mode = ConfigureBindingBackend(pipelineLayout, out MetalCommandEncodingPath path);
             EnsureEncoderForPath(path);
             ApplyPendingPassDebugGroup();
-            ((MetalCommandBuffer)m_CommandBuffer!).ApplyPendingBarrierForActiveEncoderIfNeeded();
 
             if (path == MetalCommandEncodingPath.Classic)
             {
@@ -571,6 +686,8 @@ namespace Infinity.Graphics
                 m_BindingBackend?.CommitCompute(m_NativeEncoder4);
                 m_NativeEncoder4.DispatchThreadgroups(threadGroupCount, threadsPerGroup);
             }
+
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
         }
 
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset)
@@ -592,6 +709,8 @@ namespace Infinity.Graphics
                 m_BindingBackend?.CommitCompute(m_NativeEncoder4);
                 m_NativeEncoder4.DispatchThreadgroupsWithIndirectBuffer(indirectBuffer.NativeBuffer.GpuAddress + argsOffset, threadsPerGroup);
             }
+
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
         }
 
         public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
@@ -738,6 +857,42 @@ namespace Infinity.Graphics
             }
         }
 
+        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        {
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            MetalBarrierHelper.ExtractBarrierInfo(barrier, out MTLBarrierScope scope, out ulong afterStages, out ulong beforeStages);
+
+            IntPtr encoderPtr = m_NativeEncoder4.NativePtr != IntPtr.Zero ? m_NativeEncoder4.NativePtr
+                : m_NativeAccelEncoder.NativePtr != IntPtr.Zero ? m_NativeAccelEncoder.NativePtr
+                : m_NativeEncoder.NativePtr;
+            MetalCommandEncodingPath path = commandBuffer.EncodingPath;
+
+            if (commandBuffer.IsIntraEncoderBarrier(afterStages))
+            {
+                MetalBarrierHelper.ApplyEncoderBarrier(encoderPtr, path, scope, afterStages, beforeStages);
+            }
+            else if (afterStages != 0)
+            {
+                // Cross-encoder barrier
+                if (path == MetalCommandEncodingPath.Classic && commandBuffer.HasCompletedEncoder && !commandBuffer.HasWaitedForFenceInCurrentEncoder)
+                {
+                    WaitForFence(commandBuffer.BarrierFence);
+                    commandBuffer.HasWaitedForFenceInCurrentEncoder = true;
+                }
+
+                MetalBarrierHelper.ApplyQueueBarrier(encoderPtr, path, scope, afterStages, beforeStages);
+            }
+        }
+
+        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        {
+            Span<RHIResourceBarrier> span = barriers.Span;
+            for (int i = 0; i < span.Length; ++i)
+            {
+                ResourceBarrier(span[i]);
+            }
+        }
+
         public override void PushDebugGroup(string name)
         {
             if (m_NativeAccelEncoder.NativePtr != IntPtr.Zero)
@@ -797,12 +952,12 @@ namespace Infinity.Graphics
 
         public override void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState)
         {
-            ApplyImmediateBarrier(MTLBarrierScope.Buffers, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing));
+            ApplyIntraEncoderBarrier(MTLBarrierScope.Buffers, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing));
         }
 
         public override void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState)
         {
-            ApplyImmediateBarrier(MTLBarrierScope.Textures, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing));
+            ApplyIntraEncoderBarrier(MTLBarrierScope.Textures, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing));
         }
 
         public override void SetPipeline(RHIRaytracingPipeline pipeline)
@@ -813,7 +968,6 @@ namespace Infinity.Graphics
             MetalBindingMode mode = ConfigureBindingBackend(pipelineLayout, out MetalCommandEncodingPath path);
             EnsureComputeEncoder(path);
             ApplyPendingPassDebugGroup();
-            ((MetalCommandBuffer)m_CommandBuffer!).ApplyPendingBarrierForActiveEncoderIfNeeded();
 
             if (path == MetalCommandEncodingPath.Classic)
             {
@@ -864,6 +1018,8 @@ namespace Infinity.Graphics
             EnsureAccelerationEncoderClassic();
             MetalTopLevelAccelStruct classicTlas = topLevelAccelStruct as MetalTopLevelAccelStruct ?? throw new InvalidOperationException("TLAS must be a MetalTopLevelAccelStruct.");
             m_NativeAccelEncoder.BuildAccelerationStructure(classicTlas.NativeAccelerationStructure, classicTlas.NativeDescriptor, classicTlas.NativeScratchBuffer, 0);
+
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
         }
 
         public override void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct)
@@ -887,6 +1043,8 @@ namespace Infinity.Graphics
             EnsureAccelerationEncoderClassic();
             MetalBottomLevelAccelStruct classicBlas = bottomLevelAccelStruct as MetalBottomLevelAccelStruct ?? throw new InvalidOperationException("BLAS must be a MetalBottomLevelAccelStruct.");
             m_NativeAccelEncoder.BuildAccelerationStructure(classicBlas.NativeAccelerationStructure, classicBlas.NativeDescriptor, classicBlas.NativeScratchBuffer, 0);
+
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
         }
 
         public override void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable)
@@ -922,6 +1080,8 @@ namespace Infinity.Graphics
                 m_BindingBackend?.CommitRaytracing(m_NativeEncoder4, table);
                 m_NativeEncoder4.DispatchThreadgroups(threadgroupCount, threadsPerGroup);
             }
+
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing));
         }
 
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable)
@@ -957,6 +1117,8 @@ namespace Infinity.Graphics
                 m_BindingBackend?.CommitRaytracing(m_NativeEncoder4, table);
                 m_NativeEncoder4.DispatchThreadgroupsWithIndirectBuffer(indirectBuffer.NativeBuffer.GpuAddress + argsOffset, threadsPerGroup);
             }
+
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing));
         }
 
         public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
@@ -1035,39 +1197,13 @@ namespace Infinity.Graphics
             }
         }
 
-        internal void ApplyImmediateBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
+        internal void ApplyIntraEncoderBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
         {
-            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
-            {
-                if (scope != 0)
-                {
-                    m_NativeEncoder.MemoryBarrier(scope);
-                }
-
-                MetalCommandBuffer cmd = (MetalCommandBuffer)m_CommandBuffer!;
-                if (cmd.EnableMetal4Barriers)
-                {
-                    IntPtr encoderPtr = m_NativeAccelEncoder.NativePtr != IntPtr.Zero ? m_NativeAccelEncoder.NativePtr : m_NativeEncoder.NativePtr;
-                    MetalBarrierHelper.TryBarrierAfterEncoderStages(encoderPtr, afterStages, beforeStages);
-                }
-
-                return;
-            }
-
-            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
-            {
-                ulong resolvedAfter = afterStages != 0 ? afterStages : MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing);
-                ulong resolvedBefore = beforeStages != 0 ? beforeStages : resolvedAfter;
-                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
-                encoder4.BarrierAfterEncoderStages(resolvedAfter, resolvedBefore, MTL4VisibilityOptions.Device);
-                return;
-            }
-
-            if (scope != 0)
-            {
-                EnsureComputeEncoder(MetalCommandEncodingPath.Classic);
-                m_NativeEncoder.MemoryBarrier(scope);
-            }
+            IntPtr encoderPtr = m_NativeEncoder4.NativePtr != IntPtr.Zero ? m_NativeEncoder4.NativePtr
+                : m_NativeAccelEncoder.NativePtr != IntPtr.Zero ? m_NativeAccelEncoder.NativePtr
+                : m_NativeEncoder.NativePtr;
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            MetalBarrierHelper.ApplyEncoderBarrier(encoderPtr, commandBuffer.EncodingPath, scope, afterStages, beforeStages);
         }
 
         protected override void Release()
@@ -1291,35 +1427,37 @@ namespace Infinity.Graphics
             }
         }
 
-        internal void ApplyImmediateBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
+        public override void ResourceBarrier(in RHIResourceBarrier barrier)
         {
-            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            MetalBarrierHelper.ExtractBarrierInfo(barrier, out MTLBarrierScope scope, out ulong afterStages, out ulong beforeStages);
+
+            IntPtr encoderPtr = m_NativeEncoder4.NativePtr != IntPtr.Zero ? m_NativeEncoder4.NativePtr : m_NativeEncoder.NativePtr;
+            MetalCommandEncodingPath path = commandBuffer.EncodingPath;
+
+            if (commandBuffer.IsIntraEncoderBarrier(afterStages))
             {
-                if (scope != 0)
-                {
-                    MTLRenderStages after = MetalBarrierHelper.ConvertToRenderStages(afterStages);
-                    MTLRenderStages before = MetalBarrierHelper.ConvertToRenderStages(beforeStages);
-                    if (after != 0 && before != 0)
-                    {
-                        m_NativeEncoder.MemoryBarrier(scope, after, before);
-                    }
-                }
-
-                MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-                if (commandBuffer.EnableMetal4Barriers)
-                {
-                    MetalBarrierHelper.TryBarrierAfterEncoderStages(m_NativeEncoder.NativePtr, afterStages, beforeStages);
-                }
-
-                return;
+                MetalBarrierHelper.ApplyEncoderBarrier(encoderPtr, path, scope, afterStages, beforeStages);
             }
-
-            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            else if (afterStages != 0)
             {
-                ulong resolvedAfter = afterStages != 0 ? afterStages : (MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Vertex) | MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Fragment));
-                ulong resolvedBefore = beforeStages != 0 ? beforeStages : resolvedAfter;
-                MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
-                encoder4.BarrierAfterEncoderStages(resolvedAfter, resolvedBefore, MTL4VisibilityOptions.Device);
+                // Cross-encoder barrier
+                if (path == MetalCommandEncodingPath.Classic && commandBuffer.HasCompletedEncoder && !commandBuffer.HasWaitedForFenceInCurrentEncoder)
+                {
+                    WaitForFence(commandBuffer.BarrierFence);
+                    commandBuffer.HasWaitedForFenceInCurrentEncoder = true;
+                }
+
+                MetalBarrierHelper.ApplyQueueBarrier(encoderPtr, path, scope, afterStages, beforeStages);
+            }
+        }
+
+        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        {
+            Span<RHIResourceBarrier> span = barriers.Span;
+            for (int i = 0; i < span.Length; ++i)
+            {
+                ResourceBarrier(span[i]);
             }
         }
 
@@ -1477,7 +1615,6 @@ namespace Infinity.Graphics
             MetalBindingMode mode = ConfigureBindingBackend(pipelineLayout, out MetalCommandEncodingPath path);
             EnsureEncoderForPath(path);
             ApplyPendingPassDebugGroup();
-            ((MetalCommandBuffer)m_CommandBuffer!).ApplyPendingBarrierForActiveEncoderIfNeeded();
             BuildVertexStrideMap(metalPipeline);
 
             if (path == MetalCommandEncodingPath.Classic)
@@ -1563,6 +1700,8 @@ namespace Infinity.Graphics
                 m_BindingBackend?.CommitRaster(m_NativeEncoder4);
                 m_NativeEncoder4.DrawPrimitives(primitiveType, firstVertex, vertexCount, instanceCount, firstInstance);
             }
+
+            MarkRasterStagesSeen();
         }
 
         public override void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
@@ -1573,6 +1712,7 @@ namespace Infinity.Graphics
             {
                 m_BindingBackend?.CommitRaster(m_NativeEncoder);
                 m_NativeEncoder.DrawIndexedPrimitives(primitiveType, indexCount, m_IndexType, m_IndexBuffer, indexOffset, instanceCount, baseVertex, firstInstance);
+                MarkRasterStagesSeen();
                 return;
             }
 
@@ -1585,6 +1725,7 @@ namespace Infinity.Graphics
             ulong indexLength = indexOffset < m_IndexBuffer.Length ? m_IndexBuffer.Length - indexOffset : 0;
             m_BindingBackend?.CommitRaster(m_NativeEncoder4);
             m_NativeEncoder4.DrawIndexedPrimitives(primitiveType, indexCount, m_IndexType, indexAddress, indexLength, instanceCount, baseVertex, firstInstance);
+            MarkRasterStagesSeen();
         }
 
         public override void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
@@ -1605,6 +1746,8 @@ namespace Infinity.Graphics
                     m_NativeEncoder4.DrawPrimitives(primitiveType, indirectAddress);
                 }
             }
+
+            MarkRasterStagesSeen();
         }
 
         public override void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
@@ -1632,6 +1775,8 @@ namespace Infinity.Graphics
                     m_NativeEncoder4.DrawIndexedPrimitives(primitiveType, m_IndexType, indexAddress, indexLength, indirectAddress);
                 }
             }
+
+            MarkRasterStagesSeen();
         }
 
         public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
@@ -1646,6 +1791,8 @@ namespace Infinity.Graphics
                 m_BindingBackend?.CommitRaster(m_NativeEncoder4);
                 m_NativeEncoder4.DrawMeshThreadgroups(new MTLSize(groupCountX, groupCountY, groupCountZ), new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
             }
+
+            MarkRasterStagesSeen();
         }
 
         public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
@@ -1662,6 +1809,8 @@ namespace Infinity.Graphics
                 ulong indirectAddress = metalBuffer.NativeBuffer.GpuAddress + argsOffset;
                 m_NativeEncoder4.DrawMeshThreadgroupsWithIndirectBuffer(indirectAddress, new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
             }
+
+            MarkRasterStagesSeen();
         }
 
         public override void DispatchGraph()
@@ -1936,6 +2085,12 @@ namespace Infinity.Graphics
         }
 
         private bool HasNativeEncoder => m_NativeEncoder.NativePtr != IntPtr.Zero || m_NativeEncoder4.NativePtr != IntPtr.Zero;
+
+        private void MarkRasterStagesSeen()
+        {
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(
+                MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Vertex) | MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Fragment));
+        }
     }
 
     internal sealed class MetalMLEncoder : RHIMLEncoder
@@ -1967,6 +2122,38 @@ namespace Infinity.Graphics
             if (!string.IsNullOrWhiteSpace(descriptor.Name))
             {
                 PushDebugGroup(descriptor.Name);
+            }
+        }
+
+        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        {
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            MetalBarrierHelper.ExtractBarrierInfo(barrier, out MTLBarrierScope scope, out ulong afterStages, out ulong beforeStages);
+
+            if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            IntPtr encoderPtr = m_NativeEncoder.NativePtr;
+            MetalCommandEncodingPath path = commandBuffer.EncodingPath;
+
+            if (commandBuffer.IsIntraEncoderBarrier(afterStages))
+            {
+                MetalBarrierHelper.ApplyEncoderBarrier(encoderPtr, path, scope, afterStages, beforeStages);
+            }
+            else if (afterStages != 0)
+            {
+                MetalBarrierHelper.ApplyQueueBarrier(encoderPtr, path, scope, afterStages, beforeStages);
+            }
+        }
+
+        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        {
+            Span<RHIResourceBarrier> span = barriers.Span;
+            for (int i = 0; i < span.Length; ++i)
+            {
+                ResourceBarrier(span[i]);
             }
         }
 
