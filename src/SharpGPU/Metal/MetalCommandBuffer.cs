@@ -45,7 +45,6 @@ namespace Infinity.Graphics
         internal MTLCommandBuffer NativeCommandBuffer => m_NativeCommandBuffer;
         internal MTL4CommandBuffer NativeCommandBuffer4 => m_NativeCommandBuffer4;
         internal CAMetalDrawable PresentDrawable => m_PresentDrawable;
-        internal bool EnableMetal4Barriers => m_EnableMetal4Barriers;
         internal MetalCommandEncodingPath EncodingPath => m_EncodingPath;
 
         private readonly MetalTransferEncoder m_TransferEncoder;
@@ -54,20 +53,21 @@ namespace Infinity.Graphics
         private readonly MetalRaytracingEncoder m_RaytracingEncoder;
         private readonly MetalMLEncoder m_MLEncoder;
         private readonly MTLFence m_BarrierFence;
-        private readonly bool m_EnableMetal4Barriers;
 
         private MTLCommandBuffer m_NativeCommandBuffer;
         private MTL4CommandBuffer m_NativeCommandBuffer4;
         private CAMetalDrawable m_PresentDrawable;
         private MetalActiveEncoderType m_ActiveEncoder;
-        private MetalActiveEncoderType m_LastCompletedEncoder;
         private MetalCommandEncodingPath m_EncodingPath;
         private bool m_Mtl4CommandBufferEnded;
         private string m_CommandBufferName = string.Empty;
-        private bool m_HasPendingBarrier;
-        private ulong m_PendingAfterStages;
-        private ulong m_PendingBeforeStages;
-        private MTLBarrierScope m_PendingBarrierScope;
+
+        // Barrier tracking: seenStagesMask tracks which Metal 4 stage bits have had
+        // work encoded in the current encoder. Used to decide between
+        // BarrierAfterEncoderStages (intra-encoder) vs BarrierAfterQueueStages (cross-encoder).
+        private ulong m_CurrentEncoderSeenStages;
+        private bool m_HasCompletedEncoder;
+        private bool m_HasWaitedForFenceInCurrentEncoder;
 
         public MetalCommandBuffer(MetalCommandQueue commandQueue)
         {
@@ -78,7 +78,6 @@ namespace Infinity.Graphics
             m_RaytracingEncoder = new MetalRaytracingEncoder(this);
             m_MLEncoder = new MetalMLEncoder(this);
             m_BarrierFence = commandQueue.MetalDevice.NativeDevice.NewFence;
-            m_EnableMetal4Barriers = commandQueue.MetalDevice.SupportsMetal4Barriers && IsMetal4BarrierEnabledByEnv();
 
             ResetState();
         }
@@ -89,38 +88,6 @@ namespace Infinity.Graphics
             ResetState();
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
-        {
-            MTLBarrierScope scope = MetalUtility.ConvertToMetalBarrierScope(barrier.ResourceType);
-            ulong afterStages = 0;
-            ulong beforeStages = 0;
-
-            if (barrier.ResourceBarrierType == ERHIResourceBarrierType.Triansition)
-            {
-                if (barrier.ResourceType == ERHIResourceType.Buffer)
-                {
-                    afterStages = MetalUtility.ConvertToMetal4Stages(barrier.BufferBarrierInfo.SrcStage);
-                    beforeStages = MetalUtility.ConvertToMetal4Stages(barrier.BufferBarrierInfo.DstStage);
-                }
-                else
-                {
-                    afterStages = MetalUtility.ConvertToMetal4Stages(barrier.TextureBarrierInfo.SrcStage);
-                    beforeStages = MetalUtility.ConvertToMetal4Stages(barrier.TextureBarrierInfo.DstStage);
-                }
-            }
-
-            ApplyBarrier(scope, afterStages, beforeStages);
-        }
-
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
-        {
-            Span<RHIResourceBarrier> span = barriers.Span;
-            for (int i = 0; i < span.Length; ++i)
-            {
-                ResourceBarrier(span[i]);
-            }
-        }
-
         public override RHITransferEncoder BeginTransferPass(in RHITransferPassDescriptor descriptor)
         {
             // Transfer pass can be encoded via classic blit encoder or via MTL4 compute encoder copy APIs.
@@ -129,7 +96,7 @@ namespace Infinity.Graphics
                 : MetalCommandEncodingPath.Classic;
             LockEncodingPath(requestedPath, "transfer pass");
             m_TransferEncoder.BeginPass(descriptor);
-            ApplyPendingBarrierToTransfer();
+            BeginEncoderBarrierState();
             m_ActiveEncoder = MetalActiveEncoderType.Transfer;
             return m_TransferEncoder;
         }
@@ -143,19 +110,15 @@ namespace Infinity.Graphics
 
             m_TransferEncoder.SignalFence(m_BarrierFence);
             m_TransferEncoder.EndPass();
-            m_LastCompletedEncoder = MetalActiveEncoderType.Transfer;
+            EndEncoderBarrierState();
             m_ActiveEncoder = MetalActiveEncoderType.None;
         }
 
         public override RHIComputeEncoder BeginComputePass(in RHIComputePassDescriptor descriptor)
         {
             m_ComputeEncoder.BeginPass(descriptor);
+            BeginEncoderBarrierState();
             m_ActiveEncoder = MetalActiveEncoderType.Compute;
-            if (m_EncodingPath != MetalCommandEncodingPath.Unknown)
-            {
-                ApplyPendingBarrierToCompute();
-            }
-
             return m_ComputeEncoder;
         }
 
@@ -168,19 +131,15 @@ namespace Infinity.Graphics
 
             m_ComputeEncoder.SignalFence(m_BarrierFence);
             m_ComputeEncoder.EndPass();
-            m_LastCompletedEncoder = MetalActiveEncoderType.Compute;
+            EndEncoderBarrierState();
             m_ActiveEncoder = MetalActiveEncoderType.None;
         }
 
         public override RHIRaytracingEncoder BeginRaytracingPass(in RHIRayTracingPassDescriptor descriptor)
         {
             m_RaytracingEncoder.BeginPass(descriptor);
+            BeginEncoderBarrierState();
             m_ActiveEncoder = MetalActiveEncoderType.Raytracing;
-            if (m_EncodingPath != MetalCommandEncodingPath.Unknown)
-            {
-                ApplyPendingBarrierToRaytracing();
-            }
-
             return m_RaytracingEncoder;
         }
 
@@ -193,19 +152,15 @@ namespace Infinity.Graphics
 
             m_RaytracingEncoder.SignalFence(m_BarrierFence);
             m_RaytracingEncoder.EndPass();
-            m_LastCompletedEncoder = MetalActiveEncoderType.Raytracing;
+            EndEncoderBarrierState();
             m_ActiveEncoder = MetalActiveEncoderType.None;
         }
 
         public override RHIRasterEncoder BeginRasterPass(in RHIRasterPassDescriptor descriptor)
         {
             m_RasterEncoder.BeginPass(descriptor);
+            BeginEncoderBarrierState();
             m_ActiveEncoder = MetalActiveEncoderType.Raster;
-            if (m_EncodingPath != MetalCommandEncodingPath.Unknown)
-            {
-                ApplyPendingBarrierToRaster();
-            }
-
             return m_RasterEncoder;
         }
 
@@ -218,13 +173,14 @@ namespace Infinity.Graphics
 
             m_RasterEncoder.SignalFence(m_BarrierFence);
             m_RasterEncoder.EndPass();
-            m_LastCompletedEncoder = MetalActiveEncoderType.Raster;
+            EndEncoderBarrierState();
             m_ActiveEncoder = MetalActiveEncoderType.None;
         }
 
         public override RHIMLEncoder BeginMLPass(in RHIMLPassDescriptor descriptor)
         {
             m_MLEncoder.BeginPass(descriptor);
+            BeginEncoderBarrierState();
             m_ActiveEncoder = MetalActiveEncoderType.ML;
             return m_MLEncoder;
         }
@@ -237,7 +193,7 @@ namespace Infinity.Graphics
             }
 
             m_MLEncoder.EndPass();
-            m_LastCompletedEncoder = MetalActiveEncoderType.ML;
+            EndEncoderBarrierState();
             m_ActiveEncoder = MetalActiveEncoderType.None;
         }
 
@@ -363,130 +319,60 @@ namespace Infinity.Graphics
             m_EncodingPath = lockedPath;
         }
 
-        internal void ApplyPendingBarrierForActiveEncoderIfNeeded()
-        {
-            if (!m_HasPendingBarrier)
-            {
-                return;
-            }
-
-            switch (m_ActiveEncoder)
-            {
-                case MetalActiveEncoderType.Transfer:
-                    ApplyPendingBarrierToTransfer();
-                    break;
-                case MetalActiveEncoderType.Compute:
-                    ApplyPendingBarrierToCompute();
-                    break;
-                case MetalActiveEncoderType.Raster:
-                    ApplyPendingBarrierToRaster();
-                    break;
-                case MetalActiveEncoderType.Raytracing:
-                    ApplyPendingBarrierToRaytracing();
-                    break;
-            }
-        }
-
         internal void FinalizeForSubmit()
         {
             End();
         }
 
-        private void ApplyBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
+        // ── Barrier tracking API for encoders ──
+
+        /// <summary>
+        /// Called by encoders after dispatch/draw/copy to record which stages have produced work.
+        /// </summary>
+        internal void MarkStagesSeen(ulong stages)
         {
-            if (m_ActiveEncoder == MetalActiveEncoderType.Compute)
-            {
-                m_ComputeEncoder.ApplyImmediateBarrier(scope, afterStages, beforeStages);
-                return;
-            }
-
-            if (m_ActiveEncoder == MetalActiveEncoderType.Raster)
-            {
-                m_RasterEncoder.ApplyImmediateBarrier(scope, afterStages, beforeStages);
-                return;
-            }
-
-            if (m_ActiveEncoder == MetalActiveEncoderType.Raytracing)
-            {
-                m_RaytracingEncoder.ApplyImmediateBarrier(scope, afterStages, beforeStages);
-                return;
-            }
-
-            m_HasPendingBarrier = true;
-            m_PendingBarrierScope |= scope;
-            m_PendingAfterStages = afterStages;
-            m_PendingBeforeStages = beforeStages;
+            m_CurrentEncoderSeenStages |= stages;
         }
 
-        private void ApplyPendingBarrierToTransfer()
+        /// <summary>
+        /// Returns true if the srcStage was already seen in the current encoder (intra-encoder dependency).
+        /// Returns false if the srcStage must have been produced by a previous encoder (cross-encoder dependency).
+        /// </summary>
+        internal bool IsIntraEncoderBarrier(ulong afterStages)
         {
-            if (!m_HasPendingBarrier)
-            {
-                return;
-            }
-
-            if (m_BarrierFence.NativePtr != IntPtr.Zero && m_LastCompletedEncoder != MetalActiveEncoderType.None)
-            {
-                m_TransferEncoder.WaitForFence(m_BarrierFence);
-            }
-
-            ClearPendingBarrier();
+            return afterStages != 0 && (m_CurrentEncoderSeenStages & afterStages) != 0;
         }
 
-        private void ApplyPendingBarrierToCompute()
+        /// <summary>
+        /// Whether any previous encoder has completed (used to decide if fence wait is necessary).
+        /// </summary>
+        internal bool HasCompletedEncoder => m_HasCompletedEncoder;
+
+        /// <summary>
+        /// Tracks whether the current encoder has already waited for the fence (avoid duplicate waits).
+        /// </summary>
+        internal bool HasWaitedForFenceInCurrentEncoder
         {
-            if (!m_HasPendingBarrier)
-            {
-                return;
-            }
-
-            if (m_BarrierFence.NativePtr != IntPtr.Zero && m_LastCompletedEncoder != MetalActiveEncoderType.None)
-            {
-                m_ComputeEncoder.WaitForFence(m_BarrierFence);
-            }
-
-            m_ComputeEncoder.ApplyImmediateBarrier(m_PendingBarrierScope, m_PendingAfterStages, m_PendingBeforeStages);
-            ClearPendingBarrier();
+            get => m_HasWaitedForFenceInCurrentEncoder;
+            set => m_HasWaitedForFenceInCurrentEncoder = value;
         }
 
-        private void ApplyPendingBarrierToRaster()
+        /// <summary>
+        /// The MTLFence used for cross-encoder synchronization on the classic encoding path.
+        /// </summary>
+        internal MTLFence BarrierFence => m_BarrierFence;
+
+        // ── Private helpers ──
+
+        private void BeginEncoderBarrierState()
         {
-            if (!m_HasPendingBarrier)
-            {
-                return;
-            }
-
-            if (m_BarrierFence.NativePtr != IntPtr.Zero && m_LastCompletedEncoder != MetalActiveEncoderType.None)
-            {
-                m_RasterEncoder.WaitForFence(m_BarrierFence);
-            }
-
-            m_RasterEncoder.ApplyImmediateBarrier(m_PendingBarrierScope, m_PendingAfterStages, m_PendingBeforeStages);
-            ClearPendingBarrier();
+            m_CurrentEncoderSeenStages = 0;
+            m_HasWaitedForFenceInCurrentEncoder = false;
         }
 
-        private void ApplyPendingBarrierToRaytracing()
+        private void EndEncoderBarrierState()
         {
-            if (!m_HasPendingBarrier)
-            {
-                return;
-            }
-
-            if (m_BarrierFence.NativePtr != IntPtr.Zero && m_LastCompletedEncoder != MetalActiveEncoderType.None)
-            {
-                m_RaytracingEncoder.WaitForFence(m_BarrierFence);
-            }
-
-            m_RaytracingEncoder.ApplyImmediateBarrier(m_PendingBarrierScope, m_PendingAfterStages, m_PendingBeforeStages);
-            ClearPendingBarrier();
-        }
-
-        private void ClearPendingBarrier()
-        {
-            m_HasPendingBarrier = false;
-            m_PendingAfterStages = 0;
-            m_PendingBeforeStages = 0;
-            m_PendingBarrierScope = 0;
+            m_HasCompletedEncoder = true;
         }
 
         private void ResetState()
@@ -495,22 +381,11 @@ namespace Infinity.Graphics
             m_NativeCommandBuffer4 = default;
             m_PresentDrawable = default;
             m_ActiveEncoder = MetalActiveEncoderType.None;
-            m_LastCompletedEncoder = MetalActiveEncoderType.None;
             m_EncodingPath = MetalCommandEncodingPath.Unknown;
             m_Mtl4CommandBufferEnded = false;
-            ClearPendingBarrier();
-        }
-
-        private static bool IsMetal4BarrierEnabledByEnv()
-        {
-            string? value = Environment.GetEnvironmentVariable("INFINITY_METAL_USE_MTL4_BARRIER");
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return false;
-            }
-
-            string lower = value.Trim().ToLowerInvariant();
-            return lower == "1" || lower == "true" || lower == "yes" || lower == "on";
+            m_CurrentEncoderSeenStages = 0;
+            m_HasCompletedEncoder = false;
+            m_HasWaitedForFenceInCurrentEncoder = false;
         }
 
         protected override void Release()

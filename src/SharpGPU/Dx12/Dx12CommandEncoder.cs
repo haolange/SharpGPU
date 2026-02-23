@@ -30,52 +30,6 @@ namespace Infinity.Graphics
 #endif
         }
 
-        public override void PushDebugGroup(string name)
-        {
-            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
-            Marshal.FreeHGlobal(namePtr);
-        }
-
-        public override void PopDebugGroup()
-        {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->EndEvent();
-        }
-
-        public override void WriteTimestamp(in uint index)
-        {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
-        }
-
-        public override void ResolveQuery(RHIQuery query, in uint startIndex, in uint queriesCount)
-        {
-            Dx12Query dx12Query = query as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-            switch (query.QueryDescriptor.Type)
-            {
-                case ERHIQueryType.Occlusion:
-                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, startIndex, queriesCount, dx12Query.QueryResult, startIndex * 8);
-                    break;
-
-                case ERHIQueryType.Statistics:
-                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, startIndex, queriesCount, dx12Query.QueryResult, startIndex * (uint)sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS));
-                    break;
-
-                default:
-                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, startIndex, queriesCount, dx12Query.QueryResult, startIndex * 8);
-                    break;
-            }
-        }
-
-        /*
         public override void ResourceBarrier(in RHIResourceBarrier barrier)
         {
             ID3D12Resource* resource = null;
@@ -240,7 +194,51 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
-        */
+
+        public override void PushDebugGroup(string name)
+        {
+            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
+            Marshal.FreeHGlobal(namePtr);
+        }
+
+        public override void PopDebugGroup()
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->EndEvent();
+        }
+
+        public override void WriteTimestamp(in uint index)
+        {
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
+        }
+
+        public override void ResolveQuery(RHIQuery query, in uint startIndex, in uint queriesCount)
+        {
+            Dx12Query dx12Query = query as Dx12Query;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            switch (query.QueryDescriptor.Type)
+            {
+                case ERHIQueryType.Occlusion:
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION, startIndex, queriesCount, dx12Query.QueryResult, startIndex * 8);
+                    break;
+
+                case ERHIQueryType.Statistics:
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, startIndex, queriesCount, dx12Query.QueryResult, startIndex * (uint)sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS));
+                    break;
+
+                default:
+                    dx12CommandBuffer.NativeCommandList->ResolveQueryData(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, startIndex, queriesCount, dx12Query.QueryResult, startIndex * 8);
+                    break;
+            }
+        }
 
         public override void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size)
         {
@@ -387,6 +385,171 @@ namespace Infinity.Graphics
 #if DEBUG
             PushDebugGroup(descriptor.Name);
 #endif
+        }
+
+        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        {
+            ID3D12Resource* resource = null;
+            D3D12_RESOURCE_BARRIER resourceBarrier;
+
+            switch (barrier.ResourceBarrierType)
+            {
+                case ERHIResourceBarrierType.UAV:
+                    if (barrier.ResourceType == ERHIResourceType.Buffer)
+                    {
+                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
+#endif
+                        resource = buffer.NativeResource;
+                    }
+                    else
+                    {
+                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                        Debug.Assert(texture != null, "Barrier Texture is null");
+#endif
+                        resource = texture.NativeResource;
+                    }
+                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitUAV(resource);
+                    break;
+
+                case ERHIResourceBarrierType.Aliasing:
+                    if (barrier.ResourceType == ERHIResourceType.Buffer)
+                    {
+                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
+#endif
+                        resource = buffer.NativeResource;
+                    }
+                    else
+                    {
+                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                        Debug.Assert(texture != null, "Barrier Texture is null");
+#endif
+                        resource = texture.NativeResource;
+                    }
+                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitAliasing(null, resource);
+                    break;
+
+                case ERHIResourceBarrierType.Triansition:
+                    D3D12_RESOURCE_STATES srcState;
+                    D3D12_RESOURCE_STATES dstState;
+                    if (barrier.ResourceType == ERHIResourceType.Buffer)
+                    {
+                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
+#endif
+
+                        resource = buffer.NativeResource;
+                        srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
+                        dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
+                    }
+                    else
+                    {
+                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                        Debug.Assert(texture != null, "Barrier Texture is null");
+#endif
+
+                        resource = texture.NativeResource;
+                        srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
+                        dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
+                    }
+                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitTransition(resource, srcState, dstState);
+                    break;
+            }
+
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->ResourceBarrier(1, &resourceBarrier);
+        }
+
+        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        {
+            ID3D12Resource* resource;
+            D3D12_RESOURCE_STATES srcState;
+            D3D12_RESOURCE_STATES dstState;
+            D3D12_RESOURCE_BARRIER* resourceBarriers = stackalloc D3D12_RESOURCE_BARRIER[barriers.Length];
+
+            for (int i = 0; i < barriers.Length; ++i)
+            {
+                ref RHIResourceBarrier barrier = ref barriers.Span[i];
+
+                switch (barrier.ResourceBarrierType)
+                {
+                    case ERHIResourceBarrierType.UAV:
+                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                        {
+                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
+#endif
+                            resource = buffer.NativeResource;
+                        }
+                        else
+                        {
+                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
+#endif
+                            resource = texture.NativeResource;
+                        }
+                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitUAV(resource);
+                        break;
+
+                    case ERHIResourceBarrierType.Aliasing:
+                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                        {
+                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
+#endif
+                            resource = buffer.NativeResource;
+                        }
+                        else
+                        {
+                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
+#endif
+                            resource = texture.NativeResource;
+                        }
+                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitAliasing(null, resource);
+                        break;
+
+                    case ERHIResourceBarrierType.Triansition:
+                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                        {
+                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
+#endif
+
+                            resource = buffer.NativeResource;
+                            srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
+                            dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
+                        }
+                        else
+                        {
+                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
+#endif
+
+                            resource = texture.NativeResource;
+                            srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
+                            dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
+                        }
+                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitTransition(resource, srcState, dstState);
+                        break;
+                }
+            }
+
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
 
         public override void PushDebugGroup(string name)
@@ -551,6 +714,171 @@ namespace Infinity.Graphics
 #if DEBUG
             PushDebugGroup(descriptor.Name);
 #endif
+        }
+
+        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        {
+            ID3D12Resource* resource = null;
+            D3D12_RESOURCE_BARRIER resourceBarrier;
+
+            switch (barrier.ResourceBarrierType)
+            {
+                case ERHIResourceBarrierType.UAV:
+                    if (barrier.ResourceType == ERHIResourceType.Buffer)
+                    {
+                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
+#endif
+                        resource = buffer.NativeResource;
+                    }
+                    else
+                    {
+                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                        Debug.Assert(texture != null, "Barrier Texture is null");
+#endif
+                        resource = texture.NativeResource;
+                    }
+                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitUAV(resource);
+                    break;
+
+                case ERHIResourceBarrierType.Aliasing:
+                    if (barrier.ResourceType == ERHIResourceType.Buffer)
+                    {
+                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
+#endif
+                        resource = buffer.NativeResource;
+                    }
+                    else
+                    {
+                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                        Debug.Assert(texture != null, "Barrier Texture is null");
+#endif
+                        resource = texture.NativeResource;
+                    }
+                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitAliasing(null, resource);
+                    break;
+
+                case ERHIResourceBarrierType.Triansition:
+                    D3D12_RESOURCE_STATES srcState;
+                    D3D12_RESOURCE_STATES dstState;
+                    if (barrier.ResourceType == ERHIResourceType.Buffer)
+                    {
+                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
+#endif
+
+                        resource = buffer.NativeResource;
+                        srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
+                        dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
+                    }
+                    else
+                    {
+                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                        Debug.Assert(texture != null, "Barrier Texture is null");
+#endif
+
+                        resource = texture.NativeResource;
+                        srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
+                        dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
+                    }
+                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitTransition(resource, srcState, dstState);
+                    break;
+            }
+
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->ResourceBarrier(1, &resourceBarrier);
+        }
+
+        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        {
+            ID3D12Resource* resource;
+            D3D12_RESOURCE_STATES srcState;
+            D3D12_RESOURCE_STATES dstState;
+            D3D12_RESOURCE_BARRIER* resourceBarriers = stackalloc D3D12_RESOURCE_BARRIER[barriers.Length];
+
+            for (int i = 0; i < barriers.Length; ++i)
+            {
+                ref RHIResourceBarrier barrier = ref barriers.Span[i];
+
+                switch (barrier.ResourceBarrierType)
+                {
+                    case ERHIResourceBarrierType.UAV:
+                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                        {
+                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
+#endif
+                            resource = buffer.NativeResource;
+                        }
+                        else
+                        {
+                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
+#endif
+                            resource = texture.NativeResource;
+                        }
+                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitUAV(resource);
+                        break;
+
+                    case ERHIResourceBarrierType.Aliasing:
+                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                        {
+                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
+#endif
+                            resource = buffer.NativeResource;
+                        }
+                        else
+                        {
+                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
+#endif
+                            resource = texture.NativeResource;
+                        }
+                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitAliasing(null, resource);
+                        break;
+
+                    case ERHIResourceBarrierType.Triansition:
+                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                        {
+                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
+#endif
+
+                            resource = buffer.NativeResource;
+                            srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
+                            dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
+                        }
+                        else
+                        {
+                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
+#endif
+
+                            resource = texture.NativeResource;
+                            srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
+                            dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
+                        }
+                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitTransition(resource, srcState, dstState);
+                        break;
+                }
+            }
+
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
 
         public override void PushDebugGroup(string name)
@@ -940,13 +1268,12 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_PIPELINE_STATISTICS, index);
         }
 
-        /*
         public override void ResourceBarrier(in RHIResourceBarrier barrier)
         {
             ID3D12Resource* resource = null;
             D3D12_RESOURCE_BARRIER resourceBarrier;
 
-            switch (barrier.BarrierType)
+            switch (barrier.ResourceBarrierType)
             {
                 case ERHIResourceBarrierType.UAV:
                     if (barrier.ResourceType == ERHIResourceType.Buffer)
@@ -1032,7 +1359,7 @@ namespace Infinity.Graphics
             {
                 ref RHIResourceBarrier barrier = ref barriers.Span[i];
 
-                switch (barrier.BarrierType)
+                switch (barrier.ResourceBarrierType)
                 {
                     case ERHIResourceBarrierType.UAV:
                         if (barrier.ResourceType == ERHIResourceType.Buffer)
@@ -1105,7 +1432,6 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
-        */
 
         public override void NextSubPass()
         {
@@ -1360,6 +1686,171 @@ namespace Infinity.Graphics
 #if DEBUG
             PushDebugGroup(descriptor.Name);
 #endif
+        }
+
+        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        {
+            ID3D12Resource* resource = null;
+            D3D12_RESOURCE_BARRIER resourceBarrier;
+
+            switch (barrier.ResourceBarrierType)
+            {
+                case ERHIResourceBarrierType.UAV:
+                    if (barrier.ResourceType == ERHIResourceType.Buffer)
+                    {
+                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
+#endif
+                        resource = buffer.NativeResource;
+                    }
+                    else
+                    {
+                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                        Debug.Assert(texture != null, "Barrier Texture is null");
+#endif
+                        resource = texture.NativeResource;
+                    }
+                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitUAV(resource);
+                    break;
+
+                case ERHIResourceBarrierType.Aliasing:
+                    if (barrier.ResourceType == ERHIResourceType.Buffer)
+                    {
+                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
+#endif
+                        resource = buffer.NativeResource;
+                    }
+                    else
+                    {
+                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                        Debug.Assert(texture != null, "Barrier Texture is null");
+#endif
+                        resource = texture.NativeResource;
+                    }
+                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitAliasing(null, resource);
+                    break;
+
+                case ERHIResourceBarrierType.Triansition:
+                    D3D12_RESOURCE_STATES srcState;
+                    D3D12_RESOURCE_STATES dstState;
+                    if (barrier.ResourceType == ERHIResourceType.Buffer)
+                    {
+                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                        Debug.Assert(buffer != null, "Barrier Buffer is null");
+#endif
+
+                        resource = buffer.NativeResource;
+                        srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
+                        dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
+                    }
+                    else
+                    {
+                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                        Debug.Assert(texture != null, "Barrier Texture is null");
+#endif
+
+                        resource = texture.NativeResource;
+                        srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
+                        dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
+                    }
+                    resourceBarrier = D3D12_RESOURCE_BARRIER.InitTransition(resource, srcState, dstState);
+                    break;
+            }
+
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->ResourceBarrier(1, &resourceBarrier);
+        }
+
+        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        {
+            ID3D12Resource* resource;
+            D3D12_RESOURCE_STATES srcState;
+            D3D12_RESOURCE_STATES dstState;
+            D3D12_RESOURCE_BARRIER* resourceBarriers = stackalloc D3D12_RESOURCE_BARRIER[barriers.Length];
+
+            for (int i = 0; i < barriers.Length; ++i)
+            {
+                ref RHIResourceBarrier barrier = ref barriers.Span[i];
+
+                switch (barrier.ResourceBarrierType)
+                {
+                    case ERHIResourceBarrierType.UAV:
+                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                        {
+                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
+#endif
+                            resource = buffer.NativeResource;
+                        }
+                        else
+                        {
+                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
+#endif
+                            resource = texture.NativeResource;
+                        }
+                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitUAV(resource);
+                        break;
+
+                    case ERHIResourceBarrierType.Aliasing:
+                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                        {
+                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
+#endif
+                            resource = buffer.NativeResource;
+                        }
+                        else
+                        {
+                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
+#endif
+                            resource = texture.NativeResource;
+                        }
+                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitAliasing(null, resource);
+                        break;
+
+                    case ERHIResourceBarrierType.Triansition:
+                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                        {
+                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
+#if DEBUG
+                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
+#endif
+
+                            resource = buffer.NativeResource;
+                            srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
+                            dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
+                        }
+                        else
+                        {
+                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
+#if DEBUG
+                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
+#endif
+
+                            resource = texture.NativeResource;
+                            srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
+                            dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
+                        }
+                        resourceBarriers[i] = D3D12_RESOURCE_BARRIER.InitTransition(resource, srcState, dstState);
+                        break;
+                }
+            }
+
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->ResourceBarrier((uint)barriers.Length, resourceBarriers);
         }
 
         public override void PushDebugGroup(string name)
