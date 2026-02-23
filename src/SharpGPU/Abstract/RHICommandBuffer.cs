@@ -80,6 +80,21 @@ namespace Infinity.Graphics
         }
     }
 
+    public struct RHIMLPassScoper : IDisposable
+    {
+        RHIMLEncoder m_MLEncoder;
+
+        internal RHIMLPassScoper(RHIMLEncoder mlEncoder)
+        {
+            m_MLEncoder = mlEncoder;
+        }
+
+        public void Dispose()
+        {
+            m_MLEncoder.EndPass();
+        }
+    }
+
     public static class RHICommandBufferUtility
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -111,6 +126,12 @@ namespace Infinity.Graphics
         public static RHIRasterPassScoper BeginScopedRasterPass(this RHICommandBuffer cmdBuffer, in RHIRasterPassDescriptor descriptor)
         {
             return new RHIRasterPassScoper(cmdBuffer.BeginRasterPass(descriptor));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static RHIMLPassScoper BeginScopedMLPass(this RHICommandBuffer cmdBuffer, in RHIMLPassDescriptor descriptor)
+        {
+            return new RHIMLPassScoper(cmdBuffer.BeginMLPass(descriptor));
         }
     }
 
@@ -144,11 +165,14 @@ namespace Infinity.Graphics
         public abstract void EndRaytracingPass();
         public abstract RHIRasterEncoder BeginRasterPass(in RHIRasterPassDescriptor descriptor);
         public abstract void EndRasterPass();
+        public abstract RHIMLEncoder BeginMLPass(in RHIMLPassDescriptor descriptor);
+        public abstract void EndMLPass();
         public abstract void End();
         public abstract RHITransferEncoder GetTransferEncoder();
         public abstract RHIComputeEncoder GetComputeEncoder();
         public abstract RHIRaytracingEncoder GetRaytracingEncoder();
         public abstract RHIRasterEncoder GetRasterEncoder();
+        public abstract RHIMLEncoder GetMLEncoder();
     }
 
     public struct RHIComputeIndirectCommandBufferDescription

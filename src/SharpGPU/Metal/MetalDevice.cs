@@ -173,6 +173,16 @@ namespace Infinity.Graphics
             return new MetalRasterPipeline(this, descriptor);
         }
 
+        public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
+        {
+            return new MetalMLPipeline(this, descriptor);
+        }
+
+        public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
+        {
+            return new MetalTensor(this, descriptor);
+        }
+
         public override RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
         {
             return new MetalPipelineLibrary(descriptor);
@@ -243,6 +253,7 @@ namespace Infinity.Graphics
                 isHiddenSurfaceRemovalSupported: false,
                 isBarycentricCoordSupported: m_NativeDevice.SupportsShaderBarycentricCoordinates,
                 isProgrammableSamplePositionSupported: m_NativeDevice.ProgrammableSamplePositionsSupported,
+                isMLSupported: m_SupportsMetal4,
                 matrixMajorons: ERHIMatrixMajorons.RowMajor,
                 depthValueRange: ERHIDepthValueRange.ZeroToOne,
                 multiviewStrategy: ERHIMultiviewStrategy.Unsupported,

@@ -74,6 +74,7 @@ namespace Infinity.Graphics
                                 in bool isHiddenSurfaceRemovalSupported,
                                 in bool isBarycentricCoordSupported,
                                 in bool isProgrammableSamplePositionSupported,
+                                in bool isMLSupported,
                                 in ERHIMatrixMajorons matrixMajorons,
                                 in ERHIDepthValueRange depthValueRange,
                                 in ERHIMultiviewStrategy multiviewStrategy,
@@ -102,6 +103,7 @@ namespace Infinity.Graphics
                                                                         isHiddenSurfaceRemovalSupported,
                                                                         isBarycentricCoordSupported,
                                                                         isProgrammableSamplePositionSupported,
+                                                                        isMLSupported,
                                                                         matrixMajorons,
                                                                         depthValueRange,
                                                                         multiviewStrategy,
@@ -361,6 +363,16 @@ namespace Infinity.Graphics
         public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
         {
             return new Dx12RasterIndirectCommandBuffer(this, descriptor);
+        }
+
+        public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
+        {
+            return new Dx12MLPipeline(this, descriptor);
+        }
+
+        public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
+        {
+            return new Dx12Tensor(this, descriptor);
         }
 
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)
@@ -710,6 +722,7 @@ namespace Infinity.Graphics
                                               isHiddenSurfaceRemovalSupported,
                                               isBarycentricCoordSupported,
                                               isProgrammableSamplePositionSupported,
+                                              true,
                                               matrixMajorons,
                                               depthValueRange,
                                               multiviewStrategy,

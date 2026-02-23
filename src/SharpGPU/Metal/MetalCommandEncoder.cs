@@ -1937,4 +1937,116 @@ namespace Infinity.Graphics
 
         private bool HasNativeEncoder => m_NativeEncoder.NativePtr != IntPtr.Zero || m_NativeEncoder4.NativePtr != IntPtr.Zero;
     }
+
+    internal sealed class MetalMLEncoder : RHIMLEncoder
+    {
+        private MTL4MachineLearningCommandEncoder m_NativeEncoder;
+        private readonly MetalDevice m_MetalDevice;
+
+        public MetalMLEncoder(MetalCommandBuffer cmdBuffer)
+        {
+            m_CommandBuffer = cmdBuffer;
+            m_MetalDevice = ((MetalCommandQueue)cmdBuffer.CommandQueue).MetalDevice;
+        }
+
+        internal override void BeginPass(in RHIMLPassDescriptor descriptor)
+        {
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            m_NativeEncoder = default;
+
+            // ML encoding requires MTL4 path
+            commandBuffer.LockEncodingPath(MetalCommandEncodingPath.MTL4, "ML pass");
+            MTL4CommandBuffer mtl4CmdBuffer = commandBuffer.EnsureMtl4CommandBuffer();
+            m_NativeEncoder = mtl4CmdBuffer.MachineLearningCommandEncoder();
+
+            if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create MTL4MachineLearningCommandEncoder.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(descriptor.Name))
+            {
+                PushDebugGroup(descriptor.Name);
+            }
+        }
+
+        public override void PushDebugGroup(string name)
+        {
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder baseEncoder = new MTL4CommandEncoder(m_NativeEncoder.NativePtr);
+                baseEncoder.PushDebugGroup(new NSString(name));
+            }
+        }
+
+        public override void PopDebugGroup()
+        {
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder baseEncoder = new MTL4CommandEncoder(m_NativeEncoder.NativePtr);
+                baseEncoder.PopDebugGroup();
+            }
+        }
+
+        public override void WriteTimestamp(in uint index)
+        {
+            // TODO: MTL4 timestamp support for ML pass
+        }
+
+        public override void SetPipeline(RHIMLPipeline pipeline)
+        {
+            m_CachedPipeline = pipeline;
+            MetalMLPipeline metalPipeline = (MetalMLPipeline)pipeline;
+            if (metalPipeline.NativePipelineState.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.SetPipelineState(metalPipeline.NativePipelineState);
+            }
+        }
+
+        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        {
+            // TODO: Convert RHIResourceTable to MTL4ArgumentTable and bind
+            // m_NativeEncoder.SetArgumentTable(argumentTable);
+        }
+
+        public override void SetInputTensor(RHITensor tensor, in uint index)
+        {
+            MetalTensor metalTensor = (MetalTensor)tensor;
+            // Bind the native MTLTensor as an input via argument table
+            // The ML encoder uses argument tables to bind tensor resources
+            // TODO: Create/update MTL4ArgumentTable entry for input tensor at index
+        }
+
+        public override void SetOutputTensor(RHITensor tensor, in uint index)
+        {
+            MetalTensor metalTensor = (MetalTensor)tensor;
+            // Bind the native MTLTensor as an output via argument table
+            // TODO: Create/update MTL4ArgumentTable entry for output tensor at index
+        }
+
+        public override void Dispatch(RHIHeap intermediatesHeap)
+        {
+            if (intermediatesHeap != null)
+            {
+                MetalHeap metalHeap = (MetalHeap)intermediatesHeap;
+                // TODO: Get native MTLHeap from MetalHeap and dispatch
+                // m_NativeEncoder.DispatchNetworkWithIntermediatesHeap(nativeHeap);
+            }
+        }
+
+        public override void EndPass()
+        {
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder baseEncoder = new MTL4CommandEncoder(m_NativeEncoder.NativePtr);
+                baseEncoder.EndEncoding();
+                m_NativeEncoder = default;
+            }
+            m_CachedPipeline = null;
+        }
+
+        protected override void Release()
+        {
+        }
+    }
 }

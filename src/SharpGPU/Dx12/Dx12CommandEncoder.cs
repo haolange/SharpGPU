@@ -1347,5 +1347,87 @@ namespace Infinity.Graphics
 
         }
     }
+
+    internal unsafe class Dx12MLEncoder : RHIMLEncoder
+    {
+        public Dx12MLEncoder(Dx12CommandBuffer cmdBuffer)
+        {
+            m_CommandBuffer = cmdBuffer;
+        }
+
+        internal override void BeginPass(in RHIMLPassDescriptor descriptor)
+        {
+#if DEBUG
+            PushDebugGroup(descriptor.Name);
+#endif
+        }
+
+        public override void PushDebugGroup(string name)
+        {
+            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
+            Marshal.FreeHGlobal(namePtr);
+        }
+
+        public override void PopDebugGroup()
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->EndEvent();
+        }
+
+        public override void WriteTimestamp(in uint index)
+        {
+            // TODO: timestamp query support for ML pass
+        }
+
+        public override void SetPipeline(RHIMLPipeline pipeline)
+        {
+            m_CachedPipeline = pipeline;
+            // TODO: DirectML integration
+            // Prepare IDMLCommandRecorder for dispatch with the compiled operator
+        }
+
+        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        {
+            // TODO: DirectML integration
+            // Map resource table bindings to IDMLBindingTable inputs/outputs
+        }
+
+        public override void SetInputTensor(RHITensor tensor, in uint index)
+        {
+            // TODO: DirectML integration
+            // Bind the backing buffer of Dx12Tensor as an input to IDMLBindingTable
+            // Dx12Tensor dx12Tensor = (Dx12Tensor)tensor;
+            // Use dx12Tensor.BackingBuffer to create DML_BUFFER_BINDING
+        }
+
+        public override void SetOutputTensor(RHITensor tensor, in uint index)
+        {
+            // TODO: DirectML integration
+            // Bind the backing buffer of Dx12Tensor as an output to IDMLBindingTable
+            // Dx12Tensor dx12Tensor = (Dx12Tensor)tensor;
+            // Use dx12Tensor.BackingBuffer to create DML_BUFFER_BINDING
+        }
+
+        public override void Dispatch(RHIHeap intermediatesHeap)
+        {
+            // TODO: DirectML integration
+            // IDMLCommandRecorder::RecordDispatch(commandList, compiledOperator, bindingTable)
+        }
+
+        public override void EndPass()
+        {
+#if DEBUG
+            PopDebugGroup();
+#endif
+            m_CachedPipeline = null;
+        }
+
+        protected override void Release()
+        {
+
+        }
+    }
 #pragma warning restore CS0414, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
 }

@@ -150,6 +150,16 @@ namespace Infinity.Graphics
             throw new NotImplementedException();
         }
 
+        public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
+        {
+            throw new NotImplementedException();
+        }
+
         private void CreateDevice(in IntPtr devicePtr)
         {
             throw new NotImplementedException();

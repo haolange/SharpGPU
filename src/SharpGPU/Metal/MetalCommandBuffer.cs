@@ -11,7 +11,8 @@ namespace Infinity.Graphics
         Transfer,
         Compute,
         Raster,
-        Raytracing
+        Raytracing,
+        ML
     }
 
     internal enum MetalCommandEncodingPath : byte
@@ -51,6 +52,7 @@ namespace Infinity.Graphics
         private readonly MetalComputeEncoder m_ComputeEncoder;
         private readonly MetalRasterEncoder m_RasterEncoder;
         private readonly MetalRaytracingEncoder m_RaytracingEncoder;
+        private readonly MetalMLEncoder m_MLEncoder;
         private readonly MTLFence m_BarrierFence;
         private readonly bool m_EnableMetal4Barriers;
 
@@ -74,6 +76,7 @@ namespace Infinity.Graphics
             m_ComputeEncoder = new MetalComputeEncoder(this);
             m_RasterEncoder = new MetalRasterEncoder(this);
             m_RaytracingEncoder = new MetalRaytracingEncoder(this);
+            m_MLEncoder = new MetalMLEncoder(this);
             m_BarrierFence = commandQueue.MetalDevice.NativeDevice.NewFence;
             m_EnableMetal4Barriers = commandQueue.MetalDevice.SupportsMetal4Barriers && IsMetal4BarrierEnabledByEnv();
 
@@ -219,6 +222,25 @@ namespace Infinity.Graphics
             m_ActiveEncoder = MetalActiveEncoderType.None;
         }
 
+        public override RHIMLEncoder BeginMLPass(in RHIMLPassDescriptor descriptor)
+        {
+            m_MLEncoder.BeginPass(descriptor);
+            m_ActiveEncoder = MetalActiveEncoderType.ML;
+            return m_MLEncoder;
+        }
+
+        public override void EndMLPass()
+        {
+            if (m_ActiveEncoder != MetalActiveEncoderType.ML)
+            {
+                return;
+            }
+
+            m_MLEncoder.EndPass();
+            m_LastCompletedEncoder = MetalActiveEncoderType.ML;
+            m_ActiveEncoder = MetalActiveEncoderType.None;
+        }
+
         public override void End()
         {
             switch (m_ActiveEncoder)
@@ -234,6 +256,9 @@ namespace Infinity.Graphics
                     break;
                 case MetalActiveEncoderType.Raytracing:
                     EndRaytracingPass();
+                    break;
+                case MetalActiveEncoderType.ML:
+                    EndMLPass();
                     break;
             }
 
@@ -264,6 +289,11 @@ namespace Infinity.Graphics
         public override RHIRasterEncoder GetRasterEncoder()
         {
             return m_RasterEncoder;
+        }
+
+        public override RHIMLEncoder GetMLEncoder()
+        {
+            return m_MLEncoder;
         }
 
         internal void SetPresentDrawable(in CAMetalDrawable drawable)
@@ -489,6 +519,7 @@ namespace Infinity.Graphics
             m_ComputeEncoder.Dispose();
             m_RasterEncoder.Dispose();
             m_RaytracingEncoder.Dispose();
+            m_MLEncoder.Dispose();
 
             if (m_BarrierFence.NativePtr != IntPtr.Zero)
             {

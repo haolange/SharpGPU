@@ -89,6 +89,7 @@
         Task,
         Mesh,
         RayTracing,
+        MachineLearning,
         Pending
     }
 
@@ -102,8 +103,9 @@
         AllGraphics = 0x20,
         //AllGraphics = Vertex | Fragment,
         RayTracing = 0x40,
-        All = 0x80,
-        //All = Vertex | Fragment | Compute | Task | Mesh | RayTracing,
+        MachineLearning = 0x80,
+        All = 0x100,
+        //All = Vertex | Fragment | Compute | Task | Mesh | RayTracing | MachineLearning,
         Pending
     }
 
@@ -652,6 +654,31 @@
         Task,
         Mesh,
         RayTracing,
+        MachineLearning,
+        Pending
+    }
+
+    public enum ERHIMLDataType : byte
+    {
+        Float32,
+        Float16,
+        BFloat16,
+        Int32,
+        Int16,
+        Int8,
+        UInt32,
+        UInt16,
+        UInt8,
+        Pending
+    }
+
+    public enum ERHITensorUsage
+    {
+        MachineLearning = 0x01,
+        Compute = 0x02,
+        Render = 0x04,
+        Read = 0x08,
+        Write = 0x10,
         Pending
     }
 
