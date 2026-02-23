@@ -210,5 +210,6 @@ namespace Infinity.Graphics
         public abstract RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor);
         public abstract RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor);
         public abstract RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor);
+        public abstract RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor);
     }
 }

@@ -318,6 +318,8 @@ namespace Infinity.Graphics
         public abstract void WriteTimestamp(in uint index);
         public abstract void SetPipeline(RHIMLPipeline pipeline);
         public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
+        public abstract void SetInputTensor(RHITensor tensor, in uint index);
+        public abstract void SetOutputTensor(RHITensor tensor, in uint index);
         public abstract void Dispatch(RHIHeap intermediatesHeap);
         public abstract void EndPass();
     }

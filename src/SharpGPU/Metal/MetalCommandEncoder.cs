@@ -2009,6 +2009,21 @@ namespace Infinity.Graphics
             // m_NativeEncoder.SetArgumentTable(argumentTable);
         }
 
+        public override void SetInputTensor(RHITensor tensor, in uint index)
+        {
+            MetalTensor metalTensor = (MetalTensor)tensor;
+            // Bind the native MTLTensor as an input via argument table
+            // The ML encoder uses argument tables to bind tensor resources
+            // TODO: Create/update MTL4ArgumentTable entry for input tensor at index
+        }
+
+        public override void SetOutputTensor(RHITensor tensor, in uint index)
+        {
+            MetalTensor metalTensor = (MetalTensor)tensor;
+            // Bind the native MTLTensor as an output via argument table
+            // TODO: Create/update MTL4ArgumentTable entry for output tensor at index
+        }
+
         public override void Dispatch(RHIHeap intermediatesHeap)
         {
             if (intermediatesHeap != null)

@@ -1394,6 +1394,22 @@ namespace Infinity.Graphics
             // Map resource table bindings to IDMLBindingTable inputs/outputs
         }
 
+        public override void SetInputTensor(RHITensor tensor, in uint index)
+        {
+            // TODO: DirectML integration
+            // Bind the backing buffer of Dx12Tensor as an input to IDMLBindingTable
+            // Dx12Tensor dx12Tensor = (Dx12Tensor)tensor;
+            // Use dx12Tensor.BackingBuffer to create DML_BUFFER_BINDING
+        }
+
+        public override void SetOutputTensor(RHITensor tensor, in uint index)
+        {
+            // TODO: DirectML integration
+            // Bind the backing buffer of Dx12Tensor as an output to IDMLBindingTable
+            // Dx12Tensor dx12Tensor = (Dx12Tensor)tensor;
+            // Use dx12Tensor.BackingBuffer to create DML_BUFFER_BINDING
+        }
+
         public override void Dispatch(RHIHeap intermediatesHeap)
         {
             // TODO: DirectML integration

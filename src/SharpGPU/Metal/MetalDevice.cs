@@ -178,6 +178,11 @@ namespace Infinity.Graphics
             return new MetalMLPipeline(this, descriptor);
         }
 
+        public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
+        {
+            return new MetalTensor(this, descriptor);
+        }
+
         public override RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
         {
             return new MetalPipelineLibrary(descriptor);

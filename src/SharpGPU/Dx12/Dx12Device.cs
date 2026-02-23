@@ -370,6 +370,11 @@ namespace Infinity.Graphics
             return new Dx12MLPipeline(this, descriptor);
         }
 
+        public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
+        {
+            return new Dx12Tensor(this, descriptor);
+        }
+
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)
         {
             int index = m_DescriptorHeapDSV.Allocate();
