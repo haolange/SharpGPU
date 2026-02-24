@@ -51,6 +51,14 @@ namespace Infinity.Graphics
             }
 
             int tableCount = Math.Max(0, resourceTableLayoutCount);
+
+            // Metal 4: prefer ArgumentTable when exactly one resource table layout is active.
+            // With multiple tables SetBytes is used to avoid argument-table allocation overhead.
+            if (capabilities.SupportsMetal4 && capabilities.SupportsArgumentTable && tableCount == 1)
+            {
+                return MetalBindingMode.ArgumentTable;
+            }
+
             if (capabilities.SupportsMetal3)
             {
                 return MetalBindingMode.SetBytes;
