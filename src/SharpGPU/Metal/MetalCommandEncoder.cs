@@ -761,16 +761,10 @@ namespace Infinity.Graphics
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             commandBuffer.LockEncodingPath(path, "compute pipeline set");
 
-            bool? legacyCompatibilityOverride = null;
-            if (mode == MetalBindingMode.SetBytes && !MetalBindingPolicyResolver.IsStrictSetBytesModeEnabled())
-            {
-                legacyCompatibilityOverride = true;
-            }
-
             if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
             {
                 m_BindingBackend?.Dispose();
-                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Compute, legacyCompatibilityOverride);
+                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Compute);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
@@ -1242,16 +1236,10 @@ namespace Infinity.Graphics
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             commandBuffer.LockEncodingPath(path, "ray tracing pipeline set");
 
-            bool? legacyCompatibilityOverride = null;
-            if (mode == MetalBindingMode.SetBytes && !MetalBindingPolicyResolver.IsStrictSetBytesModeEnabled())
-            {
-                legacyCompatibilityOverride = true;
-            }
-
             if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
             {
                 m_BindingBackend?.Dispose();
-                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raytracing, legacyCompatibilityOverride);
+                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raytracing);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
@@ -1941,16 +1929,10 @@ namespace Infinity.Graphics
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             commandBuffer.LockEncodingPath(path, "raster pipeline set");
 
-            bool? legacyCompatibilityOverride = null;
-            if (mode == MetalBindingMode.SetBytes && !MetalBindingPolicyResolver.IsStrictSetBytesModeEnabled())
-            {
-                legacyCompatibilityOverride = true;
-            }
-
             if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
             {
                 m_BindingBackend?.Dispose();
-                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raster, legacyCompatibilityOverride);
+                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raster);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
