@@ -164,6 +164,20 @@ namespace Infinity.Graphics
                 return m_DescriptorHeapCbvSrvUav;
             }
         }
+        public Dx12DescriptorHeap StagingHeapCbvSrvUav
+        {
+            get
+            {
+                return m_StagingHeapCbvSrvUav;
+            }
+        }
+        public Dx12DescriptorHeap StagingHeapSampler
+        {
+            get
+            {
+                return m_StagingHeapSampler;
+            }
+        }
         public ID3D12CommandSignature* DrawIndirectSignature
         {
             get
@@ -207,6 +221,8 @@ namespace Infinity.Graphics
         private Dx12DescriptorHeap m_DescriptorHeapHeapRTV;
         private Dx12DescriptorHeap m_DescriptorHeapSampler;
         private Dx12DescriptorHeap m_DescriptorHeapCbvSrvUav;
+        private Dx12DescriptorHeap m_StagingHeapCbvSrvUav;
+        private Dx12DescriptorHeap m_StagingHeapSampler;
         private ID3D12CommandSignature* m_DrawIndirectSignature;
         private ID3D12CommandSignature* m_DrawIndexedIndirectSignature;
         private ID3D12CommandSignature* m_DispatchRayIndirectSignature;
@@ -307,7 +323,7 @@ namespace Infinity.Graphics
 
         public override RHIResourceTable CreateResourceTable(in RHIResourceTableDescriptor descriptor)
         {
-            return new Dx12ResourceTable(descriptor);
+            return new Dx12ResourceTable(this, descriptor);
         }
 
         public override RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor)
@@ -377,7 +393,7 @@ namespace Infinity.Graphics
 
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)
         {
-            int index = m_DescriptorHeapDSV.Allocate();
+            int index = m_DescriptorHeapDSV.Allocate(count);
             Dx12DescriptorInfo descriptorInfo;
             descriptorInfo.Index = index;
             descriptorInfo.CpuHandle = m_DescriptorHeapDSV.NativeCpuStartHandle.Offset(index, m_DescriptorHeapDSV.DescriptorSize);
@@ -388,7 +404,7 @@ namespace Infinity.Graphics
 
         public Dx12DescriptorInfo AllocateRtvDescriptor(in int count)
         {
-            int index = m_DescriptorHeapHeapRTV.Allocate();
+            int index = m_DescriptorHeapHeapRTV.Allocate(count);
             Dx12DescriptorInfo descriptorInfo;
             descriptorInfo.Index = index;
             descriptorInfo.CpuHandle = m_DescriptorHeapHeapRTV.NativeCpuStartHandle.Offset(index, m_DescriptorHeapHeapRTV.DescriptorSize);
@@ -399,7 +415,7 @@ namespace Infinity.Graphics
 
         public Dx12DescriptorInfo AllocateSamplerDescriptor(in int count)
         {
-            int index = m_DescriptorHeapSampler.Allocate();
+            int index = m_DescriptorHeapSampler.Allocate(count);
             Dx12DescriptorInfo descriptorInfo;
             descriptorInfo.Index = index;
             descriptorInfo.CpuHandle = m_DescriptorHeapSampler.NativeCpuStartHandle.Offset(index, m_DescriptorHeapSampler.DescriptorSize);
@@ -410,13 +426,42 @@ namespace Infinity.Graphics
 
         public Dx12DescriptorInfo AllocateCbvSrvUavDescriptor(in int count)
         {
-            int index = m_DescriptorHeapCbvSrvUav.Allocate();
+            int index = m_DescriptorHeapCbvSrvUav.Allocate(count);
             Dx12DescriptorInfo descriptorInfo;
             descriptorInfo.Index = index;
             descriptorInfo.CpuHandle = m_DescriptorHeapCbvSrvUav.NativeCpuStartHandle.Offset(index, m_DescriptorHeapCbvSrvUav.DescriptorSize);
             descriptorInfo.GpuHandle = m_DescriptorHeapCbvSrvUav.NativeGpuStartHandle.Offset(index, m_DescriptorHeapCbvSrvUav.DescriptorSize);
             descriptorInfo.DescriptorHeap = m_DescriptorHeapCbvSrvUav.NativeDescriptorHeap;
             return descriptorInfo;
+        }
+
+        public Dx12DescriptorInfo AllocateStagingCbvSrvUavDescriptor(in int count)
+        {
+            int index = m_StagingHeapCbvSrvUav.Allocate(count);
+            Dx12DescriptorInfo descriptorInfo;
+            descriptorInfo.Index = index;
+            descriptorInfo.CpuHandle = m_StagingHeapCbvSrvUav.NativeCpuStartHandle.Offset(index, m_StagingHeapCbvSrvUav.DescriptorSize);
+            descriptorInfo.GpuHandle = default;
+            descriptorInfo.DescriptorHeap = m_StagingHeapCbvSrvUav.NativeDescriptorHeap;
+            return descriptorInfo;
+        }
+
+        public Dx12DescriptorInfo AllocateStagingSamplerDescriptor(in int count)
+        {
+            int index = m_StagingHeapSampler.Allocate(count);
+            Dx12DescriptorInfo descriptorInfo;
+            descriptorInfo.Index = index;
+            descriptorInfo.CpuHandle = m_StagingHeapSampler.NativeCpuStartHandle.Offset(index, m_StagingHeapSampler.DescriptorSize);
+            descriptorInfo.GpuHandle = default;
+            descriptorInfo.DescriptorHeap = m_StagingHeapSampler.NativeDescriptorHeap;
+            return descriptorInfo;
+        }
+
+        public void CopyDescriptors(Dx12DescriptorHeap srcHeap, in int srcIndex, Dx12DescriptorHeap dstHeap, in int dstIndex, in int count)
+        {
+            D3D12_CPU_DESCRIPTOR_HANDLE srcHandle = srcHeap.NativeCpuStartHandle.Offset(srcIndex, srcHeap.DescriptorSize);
+            D3D12_CPU_DESCRIPTOR_HANDLE dstHandle = dstHeap.NativeCpuStartHandle.Offset(dstIndex, dstHeap.DescriptorSize);
+            m_NativeDevice->CopyDescriptorsSimple((uint)count, dstHandle, srcHandle, dstHeap.NativeType);
         }
 
         public void FreeDsvDescriptor(in int index)
@@ -457,6 +502,26 @@ namespace Infinity.Graphics
         public void FreeCbvSrvUavDescriptor(in int index, in int count)
         {
             m_DescriptorHeapCbvSrvUav.Free(index, count);
+        }
+
+        public void FreeStagingCbvSrvUavDescriptor(in int index)
+        {
+            m_StagingHeapCbvSrvUav.Free(index);
+        }
+
+        public void FreeStagingCbvSrvUavDescriptor(in int index, in int count)
+        {
+            m_StagingHeapCbvSrvUav.Free(index, count);
+        }
+
+        public void FreeStagingSamplerDescriptor(in int index)
+        {
+            m_StagingHeapSampler.Free(index);
+        }
+
+        public void FreeStagingSamplerDescriptor(in int index, in int count)
+        {
+            m_StagingHeapSampler.Free(index, count);
         }
 
         private void CreateDevice()
@@ -732,10 +797,17 @@ namespace Infinity.Graphics
 
         private void CreateDescriptorHeaps()
         {
-            m_DescriptorHeapDSV = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_DSV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 1024);
-            m_DescriptorHeapHeapRTV = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 1024);
+            // Non-shader-visible heaps for RTV/DSV (these cannot be shader-visible on DX12)
+            m_DescriptorHeapDSV = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_DSV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 4096);
+            m_DescriptorHeapHeapRTV = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 4096);
+
+            // Shader-visible heaps for GPU access - large enough for bindless resource arrays
             m_DescriptorHeapSampler = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 2048);
-            m_DescriptorHeapCbvSrvUav = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 32768);
+            m_DescriptorHeapCbvSrvUav = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 1000000);
+
+            // CPU-only staging heaps for building descriptors before copying to GPU-visible heaps
+            m_StagingHeapCbvSrvUav = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 65536);
+            m_StagingHeapSampler = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 2048);
         }
 
         private void CreateCommandSignatures()
@@ -860,6 +932,8 @@ namespace Infinity.Graphics
             m_DescriptorHeapHeapRTV.Dispose();
             m_DescriptorHeapSampler.Dispose();
             m_DescriptorHeapCbvSrvUav.Dispose();
+            m_StagingHeapCbvSrvUav.Dispose();
+            m_StagingHeapSampler.Dispose();
 
             m_DrawIndirectSignature->Release();
             m_DrawIndexedIndirectSignature->Release();
