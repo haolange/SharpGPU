@@ -27,6 +27,7 @@ namespace Infinity.Graphics
         private VulkanRasterEncoder m_RasterEncoder;
         private VulkanRaytracingEncoder m_RaytracingEncoder;
         private VulkanMLEncoder m_MLEncoder;
+        private VulkanWorkGraphEncoder m_WorkGraphEncoder;
         private VkCommandPool m_NativeCommandPool;
         private VkCommandBuffer m_NativeCommandBuffer;
 
@@ -68,6 +69,7 @@ namespace Infinity.Graphics
             m_RasterEncoder = new VulkanRasterEncoder(this);
             m_RaytracingEncoder = new VulkanRaytracingEncoder(this);
             m_MLEncoder = new VulkanMLEncoder(this);
+            m_WorkGraphEncoder = new VulkanWorkGraphEncoder(this);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -183,6 +185,24 @@ namespace Infinity.Graphics
         public override RHIMLEncoder GetMLEncoder()
         {
             return m_MLEncoder;
+        }
+
+        public override RHIWorkGraphEncoder BeginWorkGraphPass(in RHIWorkGraphPassDescriptor descriptor)
+        {
+            m_WorkGraphEncoder.BeginPass(descriptor);
+            return m_WorkGraphEncoder;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override void EndWorkGraphPass()
+        {
+            m_WorkGraphEncoder.EndPass();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override RHIWorkGraphEncoder GetWorkGraphEncoder()
+        {
+            return m_WorkGraphEncoder;
         }
 
         protected override void Release()

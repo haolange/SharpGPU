@@ -1632,11 +1632,6 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void DispatchGraph()
-        {
-            throw new NotImplementedException();
-        }
-
         public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
         {
             Dx12RasterIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RasterIndirectCommandBuffer;

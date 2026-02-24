@@ -882,11 +882,6 @@ namespace Infinity.Graphics
             VulkanNative.vkCmdDrawMeshTasksIndirectEXT(vkCmdBuf.NativeCommandBuffer, vkArgs.NativeBuffer, argsOffset, 1, 0);
         }
 
-        public override void DispatchGraph()
-        {
-            // Work graphs not supported in Vulkan
-        }
-
         public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
         {
             // Requires VK_NV_device_generated_commands

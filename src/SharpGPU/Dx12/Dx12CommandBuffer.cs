@@ -31,6 +31,7 @@ namespace Infinity.Graphics
         private Dx12RasterEncoder m_RasterEncoder;
         private Dx12RaytracingEncoder m_RaytracingEncoder;
         private Dx12MLEncoder m_MLEncoder;
+        private Dx12WorkGraphEncoder m_WorkGraphEncoder;
         private ID3D12CommandAllocator* m_NativeCommandAllocator;
         private ID3D12GraphicsCommandList7* m_NativeCommandList;
 
@@ -57,6 +58,7 @@ namespace Infinity.Graphics
             m_RasterEncoder = new Dx12RasterEncoder(this);
             m_RaytracingEncoder = new Dx12RaytracingEncoder(this);
             m_MLEncoder = new Dx12MLEncoder(this);
+            m_WorkGraphEncoder = new Dx12WorkGraphEncoder(this);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -180,6 +182,24 @@ namespace Infinity.Graphics
         public override RHIMLEncoder GetMLEncoder()
         {
             return m_MLEncoder;
+        }
+
+        public override RHIWorkGraphEncoder BeginWorkGraphPass(in RHIWorkGraphPassDescriptor descriptor)
+        {
+            m_WorkGraphEncoder.BeginPass(descriptor);
+            return m_WorkGraphEncoder;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override void EndWorkGraphPass()
+        {
+            m_WorkGraphEncoder.EndPass();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public override RHIWorkGraphEncoder GetWorkGraphEncoder()
+        {
+            return m_WorkGraphEncoder;
         }
 
         /*public override void Commit(RHIFence? fence)

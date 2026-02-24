@@ -663,6 +663,11 @@ namespace Infinity.Graphics
             return new VulkanTensor(this, descriptor);
         }
 
+        public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
+        {
+            return new VulkanWorkGraphPipeline(descriptor);
+        }
+
         public int GetQueueFamilyIndex(in ERHIPipelineType pipeline)
         {
             switch (pipeline)

@@ -391,6 +391,11 @@ namespace Infinity.Graphics
             return new Dx12Tensor(this, descriptor);
         }
 
+        public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
+        {
+            return new Dx12WorkGraphPipeline(descriptor);
+        }
+
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)
         {
             int index = m_DescriptorHeapDSV.Allocate(count);

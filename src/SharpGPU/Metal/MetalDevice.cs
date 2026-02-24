@@ -183,6 +183,11 @@ namespace Infinity.Graphics
             return new MetalTensor(this, descriptor);
         }
 
+        public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
+        {
+            return new MetalWorkGraphPipeline(descriptor);
+        }
+
         public override RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
         {
             return new MetalPipelineLibrary(this, descriptor);

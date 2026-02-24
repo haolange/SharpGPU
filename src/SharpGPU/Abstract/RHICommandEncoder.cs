@@ -365,7 +365,6 @@ namespace Infinity.Graphics
         public abstract void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
         public abstract void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset);
-        public abstract void DispatchGraph();
         public abstract void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer);
         public abstract void EndPass();
     }

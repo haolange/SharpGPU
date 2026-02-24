@@ -1890,11 +1890,6 @@ namespace Infinity.Graphics
             MarkRasterStagesSeen();
         }
 
-        public override void DispatchGraph()
-        {
-            throw new NotSupportedException("Work graph dispatch is not implemented in Metal backend.");
-        }
-
         public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
         {
             MetalRasterIndirectCommandBuffer metalICB = (MetalRasterIndirectCommandBuffer)indirectCmdBuffer;

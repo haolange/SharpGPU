@@ -95,6 +95,21 @@ namespace Infinity.Graphics
         }
     }
 
+    public struct RHIWorkGraphPassScoper : IDisposable
+    {
+        RHIWorkGraphEncoder m_WorkGraphEncoder;
+
+        internal RHIWorkGraphPassScoper(RHIWorkGraphEncoder workGraphEncoder)
+        {
+            m_WorkGraphEncoder = workGraphEncoder;
+        }
+
+        public void Dispose()
+        {
+            m_WorkGraphEncoder.EndPass();
+        }
+    }
+
     public static class RHICommandBufferUtility
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -133,6 +148,12 @@ namespace Infinity.Graphics
         {
             return new RHIMLPassScoper(cmdBuffer.BeginMLPass(descriptor));
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static RHIWorkGraphPassScoper BeginScopedWorkGraphPass(this RHICommandBuffer cmdBuffer, in RHIWorkGraphPassDescriptor descriptor)
+        {
+            return new RHIWorkGraphPassScoper(cmdBuffer.BeginWorkGraphPass(descriptor));
+        }
     }
 
     public abstract class RHICommandBuffer : Disposal
@@ -165,12 +186,15 @@ namespace Infinity.Graphics
         public abstract void EndRasterPass();
         public abstract RHIMLEncoder BeginMLPass(in RHIMLPassDescriptor descriptor);
         public abstract void EndMLPass();
+        public abstract RHIWorkGraphEncoder BeginWorkGraphPass(in RHIWorkGraphPassDescriptor descriptor);
+        public abstract void EndWorkGraphPass();
         public abstract void End();
         public abstract RHITransferEncoder GetTransferEncoder();
         public abstract RHIComputeEncoder GetComputeEncoder();
         public abstract RHIRaytracingEncoder GetRaytracingEncoder();
         public abstract RHIRasterEncoder GetRasterEncoder();
         public abstract RHIMLEncoder GetMLEncoder();
+        public abstract RHIWorkGraphEncoder GetWorkGraphEncoder();
     }
 
     public struct RHIComputeIndirectCommandBufferDescription

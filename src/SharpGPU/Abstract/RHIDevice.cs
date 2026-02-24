@@ -211,5 +211,6 @@ namespace Infinity.Graphics
         public abstract RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor);
         public abstract RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor);
         public abstract RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor);
+        public abstract RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor);
     }
 }
