@@ -546,11 +546,18 @@ namespace Infinity.Graphics
         {
             foreach (KeyValuePair<uint, MetalResourceTable> pair in m_BoundTables)
             {
-                MetalBindInfo[] binds = pair.Value.ResourceTableLayout.BindInfos;
-                RHIResourceTableElement[] elements = pair.Value.Elements;
-                for (int i = 0; i < binds.Length && i < elements.Length; ++i)
+                MetalResourceTable table = pair.Value;
+                MetalBindInfo[] binds = table.ResourceTableLayout.BindInfos;
+                for (int i = 0; i < binds.Length; ++i)
                 {
-                    MetalBindingHelpers.BindComputeElement(encoder, binds[i], elements[i]);
+                    ref readonly MetalBindInfo bind = ref binds[i];
+                    int arrayCount = (int)Math.Max(1u, bind.Count);
+                    for (int j = 0; j < arrayCount; ++j)
+                    {
+                        RHIResourceTableElement element = table.GetElement(i, j);
+                        MetalBindInfo arrayBind = new MetalBindInfo(bind.Slot + (uint)j, bind.Index, 1, bind.Type, bind.Stage);
+                        MetalBindingHelpers.BindComputeElement(encoder, arrayBind, element);
+                    }
                 }
             }
         }
@@ -559,11 +566,18 @@ namespace Infinity.Graphics
         {
             foreach (KeyValuePair<uint, MetalResourceTable> pair in m_BoundTables)
             {
-                MetalBindInfo[] binds = pair.Value.ResourceTableLayout.BindInfos;
-                RHIResourceTableElement[] elements = pair.Value.Elements;
-                for (int i = 0; i < binds.Length && i < elements.Length; ++i)
+                MetalResourceTable table = pair.Value;
+                MetalBindInfo[] binds = table.ResourceTableLayout.BindInfos;
+                for (int i = 0; i < binds.Length; ++i)
                 {
-                    MetalBindingHelpers.BindRasterElement(encoder, binds[i], elements[i]);
+                    ref readonly MetalBindInfo bind = ref binds[i];
+                    int arrayCount = (int)Math.Max(1u, bind.Count);
+                    for (int j = 0; j < arrayCount; ++j)
+                    {
+                        RHIResourceTableElement element = table.GetElement(i, j);
+                        MetalBindInfo arrayBind = new MetalBindInfo(bind.Slot + (uint)j, bind.Index, 1, bind.Type, bind.Stage);
+                        MetalBindingHelpers.BindRasterElement(encoder, arrayBind, element);
+                    }
                 }
             }
         }
@@ -599,15 +613,10 @@ namespace Infinity.Graphics
 
         private static void ValidateTableArrayBindings(MetalResourceTableLayout layout, in uint tableIndex)
         {
-            MetalBindInfo[] binds = layout.BindInfos;
-            for (int i = 0; i < binds.Length; ++i)
-            {
-                ref readonly MetalBindInfo bind = ref binds[i];
-                if (bind.Count > 1)
-                {
-                    throw new NotSupportedException($"TODO(UNVERIFIED): Metal backend currently does not support Count>1 resource-table element binding without API extension. table={tableIndex}, slot={bind.Slot}, type={bind.Type}, count={bind.Count}");
-                }
-            }
+            // Count > 1 (bindless arrays) is now supported across all Metal binding backends.
+            // ArgumentBuffer mode uses ArrayLength for argument descriptors.
+            // SetBytes mode encodes all array entries into the payload.
+            // Legacy mode iterates over array elements directly.
         }
     }
 
@@ -835,60 +844,65 @@ namespace Infinity.Graphics
             state.Encoder.SetArgumentBuffer(state.BackingBuffer, 0);
 
             MetalBindInfo[] binds = table.ResourceTableLayout.BindInfos;
-            RHIResourceTableElement[] elements = table.Elements;
-            for (int i = 0; i < binds.Length && i < elements.Length; ++i)
+            for (int i = 0; i < binds.Length; ++i)
             {
                 ref readonly MetalBindInfo bind = ref binds[i];
-                ref RHIResourceTableElement element = ref elements[i];
+                int arrayCount = (int)Math.Max(1u, bind.Count);
 
-                switch (bind.Type)
+                for (int j = 0; j < arrayCount; ++j)
                 {
-                    case ERHIBindType.Buffer:
-                    case ERHIBindType.StorageBuffer:
-                    case ERHIBindType.UniformBuffer:
-                        if (element.BufferView is MetalBufferView bufferView)
-                        {
-                            state.Encoder.SetBuffer(bufferView.Buffer.NativeBuffer, (ulong)Math.Max(0, bufferView.Descriptor.Offset), bind.Slot);
-                        }
+                    RHIResourceTableElement element = table.GetElement(i, j);
+                    ulong encoderIndex = bind.Slot + (ulong)j;
 
-                        break;
+                    switch (bind.Type)
+                    {
+                        case ERHIBindType.Buffer:
+                        case ERHIBindType.StorageBuffer:
+                        case ERHIBindType.UniformBuffer:
+                            if (element.BufferView is MetalBufferView bufferView)
+                            {
+                                state.Encoder.SetBuffer(bufferView.Buffer.NativeBuffer, (ulong)Math.Max(0, bufferView.Descriptor.Offset), encoderIndex);
+                            }
 
-                    case ERHIBindType.Texture2D:
-                    case ERHIBindType.Texture2DMS:
-                    case ERHIBindType.Texture2DArray:
-                    case ERHIBindType.Texture2DArrayMS:
-                    case ERHIBindType.TextureCube:
-                    case ERHIBindType.TextureCubeArray:
-                    case ERHIBindType.Texture3D:
-                    case ERHIBindType.StorageTexture2D:
-                    case ERHIBindType.StorageTexture2DMS:
-                    case ERHIBindType.StorageTexture2DArray:
-                    case ERHIBindType.StorageTexture2DArrayMS:
-                    case ERHIBindType.StorageTextureCube:
-                    case ERHIBindType.StorageTextureCubeArray:
-                    case ERHIBindType.StorageTexture3D:
-                        if (element.TextureView is MetalTextureView textureView)
-                        {
-                            state.Encoder.SetTexture(textureView.NativeTexture, bind.Slot);
-                        }
+                            break;
 
-                        break;
+                        case ERHIBindType.Texture2D:
+                        case ERHIBindType.Texture2DMS:
+                        case ERHIBindType.Texture2DArray:
+                        case ERHIBindType.Texture2DArrayMS:
+                        case ERHIBindType.TextureCube:
+                        case ERHIBindType.TextureCubeArray:
+                        case ERHIBindType.Texture3D:
+                        case ERHIBindType.StorageTexture2D:
+                        case ERHIBindType.StorageTexture2DMS:
+                        case ERHIBindType.StorageTexture2DArray:
+                        case ERHIBindType.StorageTexture2DArrayMS:
+                        case ERHIBindType.StorageTextureCube:
+                        case ERHIBindType.StorageTextureCubeArray:
+                        case ERHIBindType.StorageTexture3D:
+                            if (element.TextureView is MetalTextureView textureView)
+                            {
+                                state.Encoder.SetTexture(textureView.NativeTexture, encoderIndex);
+                            }
 
-                    case ERHIBindType.Sampler:
-                        if (element.Sampler is MetalSampler sampler)
-                        {
-                            state.Encoder.SetSamplerState(sampler.NativeSampler, bind.Slot);
-                        }
+                            break;
 
-                        break;
+                        case ERHIBindType.Sampler:
+                            if (element.Sampler is MetalSampler sampler)
+                            {
+                                state.Encoder.SetSamplerState(sampler.NativeSampler, encoderIndex);
+                            }
 
-                    case ERHIBindType.AccelStruct:
-                        if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
-                        {
-                            state.Encoder.SetAccelerationStructure(topLevel.NativeAccelerationStructure, bind.Slot);
-                        }
+                            break;
 
-                        break;
+                        case ERHIBindType.AccelStruct:
+                            if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
+                            {
+                                state.Encoder.SetAccelerationStructure(topLevel.NativeAccelerationStructure, encoderIndex);
+                            }
+
+                            break;
+                    }
                 }
             }
         }
@@ -1085,87 +1099,97 @@ namespace Infinity.Graphics
 
         private static byte[] EncodePayload(MetalResourceTable table, MetalFunctionTable? functionTable)
         {
-            List<MetalBindlessPayloadEntry> entries = new List<MetalBindlessPayloadEntry>(table.ResourceTableLayout.BindInfos.Length + 2);
-
             MetalBindInfo[] binds = table.ResourceTableLayout.BindInfos;
-            RHIResourceTableElement[] elements = table.Elements;
-            for (int i = 0; i < binds.Length && i < elements.Length; ++i)
+            int totalEntries = 0;
+            for (int i = 0; i < binds.Length; ++i)
+            {
+                totalEntries += (int)Math.Max(1u, binds[i].Count);
+            }
+
+            List<MetalBindlessPayloadEntry> entries = new List<MetalBindlessPayloadEntry>(totalEntries + 2);
+
+            for (int i = 0; i < binds.Length; ++i)
             {
                 ref readonly MetalBindInfo bind = ref binds[i];
-                ref RHIResourceTableElement element = ref elements[i];
+                int arrayCount = (int)Math.Max(1u, bind.Count);
 
-                ulong value0 = 0;
-                ulong value1 = 0;
-                switch (bind.Type)
+                for (int j = 0; j < arrayCount; ++j)
                 {
-                    case ERHIBindType.Buffer:
-                    case ERHIBindType.StorageBuffer:
-                    case ERHIBindType.UniformBuffer:
-                        if (element.BufferView is MetalBufferView bufferView)
-                        {
-                            ulong offset = (ulong)Math.Max(0, bufferView.Descriptor.Offset);
-                            value0 = bufferView.Buffer.NativeBuffer.GpuAddress + offset;
-                            value1 = (ulong)Math.Max(0, bufferView.Descriptor.Stride);
-                        }
+                    RHIResourceTableElement element = table.GetElement(i, j);
 
-                        break;
-
-                    case ERHIBindType.Texture2D:
-                    case ERHIBindType.Texture2DMS:
-                    case ERHIBindType.Texture2DArray:
-                    case ERHIBindType.Texture2DArrayMS:
-                    case ERHIBindType.TextureCube:
-                    case ERHIBindType.TextureCubeArray:
-                    case ERHIBindType.Texture3D:
-                    case ERHIBindType.StorageTexture2D:
-                    case ERHIBindType.StorageTexture2DMS:
-                    case ERHIBindType.StorageTexture2DArray:
-                    case ERHIBindType.StorageTexture2DArrayMS:
-                    case ERHIBindType.StorageTextureCube:
-                    case ERHIBindType.StorageTextureCubeArray:
-                    case ERHIBindType.StorageTexture3D:
-                        if (element.TextureView is MetalTextureView textureView)
-                        {
-                            value0 = textureView.NativeTexture.GpuResourceID._impl;
-                        }
-
-                        break;
-
-                    case ERHIBindType.Sampler:
-                        if (element.Sampler is MetalSampler sampler)
-                        {
-                            value0 = sampler.NativeSampler.GpuResourceID._impl;
-                        }
-
-                        break;
-
-                    case ERHIBindType.AccelStruct:
-                        if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
-                        {
-                            value0 = topLevel.NativeAccelerationStructure.GpuResourceID._impl;
-                        }
-
-                        break;
-                }
-
-                entries.Add(new MetalBindlessPayloadEntry
-                {
-                    Slot = bind.Slot,
-                    BindType = (uint)bind.Type,
-                    StageMask = (uint)bind.Stage,
-                    Reserved = 0,
-                    Value0 = value0,
-                    Value1 = value1
-                });
-
-                if (value0 == 0 && bind.Type != ERHIBindType.Sampler)
-                {
-                    string logKey = $"{bind.Slot}:{bind.Type}:{bind.Stage}";
-                    lock (s_ZeroAddressLogLock)
+                    ulong value0 = 0;
+                    ulong value1 = 0;
+                    switch (bind.Type)
                     {
-                        if (s_ZeroAddressLogKeys.Add(logKey))
+                        case ERHIBindType.Buffer:
+                        case ERHIBindType.StorageBuffer:
+                        case ERHIBindType.UniformBuffer:
+                            if (element.BufferView is MetalBufferView bufferView)
+                            {
+                                ulong offset = (ulong)Math.Max(0, bufferView.Descriptor.Offset);
+                                value0 = bufferView.Buffer.NativeBuffer.GpuAddress + offset;
+                                value1 = (ulong)Math.Max(0, bufferView.Descriptor.Stride);
+                            }
+
+                            break;
+
+                        case ERHIBindType.Texture2D:
+                        case ERHIBindType.Texture2DMS:
+                        case ERHIBindType.Texture2DArray:
+                        case ERHIBindType.Texture2DArrayMS:
+                        case ERHIBindType.TextureCube:
+                        case ERHIBindType.TextureCubeArray:
+                        case ERHIBindType.Texture3D:
+                        case ERHIBindType.StorageTexture2D:
+                        case ERHIBindType.StorageTexture2DMS:
+                        case ERHIBindType.StorageTexture2DArray:
+                        case ERHIBindType.StorageTexture2DArrayMS:
+                        case ERHIBindType.StorageTextureCube:
+                        case ERHIBindType.StorageTextureCubeArray:
+                        case ERHIBindType.StorageTexture3D:
+                            if (element.TextureView is MetalTextureView textureView)
+                            {
+                                value0 = textureView.NativeTexture.GpuResourceID._impl;
+                            }
+
+                            break;
+
+                        case ERHIBindType.Sampler:
+                            if (element.Sampler is MetalSampler sampler)
+                            {
+                                value0 = sampler.NativeSampler.GpuResourceID._impl;
+                            }
+
+                            break;
+
+                        case ERHIBindType.AccelStruct:
+                            if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
+                            {
+                                value0 = topLevel.NativeAccelerationStructure.GpuResourceID._impl;
+                            }
+
+                            break;
+                    }
+
+                    entries.Add(new MetalBindlessPayloadEntry
+                    {
+                        Slot = bind.Slot + (uint)j,
+                        BindType = (uint)bind.Type,
+                        StageMask = (uint)bind.Stage,
+                        Reserved = 0,
+                        Value0 = value0,
+                        Value1 = value1
+                    });
+
+                    if (value0 == 0 && bind.Type != ERHIBindType.Sampler)
+                    {
+                        string logKey = $"{bind.Slot + (uint)j}:{bind.Type}:{bind.Stage}";
+                        lock (s_ZeroAddressLogLock)
                         {
-                            Console.WriteLine($"[MetalBinding] WARNING: SetBytes payload entry has zero value0. slot={bind.Slot}, type={bind.Type}, stage={bind.Stage}.");
+                            if (s_ZeroAddressLogKeys.Add(logKey))
+                            {
+                                Console.WriteLine($"[MetalBinding] WARNING: SetBytes payload entry has zero value0. slot={bind.Slot + (uint)j}, type={bind.Type}, stage={bind.Stage}.");
+                            }
                         }
                     }
                 }
@@ -1362,7 +1386,8 @@ namespace Infinity.Graphics
             for (int i = 0; i < binds.Length; ++i)
             {
                 ref readonly MetalBindInfo bind = ref binds[i];
-                ulong nextIndex = bind.Slot + 1UL;
+                ulong arrayCount = Math.Max(1UL, bind.Count);
+                ulong nextIndex = bind.Slot + arrayCount;
                 if (MetalBindingHelpers.IsBufferBindingType(bind.Type))
                 {
                     maxBufferCount = Math.Max(maxBufferCount, nextIndex);
@@ -1411,60 +1436,66 @@ namespace Infinity.Graphics
         private static void PopulateArgumentTable(MTL4ArgumentTable argumentTable, MetalResourceTable table)
         {
             MetalBindInfo[] binds = table.ResourceTableLayout.BindInfos;
-            RHIResourceTableElement[] elements = table.Elements;
-            for (int i = 0; i < binds.Length && i < elements.Length; ++i)
+            for (int i = 0; i < binds.Length; ++i)
             {
                 ref readonly MetalBindInfo bind = ref binds[i];
-                ref RHIResourceTableElement element = ref elements[i];
-                switch (bind.Type)
+                int arrayCount = (int)Math.Max(1u, bind.Count);
+
+                for (int j = 0; j < arrayCount; ++j)
                 {
-                    case ERHIBindType.Buffer:
-                    case ERHIBindType.StorageBuffer:
-                    case ERHIBindType.UniformBuffer:
-                        if (element.BufferView is MetalBufferView bufferView)
-                        {
-                            ulong offset = (ulong)Math.Max(0, bufferView.Descriptor.Offset);
-                            argumentTable.SetAddress(bufferView.Buffer.NativeBuffer.GpuAddress + offset, bind.Slot);
-                        }
+                    RHIResourceTableElement element = table.GetElement(i, j);
+                    ulong slotIndex = bind.Slot + (ulong)j;
 
-                        break;
+                    switch (bind.Type)
+                    {
+                        case ERHIBindType.Buffer:
+                        case ERHIBindType.StorageBuffer:
+                        case ERHIBindType.UniformBuffer:
+                            if (element.BufferView is MetalBufferView bufferView)
+                            {
+                                ulong offset = (ulong)Math.Max(0, bufferView.Descriptor.Offset);
+                                argumentTable.SetAddress(bufferView.Buffer.NativeBuffer.GpuAddress + offset, slotIndex);
+                            }
 
-                    case ERHIBindType.Texture2D:
-                    case ERHIBindType.Texture2DMS:
-                    case ERHIBindType.Texture2DArray:
-                    case ERHIBindType.Texture2DArrayMS:
-                    case ERHIBindType.TextureCube:
-                    case ERHIBindType.TextureCubeArray:
-                    case ERHIBindType.Texture3D:
-                    case ERHIBindType.StorageTexture2D:
-                    case ERHIBindType.StorageTexture2DMS:
-                    case ERHIBindType.StorageTexture2DArray:
-                    case ERHIBindType.StorageTexture2DArrayMS:
-                    case ERHIBindType.StorageTextureCube:
-                    case ERHIBindType.StorageTextureCubeArray:
-                    case ERHIBindType.StorageTexture3D:
-                        if (element.TextureView is MetalTextureView textureView)
-                        {
-                            argumentTable.SetTexture(textureView.NativeTexture.GpuResourceID, bind.Slot);
-                        }
+                            break;
 
-                        break;
+                        case ERHIBindType.Texture2D:
+                        case ERHIBindType.Texture2DMS:
+                        case ERHIBindType.Texture2DArray:
+                        case ERHIBindType.Texture2DArrayMS:
+                        case ERHIBindType.TextureCube:
+                        case ERHIBindType.TextureCubeArray:
+                        case ERHIBindType.Texture3D:
+                        case ERHIBindType.StorageTexture2D:
+                        case ERHIBindType.StorageTexture2DMS:
+                        case ERHIBindType.StorageTexture2DArray:
+                        case ERHIBindType.StorageTexture2DArrayMS:
+                        case ERHIBindType.StorageTextureCube:
+                        case ERHIBindType.StorageTextureCubeArray:
+                        case ERHIBindType.StorageTexture3D:
+                            if (element.TextureView is MetalTextureView textureView)
+                            {
+                                argumentTable.SetTexture(textureView.NativeTexture.GpuResourceID, slotIndex);
+                            }
 
-                    case ERHIBindType.Sampler:
-                        if (element.Sampler is MetalSampler sampler)
-                        {
-                            argumentTable.SetSamplerState(sampler.NativeSampler.GpuResourceID, bind.Slot);
-                        }
+                            break;
 
-                        break;
+                        case ERHIBindType.Sampler:
+                            if (element.Sampler is MetalSampler sampler)
+                            {
+                                argumentTable.SetSamplerState(sampler.NativeSampler.GpuResourceID, slotIndex);
+                            }
 
-                    case ERHIBindType.AccelStruct:
-                        if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
-                        {
-                            argumentTable.SetResource(topLevel.NativeAccelerationStructure.GpuResourceID, bind.Slot);
-                        }
+                            break;
 
-                        break;
+                        case ERHIBindType.AccelStruct:
+                            if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
+                            {
+                                argumentTable.SetResource(topLevel.NativeAccelerationStructure.GpuResourceID, slotIndex);
+                            }
+
+                            break;
+                    }
                 }
             }
         }

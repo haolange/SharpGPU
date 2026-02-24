@@ -168,6 +168,81 @@ namespace Infinity.Graphics
             }
         }
 
+        public override void SetBindElement(in RHIResourceTableElement element, in ERHIBindType bindType, in int slot, in int arrayIndex)
+        {
+            VkWriteDescriptorSet writeDescriptor = new VkWriteDescriptorSet()
+            {
+                sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                dstSet = m_NativeDescriptorSet,
+                dstBinding = (uint)slot,
+                dstArrayElement = (uint)arrayIndex,
+                descriptorCount = 1,
+                descriptorType = VulkanUtility.ConvertToVkDescriptorType(bindType),
+            };
+
+            switch (bindType)
+            {
+                case ERHIBindType.Sampler:
+                {
+                    if (element.Sampler != null)
+                    {
+                        VulkanSampler vkSampler = element.Sampler as VulkanSampler;
+                        VkDescriptorImageInfo imageInfo = vkSampler.GetDescriptorImageInfo();
+                        writeDescriptor.pImageInfo = &imageInfo;
+                        VulkanNative.vkUpdateDescriptorSets(m_VulkanDevice.NativeDevice, 1, &writeDescriptor, 0, null);
+                    }
+                    break;
+                }
+                case ERHIBindType.UniformBuffer:
+                case ERHIBindType.Buffer:
+                case ERHIBindType.StorageBuffer:
+                {
+                    if (element.BufferView != null)
+                    {
+                        VulkanBufferView vkBufferView = element.BufferView as VulkanBufferView;
+                        VkDescriptorBufferInfo bufferInfo = vkBufferView.GetDescriptorBufferInfo();
+                        writeDescriptor.pBufferInfo = &bufferInfo;
+                        VulkanNative.vkUpdateDescriptorSets(m_VulkanDevice.NativeDevice, 1, &writeDescriptor, 0, null);
+                    }
+                    break;
+                }
+                case ERHIBindType.Texture2D:
+                case ERHIBindType.Texture2DMS:
+                case ERHIBindType.Texture2DArray:
+                case ERHIBindType.Texture2DArrayMS:
+                case ERHIBindType.TextureCube:
+                case ERHIBindType.TextureCubeArray:
+                case ERHIBindType.Texture3D:
+                {
+                    if (element.TextureView != null)
+                    {
+                        VulkanTextureView vkTextureView = element.TextureView as VulkanTextureView;
+                        VkDescriptorImageInfo imageInfo = vkTextureView.GetDescriptorImageInfo(VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                        writeDescriptor.pImageInfo = &imageInfo;
+                        VulkanNative.vkUpdateDescriptorSets(m_VulkanDevice.NativeDevice, 1, &writeDescriptor, 0, null);
+                    }
+                    break;
+                }
+                case ERHIBindType.StorageTexture2D:
+                case ERHIBindType.StorageTexture2DMS:
+                case ERHIBindType.StorageTexture2DArray:
+                case ERHIBindType.StorageTexture2DArrayMS:
+                case ERHIBindType.StorageTextureCube:
+                case ERHIBindType.StorageTextureCubeArray:
+                case ERHIBindType.StorageTexture3D:
+                {
+                    if (element.TextureView != null)
+                    {
+                        VulkanTextureView vkTextureView = element.TextureView as VulkanTextureView;
+                        VkDescriptorImageInfo imageInfo = vkTextureView.GetDescriptorImageInfo(VkImageLayout.VK_IMAGE_LAYOUT_GENERAL);
+                        writeDescriptor.pImageInfo = &imageInfo;
+                        VulkanNative.vkUpdateDescriptorSets(m_VulkanDevice.NativeDevice, 1, &writeDescriptor, 0, null);
+                    }
+                    break;
+                }
+            }
+        }
+
         protected override void Release()
         {
             fixed (VkDescriptorSet* setPtr = &m_NativeDescriptorSet)

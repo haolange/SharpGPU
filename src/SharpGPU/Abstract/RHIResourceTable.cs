@@ -41,5 +41,6 @@ namespace Infinity.Graphics
     public abstract class RHIResourceTable : Disposal
     {
         public abstract void SetBindElement(in RHIResourceTableElement element, in ERHIBindType bindType, in int slot);
+        public abstract void SetBindElement(in RHIResourceTableElement element, in ERHIBindType bindType, in int slot, in int arrayIndex);
     }
 }
