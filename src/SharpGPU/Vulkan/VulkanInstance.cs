@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using Evergine.Bindings.Vulkan;
 using System.Collections.Generic;
@@ -9,21 +9,22 @@ namespace Infinity.Graphics
 #pragma warning disable CS8618
     internal unsafe class VulkanInstance : RHIInstance
     {
-        public override int DeviceCount => 1;
+        public override int DeviceCount => m_Devices.Count;
         public override ERHIBackend BackendType => ERHIBackend.Vulkan;
 
+        public VkInstance NativeInstance => m_VkInstance;
+
         private VkInstance m_VkInstance;
-
+        private List<VulkanDevice> m_Devices;
         private List<string> m_ValidationLayers;
-
         private List<string> m_RequiredExtensions;
 
         public VulkanInstance(in RHIInstanceDescriptor descriptor)
         {
-
             CheckExtensionSupport(descriptor);
             CheckValidationLayerSupport(descriptor);
             CreateVulkanInstance(descriptor);
+            EnumeratePhysicalDevices(descriptor);
         }
 
         private void CheckExtension(string[] availableinstanceExtensions, List<string> extensionsToEnable, string extension)
@@ -72,11 +73,6 @@ namespace Infinity.Graphics
                     break;
             }
 
-            /*foreach (string item in m_RequiredExtensions)
-            {
-                CheckExtension(array, m_RequiredExtensions, item);
-            }*/
-
             if (array.Any((string e) => e == "VK_KHR_get_physical_device_properties2"))
             {
                 m_RequiredExtensions.Add("VK_KHR_get_physical_device_properties2");
@@ -87,8 +83,6 @@ namespace Infinity.Graphics
                 if (array.Any((string e) => e == "VK_EXT_debug_utils"))
                 {
                     m_RequiredExtensions.Add("VK_EXT_debug_utils");
-                    //DebugUtilsEnabled = true;
-                    //DebugMarkerEnabled = true;
                 }
                 else
                 {
@@ -110,34 +104,31 @@ namespace Infinity.Graphics
                 array[i] = VulkanUtility.GetString(availableLayers[i].layerName);
             }
 
+            m_ValidationLayers = new List<string>();
             if (descriptor.EnableValidatior)
             {
-                m_ValidationLayers = new List<string>();
                 switch (VulkanUtility.GetCurrentOSPlatfom())
                 {
                     case EOSPlatform.Windows:
+                    case EOSPlatform.Linux:
                         if (array.Any((string l) => l == "VK_LAYER_KHRONOS_validation"))
                         {
                             m_ValidationLayers.Add("VK_LAYER_KHRONOS_validation");
                         }
-
                         break;
                     case EOSPlatform.Android:
                         if (array.Any((string l) => l == "VK_LAYER_LUNARG_core_validation"))
                         {
                             m_ValidationLayers.Add("VK_LAYER_LUNARG_core_validation");
                         }
-
                         if (array.Any((string l) => l == "VK_LAYER_LUNARG_swapchain"))
                         {
                             m_ValidationLayers.Add("VK_LAYER_LUNARG_swapchain");
                         }
-
                         if (array.Any((string l) => l == "VK_LAYER_LUNARG_parameter_validation"))
                         {
                             m_ValidationLayers.Add("VK_LAYER_LUNARG_parameter_validation");
                         }
-
                         break;
                 }
             }
@@ -170,13 +161,20 @@ namespace Infinity.Graphics
 
             // Validation layers
 #if DEBUG
-            IntPtr* layersToBytesArray = stackalloc IntPtr[m_ValidationLayers.Count];
-            for (int i = 0; i < m_ValidationLayers.Count; ++i)
+            if (m_ValidationLayers.Count > 0)
             {
-                layersToBytesArray[i] = Marshal.StringToHGlobalAnsi(m_ValidationLayers[i]);
+                IntPtr* layersToBytesArray = stackalloc IntPtr[m_ValidationLayers.Count];
+                for (int i = 0; i < m_ValidationLayers.Count; ++i)
+                {
+                    layersToBytesArray[i] = Marshal.StringToHGlobalAnsi(m_ValidationLayers[i]);
+                }
+                createInfo.enabledLayerCount = (uint)m_ValidationLayers.Count;
+                createInfo.ppEnabledLayerNames = (byte**)layersToBytesArray;
             }
-            createInfo.enabledLayerCount = (uint)m_ValidationLayers.Count;
-            createInfo.ppEnabledLayerNames = (byte**)layersToBytesArray;
+            else
+            {
+                createInfo.enabledLayerCount = 0;
+            }
 #else
             createInfo.enabledLayerCount = 0;
             createInfo.pNext = null;
@@ -188,14 +186,39 @@ namespace Infinity.Graphics
             }
         }
 
+        private void EnumeratePhysicalDevices(in RHIInstanceDescriptor descriptor)
+        {
+            uint deviceCount = 0;
+            VulkanUtility.CheckErrors(VulkanNative.vkEnumeratePhysicalDevices(m_VkInstance, &deviceCount, null));
+
+            if (deviceCount == 0)
+            {
+                throw new InvalidOperationException("Failed to find GPUs with Vulkan support.");
+            }
+
+            VkPhysicalDevice* physicalDevices = stackalloc VkPhysicalDevice[(int)deviceCount];
+            VulkanUtility.CheckErrors(VulkanNative.vkEnumeratePhysicalDevices(m_VkInstance, &deviceCount, physicalDevices));
+
+            m_Devices = new List<VulkanDevice>((int)deviceCount);
+            for (int i = 0; i < deviceCount; ++i)
+            {
+                m_Devices.Add(new VulkanDevice(this, physicalDevices[i], descriptor.ComputeQueueRequestCount, descriptor.TransferQueueRequestCount, descriptor.GraphicsQueueRequestCount));
+            }
+        }
+
         public override RHIDevice GetDevice(in int index)
         {
-            throw new NotImplementedException();
+            return m_Devices[index];
         }
 
         protected override void Release()
         {
+            for (int i = 0; i < m_Devices.Count; ++i)
+            {
+                m_Devices[i].Dispose();
+            }
 
+            VulkanNative.vkDestroyInstance(m_VkInstance, null);
         }
     }
 #pragma warning restore CS8618
