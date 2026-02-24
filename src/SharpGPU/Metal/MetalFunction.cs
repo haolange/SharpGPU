@@ -9,6 +9,43 @@ namespace Infinity.Graphics
 {
     internal static class MetalFunctionPayloadDecoder
     {
+        [DllImport("/usr/lib/system/libdispatch.dylib")]
+        private static extern IntPtr dispatch_data_create(IntPtr buffer, UIntPtr size, IntPtr queue, IntPtr destructor);
+
+        [DllImport("/usr/lib/system/libdispatch.dylib")]
+        private static extern void dispatch_release(IntPtr obj);
+
+        internal static MTLLibrary CreateLibraryFromBinary(MTLDevice device, IntPtr byteCode, uint byteSize)
+        {
+            if (byteCode == IntPtr.Zero || byteSize == 0)
+            {
+                throw new InvalidOperationException("Metal library binary payload is empty.");
+            }
+
+            IntPtr dispatchData = dispatch_data_create(byteCode, new UIntPtr(byteSize), IntPtr.Zero, IntPtr.Zero);
+            if (dispatchData == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create dispatch_data_t for Metal library binary payload.");
+            }
+
+            try
+            {
+                NSError error = default;
+                MTLLibrary library = device.NewLibrary(dispatchData, ref error);
+                if (library.NativePtr == IntPtr.Zero)
+                {
+                    string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
+                    throw new InvalidOperationException($"Failed to create MTLLibrary from binary payload: {errorText}");
+                }
+
+                return library;
+            }
+            finally
+            {
+                dispatch_release(dispatchData);
+            }
+        }
+
         internal static string DecodeSource(in RHIFunctionDescriptor descriptor)
         {
             if (descriptor.ByteCode == IntPtr.Zero || descriptor.ByteSize == 0)
@@ -23,7 +60,7 @@ namespace Infinity.Graphics
 
             if (descriptor.PayloadKind == ERHIShaderPayloadKind.MetalLibrary)
             {
-                throw new NotSupportedException("Metal library binary payload is not wired yet. Use MslSource payload for now.");
+                return string.Empty;
             }
 
             throw new NotSupportedException($"Unsupported shader payload for Metal function: {descriptor.PayloadKind}");
@@ -43,7 +80,7 @@ namespace Infinity.Graphics
 
             if (descriptor.PayloadKind == ERHIShaderPayloadKind.MetalLibrary)
             {
-                throw new NotSupportedException("Metal library binary payload is not wired yet. Use MslSource payload for now.");
+                return string.Empty;
             }
 
             throw new NotSupportedException($"Unsupported shader payload for Metal function library: {descriptor.PayloadKind}");
@@ -124,22 +161,30 @@ namespace Infinity.Graphics
         public MetalFunction(MetalDevice device, in RHIFunctionDescriptor descriptor)
         {
             m_Descriptor = descriptor;
-            string source = MetalFunctionPayloadDecoder.DecodeSource(descriptor);
-            if (string.IsNullOrWhiteSpace(source))
+
+            if (descriptor.PayloadKind == ERHIShaderPayloadKind.MetalLibrary)
             {
-                throw new InvalidOperationException("Metal function payload is empty.");
+                m_NativeLibrary = MetalFunctionPayloadDecoder.CreateLibraryFromBinary(device.NativeDevice, descriptor.ByteCode, descriptor.ByteSize);
             }
-
-            NSString sourceString = new NSString(source);
-            MTLCompileOptions options = MTLCompileOptions.New();
-            options.FastMathEnabled = true;
-
-            NSError error = default;
-            m_NativeLibrary = device.NativeDevice.NewLibrary(sourceString, options, ref error);
-            if (m_NativeLibrary.NativePtr == IntPtr.Zero)
+            else
             {
-                string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
-                throw new InvalidOperationException($"Failed to compile MSL library: {errorText}");
+                string source = MetalFunctionPayloadDecoder.DecodeSource(descriptor);
+                if (string.IsNullOrWhiteSpace(source))
+                {
+                    throw new InvalidOperationException("Metal function payload is empty.");
+                }
+
+                NSString sourceString = new NSString(source);
+                MTLCompileOptions options = MTLCompileOptions.New();
+                options.FastMathEnabled = true;
+
+                NSError error = default;
+                m_NativeLibrary = device.NativeDevice.NewLibrary(sourceString, options, ref error);
+                if (m_NativeLibrary.NativePtr == IntPtr.Zero)
+                {
+                    string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
+                    throw new InvalidOperationException($"Failed to compile MSL library: {errorText}");
+                }
             }
 
             NSString entryName = new NSString(descriptor.EntryName);
@@ -175,22 +220,30 @@ namespace Infinity.Graphics
         public MetalFunctionLibrary(MetalDevice device, in RHIFunctionLibraryDescriptor descriptor)
         {
             m_Descriptor = descriptor;
-            string source = MetalFunctionPayloadDecoder.DecodeSource(descriptor);
-            if (string.IsNullOrWhiteSpace(source))
+
+            if (descriptor.PayloadKind == ERHIShaderPayloadKind.MetalLibrary)
             {
-                throw new InvalidOperationException("Metal function library payload is empty.");
+                m_NativeLibrary = MetalFunctionPayloadDecoder.CreateLibraryFromBinary(device.NativeDevice, descriptor.ByteCode, descriptor.ByteSize);
             }
-
-            NSString sourceString = new NSString(source);
-            MTLCompileOptions options = MTLCompileOptions.New();
-            options.FastMathEnabled = true;
-
-            NSError error = default;
-            m_NativeLibrary = device.NativeDevice.NewLibrary(sourceString, options, ref error);
-            if (m_NativeLibrary.NativePtr == IntPtr.Zero)
+            else
             {
-                string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
-                throw new InvalidOperationException($"Failed to compile MSL function library: {errorText}");
+                string source = MetalFunctionPayloadDecoder.DecodeSource(descriptor);
+                if (string.IsNullOrWhiteSpace(source))
+                {
+                    throw new InvalidOperationException("Metal function library payload is empty.");
+                }
+
+                NSString sourceString = new NSString(source);
+                MTLCompileOptions options = MTLCompileOptions.New();
+                options.FastMathEnabled = true;
+
+                NSError error = default;
+                m_NativeLibrary = device.NativeDevice.NewLibrary(sourceString, options, ref error);
+                if (m_NativeLibrary.NativePtr == IntPtr.Zero)
+                {
+                    string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
+                    throw new InvalidOperationException($"Failed to compile MSL function library: {errorText}");
+                }
             }
         }
 

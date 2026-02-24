@@ -961,11 +961,15 @@ namespace Infinity.Graphics
         private const uint BindTypeVisibleFunctionTable = 0xFFFF0002;
 
         private readonly SortedDictionary<uint, byte[]> m_TablePayloads;
+        private readonly SortedDictionary<uint, MTLBuffer> m_FallbackBuffers;
+        private bool m_HasWarnedPayloadFallback;
 
         internal MetalSetBytesBindingBackend(MetalDevice device, in MetalBindingPipelineType pipelineType, bool? legacyCompatibilityOverride = null)
             : base(device, pipelineType, legacyCompatibilityOverride)
         {
             m_TablePayloads = new SortedDictionary<uint, byte[]>();
+            m_FallbackBuffers = new SortedDictionary<uint, MTLBuffer>();
+            m_HasWarnedPayloadFallback = false;
         }
 
         public override MetalBindingMode Mode => MetalBindingMode.SetBytes;
@@ -981,6 +985,8 @@ namespace Infinity.Graphics
         {
             base.ResetForPipeline(pipelineLayout);
             m_TablePayloads.Clear();
+            ReleaseFallbackBuffers();
+            m_HasWarnedPayloadFallback = false;
         }
 
         protected override void OnResourceTableUpdated(MetalResourceTable resourceTable, in uint tableIndex)
@@ -998,9 +1004,17 @@ namespace Infinity.Graphics
                     m_TablePayloads[pair.Key] = payload;
                 }
 
-                fixed (byte* payloadPtr = payload)
+                if (payload.Length > SetBytesMaxLength)
                 {
-                    encoder.SetBytes((IntPtr)payloadPtr, (ulong)payload.Length, pair.Key);
+                    MTLBuffer fallback = GetOrUpdateFallbackBuffer(pair.Key, payload);
+                    encoder.SetBuffer(fallback, 0, pair.Key);
+                }
+                else
+                {
+                    fixed (byte* payloadPtr = payload)
+                    {
+                        encoder.SetBytes((IntPtr)payloadPtr, (ulong)payload.Length, pair.Key);
+                    }
                 }
             }
 
@@ -1022,9 +1036,17 @@ namespace Infinity.Graphics
                 byte[] payload = EncodePayload(pair.Value, functionTable);
                 m_TablePayloads[pair.Key] = payload;
 
-                fixed (byte* payloadPtr = payload)
+                if (payload.Length > SetBytesMaxLength)
                 {
-                    encoder.SetBytes((IntPtr)payloadPtr, (ulong)payload.Length, pair.Key);
+                    MTLBuffer fallback = GetOrUpdateFallbackBuffer(pair.Key, payload);
+                    encoder.SetBuffer(fallback, 0, pair.Key);
+                }
+                else
+                {
+                    fixed (byte* payloadPtr = payload)
+                    {
+                        encoder.SetBytes((IntPtr)payloadPtr, (ulong)payload.Length, pair.Key);
+                    }
                 }
             }
 
@@ -1054,10 +1076,19 @@ namespace Infinity.Graphics
                     m_TablePayloads[pair.Key] = payload;
                 }
 
-                fixed (byte* payloadPtr = payload)
+                if (payload.Length > SetBytesMaxLength)
                 {
-                    encoder.SetVertexBytes((IntPtr)payloadPtr, (ulong)payload.Length, pair.Key);
-                    encoder.SetFragmentBytes((IntPtr)payloadPtr, (ulong)payload.Length, pair.Key);
+                    MTLBuffer fallback = GetOrUpdateFallbackBuffer(pair.Key, payload);
+                    encoder.SetVertexBuffer(fallback, 0, pair.Key);
+                    encoder.SetFragmentBuffer(fallback, 0, pair.Key);
+                }
+                else
+                {
+                    fixed (byte* payloadPtr = payload)
+                    {
+                        encoder.SetVertexBytes((IntPtr)payloadPtr, (ulong)payload.Length, pair.Key);
+                        encoder.SetFragmentBytes((IntPtr)payloadPtr, (ulong)payload.Length, pair.Key);
+                    }
                 }
             }
 
@@ -1249,12 +1280,71 @@ namespace Infinity.Graphics
                 entrySpan[i] = entries[i];
             }
 
-            if (payload.Length > SetBytesMaxLength)
+            return payload;
+        }
+
+        private unsafe MTLBuffer GetOrUpdateFallbackBuffer(uint tableIndex, byte[] payload)
+        {
+            WarnPayloadFallbackOnce(payload.Length);
+
+            if (m_FallbackBuffers.TryGetValue(tableIndex, out MTLBuffer existing))
             {
-                throw new NotSupportedException($"TODO(UNVERIFIED): SetBytes payload size {payload.Length} exceeds Metal immediate-byte limit ({SetBytesMaxLength}). Use argument-buffer mode or split payload.");
+                if ((ulong)payload.Length <= existing.Length)
+                {
+                    fixed (byte* src = payload)
+                    {
+                        Buffer.MemoryCopy(src, existing.Contents.ToPointer(), (long)existing.Length, payload.Length);
+                    }
+
+                    return existing;
+                }
+
+                ObjectiveCRuntime.Release(existing);
+                m_FallbackBuffers.Remove(tableIndex);
             }
 
-            return payload;
+            MTLBuffer buffer = Device.NativeDevice.NewBuffer((ulong)payload.Length, MTLResourceOptions.ResourceStorageModeShared);
+            if (buffer.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException($"Failed to allocate MTLBuffer fallback for oversized SetBytes payload (size={payload.Length}).");
+            }
+
+            fixed (byte* src = payload)
+            {
+                Buffer.MemoryCopy(src, buffer.Contents.ToPointer(), payload.Length, payload.Length);
+            }
+
+            m_FallbackBuffers[tableIndex] = buffer;
+            return buffer;
+        }
+
+        private void WarnPayloadFallbackOnce(int payloadSize)
+        {
+            if (m_HasWarnedPayloadFallback)
+            {
+                return;
+            }
+
+            Console.WriteLine($"[MetalBinding] PERF: SetBytes payload size {payloadSize} exceeds {SetBytesMaxLength}-byte limit. Falling back to MTLBuffer binding. Consider using ArgumentBuffer mode for large resource tables.");
+            m_HasWarnedPayloadFallback = true;
+        }
+
+        private void ReleaseFallbackBuffers()
+        {
+            foreach (KeyValuePair<uint, MTLBuffer> pair in m_FallbackBuffers)
+            {
+                if (pair.Value.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(pair.Value);
+                }
+            }
+
+            m_FallbackBuffers.Clear();
+        }
+
+        protected override void DisposeBackend()
+        {
+            ReleaseFallbackBuffers();
         }
     }
 

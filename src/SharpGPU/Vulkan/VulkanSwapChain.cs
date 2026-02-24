@@ -185,6 +185,9 @@ namespace Infinity.Graphics
         {
             VulkanNative.vkDeviceWaitIdle(m_VulkanDevice.NativeDevice);
 
+            // Release old textures (external image wrappers)
+            ReleaseTextures();
+
             // Destroy old swap chain
             VulkanNative.vkDestroySwapchainKHR(m_VulkanDevice.NativeDevice, m_NativeSwapChain, null);
 
@@ -213,8 +216,21 @@ namespace Infinity.Graphics
             VulkanNative.vkQueuePresentKHR(vkQueue.NativeQueue, &presentInfo);
         }
 
+        private void ReleaseTextures()
+        {
+            if (m_Textures != null)
+            {
+                for (int i = 0; i < m_Textures.Length; ++i)
+                {
+                    m_Textures[i]?.Dispose();
+                }
+                m_Textures = null;
+            }
+        }
+
         protected override void Release()
         {
+            ReleaseTextures();
             VulkanNative.vkDestroySemaphore(m_VulkanDevice.NativeDevice, m_ImageAvailableSemaphore, null);
             VulkanNative.vkDestroySwapchainKHR(m_VulkanDevice.NativeDevice, m_NativeSwapChain, null);
             VulkanNative.vkDestroySurfaceKHR(m_VulkanDevice.VulkanInstance.NativeInstance, m_Surface, null);

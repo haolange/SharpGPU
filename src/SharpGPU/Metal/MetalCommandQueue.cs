@@ -72,22 +72,100 @@ namespace Infinity.Graphics
 
         public override void MapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
         {
-            throw new NotSupportedException("Tiled texture mapping is not implemented in Metal backend.");
+            UpdateSparseTextureMappings(tiledTextureRegions, MTLSparseTextureMappingMode.Map);
         }
 
         public override void UnMapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
         {
-            throw new NotSupportedException("Tiled texture unmapping is not implemented in Metal backend.");
+            UpdateSparseTextureMappings(tiledTextureRegions, MTLSparseTextureMappingMode.Unmap);
         }
 
         public override void MapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
         {
-            throw new NotSupportedException("Packed mip mapping is not implemented in Metal backend.");
+            UpdatePackedMipMappings(tiledTexturePackedMips, MTLSparseTextureMappingMode.Map);
         }
 
         public override void UnMapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
         {
-            throw new NotSupportedException("Packed mip unmapping is not implemented in Metal backend.");
+            UpdatePackedMipMappings(tiledTexturePackedMips, MTLSparseTextureMappingMode.Unmap);
+        }
+
+        private void UpdateSparseTextureMappings(in RHITiledTextureRegions tiledTextureRegions, MTLSparseTextureMappingMode mode)
+        {
+            MetalTexture metalTexture = tiledTextureRegions.Texture as MetalTexture ?? throw new ArgumentException("Invalid texture type for Metal sparse mapping.");
+            Span<RHITextureCoordinateRegion> regions = tiledTextureRegions.Regions.Span;
+            if (regions.Length == 0)
+            {
+                return;
+            }
+
+            MTLCommandBuffer cmdBuffer = m_NativeQueue.CommandBuffer();
+            MTLResourceStateCommandEncoder encoder = cmdBuffer.ResourceStateCommandEncoder();
+            if (encoder.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create resource state command encoder for sparse texture mapping.");
+            }
+
+            for (int i = 0; i < regions.Length; ++i)
+            {
+                ref RHITextureCoordinateRegion region = ref regions[i];
+                MTLRegion mtlRegion;
+                mtlRegion.origin.x = (ulong)Math.Max(0, region.Start.X);
+                mtlRegion.origin.y = (ulong)Math.Max(0, region.Start.Y);
+                mtlRegion.origin.z = (ulong)Math.Max(0, region.Start.Z);
+                mtlRegion.size.width = (ulong)Math.Max(0, region.End.X - region.Start.X);
+                mtlRegion.size.height = (ulong)Math.Max(0, region.End.Y - region.Start.Y);
+                mtlRegion.size.depth = (ulong)Math.Max(0, region.End.Z - region.Start.Z);
+                encoder.UpdateTextureMapping(metalTexture.NativeTexture, mode, mtlRegion, (ulong)Math.Max(0, region.MipLevel), (ulong)Math.Max(0, region.Layer));
+            }
+
+            encoder.EndEncoding();
+            cmdBuffer.Commit();
+            cmdBuffer.WaitUntilCompleted();
+        }
+
+        private void UpdatePackedMipMappings(in RHITiledTexturePackedMips tiledTexturePackedMips, MTLSparseTextureMappingMode mode)
+        {
+            Span<RHITiledTexturePackedMip> packedMips = tiledTexturePackedMips.PackedMips.Span;
+            if (packedMips.Length == 0)
+            {
+                return;
+            }
+
+            MTLCommandBuffer cmdBuffer = m_NativeQueue.CommandBuffer();
+            MTLResourceStateCommandEncoder encoder = cmdBuffer.ResourceStateCommandEncoder();
+            if (encoder.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create resource state command encoder for packed mip mapping.");
+            }
+
+            for (int i = 0; i < packedMips.Length; ++i)
+            {
+                ref RHITiledTexturePackedMip packedMip = ref packedMips[i];
+                MetalTexture metalTexture = packedMip.Texture as MetalTexture ?? throw new ArgumentException($"Invalid texture type for Metal packed mip mapping at index {i}.");
+
+                ulong firstPackedMipLevel = metalTexture.NativeTexture.FirstMipmapInTail;
+                ulong totalMipLevels = metalTexture.NativeTexture.MipmapLevelCount;
+
+                for (ulong mip = firstPackedMipLevel; mip < totalMipLevels; ++mip)
+                {
+                    MTLRegion mtlRegion;
+                    mtlRegion.origin.x = 0;
+                    mtlRegion.origin.y = 0;
+                    mtlRegion.origin.z = 0;
+                    ulong mipWidth = Math.Max(1UL, metalTexture.NativeTexture.Width >> (int)mip);
+                    ulong mipHeight = Math.Max(1UL, metalTexture.NativeTexture.Height >> (int)mip);
+                    ulong mipDepth = Math.Max(1UL, metalTexture.NativeTexture.Depth >> (int)mip);
+                    mtlRegion.size.width = mipWidth;
+                    mtlRegion.size.height = mipHeight;
+                    mtlRegion.size.depth = mipDepth;
+                    encoder.UpdateTextureMapping(metalTexture.NativeTexture, mode, mtlRegion, mip, (ulong)Math.Max(0, packedMip.Layer));
+                }
+            }
+
+            encoder.EndEncoding();
+            cmdBuffer.Commit();
+            cmdBuffer.WaitUntilCompleted();
         }
 
         public override void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore)

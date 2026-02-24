@@ -216,6 +216,12 @@ namespace Infinity.Graphics
 
         private ID3D12PipelineState* m_NativePipelineState;
 
+        internal Dx12ComputePipeline(ID3D12PipelineState* nativePipelineState, in RHIComputePipelineDescriptor descriptor)
+        {
+            m_Descriptor = descriptor;
+            m_NativePipelineState = nativePipelineState;
+        }
+
         public Dx12ComputePipeline(Dx12Device device, in RHIComputePipelineDescriptor descriptor)
         {
             m_Descriptor = descriptor;
@@ -595,6 +601,14 @@ namespace Infinity.Graphics
         private ID3D12PipelineState* m_NativePipelineState;
         private D3D_PRIMITIVE_TOPOLOGY m_PrimitiveTopology;
 
+        internal Dx12RasterPipeline(ID3D12PipelineState* nativePipelineState, in RHIRasterPipelineDescriptor descriptor)
+        {
+            m_Descriptor = descriptor;
+            m_NativePipelineState = nativePipelineState;
+            m_PrimitiveTopology = Dx12Utility.ConvertToDx12PrimitiveTopology(descriptor.PrimitiveAssembler.PrimitiveTopology);
+            m_VertexStrides = Array.Empty<uint>();
+        }
+
         public Dx12RasterPipeline(Dx12Device device, in RHIRasterPipelineDescriptor descriptor)
         {
             m_Descriptor = descriptor;
@@ -815,17 +829,83 @@ namespace Infinity.Graphics
 
         public override RHIComputePipeline LoadComputePipeline(RHIComputePipelineDescriptor computePipelineDescriptor)
         {
-            throw new System.NotImplementedException();
+            if (m_NativePipelineLibrary == null)
+            {
+                throw new System.InvalidOperationException("Dx12PipelineLibrary: Cannot load pipeline — ID3D12PipelineLibrary has not been initialized.");
+            }
+
+            Dx12Function computeFunction = computePipelineDescriptor.ComputeFunction as Dx12Function;
+            Dx12PipelineLayout pipelineLayout = computePipelineDescriptor.PipelineLayout as Dx12PipelineLayout;
+
+            D3D12_COMPUTE_PIPELINE_STATE_DESC description = new D3D12_COMPUTE_PIPELINE_STATE_DESC();
+            description.pRootSignature = pipelineLayout.NativeRootSignature;
+            description.Flags = D3D12_PIPELINE_STATE_FLAGS.D3D12_PIPELINE_STATE_FLAG_NONE;
+            description.CS.BytecodeLength = computeFunction.NativeShaderBytecode.BytecodeLength;
+            description.CS.pShaderBytecode = computeFunction.NativeShaderBytecode.pShaderBytecode;
+
+            ID3D12PipelineState* nativePipelineState;
+            fixed (char* pName = computePipelineDescriptor.Name)
+            {
+                HRESULT hResult = m_NativePipelineLibrary->LoadComputePipeline(pName, &description, __uuidof<ID3D12PipelineState>(), (void**)&nativePipelineState);
+
+                if (hResult == DXGI.DXGI_ERROR_NOT_FOUND)
+                {
+                    // Cache miss: create the pipeline normally and store it for next time
+                    Dx12ComputePipeline fallbackPipeline = new Dx12ComputePipeline(m_Dx12Device, computePipelineDescriptor);
+                    StoreComputePipeline(computePipelineDescriptor.Name, fallbackPipeline);
+                    return fallbackPipeline;
+                }
+#if DEBUG
+                Dx12Utility.CHECK_HR(hResult);
+#endif
+            }
+
+            Dx12ComputePipeline pipeline = new Dx12ComputePipeline(nativePipelineState, computePipelineDescriptor);
+            return pipeline;
         }
 
         public override RHIRasterPipeline LoadRasterPipeline(RHIRasterPipelineDescriptor rasterPipelineDescriptor)
         {
-            throw new System.NotImplementedException();
+            if (m_NativePipelineLibrary == null)
+            {
+                throw new System.InvalidOperationException("Dx12PipelineLibrary: Cannot load pipeline — ID3D12PipelineLibrary has not been initialized.");
+            }
+
+            Dx12PipelineLayout pipelineLayout = rasterPipelineDescriptor.PipelineLayout as Dx12PipelineLayout;
+
+            // Build the graphics pipeline state description for library lookup
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC description = new D3D12_GRAPHICS_PIPELINE_STATE_DESC();
+            description.pRootSignature = pipelineLayout.NativeRootSignature;
+            description.PrimitiveTopologyType = Dx12Utility.ConvertToDx12PrimitiveTopologyType(rasterPipelineDescriptor.PrimitiveTopology);
+            description.SampleMask = uint.MaxValue;
+            description.SampleDesc.Count = (uint)rasterPipelineDescriptor.SampleCount;
+            description.SampleDesc.Quality = 0;
+            description.NumRenderTargets = (uint)rasterPipelineDescriptor.OutputStateDescriptor.ColorAttachmentFormats.Length;
+
+            ID3D12PipelineState* nativePipelineState;
+            fixed (char* pName = rasterPipelineDescriptor.Name)
+            {
+                HRESULT hResult = m_NativePipelineLibrary->LoadGraphicsPipeline(pName, &description, __uuidof<ID3D12PipelineState>(), (void**)&nativePipelineState);
+
+                if (hResult == DXGI.DXGI_ERROR_NOT_FOUND)
+                {
+                    // Cache miss: create the pipeline normally and store it for next time
+                    Dx12RasterPipeline fallbackPipeline = new Dx12RasterPipeline(m_Dx12Device, rasterPipelineDescriptor);
+                    StoreRasterPipeline(rasterPipelineDescriptor.Name, fallbackPipeline);
+                    return fallbackPipeline;
+                }
+#if DEBUG
+                Dx12Utility.CHECK_HR(hResult);
+#endif
+            }
+
+            Dx12RasterPipeline pipeline = new Dx12RasterPipeline(nativePipelineState, rasterPipelineDescriptor);
+            return pipeline;
         }
 
         public override RHIRaytracingPipeline LoadRaytracingPipeline(RHIRaytracingPipelineDescriptor raytracingPipelineDescriptor)
         {
-            throw new System.NotSupportedException("D3D12 PipelineLibrary does not support loading raytracing state objects.");
+            throw new System.NotSupportedException("D3D12 PipelineLibrary does not support loading raytracing state objects. Raytracing pipelines use ID3D12StateObject which is incompatible with ID3D12PipelineLibrary.");
         }
 
         public override RHIPipelineLibraryResult Serialize()

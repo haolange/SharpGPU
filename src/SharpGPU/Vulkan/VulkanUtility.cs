@@ -951,6 +951,46 @@ namespace Infinity.Graphics
             }
         }
 
+        public static VkExtent2D ConvertToVkFragmentExtent(in ERHIShadingRate shadingRate)
+        {
+            switch (shadingRate)
+            {
+                case ERHIShadingRate.Rate1x1:
+                    return new VkExtent2D() { width = 1, height = 1 };
+                case ERHIShadingRate.Rate1x2:
+                    return new VkExtent2D() { width = 1, height = 2 };
+                case ERHIShadingRate.Rate2x1:
+                    return new VkExtent2D() { width = 2, height = 1 };
+                case ERHIShadingRate.Rate2x2:
+                    return new VkExtent2D() { width = 2, height = 2 };
+                case ERHIShadingRate.Rate2x4:
+                    return new VkExtent2D() { width = 2, height = 4 };
+                case ERHIShadingRate.Rate4x2:
+                    return new VkExtent2D() { width = 4, height = 2 };
+                case ERHIShadingRate.Rate4x4:
+                    return new VkExtent2D() { width = 4, height = 4 };
+                default:
+                    return new VkExtent2D() { width = 1, height = 1 };
+            }
+        }
+
+        public static VkFragmentShadingRateCombinerOpKHR ConvertToVkShadingRateCombiner(in ERHIShadingRateCombiner combiner)
+        {
+            switch (combiner)
+            {
+                case ERHIShadingRateCombiner.Min:
+                    return VkFragmentShadingRateCombinerOpKHR.VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR;
+                case ERHIShadingRateCombiner.Max:
+                    return VkFragmentShadingRateCombinerOpKHR.VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR;
+                case ERHIShadingRateCombiner.Override:
+                    return VkFragmentShadingRateCombinerOpKHR.VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR;
+                case ERHIShadingRateCombiner.Passthrough:
+                    return VkFragmentShadingRateCombinerOpKHR.VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+                default:
+                    return VkFragmentShadingRateCombinerOpKHR.VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+            }
+        }
+
         public static VkShaderStageFlagBits ConvertToVkShaderStageBit(in ERHIFunctionType type)
         {
             switch (type)

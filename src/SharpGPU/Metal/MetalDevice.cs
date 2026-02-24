@@ -185,22 +185,22 @@ namespace Infinity.Graphics
 
         public override RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
         {
-            return new MetalPipelineLibrary(descriptor);
+            return new MetalPipelineLibrary(this, descriptor);
         }
 
         public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
         {
-            return new MetalComputeIndirectCommandBuffer(descriptor);
+            return new MetalComputeIndirectCommandBuffer(this, descriptor);
         }
 
         public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor)
         {
-            return new MetalRayTracingIndirectCommandBuffer(descriptor);
+            return new MetalRayTracingIndirectCommandBuffer(this, descriptor);
         }
 
         public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
         {
-            return new MetalRasterIndirectCommandBuffer(descriptor);
+            return new MetalRasterIndirectCommandBuffer(this, descriptor);
         }
 
         private void BuildLimitAndFeature()

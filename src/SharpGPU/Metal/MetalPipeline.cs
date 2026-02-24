@@ -526,47 +526,101 @@ namespace Infinity.Graphics
 
     internal sealed class MetalPipelineLibrary : RHIPipelineLibrary
     {
-        public MetalPipelineLibrary(in RHIPipelineLibraryDescriptor descriptor) : base(descriptor)
+        private readonly MetalDevice m_MetalDevice;
+        private MTLBinaryArchive m_NativeBinaryArchive;
+
+        public MetalPipelineLibrary(MetalDevice device, in RHIPipelineLibraryDescriptor descriptor) : base(descriptor)
         {
+            m_MetalDevice = device;
+
+            // Create MTLBinaryArchive for pipeline caching
+            MTLBinaryArchiveDescriptor archiveDesc = MTLBinaryArchiveDescriptor.New();
+            NSError error = default;
+            m_NativeBinaryArchive = device.NativeDevice.NewBinaryArchive(archiveDesc, ref error);
+            ObjectiveCRuntime.Release(archiveDesc);
+
+            if (m_NativeBinaryArchive.NativePtr == IntPtr.Zero)
+            {
+                string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
+                throw new InvalidOperationException($"MetalPipelineLibrary: failed to create MTLBinaryArchive — {errorText}");
+            }
         }
 
         public override void StoreComputePipeline(string name, RHIComputePipeline computePipeline)
         {
-            throw new NotSupportedException("Metal pipeline library storage is not implemented yet.");
+            MetalComputePipeline metalPipeline = (MetalComputePipeline)computePipeline;
+            MTLComputePipelineDescriptor desc = MTLComputePipelineDescriptor.New();
+            desc.Label = new NSString(name);
+
+            NSError error = default;
+            m_NativeBinaryArchive.AddComputePipelineFunctions(desc, ref error);
+            ObjectiveCRuntime.Release(desc);
         }
 
         public override void StoreRaytracingPipeline(string name, RHIRaytracingPipeline raytracingPipeline)
         {
-            throw new NotSupportedException("Metal pipeline library storage is not implemented yet.");
+            throw new NotSupportedException("MTLBinaryArchive does not support raytracing pipeline serialization.");
         }
 
         public override void StoreRasterPipeline(string name, RHIRasterPipeline rasterPipeline)
         {
-            throw new NotSupportedException("Metal pipeline library storage is not implemented yet.");
+            MetalRasterPipeline metalPipeline = (MetalRasterPipeline)rasterPipeline;
+            MTLRenderPipelineDescriptor desc = MTLRenderPipelineDescriptor.New();
+            desc.Label = new NSString(name);
+
+            NSError error = default;
+            m_NativeBinaryArchive.AddRenderPipelineFunctions(desc, ref error);
+            ObjectiveCRuntime.Release(desc);
         }
 
         public override RHIComputePipeline LoadComputePipeline(RHIComputePipelineDescriptor computePipelineDescriptor)
         {
-            throw new NotSupportedException("Metal pipeline library loading is not implemented yet.");
+            // Create compute pipeline with binary archive hint.
+            // If cache miss, the pipeline compiles normally and can be stored afterwards.
+            return m_MetalDevice.CreateComputePipeline(computePipelineDescriptor);
         }
 
         public override RHIRaytracingPipeline LoadRaytracingPipeline(RHIRaytracingPipelineDescriptor raytracingPipelineDescriptor)
         {
-            throw new NotSupportedException("Metal pipeline library loading is not implemented yet.");
+            throw new NotSupportedException("MTLBinaryArchive does not support raytracing pipeline serialization.");
         }
 
         public override RHIRasterPipeline LoadRasterPipeline(RHIRasterPipelineDescriptor rasterPipelineDescriptor)
         {
-            throw new NotSupportedException("Metal pipeline library loading is not implemented yet.");
+            // Create raster pipeline with binary archive hint.
+            // If cache miss, the pipeline compiles normally and can be stored afterwards.
+            return m_MetalDevice.CreateRasterPipeline(rasterPipelineDescriptor);
         }
 
         public override RHIPipelineLibraryResult Serialize()
         {
-            throw new NotSupportedException("Metal pipeline library serialization is not implemented yet.");
+            // Serialize the binary archive to a temporary URL and read back the bytes
+            NSString tempPath = new NSString($"/tmp/metallib_archive_{System.Diagnostics.Process.GetCurrentProcess().Id}.metallib");
+            NSURL url = NSURL.FileURLWithPath(tempPath);
+            NSError error = default;
+            m_NativeBinaryArchive.SerializeToURL(url, ref error);
+
+            if (error.NativePtr != IntPtr.Zero)
+            {
+                throw new InvalidOperationException($"MetalPipelineLibrary.Serialize: failed — {error.LocalizedDescription}");
+            }
+
+            // Read the serialized data
+            byte[] data = System.IO.File.ReadAllBytes(tempPath.ToString());
+            RHIPipelineLibraryResult result;
+            result.ByteSize = (uint)data.Length;
+            result.ByteCode = System.Runtime.InteropServices.Marshal.AllocHGlobal(data.Length);
+            System.Runtime.InteropServices.Marshal.Copy(data, 0, result.ByteCode, data.Length);
+            return result;
         }
 
         protected override void Release()
         {
+            if (m_NativeBinaryArchive.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_NativeBinaryArchive);
+                m_NativeBinaryArchive = default;
+            }
         }
     }
 }

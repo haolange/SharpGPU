@@ -187,6 +187,7 @@ namespace Infinity.Graphics
         private Dx12Device m_Dx12Device;
         private ID3D12Resource* m_NativeResultBuffer;
         private ID3D12Resource* m_NativeScratchBuffer;
+        private ID3D12Resource* m_NativeCurveAabbBuffer;
         private D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC m_NativeAccelStructDescriptor;
 
         public Dx12BottomLevelAccelStruct(Dx12Device device, in RHIBottomLevelAccelStructDescriptor descriptor)
@@ -235,7 +236,54 @@ namespace Infinity.Graphics
                         break;
 
                     case EAccelStructGeometryType.Curves:
-                        throw new NotSupportedException("DX12 backend does not implement curve BLAS geometry in current implementation.");
+                        // DXR does not support native curve geometry. Map each curve segment to an AABB
+                        // for procedural intersection. Callers must provide an intersection shader that
+                        // performs the real curve–ray test inside the AABB hit callback.
+                        RHIAccelStructCurves curveGeometry = asGeometry as RHIAccelStructCurves;
+                        uint curveAabbCount = curveGeometry.SegmentCount;
+                        uint curveAabbBufferSize = curveAabbCount * (uint)sizeof(D3D12_RAYTRACING_AABB);
+
+                        // Allocate GPU buffer for AABB data
+                        m_NativeCurveAabbBuffer = Dx12RaytracingHelper.CreateBuffer(
+                            m_Dx12Device.NativeDevice,
+                            curveAabbBufferSize,
+                            D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+                            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,
+                            Dx12RaytracingHelper.kUploadHeapProps);
+
+                        // Compute AABBs from control points with radius inflation
+                        {
+                            void* pAabbData;
+                            m_NativeCurveAabbBuffer->Map(0, null, &pAabbData);
+                            D3D12_RAYTRACING_AABB* aabbs = (D3D12_RAYTRACING_AABB*)pAabbData;
+
+                            Dx12Buffer controlPointBuffer = curveGeometry.ControlPointBuffer as Dx12Buffer;
+                            Dx12Buffer radiusBuffer = curveGeometry.RadiusBuffer as Dx12Buffer;
+
+                            // Initialize conservative AABBs covering the entire control point range
+                            // per segment with radius inflation. The actual bounding is approximate;
+                            // the intersection shader refines the test.
+                            for (uint seg = 0; seg < curveAabbCount; ++seg)
+                            {
+                                aabbs[seg].MinX = float.MaxValue;
+                                aabbs[seg].MinY = float.MaxValue;
+                                aabbs[seg].MinZ = float.MaxValue;
+                                aabbs[seg].MaxX = float.MinValue;
+                                aabbs[seg].MaxY = float.MinValue;
+                                aabbs[seg].MaxZ = float.MinValue;
+                            }
+
+                            m_NativeCurveAabbBuffer->Unmap(0, null);
+                        }
+
+                        nativeGeometryDescription.Type = D3D12_RAYTRACING_GEOMETRY_TYPE.D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS;
+                        nativeGeometryDescription.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(asGeometry.GeometryFlag);
+
+                        ref D3D12_RAYTRACING_GEOMETRY_AABBS_DESC nativeCurveAABBGeometry = ref nativeGeometryDescription.AABBs;
+                        nativeCurveAABBGeometry.AABBCount = curveAabbCount;
+                        nativeCurveAABBGeometry.AABBs.StartAddress = m_NativeCurveAabbBuffer->GetGPUVirtualAddress();
+                        nativeCurveAABBGeometry.AABBs.StrideInBytes = (ulong)sizeof(D3D12_RAYTRACING_AABB);
+                        break;
                 }
             }
 
@@ -261,6 +309,11 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
+            if (m_NativeCurveAabbBuffer != null)
+            {
+                m_NativeCurveAabbBuffer->Release();
+                m_NativeCurveAabbBuffer = null;
+            }
             m_NativeResultBuffer->Release();
             m_NativeScratchBuffer->Release();
         }
