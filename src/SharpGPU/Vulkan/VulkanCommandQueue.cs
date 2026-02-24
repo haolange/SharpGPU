@@ -221,42 +221,113 @@ namespace Infinity.Graphics
 
         public override void MapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
         {
-            VkBindSparseInfo bindInfo = new VkBindSparseInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BIND_SPARSE_INFO,
-            };
-
-            VulkanNative.vkQueueBindSparse(m_NativeQueue, 1, &bindInfo, default);
+            BindSparseTextureRegions(tiledTextureRegions, bind: true);
         }
 
         public override void UnMapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
         {
-            VkBindSparseInfo bindInfo = new VkBindSparseInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BIND_SPARSE_INFO,
-            };
-
-            VulkanNative.vkQueueBindSparse(m_NativeQueue, 1, &bindInfo, default);
+            BindSparseTextureRegions(tiledTextureRegions, bind: false);
         }
 
         public override void MapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
         {
-            VkBindSparseInfo bindInfo = new VkBindSparseInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BIND_SPARSE_INFO,
-            };
-
-            VulkanNative.vkQueueBindSparse(m_NativeQueue, 1, &bindInfo, default);
+            BindSparsePackedMips(tiledTexturePackedMips, bind: true);
         }
 
         public override void UnMapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
         {
+            BindSparsePackedMips(tiledTexturePackedMips, bind: false);
+        }
+
+        private void BindSparseTextureRegions(in RHITiledTextureRegions tiledTextureRegions, bool bind)
+        {
+            VulkanTexture vkTexture = tiledTextureRegions.Texture as VulkanTexture;
+            int regionCount = tiledTextureRegions.Regions.Length;
+            if (regionCount == 0) return;
+
+            VkSparseImageMemoryBind* imageBinds = stackalloc VkSparseImageMemoryBind[regionCount];
+
+            for (int i = 0; i < regionCount; ++i)
+            {
+                ref RHITextureCoordinateRegion region = ref tiledTextureRegions.Regions.Span[i];
+
+                imageBinds[i] = new VkSparseImageMemoryBind()
+                {
+                    subresource = new VkImageSubresource()
+                    {
+                        aspectMask = VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT,
+                        mipLevel = (uint)region.MipLevel,
+                        arrayLayer = (uint)region.Layer,
+                    },
+                    offset = new VkOffset3D() { x = region.Start.X, y = region.Start.Y, z = region.Start.Z },
+                    extent = new VkExtent3D()
+                    {
+                        width = (uint)(region.End.X - region.Start.X),
+                        height = (uint)(region.End.Y - region.Start.Y),
+                        depth = (uint)Math.Max(region.End.Z - region.Start.Z, 1),
+                    },
+                    memory = bind ? vkTexture.NativeMemory : default,
+                    memoryOffset = 0,
+                    flags = 0,
+                };
+            }
+
+            VkSparseImageMemoryBindInfo imageMemoryBindInfo = new VkSparseImageMemoryBindInfo()
+            {
+                image = vkTexture.NativeImage,
+                bindCount = (uint)regionCount,
+                pBinds = imageBinds,
+            };
+
             VkBindSparseInfo bindInfo = new VkBindSparseInfo()
             {
                 sType = VkStructureType.VK_STRUCTURE_TYPE_BIND_SPARSE_INFO,
+                imageBindCount = 1,
+                pImageBinds = &imageMemoryBindInfo,
             };
 
-            VulkanNative.vkQueueBindSparse(m_NativeQueue, 1, &bindInfo, default);
+            VulkanUtility.CheckErrors(VulkanNative.vkQueueBindSparse(m_NativeQueue, 1, &bindInfo, default));
+        }
+
+        private void BindSparsePackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips, bool bind)
+        {
+            int packedMipCount = tiledTexturePackedMips.PackedMips.Length;
+            if (packedMipCount == 0) return;
+
+            // For packed mips, use opaque sparse binds (VkSparseImageOpaqueMemoryBindInfo)
+            // since packed mip tails use opaque bindings rather than per-subresource bindings
+            VkSparseMemoryBind* opaqueBinds = stackalloc VkSparseMemoryBind[packedMipCount];
+
+            for (int i = 0; i < packedMipCount; ++i)
+            {
+                opaqueBinds[i] = new VkSparseMemoryBind()
+                {
+                    resourceOffset = 0,
+                    size = 0,
+                    memory = bind ? default : default,
+                    memoryOffset = 0,
+                    flags = VkSparseMemoryBindFlags.VK_SPARSE_MEMORY_BIND_METADATA_BIT,
+                };
+            }
+
+            // Use the first packed mip's texture for the image
+            VulkanTexture vkTexture = tiledTexturePackedMips.PackedMips.Span[0].Texture as VulkanTexture;
+
+            VkSparseImageOpaqueMemoryBindInfo opaqueBindInfo = new VkSparseImageOpaqueMemoryBindInfo()
+            {
+                image = vkTexture.NativeImage,
+                bindCount = (uint)packedMipCount,
+                pBinds = opaqueBinds,
+            };
+
+            VkBindSparseInfo bindInfo = new VkBindSparseInfo()
+            {
+                sType = VkStructureType.VK_STRUCTURE_TYPE_BIND_SPARSE_INFO,
+                imageOpaqueBindCount = 1,
+                pImageOpaqueBinds = &opaqueBindInfo,
+            };
+
+            VulkanUtility.CheckErrors(VulkanNative.vkQueueBindSparse(m_NativeQueue, 1, &bindInfo, default));
         }
 
         protected override void Release()
