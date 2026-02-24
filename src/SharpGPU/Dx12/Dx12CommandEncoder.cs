@@ -1676,6 +1676,10 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12MLEncoder : RHIMLEncoder
     {
+#if DEBUG
+        private bool m_PipelineSet;
+#endif
+
         public Dx12MLEncoder(Dx12CommandBuffer cmdBuffer)
         {
             m_CommandBuffer = cmdBuffer;
@@ -1869,42 +1873,80 @@ namespace Infinity.Graphics
 
         public override void WriteTimestamp(in uint index)
         {
-            // TODO: timestamp query support for ML pass
+#if DEBUG
+            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current MLPass TimestampQuery is null");
+#endif
+            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList->EndQuery(dx12Query.QueryHeap, D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP, index);
         }
 
         public override void SetPipeline(RHIMLPipeline pipeline)
         {
+#if DEBUG
+            m_PipelineSet = true;
+#endif
             m_CachedPipeline = pipeline;
-            // TODO: DirectML integration
-            // Prepare IDMLCommandRecorder for dispatch with the compiled operator
+
+            // ML pipeline uses compute shader bridge: bind the internal compute pipeline
+            Dx12MLPipeline dx12MLPipeline = pipeline as Dx12MLPipeline;
+            if (dx12MLPipeline.ComputePipeline != null)
+            {
+                Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+                dx12CommandBuffer.NativeCommandList->SetPipelineState(dx12MLPipeline.ComputePipeline.NativePipelineState);
+            }
         }
 
         public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
         {
-            // TODO: DirectML integration
-            // Map resource table bindings to IDMLBindingTable inputs/outputs
+            // Bind resource table descriptors to compute root signature slots
+            Dx12ResourceTable dx12ResourceTable = resourceTable as Dx12ResourceTable;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            for (int i = 0; i < dx12ResourceTable.NativeGpuDescriptorHandles.Length; ++i)
+            {
+                dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable(tableIndex + (uint)i, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
+            }
         }
 
         public override void SetInputTensor(RHITensor tensor, in uint index)
         {
-            // TODO: DirectML integration
-            // Bind the backing buffer of Dx12Tensor as an input to IDMLBindingTable
-            // Dx12Tensor dx12Tensor = (Dx12Tensor)tensor;
-            // Use dx12Tensor.BackingBuffer to create DML_BUFFER_BINDING
+#if DEBUG
+            Debug.Assert(m_PipelineSet, "Dx12MLEncoder: SetPipeline must be called before SetInputTensor.");
+#endif
+            Dx12Tensor dx12Tensor = tensor as Dx12Tensor;
+            Dx12Buffer dx12Buffer = dx12Tensor.BackingBuffer as Dx12Buffer;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            // Bind tensor backing buffer as SRV via root descriptor
+            dx12CommandBuffer.NativeCommandList->SetComputeRootShaderResourceView(index, dx12Buffer.NativeResource->GetGPUVirtualAddress());
         }
 
         public override void SetOutputTensor(RHITensor tensor, in uint index)
         {
-            // TODO: DirectML integration
-            // Bind the backing buffer of Dx12Tensor as an output to IDMLBindingTable
-            // Dx12Tensor dx12Tensor = (Dx12Tensor)tensor;
-            // Use dx12Tensor.BackingBuffer to create DML_BUFFER_BINDING
+#if DEBUG
+            Debug.Assert(m_PipelineSet, "Dx12MLEncoder: SetPipeline must be called before SetOutputTensor.");
+#endif
+            Dx12Tensor dx12Tensor = tensor as Dx12Tensor;
+            Dx12Buffer dx12Buffer = dx12Tensor.BackingBuffer as Dx12Buffer;
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            // Bind tensor backing buffer as UAV via root descriptor
+            dx12CommandBuffer.NativeCommandList->SetComputeRootUnorderedAccessView(index, dx12Buffer.NativeResource->GetGPUVirtualAddress());
         }
 
         public override void Dispatch(RHIHeap intermediatesHeap)
         {
-            // TODO: DirectML integration
-            // IDMLCommandRecorder::RecordDispatch(commandList, compiledOperator, bindingTable)
+#if DEBUG
+            Debug.Assert(m_PipelineSet, "Dx12MLEncoder: SetPipeline must be called before Dispatch.");
+#endif
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+
+            // Dispatch compute shader serving as ML kernel
+            // Workgroup count derived from intermediates heap size
+            Dx12MLPipeline dx12MLPipeline = m_CachedPipeline as Dx12MLPipeline;
+            uint workgroupCount = (uint)Math.Max(1, (long)dx12MLPipeline.IntermediatesHeapSize / 256);
+            dx12CommandBuffer.NativeCommandList->Dispatch(workgroupCount, 1, 1);
         }
 
         public override void EndPass()

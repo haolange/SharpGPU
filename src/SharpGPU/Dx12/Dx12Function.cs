@@ -277,7 +277,57 @@ namespace Infinity.Graphics
 
         public override void Update(RHIRaytracingPipeline pipeline)
         {
-            throw new NotImplementedException("To do ...");
+#if DEBUG
+            System.Diagnostics.Debug.Assert(m_NativeResource != null, "SBT buffer not initialized. Call Generate() before Update().");
+#endif
+            Dx12RaytracingPipeline dx12RaytracingPipeline = pipeline as Dx12RaytracingPipeline;
+
+            void* pTableData;
+            HRESULT hResult = m_NativeResource->Map(0, null, &pTableData);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
+            IntPtr tableDataHandle = new IntPtr(pTableData);
+            ID3D12StateObjectProperties* objectProperties = dx12RaytracingPipeline.NativeStateObjectProperties;
+
+            // update ray generation shader identifier
+            {
+                char[] rayGenChar = m_RayGenerationProgram.ShaderIdentifier.ToCharArray();
+                fixed (char* pRayGenChar = rayGenChar)
+                {
+                    void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pRayGenChar);
+                    Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+                }
+                tableDataHandle += (int)m_EntryStride;
+            }
+
+            // update miss shader identifiers
+            for (int i = 0; i < m_MissPrograms.length; ++i)
+            {
+                ref Dx12FunctionTableEntry missEntry = ref m_MissPrograms[i];
+                char[] missChar = missEntry.ShaderIdentifier.ToCharArray();
+                fixed (char* pMissChar = missChar)
+                {
+                    void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pMissChar);
+                    Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+                }
+                tableDataHandle += (int)m_EntryStride;
+            }
+
+            // update hit group shader identifiers
+            for (int i = 0; i < m_HitGroupPrograms.length; ++i)
+            {
+                ref Dx12FunctionTableEntry hitGroupEntry = ref m_HitGroupPrograms[i];
+                char[] hitGroupChar = hitGroupEntry.ShaderIdentifier.ToCharArray();
+                fixed (char* pHitGroupChar = hitGroupChar)
+                {
+                    void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pHitGroupChar);
+                    Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+                }
+                tableDataHandle += (int)m_EntryStride;
+            }
+
+            m_NativeResource->Unmap(0, null);
         }
 
         protected override void Release()
