@@ -17,12 +17,12 @@ namespace Infinity.Graphics
         {
             m_VulkanDevice = device;
 
-            int layoutCount = descriptor.ResourceTableLayouts != null ? descriptor.ResourceTableLayouts.Length : 0;
+            int layoutCount = descriptor.ArgumentTableLayouts != null ? descriptor.ArgumentTableLayouts.Length : 0;
             VkDescriptorSetLayout* setLayouts = stackalloc VkDescriptorSetLayout[Math.Max(layoutCount, 1)];
 
             for (int i = 0; i < layoutCount; ++i)
             {
-                VulkanResourceTableLayout vkLayout = descriptor.ResourceTableLayouts[i] as VulkanResourceTableLayout;
+                VulkanArgumentTableLayout vkLayout = descriptor.ArgumentTableLayouts[i] as VulkanArgumentTableLayout;
                 setLayouts[i] = vkLayout.NativeDescriptorSetLayout;
             }
 

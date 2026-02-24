@@ -123,7 +123,7 @@ namespace Infinity.Graphics
     internal struct Dx12FunctionTableEntry
     {
         public string ShaderIdentifier;
-        public RHIResourceTable[]? ResourceTables;
+        public RHIArgumentTable[]? ArgumentTables;
     };
 
     internal unsafe class Dx12FunctionTable : RHIFunctionTable
@@ -153,39 +153,39 @@ namespace Infinity.Graphics
             m_HitGroupPrograms = new TArray<Dx12FunctionTableEntry>(8);
         }
 
-        public override void SetRayGenerationProgram(string exportName, RHIResourceTable[]? resourceTables = null)
+        public override void SetRayGenerationProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
         {
-            m_RayGenerationProgram.ResourceTables = resourceTables;
+            m_RayGenerationProgram.ArgumentTables = resourceTables;
             m_RayGenerationProgram.ShaderIdentifier = exportName;
         }
 
-        public override int AddMissProgram(string exportName, RHIResourceTable[]? resourceTables = null)
+        public override int AddMissProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             Dx12FunctionTableEntry missEntry;
-            missEntry.ResourceTables = resourceTables;
+            missEntry.ArgumentTables = resourceTables;
             missEntry.ShaderIdentifier = exportName;
             return m_MissPrograms.Add(missEntry);
         }
 
-        public override int AddHitGroupProgram(string exportName, RHIResourceTable[]? resourceTables = null)
+        public override int AddHitGroupProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             Dx12FunctionTableEntry hitGroupEntry;
-            hitGroupEntry.ResourceTables = resourceTables;
+            hitGroupEntry.ArgumentTables = resourceTables;
             hitGroupEntry.ShaderIdentifier = exportName;
             return m_HitGroupPrograms.Add(hitGroupEntry);
         }
 
-        public override void SetMissProgram(in int index, string exportName, RHIResourceTable[]? resourceTables = null)
+        public override void SetMissProgram(in int index, string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             ref Dx12FunctionTableEntry missEntry = ref m_MissPrograms[index];
-            missEntry.ResourceTables = resourceTables;
+            missEntry.ArgumentTables = resourceTables;
             missEntry.ShaderIdentifier = exportName;
         }
 
-        public override void SetHitGroupProgram(in int index, string exportName, RHIResourceTable[]? resourceTables = null)
+        public override void SetHitGroupProgram(in int index, string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             ref Dx12FunctionTableEntry hitGroupEntry = ref m_HitGroupPrograms[index];
-            hitGroupEntry.ResourceTables = resourceTables;
+            hitGroupEntry.ArgumentTables = resourceTables;
             hitGroupEntry.ShaderIdentifier = exportName;
         }
 
@@ -230,7 +230,7 @@ namespace Infinity.Graphics
                 {
                     void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pRayGenChar);
                     Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, m_EntryStride);
-                    /*if (m_RayGenerationProgram.ResourceTables != null)
+                    /*if (m_RayGenerationProgram.ArgumentTables != null)
                     {
                         // To do local binding...
                     }*/
@@ -247,7 +247,7 @@ namespace Infinity.Graphics
                 {
                     void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pMissChar);
                     Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, m_EntryStride);
-                    /*if (missEntry.ResourceTables != null)
+                    /*if (missEntry.ArgumentTables != null)
                     {
                         // To do local binding...
                     }*/
@@ -264,7 +264,7 @@ namespace Infinity.Graphics
                 {
                     void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pHitGroupChar);
                     Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, m_EntryStride);
-                    /*if (hitGroupEntry.ResourceTables != null)
+                    /*if (hitGroupEntry.ArgumentTables != null)
                     {
                         // To do local binding...
                     }*/

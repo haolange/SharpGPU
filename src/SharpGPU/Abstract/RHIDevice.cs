@@ -196,8 +196,8 @@ namespace Infinity.Graphics
         public abstract RHISampler CreateSampler(in RHISamplerDescriptor descriptor);
         public abstract RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
         public abstract RHIBottomLevelAccelStruct CreateBottomAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor);
-        public abstract RHIResourceTableLayout CreateResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor);
-        public abstract RHIResourceTable CreateResourceTable(in RHIResourceTableDescriptor descriptor);
+        public abstract RHIArgumentTableLayout CreateArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor);
+        public abstract RHIArgumentTable CreateArgumentTable(in RHIArgumentTableDescriptor descriptor);
         public abstract RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor);
         public abstract RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor);
         public abstract RHIFunctionLibrary CreateFunctionLibrary(in RHIFunctionLibraryDescriptor descriptor);

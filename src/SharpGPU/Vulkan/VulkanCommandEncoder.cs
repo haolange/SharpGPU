@@ -434,12 +434,12 @@ namespace Infinity.Graphics
             VulkanNative.vkCmdBindPipeline(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_COMPUTE, vkPipeline.NativePipeline);
         }
 
-        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanResourceTable vkResourceTable = resourceTable as VulkanResourceTable;
+            VulkanArgumentTable vkArgumentTable = resourceTable as VulkanArgumentTable;
             VulkanComputePipeline vkPipeline = m_CachedPipeline as VulkanComputePipeline;
-            VkDescriptorSet set = vkResourceTable.NativeDescriptorSet;
+            VkDescriptorSet set = vkArgumentTable.NativeDescriptorSet;
             VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_COMPUTE, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
         }
 
@@ -806,12 +806,12 @@ namespace Infinity.Graphics
             VulkanNative.vkCmdBindPipeline(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline.NativePipeline);
         }
 
-        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanResourceTable vkResourceTable = resourceTable as VulkanResourceTable;
+            VulkanArgumentTable vkArgumentTable = resourceTable as VulkanArgumentTable;
             VulkanRasterPipeline vkPipeline = m_CachedPipeline as VulkanRasterPipeline;
-            VkDescriptorSet set = vkResourceTable.NativeDescriptorSet;
+            VkDescriptorSet set = vkArgumentTable.NativeDescriptorSet;
             VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
         }
 
@@ -1028,12 +1028,12 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanResourceTable vkResourceTable = resourceTable as VulkanResourceTable;
+            VulkanArgumentTable vkArgumentTable = resourceTable as VulkanArgumentTable;
             VulkanRaytracingPipeline vkPipeline = m_CachedPipeline as VulkanRaytracingPipeline;
-            VkDescriptorSet set = vkResourceTable.NativeDescriptorSet;
+            VkDescriptorSet set = vkArgumentTable.NativeDescriptorSet;
             VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
         }
 
@@ -1329,7 +1329,7 @@ namespace Infinity.Graphics
             m_CachedPipeline = pipeline;
         }
 
-        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
             // Resource tables for the compute bridge pipeline are bound here if the ML pipeline
             // has been compiled to a compute pipeline with descriptor sets.

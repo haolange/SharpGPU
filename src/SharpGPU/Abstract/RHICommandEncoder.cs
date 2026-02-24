@@ -275,7 +275,7 @@ namespace Infinity.Graphics
         public abstract void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState);
         public abstract void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState);
         public abstract void SetPipeline(RHIComputePipeline pipeline);
-        public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
+        public abstract void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
         public abstract void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer);
@@ -298,7 +298,7 @@ namespace Infinity.Graphics
         public abstract void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState);
         public abstract void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState);
         public abstract void SetPipeline(RHIRaytracingPipeline pipeline);
-        public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
+        public abstract void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex);
         public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct);
         public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct);
         public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
@@ -325,7 +325,7 @@ namespace Infinity.Graphics
         public abstract void PopDebugGroup();
         public abstract void WriteTimestamp(in uint index);
         public abstract void SetPipeline(RHIMLPipeline pipeline);
-        public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
+        public abstract void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex);
         public abstract void SetInputTensor(RHITensor tensor, in uint index);
         public abstract void SetOutputTensor(RHITensor tensor, in uint index);
         public abstract void Dispatch(RHIHeap intermediatesHeap);
@@ -355,7 +355,7 @@ namespace Infinity.Graphics
         public abstract void SetStencilRef(in uint value);
         public abstract void SetBlendFactor(in float4 value);
         public abstract void SetPipeline(RHIRasterPipeline pipeline);
-        public abstract void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex);
+        public abstract void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex);
         public abstract void SetIndexBuffer(RHIBuffer buffer, in uint offset);
         public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset);
         public abstract void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner);

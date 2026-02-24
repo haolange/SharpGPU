@@ -47,9 +47,9 @@ namespace Infinity.Graphics
             m_FragmentParameterMap = new Dictionary<int, Dx12BindTypeAndParameterSlot>(5);
             m_ComputeParameterMap = new Dictionary<int, Dx12BindTypeAndParameterSlot>(5);
 
-            for (int i = 0; i < descriptor.ResourceTableLayouts.Length; ++i)
+            for (int i = 0; i < descriptor.ArgumentTableLayouts.Length; ++i)
             {
-                Dx12ResourceTableLayout resourceTableLayout = descriptor.ResourceTableLayouts[i] as Dx12ResourceTableLayout;
+                Dx12ArgumentTableLayout resourceTableLayout = descriptor.ArgumentTableLayouts[i] as Dx12ArgumentTableLayout;
                 m_ParameterCount += resourceTableLayout.BindInfos.Length;
             }
 
@@ -59,9 +59,9 @@ namespace Infinity.Graphics
             D3D12_ROOT_PARAMETER1* rootParameterPtr = stackalloc D3D12_ROOT_PARAMETER1[m_ParameterCount];
             Span<D3D12_ROOT_PARAMETER1> rootParameterViews = new Span<D3D12_ROOT_PARAMETER1>(rootParameterPtr, m_ParameterCount);
 
-            for (int i = 0; i < descriptor.ResourceTableLayouts.Length; ++i)
+            for (int i = 0; i < descriptor.ArgumentTableLayouts.Length; ++i)
             {
-                Dx12ResourceTableLayout resourceTableLayout = descriptor.ResourceTableLayouts[i] as Dx12ResourceTableLayout;
+                Dx12ArgumentTableLayout resourceTableLayout = descriptor.ArgumentTableLayouts[i] as Dx12ArgumentTableLayout;
 
                 for (int j = 0; j < resourceTableLayout.BindInfos.Length; ++j)
                 {

@@ -128,14 +128,14 @@ namespace Infinity.Graphics
             return new MetalBottomLevelAccelStruct(this, descriptor);
         }
 
-        public override RHIResourceTableLayout CreateResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor)
+        public override RHIArgumentTableLayout CreateArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor)
         {
-            return new MetalResourceTableLayout(descriptor);
+            return new MetalArgumentTableLayout(descriptor);
         }
 
-        public override RHIResourceTable CreateResourceTable(in RHIResourceTableDescriptor descriptor)
+        public override RHIArgumentTable CreateArgumentTable(in RHIArgumentTableDescriptor descriptor)
         {
-            return new MetalResourceTable(descriptor);
+            return new MetalArgumentTable(descriptor);
         }
 
         public override RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor)

@@ -588,14 +588,14 @@ namespace Infinity.Graphics
             return new VulkanBottomLevelAccelStruct(this, descriptor);
         }
 
-        public override RHIResourceTableLayout CreateResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor)
+        public override RHIArgumentTableLayout CreateArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor)
         {
-            return new VulkanResourceTableLayout(this, descriptor);
+            return new VulkanArgumentTableLayout(this, descriptor);
         }
 
-        public override RHIResourceTable CreateResourceTable(in RHIResourceTableDescriptor descriptor)
+        public override RHIArgumentTable CreateArgumentTable(in RHIArgumentTableDescriptor descriptor)
         {
-            return new VulkanResourceTable(this, descriptor);
+            return new VulkanArgumentTable(this, descriptor);
         }
 
         public override RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor)

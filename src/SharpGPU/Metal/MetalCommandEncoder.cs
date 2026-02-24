@@ -656,15 +656,15 @@ namespace Infinity.Graphics
             MetalBindingLogHelper.LogPipelineModeOnce("Compute", metalPipeline.NativePipelineState.NativePtr, mode, path);
         }
 
-        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
             if (m_BindingBackend == null)
             {
                 throw new InvalidOperationException("Compute pipeline must be set before binding resource tables.");
             }
 
-            MetalResourceTable table = (MetalResourceTable)resourceTable;
-            m_BindingBackend.SetResourceTable(table, tableIndex);
+            MetalArgumentTable table = (MetalArgumentTable)resourceTable;
+            m_BindingBackend.SetArgumentTable(table, tableIndex);
         }
 
         public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
@@ -756,7 +756,7 @@ namespace Infinity.Graphics
 
         private MetalBindingMode ConfigureBindingBackend(MetalPipelineLayout pipelineLayout, out MetalCommandEncodingPath path)
         {
-            MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ResourceTableLayoutCount);
+            MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ArgumentTableLayoutCount);
             path = mode == MetalBindingMode.ArgumentTable ? MetalCommandEncodingPath.MTL4 : MetalCommandEncodingPath.Classic;
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             commandBuffer.LockEncodingPath(path, "compute pipeline set");
@@ -992,20 +992,20 @@ namespace Infinity.Graphics
             MetalBindingLogHelper.LogPipelineModeOnce("Ray", metalPipeline.NativePipelineState.NativePtr, mode, path);
         }
 
-        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
             if (m_BindingBackend == null)
             {
                 throw new InvalidOperationException("Ray tracing pipeline must be set before binding resource tables.");
             }
 
-            MetalResourceTable table = (MetalResourceTable)resourceTable;
+            MetalArgumentTable table = (MetalArgumentTable)resourceTable;
             if (m_BindingBackend.UsesReservedRayFunctionTableSlots && MetalBindingHelpers.HasRayFunctionTableSlotConflict(table))
             {
                 throw new InvalidOperationException($"Ray tracing resource table conflicts with reserved Metal function-table slots ({MetalBindingHelpers.RtVisibleFunctionTableSlot}/{MetalBindingHelpers.RtIntersectionFunctionTableSlot}). Use another slot or disable legacy compatibility binding mode.");
             }
 
-            m_BindingBackend.SetResourceTable(table, tableIndex);
+            m_BindingBackend.SetArgumentTable(table, tableIndex);
         }
 
         public override void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct)
@@ -1237,7 +1237,7 @@ namespace Infinity.Graphics
 
         private MetalBindingMode ConfigureBindingBackend(MetalPipelineLayout pipelineLayout, out MetalCommandEncodingPath path)
         {
-            MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ResourceTableLayoutCount);
+            MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ArgumentTableLayoutCount);
             path = mode == MetalBindingMode.ArgumentTable ? MetalCommandEncodingPath.MTL4 : MetalCommandEncodingPath.Classic;
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             commandBuffer.LockEncodingPath(path, "ray tracing pipeline set");
@@ -1722,15 +1722,15 @@ namespace Infinity.Graphics
             MetalBindingLogHelper.LogPipelineModeOnce("Raster", metalPipeline.NativePipelineState.NativePtr, mode, path);
         }
 
-        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
             if (m_BindingBackend == null)
             {
                 throw new InvalidOperationException("Raster pipeline must be set before binding resource tables.");
             }
 
-            MetalResourceTable table = (MetalResourceTable)resourceTable;
-            m_BindingBackend.SetResourceTable(table, tableIndex);
+            MetalArgumentTable table = (MetalArgumentTable)resourceTable;
+            m_BindingBackend.SetArgumentTable(table, tableIndex);
         }
 
         public override void SetIndexBuffer(RHIBuffer buffer, in uint offset)
@@ -1941,7 +1941,7 @@ namespace Infinity.Graphics
 
         private MetalBindingMode ConfigureBindingBackend(MetalPipelineLayout pipelineLayout, out MetalCommandEncodingPath path)
         {
-            MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ResourceTableLayoutCount);
+            MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ArgumentTableLayoutCount);
             path = mode == MetalBindingMode.ArgumentTable ? MetalCommandEncodingPath.MTL4 : MetalCommandEncodingPath.Classic;
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             commandBuffer.LockEncodingPath(path, "raster pipeline set");
@@ -2279,13 +2279,13 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            MetalResourceTable metalResourceTable = (MetalResourceTable)resourceTable;
+            MetalArgumentTable metalArgumentTable = (MetalArgumentTable)resourceTable;
 
             // The ML encoder binds resource tables through the MTL4 argument table mechanism.
             // Create an argument table from the resource table layout and populate it.
-            MetalResourceTableLayout layout = metalResourceTable.ResourceTableLayout;
+            MetalArgumentTableLayout layout = metalArgumentTable.ArgumentTableLayout;
 
             MTL4ArgumentTableDescriptor argTableDesc = MTL4ArgumentTableDescriptor.New();
             NSError argError = default;
