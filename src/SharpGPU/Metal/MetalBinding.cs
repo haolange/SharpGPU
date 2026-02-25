@@ -7,12 +7,6 @@ using SharpMetal.ObjectiveCCore;
 
 namespace Infinity.Graphics
 {
-    internal enum MetalBindingMode : byte
-    {
-        ArgumentBuffer = 0,
-        ArgumentTable = 1
-    }
-
     internal enum MetalBindingPipelineType : byte
     {
         Compute = 0,
@@ -20,88 +14,8 @@ namespace Infinity.Graphics
         Raster = 2
     }
 
-    internal readonly struct MetalBindingCapabilities
-    {
-        internal bool SupportsMetal3 { get; }
-        internal bool SupportsMetal4 { get; }
-        internal bool SupportsArgumentBuffer { get; }
-        internal bool SupportsArgumentTable { get; }
-
-        internal MetalBindingCapabilities(bool supportsMetal3, bool supportsMetal4, bool supportsArgumentBuffer, bool supportsArgumentTable)
-        {
-            SupportsMetal3 = supportsMetal3;
-            SupportsMetal4 = supportsMetal4;
-            SupportsArgumentBuffer = supportsArgumentBuffer;
-            SupportsArgumentTable = supportsArgumentTable;
-        }
-    }
-
-    internal static class MetalBindingPolicyResolver
-    {
-        private const string BindingModeOverrideEnv = "INFINITY_METAL_BINDING_MODE";
-
-        internal static MetalBindingMode Resolve(in MetalBindingCapabilities capabilities, in int resourceTableLayoutCount)
-        {
-            if (TryResolveOverride(capabilities, out MetalBindingMode overrideMode))
-            {
-                return overrideMode;
-            }
-
-            if (capabilities.SupportsMetal4 && capabilities.SupportsArgumentTable)
-            {
-                return MetalBindingMode.ArgumentTable;
-            }
-
-            return MetalBindingMode.ArgumentBuffer;
-        }
-
-        private static bool TryResolveOverride(in MetalBindingCapabilities capabilities, out MetalBindingMode mode)
-        {
-            mode = default;
-            string? rawValue = Environment.GetEnvironmentVariable(BindingModeOverrideEnv);
-            if (string.IsNullOrWhiteSpace(rawValue))
-            {
-                return false;
-            }
-
-            string value = rawValue.Trim().ToLowerInvariant();
-            if (value == "auto")
-            {
-                return false;
-            }
-
-            MetalBindingMode requestedMode = value switch
-            {
-                "argument_buffer" => MetalBindingMode.ArgumentBuffer,
-                "argumentbuffer" => MetalBindingMode.ArgumentBuffer,
-                "argument_table" => MetalBindingMode.ArgumentTable,
-                "argumenttable" => MetalBindingMode.ArgumentTable,
-                _ => throw new InvalidOperationException($"Unknown Metal binding mode override '{rawValue}'. Supported: argument_buffer, argument_table.")
-            };
-
-            if (!IsModeSupported(requestedMode, capabilities))
-            {
-                throw new InvalidOperationException($"Metal binding mode override '{rawValue}' is not supported on this device.");
-            }
-
-            mode = requestedMode;
-            return true;
-        }
-
-        private static bool IsModeSupported(in MetalBindingMode mode, in MetalBindingCapabilities capabilities)
-        {
-            return mode switch
-            {
-                MetalBindingMode.ArgumentBuffer => capabilities.SupportsArgumentBuffer,
-                MetalBindingMode.ArgumentTable => capabilities.SupportsArgumentTable,
-                _ => false
-            };
-        }
-    }
-
     internal interface IMetalBindingBackend : IDisposable
     {
-        MetalBindingMode Mode { get; }
         bool UsesReservedRayFunctionTableSlots { get; }
 
         void ResetForPipeline(MetalPipelineLayout pipelineLayout);
@@ -114,19 +28,6 @@ namespace Infinity.Graphics
         void CommitRaytracing(in MTL4ComputeCommandEncoder encoder, MetalFunctionTable? functionTable);
         void CommitRaster(in MTLRenderCommandEncoder encoder);
         void CommitRaster(in MTL4RenderCommandEncoder encoder);
-    }
-
-    internal static class MetalBindingBackendFactory
-    {
-        internal static IMetalBindingBackend Create(MetalDevice device, in MetalBindingMode mode, in MetalBindingPipelineType pipelineType, MetalCommandQueue? commandQueue = null)
-        {
-            return mode switch
-            {
-                MetalBindingMode.ArgumentBuffer => new MetalArgumentBufferBindingBackend(device, pipelineType),
-                MetalBindingMode.ArgumentTable => new MetalArgumentTableBindingBackend(device, pipelineType, commandQueue),
-                _ => throw new NotSupportedException($"Unsupported Metal binding mode '{mode}'.")
-            };
-        }
     }
 
     internal static class MetalBindingHelpers
@@ -276,7 +177,6 @@ namespace Infinity.Graphics
 
     internal abstract class MetalBindingBackendBase : IMetalBindingBackend
     {
-        public abstract MetalBindingMode Mode { get; }
         public virtual bool UsesReservedRayFunctionTableSlots => false;
 
         protected MetalDevice Device => m_Device;
@@ -315,7 +215,6 @@ namespace Infinity.Graphics
             }
 
             ValidateTableInPipelineLayout(layout);
-            ValidateTableArrayBindings(layout, tableIndex);
 
             m_BoundTables[tableIndex] = resourceTable;
             OnArgumentTableUpdated(resourceTable, tableIndex);
@@ -373,266 +272,19 @@ namespace Infinity.Graphics
                 throw new InvalidOperationException($"Resource table index '{layout.Index}' is not part of the current Metal pipeline layout.");
             }
         }
-
-        private static void ValidateTableArrayBindings(MetalArgumentTableLayout layout, in uint tableIndex)
-        {
-            // Count > 1 (bindless arrays) is now supported across all Metal binding backends.
-            // ArgumentBuffer mode uses ArrayLength for argument descriptors.
-            // SetBytes mode encodes all array entries into the payload.
-            // Legacy mode iterates over array elements directly.
-        }
-    }
-
-    internal sealed class MetalArgumentBufferBindingBackend : MetalBindingBackendBase
-    {
-        private sealed class ArgumentBufferState
-        {
-            internal readonly MetalArgumentTableLayout Layout;
-            internal readonly MTLArgumentEncoder Encoder;
-            internal MTLBuffer BackingBuffer;
-
-            internal ArgumentBufferState(MetalArgumentTableLayout layout, in MTLArgumentEncoder encoder, in MTLBuffer backingBuffer)
-            {
-                Layout = layout;
-                Encoder = encoder;
-                BackingBuffer = backingBuffer;
-            }
-        }
-
-        private readonly SortedDictionary<uint, ArgumentBufferState> m_TableStates;
-
-        internal MetalArgumentBufferBindingBackend(MetalDevice device, in MetalBindingPipelineType pipelineType)
-            : base(device, pipelineType)
-        {
-
-            m_TableStates = new SortedDictionary<uint, ArgumentBufferState>();
-        }
-
-        public override MetalBindingMode Mode => MetalBindingMode.ArgumentBuffer;
-
-        public override void ResetForPipeline(MetalPipelineLayout pipelineLayout)
-        {
-            base.ResetForPipeline(pipelineLayout);
-            ReleaseTableStates();
-        }
-
-        protected override void OnArgumentTableUpdated(MetalArgumentTable resourceTable, in uint tableIndex)
-        {
-            ArgumentBufferState state = GetOrCreateState(resourceTable.ArgumentTableLayout, tableIndex);
-            EncodeTableResources(resourceTable, state);
-        }
-
-        public override void CommitCompute(in MTLComputeCommandEncoder encoder)
-        {
-            foreach (KeyValuePair<uint, ArgumentBufferState> pair in m_TableStates)
-            {
-                encoder.SetBuffer(pair.Value.BackingBuffer, 0, pair.Key);
-            }
-        }
-
-        public override void CommitCompute(in MTL4ComputeCommandEncoder encoder)
-        {
-            throw new InvalidOperationException("Argument-buffer binding backend requires classic Metal encoder path.");
-        }
-
-        public override void CommitRaytracing(in MTLComputeCommandEncoder encoder, MetalFunctionTable? functionTable)
-        {
-            foreach (KeyValuePair<uint, ArgumentBufferState> pair in m_TableStates)
-            {
-                encoder.SetBuffer(pair.Value.BackingBuffer, 0, pair.Key);
-            }
-
-            if (functionTable != null)
-            {
-                MetalBindingHelpers.BindRayFunctionTables(encoder, functionTable);
-            }
-        }
-
-        public override void CommitRaytracing(in MTL4ComputeCommandEncoder encoder, MetalFunctionTable? functionTable)
-        {
-            throw new InvalidOperationException("Argument-buffer binding backend requires classic Metal encoder path.");
-        }
-
-        public override void CommitRaster(in MTLRenderCommandEncoder encoder)
-        {
-            foreach (KeyValuePair<uint, ArgumentBufferState> pair in m_TableStates)
-            {
-                encoder.SetVertexBuffer(pair.Value.BackingBuffer, 0, pair.Key);
-                encoder.SetFragmentBuffer(pair.Value.BackingBuffer, 0, pair.Key);
-            }
-        }
-
-        public override void CommitRaster(in MTL4RenderCommandEncoder encoder)
-        {
-            throw new InvalidOperationException("Argument-buffer binding backend requires classic Metal encoder path.");
-        }
-
-        protected override void DisposeBackend()
-        {
-            ReleaseTableStates();
-        }
-
-        private ArgumentBufferState GetOrCreateState(MetalArgumentTableLayout layout, in uint tableIndex)
-        {
-            if (m_TableStates.TryGetValue(tableIndex, out ArgumentBufferState? cachedState))
-            {
-                return cachedState;
-            }
-
-            MTLArgumentEncoder argumentEncoder = CreateArgumentEncoder(layout);
-            MTLBuffer backingBuffer = CreateBackingBuffer(argumentEncoder);
-            ArgumentBufferState state = new ArgumentBufferState(layout, argumentEncoder, backingBuffer);
-            m_TableStates.Add(tableIndex, state);
-            return state;
-        }
-
-        private MTLArgumentEncoder CreateArgumentEncoder(MetalArgumentTableLayout layout)
-        {
-            IntPtr[] descriptorPtrs = new IntPtr[layout.BindInfos.Length];
-            for (int i = 0; i < layout.BindInfos.Length; ++i)
-            {
-                ref readonly MetalBindInfo bind = ref layout.BindInfos[i];
-                MTLArgumentDescriptor descriptor = MTLArgumentDescriptor.New();
-                descriptor.Index = bind.Slot;
-                descriptor.ArrayLength = Math.Max(1u, bind.Count);
-                descriptor.DataType = MetalBindingHelpers.ConvertBindTypeToArgumentDataType(bind.Type);
-                descriptor.Access = MetalBindingHelpers.ConvertBindTypeToBindingAccess(bind.Type);
-
-                if (MetalBindingHelpers.IsTextureBindingType(bind.Type))
-                {
-                    descriptor.TextureType = MetalBindingHelpers.ConvertBindTypeToTextureType(bind.Type);
-                }
-
-                descriptorPtrs[i] = descriptor.NativePtr;
-            }
-
-            NSArray descriptorArray = MetalArrayHelper.CreateNSArrayFromPointers(descriptorPtrs);
-            MTLArgumentEncoder argumentEncoder = Device.NativeDevice.NewArgumentEncoder(descriptorArray);
-
-            for (int i = 0; i < descriptorPtrs.Length; ++i)
-            {
-                if (descriptorPtrs[i] != IntPtr.Zero)
-                {
-                    ObjectiveCRuntime.Release(descriptorPtrs[i]);
-                }
-            }
-
-            if (argumentEncoder.NativePtr == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("Failed to create Metal argument encoder for resource table.");
-            }
-
-            return argumentEncoder;
-        }
-
-        private MTLBuffer CreateBackingBuffer(in MTLArgumentEncoder argumentEncoder)
-        {
-            ulong alignment = Math.Max(1UL, argumentEncoder.Alignment);
-            ulong encodedLength = Math.Max(1UL, argumentEncoder.EncodedLength);
-            ulong byteLength = ((encodedLength + alignment - 1UL) / alignment) * alignment;
-
-            MTLBuffer backingBuffer = Device.NativeDevice.NewBuffer(byteLength, MTLResourceOptions.ResourceStorageModeShared);
-            if (backingBuffer.NativePtr == IntPtr.Zero)
-            {
-                throw new InvalidOperationException($"Failed to allocate Metal argument-buffer backing store (size={byteLength}).");
-            }
-
-            return backingBuffer;
-        }
-
-        private static void EncodeTableResources(MetalArgumentTable table, ArgumentBufferState state)
-        {
-            state.Encoder.SetArgumentBuffer(state.BackingBuffer, 0);
-
-            MetalBindInfo[] binds = table.ArgumentTableLayout.BindInfos;
-            for (int i = 0; i < binds.Length; ++i)
-            {
-                ref readonly MetalBindInfo bind = ref binds[i];
-                int arrayCount = (int)Math.Max(1u, bind.Count);
-
-                for (int j = 0; j < arrayCount; ++j)
-                {
-                    RHIArgumentTableElement element = table.GetElement(i, j);
-                    ulong encoderIndex = bind.Slot + (ulong)j;
-
-                    switch (bind.Type)
-                    {
-                        case ERHIBindType.Buffer:
-                        case ERHIBindType.StorageBuffer:
-                        case ERHIBindType.UniformBuffer:
-                            if (element.BufferView is MetalBufferView bufferView)
-                            {
-                                state.Encoder.SetBuffer(bufferView.Buffer.NativeBuffer, (ulong)Math.Max(0, bufferView.Descriptor.Offset), encoderIndex);
-                            }
-
-                            break;
-
-                        case ERHIBindType.Texture2D:
-                        case ERHIBindType.Texture2DMS:
-                        case ERHIBindType.Texture2DArray:
-                        case ERHIBindType.Texture2DArrayMS:
-                        case ERHIBindType.TextureCube:
-                        case ERHIBindType.TextureCubeArray:
-                        case ERHIBindType.Texture3D:
-                        case ERHIBindType.StorageTexture2D:
-                        case ERHIBindType.StorageTexture2DMS:
-                        case ERHIBindType.StorageTexture2DArray:
-                        case ERHIBindType.StorageTexture2DArrayMS:
-                        case ERHIBindType.StorageTextureCube:
-                        case ERHIBindType.StorageTextureCubeArray:
-                        case ERHIBindType.StorageTexture3D:
-                            if (element.TextureView is MetalTextureView textureView)
-                            {
-                                state.Encoder.SetTexture(textureView.NativeTexture, encoderIndex);
-                            }
-
-                            break;
-
-                        case ERHIBindType.Sampler:
-                            if (element.Sampler is MetalSampler sampler)
-                            {
-                                state.Encoder.SetSamplerState(sampler.NativeSampler, encoderIndex);
-                            }
-
-                            break;
-
-                        case ERHIBindType.AccelStruct:
-                            if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
-                            {
-                                state.Encoder.SetAccelerationStructure(topLevel.NativeAccelerationStructure, encoderIndex);
-                            }
-
-                            break;
-                    }
-                }
-            }
-        }
-
-        private void ReleaseTableStates()
-        {
-            foreach (KeyValuePair<uint, ArgumentBufferState> pair in m_TableStates)
-            {
-                ArgumentBufferState state = pair.Value;
-
-                if (state.BackingBuffer.NativePtr != IntPtr.Zero)
-                {
-                    ObjectiveCRuntime.Release(state.BackingBuffer);
-                    state.BackingBuffer = default;
-                }
-
-                if (state.Encoder.NativePtr != IntPtr.Zero)
-                {
-                    ObjectiveCRuntime.Release(state.Encoder);
-                }
-            }
-
-            m_TableStates.Clear();
-        }
     }
 
     internal sealed class MetalArgumentTableBindingBackend : MetalBindingBackendBase
     {
+        // ── Single-set mode state (direct MTL4ArgumentTable resource binding) ──
         private readonly SortedDictionary<uint, MTL4ArgumentTable> m_ArgumentTables;
+
+        // ── Multi-set mode state (descriptor buffer per set → single root argument table) ──
+        private bool m_IsMultiSet;
+        private MTL4ArgumentTable m_RootArgumentTable;
+        private readonly SortedDictionary<uint, MTLBuffer> m_DescriptorBuffers;
+
+        // ── Shared state ──
         private readonly SortedDictionary<uint, RasterVertexBinding> m_RasterVertexBindings;
         private readonly MetalCommandQueue? m_CommandQueue;
 
@@ -652,11 +304,10 @@ namespace Infinity.Graphics
             : base(device, pipelineType)
         {
             m_ArgumentTables = new SortedDictionary<uint, MTL4ArgumentTable>();
+            m_DescriptorBuffers = new SortedDictionary<uint, MTLBuffer>();
             m_RasterVertexBindings = new SortedDictionary<uint, RasterVertexBinding>();
             m_CommandQueue = commandQueue;
         }
-
-        public override MetalBindingMode Mode => MetalBindingMode.ArgumentTable;
 
         public override bool UsesReservedRayFunctionTableSlots => PipelineType == MetalBindingPipelineType.Raytracing;
 
@@ -664,14 +315,34 @@ namespace Infinity.Graphics
         {
             base.ResetForPipeline(pipelineLayout);
             ReleaseArgumentTables();
+            ReleaseDescriptorBuffers();
             m_RasterVertexBindings.Clear();
+
+            int layoutCount = pipelineLayout.ArgumentTableLayoutCount;
+            m_IsMultiSet = layoutCount > 1;
+
+            if (m_IsMultiSet)
+            {
+                CreateRootArgumentTable(pipelineLayout);
+            }
         }
 
         protected override void OnArgumentTableUpdated(MetalArgumentTable resourceTable, in uint tableIndex)
         {
-            MTL4ArgumentTable argumentTable = GetOrCreateArgumentTable(resourceTable.ArgumentTableLayout, tableIndex);
-            PopulateArgumentTable(argumentTable, resourceTable);
-            ApplyRasterVertexBufferBindings(argumentTable);
+            if (m_IsMultiSet)
+            {
+                MTLBuffer descriptorBuffer = GetOrCreateDescriptorBuffer(resourceTable.ArgumentTableLayout, tableIndex);
+                PopulateDescriptorBuffer(descriptorBuffer, resourceTable, m_CommandQueue);
+                m_RootArgumentTable.SetAddress(descriptorBuffer.GpuAddress, tableIndex);
+                m_CommandQueue?.AddResidencyAllocation(descriptorBuffer);
+                ApplyRasterVertexBufferBindingsToRoot();
+            }
+            else
+            {
+                MTL4ArgumentTable argumentTable = GetOrCreateArgumentTable(resourceTable.ArgumentTableLayout, tableIndex);
+                PopulateArgumentTable(argumentTable, resourceTable);
+                ApplyRasterVertexBufferBindings(argumentTable);
+            }
         }
 
         public override void SetRasterVertexBuffer(in uint slot, in ulong address, in ulong stride)
@@ -682,9 +353,20 @@ namespace Infinity.Graphics
             }
 
             m_RasterVertexBindings[slot] = new RasterVertexBinding(address, stride);
-            foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in m_ArgumentTables)
+
+            if (m_IsMultiSet)
             {
-                ApplyRasterVertexBufferBinding(pair.Value, slot, m_RasterVertexBindings[slot]);
+                if (m_RootArgumentTable.NativePtr != IntPtr.Zero)
+                {
+                    ApplyRasterVertexBufferBinding(m_RootArgumentTable, slot, m_RasterVertexBindings[slot]);
+                }
+            }
+            else
+            {
+                foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in m_ArgumentTables)
+                {
+                    ApplyRasterVertexBufferBinding(pair.Value, slot, m_RasterVertexBindings[slot]);
+                }
             }
         }
 
@@ -695,9 +377,16 @@ namespace Infinity.Graphics
 
         public override void CommitCompute(in MTL4ComputeCommandEncoder encoder)
         {
-            foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in m_ArgumentTables)
+            if (m_IsMultiSet)
             {
-                encoder.SetArgumentTable(pair.Value.NativePtr);
+                encoder.SetArgumentTable(m_RootArgumentTable.NativePtr);
+            }
+            else
+            {
+                foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in m_ArgumentTables)
+                {
+                    encoder.SetArgumentTable(pair.Value.NativePtr);
+                }
             }
         }
 
@@ -708,14 +397,26 @@ namespace Infinity.Graphics
 
         public override void CommitRaytracing(in MTL4ComputeCommandEncoder encoder, MetalFunctionTable? functionTable)
         {
-            if (functionTable != null)
+            if (m_IsMultiSet)
             {
-                PopulateRayFunctionTables(functionTable);
-            }
+                if (functionTable != null)
+                {
+                    PopulateRayFunctionTablesOnRoot(functionTable);
+                }
 
-            foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in m_ArgumentTables)
+                encoder.SetArgumentTable(m_RootArgumentTable.NativePtr);
+            }
+            else
             {
-                encoder.SetArgumentTable(pair.Value.NativePtr);
+                if (functionTable != null)
+                {
+                    PopulateRayFunctionTables(functionTable);
+                }
+
+                foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in m_ArgumentTables)
+                {
+                    encoder.SetArgumentTable(pair.Value.NativePtr);
+                }
             }
         }
 
@@ -727,18 +428,30 @@ namespace Infinity.Graphics
         public override void CommitRaster(in MTL4RenderCommandEncoder encoder)
         {
             ulong stages = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Vertex) | MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Fragment);
-            foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in m_ArgumentTables)
+
+            if (m_IsMultiSet)
             {
-                ApplyRasterVertexBufferBindings(pair.Value);
-                encoder.SetArgumentTable(pair.Value.NativePtr, stages);
+                ApplyRasterVertexBufferBindingsToRoot();
+                encoder.SetArgumentTable(m_RootArgumentTable.NativePtr, stages);
+            }
+            else
+            {
+                foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in m_ArgumentTables)
+                {
+                    ApplyRasterVertexBufferBindings(pair.Value);
+                    encoder.SetArgumentTable(pair.Value.NativePtr, stages);
+                }
             }
         }
 
         protected override void DisposeBackend()
         {
             ReleaseArgumentTables();
+            ReleaseDescriptorBuffers();
             m_RasterVertexBindings.Clear();
         }
+
+        // ── Single-set mode: direct MTL4ArgumentTable ──
 
         private MTL4ArgumentTable GetOrCreateArgumentTable(MetalArgumentTableLayout layout, in uint tableIndex)
         {
@@ -887,12 +600,172 @@ namespace Infinity.Graphics
             }
         }
 
+        // ── Multi-set mode: descriptor buffer per set → single root argument table ──
+
+        private void CreateRootArgumentTable(MetalPipelineLayout pipelineLayout)
+        {
+            // The root argument table holds one buffer slot per set (for descriptor buffer GPU addresses),
+            // plus reserved slots for RT function tables and raster vertex buffers.
+            ulong maxBufferCount = (ulong)pipelineLayout.ArgumentTableLayoutCount;
+
+            if (PipelineType == MetalBindingPipelineType.Raytracing)
+            {
+                maxBufferCount = Math.Max(maxBufferCount, MetalBindingHelpers.RtIntersectionFunctionTableSlot + 1UL);
+                maxBufferCount = Math.Max(maxBufferCount, MetalBindingHelpers.RtVisibleFunctionTableSlot + 1UL);
+            }
+
+            if (PipelineType == MetalBindingPipelineType.Raster)
+            {
+                maxBufferCount = Math.Max(maxBufferCount, 31UL);
+            }
+
+            MTL4ArgumentTableDescriptor descriptor = MTL4ArgumentTableDescriptor.New();
+            descriptor.MaxBufferBindCount = Math.Max(1UL, maxBufferCount);
+            descriptor.MaxTextureBindCount = 1UL;
+            descriptor.MaxSamplerStateBindCount = 1UL;
+            descriptor.InitializeBindings = true;
+            descriptor.SupportAttributeStrides = PipelineType == MetalBindingPipelineType.Raster;
+
+            NSError error = default;
+            m_RootArgumentTable = Device.NativeDevice.NewArgumentTable(descriptor, ref error);
+            ObjectiveCRuntime.Release(descriptor.NativePtr);
+            if (m_RootArgumentTable.NativePtr == IntPtr.Zero)
+            {
+                string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
+                throw new InvalidOperationException($"Failed to create multi-set root argument table: {errorText}");
+            }
+        }
+
+        private MTLBuffer GetOrCreateDescriptorBuffer(MetalArgumentTableLayout layout, in uint tableIndex)
+        {
+            if (m_DescriptorBuffers.TryGetValue(tableIndex, out MTLBuffer existingBuffer))
+            {
+                return existingBuffer;
+            }
+
+            // Each entry in the descriptor buffer is 8 bytes (ulong):
+            // - Buffer bindings: GPU address
+            // - Texture bindings: MTLResourceID._impl
+            // - Sampler bindings: MTLResourceID._impl
+            // - AccelStruct bindings: MTLResourceID._impl
+            ulong byteSize = (ulong)layout.TotalElementCount * 8UL;
+            byteSize = Math.Max(byteSize, 8UL);
+
+            MTLBuffer buffer = Device.NativeDevice.NewBuffer(byteSize, MTLResourceOptions.ResourceStorageModeShared);
+            if (buffer.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException($"Failed to allocate descriptor buffer for set {tableIndex} (size={byteSize}).");
+            }
+
+            m_DescriptorBuffers.Add(tableIndex, buffer);
+            return buffer;
+        }
+
+        private static void PopulateDescriptorBuffer(MTLBuffer buffer, MetalArgumentTable table, MetalCommandQueue? commandQueue)
+        {
+            IntPtr ptr = buffer.Contents;
+            MetalBindInfo[] binds = table.ArgumentTableLayout.BindInfos;
+
+            for (int i = 0; i < binds.Length; ++i)
+            {
+                ref readonly MetalBindInfo bind = ref binds[i];
+                int arrayCount = (int)Math.Max(1u, bind.Count);
+                int baseOffset = table.ArgumentTableLayout.GetElementOffset(i);
+
+                for (int j = 0; j < arrayCount; ++j)
+                {
+                    RHIArgumentTableElement element = table.GetElement(i, j);
+                    int entryByteOffset = (baseOffset + j) * 8;
+
+                    switch (bind.Type)
+                    {
+                        case ERHIBindType.Buffer:
+                        case ERHIBindType.StorageBuffer:
+                        case ERHIBindType.UniformBuffer:
+                            if (element.BufferView is MetalBufferView bufferView)
+                            {
+                                ulong bufOffset = (ulong)Math.Max(0, bufferView.Descriptor.Offset);
+                                ulong address = bufferView.Buffer.NativeBuffer.GpuAddress + bufOffset;
+                                Marshal.WriteInt64(ptr + entryByteOffset, (long)address);
+                                commandQueue?.AddResidencyAllocation(bufferView.Buffer.NativeBuffer);
+                            }
+
+                            break;
+
+                        case ERHIBindType.Texture2D:
+                        case ERHIBindType.Texture2DMS:
+                        case ERHIBindType.Texture2DArray:
+                        case ERHIBindType.Texture2DArrayMS:
+                        case ERHIBindType.TextureCube:
+                        case ERHIBindType.TextureCubeArray:
+                        case ERHIBindType.Texture3D:
+                        case ERHIBindType.StorageTexture2D:
+                        case ERHIBindType.StorageTexture2DMS:
+                        case ERHIBindType.StorageTexture2DArray:
+                        case ERHIBindType.StorageTexture2DArrayMS:
+                        case ERHIBindType.StorageTextureCube:
+                        case ERHIBindType.StorageTextureCubeArray:
+                        case ERHIBindType.StorageTexture3D:
+                            if (element.TextureView is MetalTextureView textureView)
+                            {
+                                Marshal.WriteInt64(ptr + entryByteOffset, (long)textureView.NativeTexture.GpuResourceID._impl);
+                                commandQueue?.AddResidencyAllocation(textureView.NativeTexture);
+                            }
+
+                            break;
+
+                        case ERHIBindType.Sampler:
+                            if (element.Sampler is MetalSampler sampler)
+                            {
+                                Marshal.WriteInt64(ptr + entryByteOffset, (long)sampler.NativeSampler.GpuResourceID._impl);
+                            }
+
+                            break;
+
+                        case ERHIBindType.AccelStruct:
+                            if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
+                            {
+                                Marshal.WriteInt64(ptr + entryByteOffset, (long)topLevel.NativeAccelerationStructure.GpuResourceID._impl);
+                                commandQueue?.AddResidencyAllocation(topLevel.NativeAccelerationStructure);
+                            }
+
+                            break;
+                    }
+                }
+            }
+        }
+
+        private void PopulateRayFunctionTablesOnRoot(MetalFunctionTable functionTable)
+        {
+            if (functionTable.IntersectionFunctionTable.NativePtr != IntPtr.Zero)
+            {
+                m_RootArgumentTable.SetResource(functionTable.IntersectionFunctionTable.GpuResourceID, MetalBindingHelpers.RtIntersectionFunctionTableSlot);
+            }
+
+            if (functionTable.VisibleFunctionTable.NativePtr != IntPtr.Zero)
+            {
+                m_RootArgumentTable.SetResource(functionTable.VisibleFunctionTable.GpuResourceID, MetalBindingHelpers.RtVisibleFunctionTableSlot);
+            }
+        }
+
+        // ── Raster vertex buffer helpers ──
+
         private void ApplyRasterVertexBufferBindings(MTL4ArgumentTable argumentTable)
         {
             foreach (KeyValuePair<uint, RasterVertexBinding> pair in m_RasterVertexBindings)
             {
                 ApplyRasterVertexBufferBinding(argumentTable, pair.Key, pair.Value);
             }
+        }
+
+        private void ApplyRasterVertexBufferBindingsToRoot()
+        {
+            if (m_RootArgumentTable.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            ApplyRasterVertexBufferBindings(m_RootArgumentTable);
         }
 
         private static void ApplyRasterVertexBufferBinding(MTL4ArgumentTable argumentTable, in uint slot, in RasterVertexBinding binding)
@@ -906,6 +779,8 @@ namespace Infinity.Graphics
                 argumentTable.SetAddress(binding.Address, slot);
             }
         }
+
+        // ── Lifecycle helpers ──
 
         private static void ThrowRequiresMtl4Encoder(string pipelineType)
         {
@@ -923,6 +798,27 @@ namespace Infinity.Graphics
             }
 
             m_ArgumentTables.Clear();
+        }
+
+        private void ReleaseDescriptorBuffers()
+        {
+            foreach (KeyValuePair<uint, MTLBuffer> pair in m_DescriptorBuffers)
+            {
+                if (pair.Value.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(pair.Value.NativePtr);
+                }
+            }
+
+            m_DescriptorBuffers.Clear();
+
+            if (m_RootArgumentTable.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_RootArgumentTable.NativePtr);
+                m_RootArgumentTable = default;
+            }
+
+            m_IsMultiSet = false;
         }
     }
 }

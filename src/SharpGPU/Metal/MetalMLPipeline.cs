@@ -14,7 +14,7 @@ namespace Infinity.Graphics
 
         public MetalMLPipeline(MetalDevice device, in RHIMLPipelineDescriptor descriptor)
         {
-            if (!device.BindingCapabilities.SupportsMetal4)
+            if (!device.SupportsMetal4)
             {
                 throw new NotSupportedException(
                     "MetalMLPipeline requires Metal 4 (MTL4MachineLearningPipelineState). " +
