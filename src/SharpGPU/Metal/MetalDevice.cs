@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using Infinity.Collections;
 using SharpMetal.Foundation;
 using SharpMetal.Metal;
@@ -14,6 +15,7 @@ namespace Infinity.Graphics
         internal bool SupportsMetal4Barriers => m_SupportsMetal4Barriers;
         internal bool SupportsMetal4 => m_SupportsMetal4;
         internal bool SupportsArgumentTable => m_SupportsArgumentTable;
+        internal MTLTextureViewPool TextureViewPool => m_TextureViewPool;
 
         private readonly MTLDevice m_NativeDevice;
         private readonly MetalInstance m_MetalInstance;
@@ -21,6 +23,8 @@ namespace Infinity.Graphics
         private readonly bool m_SupportsMetal3;
         private readonly bool m_SupportsMetal4;
         private readonly bool m_SupportsArgumentTable;
+        private MTLTextureViewPool m_TextureViewPool;
+        private int m_NextTextureViewIndex;
 
         private static readonly Selector s_RespondsToSelector = "respondsToSelector:";
         private static readonly Selector s_NewArgumentTableWithDescriptorError = "newArgumentTableWithDescriptor:error:";
@@ -46,6 +50,7 @@ namespace Infinity.Graphics
 
             BuildLimitAndFeature();
             CreateCommandQueues(computeQueueCount, transferQueueCount, graphicsQueueCount);
+            CreateTextureViewPool();
         }
 
         public override RHICommandQueue? GetCommandQueue(in ERHIPipelineType pipeline, in int index)
@@ -335,6 +340,29 @@ namespace Infinity.Graphics
             }
         }
 
+        internal uint AllocateTextureViewIndex()
+        {
+            return (uint)Interlocked.Increment(ref m_NextTextureViewIndex) - 1;
+        }
+
+        private void CreateTextureViewPool()
+        {
+            const ulong initialCapacity = 4096;
+
+            MTLResourceViewPoolDescriptor poolDescriptor = MTLResourceViewPoolDescriptor.New();
+            poolDescriptor.ResourceViewCount = initialCapacity;
+
+            NSError error = default;
+            m_TextureViewPool = m_NativeDevice.NewTextureViewPool(poolDescriptor, ref error);
+            ObjectiveCRuntime.Release(poolDescriptor.NativePtr);
+
+            if (m_TextureViewPool.NativePtr == IntPtr.Zero)
+            {
+                string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
+                throw new InvalidOperationException($"Failed to create MTLTextureViewPool: {errorText}");
+            }
+        }
+
         protected override void Release()
         {
             if (m_CommandQueueMap != null)
@@ -347,6 +375,12 @@ namespace Infinity.Graphics
                         queues[i]?.Dispose();
                     }
                 }
+            }
+
+            if (m_TextureViewPool.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_TextureViewPool.NativePtr);
+                m_TextureViewPool = default;
             }
 
             if (m_NativeDevice.NativePtr != IntPtr.Zero)

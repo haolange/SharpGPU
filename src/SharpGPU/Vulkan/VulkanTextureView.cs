@@ -15,15 +15,7 @@ namespace Infinity.Graphics
         {
             m_VulkanTexture = texture;
 
-            VkImageAspectFlags aspect;
-            if (descriptor.ViewType == ERHITextureViewType.DepthStencil)
-            {
-                aspect = VulkanUtility.GetVkImageAspect(texture.Descriptor.Format);
-            }
-            else
-            {
-                aspect = VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT;
-            }
+            VkImageAspectFlags aspect = VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT;
 
             VkImageViewCreateInfo viewInfo = new VkImageViewCreateInfo()
             {

@@ -557,8 +557,8 @@ namespace Infinity.Graphics
                         case ERHIBindType.StorageTexture3D:
                             if (element.TextureView is MetalTextureView textureView)
                             {
-                                argumentTable.SetTexture(textureView.NativeTexture.GpuResourceID, slotIndex);
-                                m_CommandQueue?.AddResidencyAllocation(textureView.NativeTexture);
+                                argumentTable.SetTexture(textureView.ResourceID, slotIndex);
+                                m_CommandQueue?.AddResidencyAllocation(textureView.ParentTexture);
                             }
 
                             break;
@@ -708,8 +708,8 @@ namespace Infinity.Graphics
                         case ERHIBindType.StorageTexture3D:
                             if (element.TextureView is MetalTextureView textureView)
                             {
-                                Marshal.WriteInt64(ptr + entryByteOffset, (long)textureView.NativeTexture.GpuResourceID._impl);
-                                commandQueue?.AddResidencyAllocation(textureView.NativeTexture);
+                                Marshal.WriteInt64(ptr + entryByteOffset, (long)textureView.ResourceID._impl);
+                                commandQueue?.AddResidencyAllocation(textureView.ParentTexture);
                             }
 
                             break;

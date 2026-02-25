@@ -29,7 +29,6 @@ namespace Infinity.Graphics
         }
 
         private int m_HeapIndex;
-        private ERHITextureViewType m_ViewType;
         private Dx12Texture m_Dx12Texture;
         private ID3D12DescriptorHeap* m_NativeDescriptorHeap;
         private D3D12_CPU_DESCRIPTOR_HANDLE m_NativeCpuDescriptorHandle;
@@ -38,46 +37,8 @@ namespace Infinity.Graphics
         public Dx12TextureView(Dx12Texture texture, in RHITextureViewDescriptor descriptor)
         {
             m_Dx12Texture = texture;
-            m_ViewType = descriptor.ViewType;
 
-            if (descriptor.ViewType == ERHITextureViewType.DepthStencil)
-            {
-                if(Dx12Utility.IsDepthStencilTexture(texture.Descriptor.UsageFlag))
-                {
-                    D3D12_DEPTH_STENCIL_VIEW_DESC desc = new D3D12_DEPTH_STENCIL_VIEW_DESC();
-                    desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
-                    desc.ViewDimension = Dx12Utility.ConvertToDx12TextureDSVDimension(texture.Descriptor.Dimension);
-                    Dx12Utility.FillTexture2DDSV(ref desc.Texture2D, descriptor, texture.Descriptor.Dimension);
-                    Dx12Utility.FillTexture2DArrayDSV(ref desc.Texture2DArray, descriptor, texture.Descriptor.Dimension);
-
-                    Dx12DescriptorInfo allocation = m_Dx12Texture.Dx12Device.AllocateDsvDescriptor(1);
-                    m_HeapIndex = allocation.Index;
-                    m_NativeDescriptorHeap = allocation.DescriptorHeap;
-                    m_NativeCpuDescriptorHandle = allocation.CpuHandle;
-                    m_NativeGpuDescriptorHandle = allocation.GpuHandle;
-                    m_Dx12Texture.Dx12Device.NativeDevice->CreateDepthStencilView(m_Dx12Texture.NativeResource, &desc, m_NativeCpuDescriptorHandle);
-                }
-            }
-            else if (descriptor.ViewType == ERHITextureViewType.RenderTarget)
-            {
-                if (Dx12Utility.IsRenderTargetTexture(texture.Descriptor.UsageFlag))
-                {
-                    D3D12_RENDER_TARGET_VIEW_DESC desc = new D3D12_RENDER_TARGET_VIEW_DESC();
-                    desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
-                    desc.ViewDimension = Dx12Utility.ConvertToDx12TextureRTVDimension(texture.Descriptor.Dimension);
-                    Dx12Utility.FillTexture2DRTV(ref desc.Texture2D, descriptor, texture.Descriptor.Dimension);
-                    Dx12Utility.FillTexture3DRTV(ref desc.Texture3D, descriptor, texture.Descriptor.Dimension);
-                    Dx12Utility.FillTexture2DArrayRTV(ref desc.Texture2DArray, descriptor, texture.Descriptor.Dimension);
-
-                    Dx12DescriptorInfo allocation = m_Dx12Texture.Dx12Device.AllocateRtvDescriptor(1);
-                    m_HeapIndex = allocation.Index;
-                    m_NativeDescriptorHeap = allocation.DescriptorHeap;
-                    m_NativeCpuDescriptorHandle = allocation.CpuHandle;
-                    m_NativeGpuDescriptorHandle = allocation.GpuHandle;
-                    m_Dx12Texture.Dx12Device.NativeDevice->CreateRenderTargetView(m_Dx12Texture.NativeResource, &desc, m_NativeCpuDescriptorHandle);
-                }
-            }
-            else if (descriptor.ViewType == ERHITextureViewType.ShaderResource)
+            if (descriptor.ViewType == ERHITextureViewType.ShaderResource)
             {
                 if(Dx12Utility.IsShaderResourceTexture(texture.Descriptor.UsageFlag))
                 {
@@ -122,20 +83,7 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            switch (m_ViewType)
-            {
-                case ERHITextureViewType.DepthStencil:
-                    m_Dx12Texture.Dx12Device.FreeDsvDescriptor(m_HeapIndex);
-                    break;
-
-                case ERHITextureViewType.RenderTarget:
-                    m_Dx12Texture.Dx12Device.FreeRtvDescriptor(m_HeapIndex);
-                    break;
-
-                default:
-                    m_Dx12Texture.Dx12Device.FreeCbvSrvUavDescriptor(m_HeapIndex);
-                    break;
-            }
+            m_Dx12Texture.Dx12Device.FreeCbvSrvUavDescriptor(m_HeapIndex);
         }
     }
 }
