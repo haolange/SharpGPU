@@ -49,7 +49,7 @@ namespace Infinity.Graphics
                 throw new InvalidOperationException("Failed to create MTLCommandQueue.");
             }
 
-            if (device.BindingCapabilities.SupportsArgumentTable)
+            if (device.SupportsArgumentTable)
             {
                 m_NativeQueue4 = device.NativeDevice.NewMTL4CommandQueue();
                 if (m_NativeQueue4.NativePtr != IntPtr.Zero)

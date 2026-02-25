@@ -12,16 +12,15 @@ namespace Infinity.Graphics
         public MTLDevice NativeDevice => m_NativeDevice;
         public MetalInstance MetalInstance => m_MetalInstance;
         internal bool SupportsMetal4Barriers => m_SupportsMetal4Barriers;
-        internal MetalBindingCapabilities BindingCapabilities => m_BindingCapabilities;
+        internal bool SupportsMetal4 => m_SupportsMetal4;
+        internal bool SupportsArgumentTable => m_SupportsArgumentTable;
 
         private readonly MTLDevice m_NativeDevice;
         private readonly MetalInstance m_MetalInstance;
         private readonly bool m_SupportsMetal4Barriers;
         private readonly bool m_SupportsMetal3;
         private readonly bool m_SupportsMetal4;
-        private readonly MTLArgumentBuffersTier m_ArgumentBuffersTier;
         private readonly bool m_SupportsArgumentTable;
-        private readonly MetalBindingCapabilities m_BindingCapabilities;
 
         private static readonly Selector s_RespondsToSelector = "respondsToSelector:";
         private static readonly Selector s_NewArgumentTableWithDescriptorError = "newArgumentTableWithDescriptor:error:";
@@ -42,14 +41,8 @@ namespace Infinity.Graphics
             m_DeviceId.IntValue = (uint)(m_NativeDevice.RegistryID & uint.MaxValue);
             m_SupportsMetal3 = SafeSupportsFamily(MTLGPUFamily.Metal3);
             m_SupportsMetal4 = SafeSupportsFamily(MTLGPUFamily.Metal4);
-            m_ArgumentBuffersTier = SafeArgumentBuffersTier();
             m_SupportsArgumentTable = m_SupportsMetal4 && SafeSupportsSelector(s_NewArgumentTableWithDescriptorError);
             m_SupportsMetal4Barriers = m_SupportsMetal4;
-            m_BindingCapabilities = new MetalBindingCapabilities(
-                supportsMetal3: m_SupportsMetal3,
-                supportsMetal4: m_SupportsMetal4,
-                supportsArgumentBuffer: m_ArgumentBuffersTier == MTLArgumentBuffersTier.Tier1 || m_ArgumentBuffersTier == MTLArgumentBuffersTier.Tier2,
-                supportsArgumentTable: m_SupportsArgumentTable);
 
             BuildLimitAndFeature();
             CreateCommandQueues(computeQueueCount, transferQueueCount, graphicsQueueCount);

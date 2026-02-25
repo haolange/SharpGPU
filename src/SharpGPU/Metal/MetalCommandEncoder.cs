@@ -14,9 +14,9 @@ namespace Infinity.Graphics
         private static readonly object s_LogLock = new object();
         private static readonly HashSet<string> s_LoggedPipelineModeKeys = new HashSet<string>(StringComparer.Ordinal);
 
-        internal static void LogPipelineModeOnce(string pipelineType, in IntPtr pipelineStatePtr, in MetalBindingMode mode, in MetalCommandEncodingPath path)
+        internal static void LogPipelineModeOnce(string pipelineType, in IntPtr pipelineStatePtr, in MetalCommandEncodingPath path)
         {
-            string key = $"{pipelineType}:{pipelineStatePtr}:{mode}:{path}";
+            string key = $"{pipelineType}:{pipelineStatePtr}:{path}";
             lock (s_LogLock)
             {
                 if (!s_LoggedPipelineModeKeys.Add(key))
@@ -25,7 +25,7 @@ namespace Infinity.Graphics
                 }
             }
 
-            Console.WriteLine($"[MetalBinding] {pipelineType} pipeline mode={mode}, encodingPath={path}, pipeline=0x{pipelineStatePtr.ToString("x")}.");
+            Console.WriteLine($"[MetalBinding] {pipelineType} pipeline encodingPath={path}, pipeline=0x{pipelineStatePtr.ToString("x")}.");
         }
     }
 
@@ -641,7 +641,7 @@ namespace Infinity.Graphics
             m_CachedPipeline = pipeline;
             MetalComputePipeline metalPipeline = (MetalComputePipeline)pipeline;
             MetalPipelineLayout pipelineLayout = pipeline.Descriptor.PipelineLayout as MetalPipelineLayout ?? throw new InvalidOperationException("Compute pipeline layout must be a MetalPipelineLayout.");
-            MetalBindingMode mode = ConfigureBindingBackend(pipelineLayout, out MetalCommandEncodingPath path);
+            MetalCommandEncodingPath path = ConfigureBindingBackend(pipelineLayout);
             EnsureEncoderForPath(path);
             ApplyPendingPassDebugGroup();
 
@@ -654,7 +654,7 @@ namespace Infinity.Graphics
                 m_NativeEncoder4.SetComputePipelineState(metalPipeline.NativePipelineState);
             }
 
-            MetalBindingLogHelper.LogPipelineModeOnce("Compute", metalPipeline.NativePipelineState.NativePtr, mode, path);
+            MetalBindingLogHelper.LogPipelineModeOnce("Compute", metalPipeline.NativePipelineState.NativePtr, path);
         }
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
@@ -771,22 +771,20 @@ namespace Infinity.Graphics
             m_BindingBackend = null;
         }
 
-        private MetalBindingMode ConfigureBindingBackend(MetalPipelineLayout pipelineLayout, out MetalCommandEncodingPath path)
+        private MetalCommandEncodingPath ConfigureBindingBackend(MetalPipelineLayout pipelineLayout)
         {
-            MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ArgumentTableLayoutCount);
-            path = mode == MetalBindingMode.ArgumentTable ? MetalCommandEncodingPath.MTL4 : MetalCommandEncodingPath.Classic;
+            MetalCommandEncodingPath path = MetalCommandEncodingPath.MTL4;
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             commandBuffer.LockEncodingPath(path, "compute pipeline set");
 
-            if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
+            if (m_BindingBackend == null)
             {
-                m_BindingBackend?.Dispose();
                 MetalCommandQueue? queue = commandBuffer.CommandQueue as MetalCommandQueue;
-                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Compute, queue);
+                m_BindingBackend = new MetalArgumentTableBindingBackend(m_MetalDevice, MetalBindingPipelineType.Compute, queue);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
-            return mode;
+            return path;
         }
 
         private void EnsureEncoderForPath(in MetalCommandEncodingPath path)
@@ -988,7 +986,7 @@ namespace Infinity.Graphics
             m_CachedPipeline = pipeline;
             MetalRaytracingPipeline metalPipeline = pipeline as MetalRaytracingPipeline ?? throw new InvalidOperationException("Ray tracing pipeline must be a MetalRaytracingPipeline.");
             MetalPipelineLayout pipelineLayout = pipeline.Descriptor.PipelineLayout as MetalPipelineLayout ?? throw new InvalidOperationException("Ray tracing pipeline layout must be a MetalPipelineLayout.");
-            MetalBindingMode mode = ConfigureBindingBackend(pipelineLayout, out MetalCommandEncodingPath path);
+            MetalCommandEncodingPath path = ConfigureBindingBackend(pipelineLayout);
             EnsureComputeEncoder(path);
             ApplyPendingPassDebugGroup();
 
@@ -1001,7 +999,7 @@ namespace Infinity.Graphics
                 m_NativeEncoder4.SetComputePipelineState(metalPipeline.NativePipelineState);
             }
 
-            MetalBindingLogHelper.LogPipelineModeOnce("Ray", metalPipeline.NativePipelineState.NativePtr, mode, path);
+            MetalBindingLogHelper.LogPipelineModeOnce("Ray", metalPipeline.NativePipelineState.NativePtr, path);
         }
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
@@ -1247,22 +1245,20 @@ namespace Infinity.Graphics
             m_BindingBackend = null;
         }
 
-        private MetalBindingMode ConfigureBindingBackend(MetalPipelineLayout pipelineLayout, out MetalCommandEncodingPath path)
+        private MetalCommandEncodingPath ConfigureBindingBackend(MetalPipelineLayout pipelineLayout)
         {
-            MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ArgumentTableLayoutCount);
-            path = mode == MetalBindingMode.ArgumentTable ? MetalCommandEncodingPath.MTL4 : MetalCommandEncodingPath.Classic;
+            MetalCommandEncodingPath path = MetalCommandEncodingPath.MTL4;
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             commandBuffer.LockEncodingPath(path, "ray tracing pipeline set");
 
-            if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
+            if (m_BindingBackend == null)
             {
-                m_BindingBackend?.Dispose();
                 MetalCommandQueue? queue = commandBuffer.CommandQueue as MetalCommandQueue;
-                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raytracing, queue);
+                m_BindingBackend = new MetalArgumentTableBindingBackend(m_MetalDevice, MetalBindingPipelineType.Raytracing, queue);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
-            return mode;
+            return path;
         }
 
         private void EnsureComputeEncoder(in MetalCommandEncodingPath path)
@@ -1548,7 +1544,7 @@ namespace Infinity.Graphics
         {
             // Metal4 path: no-op. The attachment map mechanism describes all subpass read/write
             // relationships upfront in BeginPass, so NextSubPass is unnecessary.
-            if (m_MetalDevice.BindingCapabilities.SupportsMetal4)
+            if (m_MetalDevice.SupportsMetal4)
             {
                 return;
             }
@@ -1696,7 +1692,7 @@ namespace Infinity.Graphics
             m_CachedPipeline = pipeline;
             MetalRasterPipeline metalPipeline = (MetalRasterPipeline)pipeline;
             MetalPipelineLayout pipelineLayout = pipeline.Descriptor.PipelineLayout as MetalPipelineLayout ?? throw new InvalidOperationException("Raster pipeline layout must be a MetalPipelineLayout.");
-            MetalBindingMode mode = ConfigureBindingBackend(pipelineLayout, out MetalCommandEncodingPath path);
+            MetalCommandEncodingPath path = ConfigureBindingBackend(pipelineLayout);
             EnsureEncoderForPath(path);
             ApplyPendingPassDebugGroup();
             BuildVertexStrideMap(metalPipeline);
@@ -1726,7 +1722,7 @@ namespace Infinity.Graphics
                 m_NativeEncoder4.SetFrontFacingWinding(metalPipeline.Winding);
             }
 
-            MetalBindingLogHelper.LogPipelineModeOnce("Raster", metalPipeline.NativePipelineState.NativePtr, mode, path);
+            MetalBindingLogHelper.LogPipelineModeOnce("Raster", metalPipeline.NativePipelineState.NativePtr, path);
         }
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
@@ -1960,22 +1956,20 @@ namespace Infinity.Graphics
             m_BindingBackend = null;
         }
 
-        private MetalBindingMode ConfigureBindingBackend(MetalPipelineLayout pipelineLayout, out MetalCommandEncodingPath path)
+        private MetalCommandEncodingPath ConfigureBindingBackend(MetalPipelineLayout pipelineLayout)
         {
-            MetalBindingMode mode = MetalBindingPolicyResolver.Resolve(m_MetalDevice.BindingCapabilities, pipelineLayout.ArgumentTableLayoutCount);
-            path = mode == MetalBindingMode.ArgumentTable ? MetalCommandEncodingPath.MTL4 : MetalCommandEncodingPath.Classic;
+            MetalCommandEncodingPath path = MetalCommandEncodingPath.MTL4;
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             commandBuffer.LockEncodingPath(path, "raster pipeline set");
 
-            if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
+            if (m_BindingBackend == null)
             {
-                m_BindingBackend?.Dispose();
                 MetalCommandQueue? queue = commandBuffer.CommandQueue as MetalCommandQueue;
-                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raster, queue);
+                m_BindingBackend = new MetalArgumentTableBindingBackend(m_MetalDevice, MetalBindingPipelineType.Raster, queue);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
-            return mode;
+            return path;
         }
 
         private void EnsureEncoderForPath(in MetalCommandEncodingPath path)
