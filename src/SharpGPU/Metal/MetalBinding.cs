@@ -118,12 +118,12 @@ namespace Infinity.Graphics
 
     internal static class MetalBindingBackendFactory
     {
-        internal static IMetalBindingBackend Create(MetalDevice device, in MetalBindingMode mode, in MetalBindingPipelineType pipelineType)
+        internal static IMetalBindingBackend Create(MetalDevice device, in MetalBindingMode mode, in MetalBindingPipelineType pipelineType, MetalCommandQueue? commandQueue = null)
         {
             return mode switch
             {
                 MetalBindingMode.ArgumentBuffer => new MetalArgumentBufferBindingBackend(device, pipelineType),
-                MetalBindingMode.ArgumentTable => new MetalArgumentTableBindingBackend(device, pipelineType),
+                MetalBindingMode.ArgumentTable => new MetalArgumentTableBindingBackend(device, pipelineType, commandQueue),
                 _ => throw new NotSupportedException($"Unsupported Metal binding mode '{mode}'.")
             };
         }
@@ -634,6 +634,7 @@ namespace Infinity.Graphics
     {
         private readonly SortedDictionary<uint, MTL4ArgumentTable> m_ArgumentTables;
         private readonly SortedDictionary<uint, RasterVertexBinding> m_RasterVertexBindings;
+        private readonly MetalCommandQueue? m_CommandQueue;
 
         private readonly struct RasterVertexBinding
         {
@@ -647,11 +648,12 @@ namespace Infinity.Graphics
             }
         }
 
-        internal MetalArgumentTableBindingBackend(MetalDevice device, in MetalBindingPipelineType pipelineType)
+        internal MetalArgumentTableBindingBackend(MetalDevice device, in MetalBindingPipelineType pipelineType, MetalCommandQueue? commandQueue = null)
             : base(device, pipelineType)
         {
             m_ArgumentTables = new SortedDictionary<uint, MTL4ArgumentTable>();
             m_RasterVertexBindings = new SortedDictionary<uint, RasterVertexBinding>();
+            m_CommandQueue = commandQueue;
         }
 
         public override MetalBindingMode Mode => MetalBindingMode.ArgumentTable;
@@ -799,7 +801,7 @@ namespace Infinity.Graphics
             return argumentTable;
         }
 
-        private static void PopulateArgumentTable(MTL4ArgumentTable argumentTable, MetalArgumentTable table)
+        private void PopulateArgumentTable(MTL4ArgumentTable argumentTable, MetalArgumentTable table)
         {
             MetalBindInfo[] binds = table.ArgumentTableLayout.BindInfos;
             for (int i = 0; i < binds.Length; ++i)
@@ -821,6 +823,7 @@ namespace Infinity.Graphics
                             {
                                 ulong offset = (ulong)Math.Max(0, bufferView.Descriptor.Offset);
                                 argumentTable.SetAddress(bufferView.Buffer.NativeBuffer.GpuAddress + offset, slotIndex);
+                                m_CommandQueue?.AddResidencyAllocation(bufferView.Buffer.NativeBuffer);
                             }
 
                             break;
@@ -842,6 +845,7 @@ namespace Infinity.Graphics
                             if (element.TextureView is MetalTextureView textureView)
                             {
                                 argumentTable.SetTexture(textureView.NativeTexture.GpuResourceID, slotIndex);
+                                m_CommandQueue?.AddResidencyAllocation(textureView.NativeTexture);
                             }
 
                             break;
@@ -858,6 +862,7 @@ namespace Infinity.Graphics
                             if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
                             {
                                 argumentTable.SetResource(topLevel.NativeAccelerationStructure.GpuResourceID, slotIndex);
+                                m_CommandQueue?.AddResidencyAllocation(topLevel.NativeAccelerationStructure);
                             }
 
                             break;

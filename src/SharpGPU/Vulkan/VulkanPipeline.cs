@@ -9,13 +9,16 @@ namespace Infinity.Graphics
     internal unsafe class VulkanPipelineLayout : RHIPipelineLayout
     {
         public VkPipelineLayout NativePipelineLayout => m_NativePipelineLayout;
+        public uint PushConstantSize => m_PushConstantSize;
 
         private VulkanDevice m_VulkanDevice;
         private VkPipelineLayout m_NativePipelineLayout;
+        private uint m_PushConstantSize;
 
         public VulkanPipelineLayout(VulkanDevice device, in RHIPipelineLayoutDescriptor descriptor)
         {
             m_VulkanDevice = device;
+            m_PushConstantSize = descriptor.PushConstantSize;
 
             int layoutCount = descriptor.ArgumentTableLayouts != null ? descriptor.ArgumentTableLayouts.Length : 0;
             VkDescriptorSetLayout* setLayouts = stackalloc VkDescriptorSetLayout[Math.Max(layoutCount, 1)];

@@ -31,6 +31,7 @@ namespace Infinity.Graphics
                 return m_PushConstantRootParameterIndex;
             }
         }
+        public uint PushConstantSize => m_PushConstantSize;
         public ID3D12RootSignature* NativeRootSignature
         {
             get
@@ -41,6 +42,7 @@ namespace Infinity.Graphics
 
         private int m_ParameterCount;
         private uint m_PushConstantRootParameterIndex;
+        private uint m_PushConstantSize;
         private ID3D12RootSignature* m_NativeRootSignature;
         private Dictionary<int, Dx12BindTypeAndParameterSlot> m_AllParameterMap;
         private Dictionary<int, Dx12BindTypeAndParameterSlot> m_VertexParameterMap;
@@ -50,6 +52,7 @@ namespace Infinity.Graphics
         public Dx12PipelineLayout(Dx12Device device, in RHIPipelineLayoutDescriptor descriptor)
         {
             m_ParameterCount = 0;
+            m_PushConstantSize = descriptor.PushConstantSize;
             m_AllParameterMap = new Dictionary<int, Dx12BindTypeAndParameterSlot>(5);
             m_VertexParameterMap = new Dictionary<int, Dx12BindTypeAndParameterSlot>(5);
             m_FragmentParameterMap = new Dictionary<int, Dx12BindTypeAndParameterSlot>(5);

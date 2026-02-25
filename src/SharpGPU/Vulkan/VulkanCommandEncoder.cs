@@ -111,11 +111,16 @@ namespace Infinity.Graphics
 
         public override void PushDebugGroup(string name)
         {
-            // Debug marker support via VK_EXT_debug_utils
+            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            vkQueue.VulkanDevice.VulkanInstance.CmdBeginDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer, name);
         }
 
         public override void PopDebugGroup()
         {
+            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            vkQueue.VulkanDevice.VulkanInstance.CmdEndDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer);
         }
 
         public override void WriteTimestamp(in uint index)
@@ -341,8 +346,19 @@ namespace Infinity.Graphics
                 ResourceBarrier(barriers.Span[i]);
         }
 
-        public override void PushDebugGroup(string name) { }
-        public override void PopDebugGroup() { }
+        public override void PushDebugGroup(string name)
+        {
+            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            vkQueue.VulkanDevice.VulkanInstance.CmdBeginDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer, name);
+        }
+
+        public override void PopDebugGroup()
+        {
+            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            vkQueue.VulkanDevice.VulkanInstance.CmdEndDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer);
+        }
 
         public override void WriteTimestamp(in uint index)
         {
@@ -447,6 +463,9 @@ namespace Infinity.Graphics
         {
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
             VulkanComputePipeline vkPipeline = m_CachedPipeline as VulkanComputePipeline;
+#if DEBUG
+            Debug.Assert(offset + size <= vkPipeline.VulkanPipelineLayout.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({vkPipeline.VulkanPipelineLayout.PushConstantSize}).");
+#endif
             VulkanNative.vkCmdPushConstants(vkCmdBuf.NativeCommandBuffer, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, VkShaderStageFlags.VK_SHADER_STAGE_ALL, offset, size, data.ToPointer());
         }
 
@@ -672,8 +691,19 @@ namespace Infinity.Graphics
                 ResourceBarrier(barriers.Span[i]);
         }
 
-        public override void PushDebugGroup(string name) { }
-        public override void PopDebugGroup() { }
+        public override void PushDebugGroup(string name)
+        {
+            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            vkQueue.VulkanDevice.VulkanInstance.CmdBeginDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer, name);
+        }
+
+        public override void PopDebugGroup()
+        {
+            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            vkQueue.VulkanDevice.VulkanInstance.CmdEndDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer);
+        }
 
         public override void WriteTimestamp(in uint index)
         {
@@ -826,6 +856,9 @@ namespace Infinity.Graphics
         {
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
             VulkanRasterPipeline vkPipeline = m_CachedPipeline as VulkanRasterPipeline;
+#if DEBUG
+            Debug.Assert(offset + size <= vkPipeline.VulkanPipelineLayout.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({vkPipeline.VulkanPipelineLayout.PushConstantSize}).");
+#endif
             VulkanNative.vkCmdPushConstants(vkCmdBuf.NativeCommandBuffer, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, VkShaderStageFlags.VK_SHADER_STAGE_ALL, offset, size, data.ToPointer());
         }
 
@@ -931,6 +964,13 @@ namespace Infinity.Graphics
         internal override void BeginPass(in RHIRayTracingPassDescriptor descriptor)
         {
             m_PassDescriptor = descriptor;
+#if DEBUG
+            PushDebugGroup(descriptor.Name);
+#endif
+            if (descriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
+            }
         }
 
         public override void ResourceBarrier(in RHIResourceBarrier barrier)
@@ -962,8 +1002,19 @@ namespace Infinity.Graphics
                 ResourceBarrier(barriers.Span[i]);
         }
 
-        public override void PushDebugGroup(string name) { }
-        public override void PopDebugGroup() { }
+        public override void PushDebugGroup(string name)
+        {
+            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            vkQueue.VulkanDevice.VulkanInstance.CmdBeginDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer, name);
+        }
+
+        public override void PopDebugGroup()
+        {
+            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            vkQueue.VulkanDevice.VulkanInstance.CmdEndDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer);
+        }
 
         public override void WriteTimestamp(in uint index)
         {
@@ -975,8 +1026,25 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void BeginStatistics(in uint index) { }
-        public override void EndStatistics(in uint index) { }
+        public override void BeginStatistics(in uint index)
+        {
+            if (m_PassDescriptor.Statistics.HasValue)
+            {
+                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery;
+                VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 0);
+            }
+        }
+
+        public override void EndStatistics(in uint index)
+        {
+            if (m_PassDescriptor.Statistics.HasValue)
+            {
+                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery;
+                VulkanNative.vkCmdEndQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index);
+            }
+        }
 
         public override void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState)
         {
@@ -1259,6 +1327,13 @@ namespace Infinity.Graphics
 
         public override void EndPass()
         {
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
+            }
+#if DEBUG
+            PopDebugGroup();
+#endif
         }
 
         protected override void Release() { }
@@ -1284,6 +1359,13 @@ namespace Infinity.Graphics
         internal override void BeginPass(in RHIMLPassDescriptor descriptor)
         {
             m_PassDescriptor = descriptor;
+#if DEBUG
+            PushDebugGroup(descriptor.Name);
+#endif
+            if (descriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
+            }
         }
 
         public override void ResourceBarrier(in RHIResourceBarrier barrier)
@@ -1328,10 +1410,29 @@ namespace Infinity.Graphics
                 ResourceBarrier(barriers.Span[i]);
         }
 
-        public override void PushDebugGroup(string name) { }
-        public override void PopDebugGroup() { }
+        public override void PushDebugGroup(string name)
+        {
+            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            vkQueue.VulkanDevice.VulkanInstance.CmdBeginDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer, name);
+        }
 
-        public override void WriteTimestamp(in uint index) { }
+        public override void PopDebugGroup()
+        {
+            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            vkQueue.VulkanDevice.VulkanInstance.CmdEndDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer);
+        }
+
+        public override void WriteTimestamp(in uint index)
+        {
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+                VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
+                VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, vkQuery.NativeQueryPool, index);
+            }
+        }
 
         public override void SetPipeline(RHIMLPipeline pipeline)
         {
@@ -1365,7 +1466,16 @@ namespace Infinity.Graphics
             // the application's ML compiler toolchain.
         }
 
-        public override void EndPass() { }
+        public override void EndPass()
+        {
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
+            }
+#if DEBUG
+            PopDebugGroup();
+#endif
+        }
 
         protected override void Release() { }
     }

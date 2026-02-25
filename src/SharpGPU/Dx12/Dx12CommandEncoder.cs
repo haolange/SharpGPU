@@ -671,6 +671,9 @@ namespace Infinity.Graphics
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
+#if DEBUG
+            Debug.Assert(offset + size <= dx12PipelineLayout.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({dx12PipelineLayout.PushConstantSize}).");
+#endif
             dx12CommandBuffer.NativeCommandList->SetComputeRoot32BitConstants(dx12PipelineLayout.PushConstantRootParameterIndex, size / 4, data.ToPointer(), offset / 4);
         }
 
@@ -1558,6 +1561,9 @@ namespace Infinity.Graphics
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
+#if DEBUG
+            Debug.Assert(offset + size <= dx12PipelineLayout.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({dx12PipelineLayout.PushConstantSize}).");
+#endif
             dx12CommandBuffer.NativeCommandList->SetGraphicsRoot32BitConstants(dx12PipelineLayout.PushConstantRootParameterIndex, size / 4, data.ToPointer(), offset / 4);
         }
 
