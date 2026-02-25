@@ -629,8 +629,6 @@
 
     public enum ERHITextureViewType : byte
     {
-        DepthStencil,
-        RenderTarget,
         ShaderResource,
         UnorderedAccess,
         RasterizerOrdered,

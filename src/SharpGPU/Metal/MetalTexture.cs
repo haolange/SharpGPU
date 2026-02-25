@@ -111,18 +111,23 @@ namespace Infinity.Graphics
     internal sealed class MetalTextureView : RHITextureView
     {
         public MetalTexture Texture => m_Texture;
-        public MTLTexture NativeTexture => m_NativeTexture;
+        public MTLResourceID ResourceID => m_ResourceID;
+        public MTLTexture ParentTexture => m_Texture.NativeTexture;
         public RHITextureViewDescriptor Descriptor => m_Descriptor;
 
         private readonly MetalTexture m_Texture;
         private readonly RHITextureViewDescriptor m_Descriptor;
-        private readonly bool m_OwnsTextureView;
-        private MTLTexture m_NativeTexture;
+        private readonly uint m_PoolIndex;
+        private MTLResourceID m_ResourceID;
 
         public MetalTextureView(MetalTexture texture, in RHITextureViewDescriptor descriptor)
         {
             m_Texture = texture;
             m_Descriptor = descriptor;
+
+            MetalDevice device = texture.MetalDevice;
+            MTLTextureViewPool pool = device.TextureViewPool;
+            m_PoolIndex = device.AllocateTextureViewIndex();
 
             bool fullView = descriptor.BaseMipLevel == 0 &&
                             descriptor.BaseArraySlice == 0 &&
@@ -131,29 +136,21 @@ namespace Infinity.Graphics
 
             if (fullView)
             {
-                m_NativeTexture = texture.NativeTexture;
-                m_OwnsTextureView = false;
+                m_ResourceID = pool.SetTextureView(texture.NativeTexture.NativePtr, m_PoolIndex);
                 return;
             }
 
-            NSRange levelRange = new NSRange { location = descriptor.BaseMipLevel, length = descriptor.MipCount };
-            NSRange sliceRange = new NSRange { location = descriptor.BaseArraySlice, length = descriptor.ArrayCount };
-            m_NativeTexture = texture.NativeTexture.NewTextureView(
-                MetalUtility.ConvertToMetalPixelFormat(texture.Descriptor.Format),
-                MetalUtility.ConvertToMetalTextureType(texture.Descriptor.Dimension),
-                levelRange,
-                sliceRange);
-            m_OwnsTextureView = true;
+            MTLTextureViewDescriptor viewDescriptor = MTLTextureViewDescriptor.New();
+            viewDescriptor.PixelFormat = MetalUtility.ConvertToMetalPixelFormat(texture.Descriptor.Format);
+            viewDescriptor.TextureType = MetalUtility.ConvertToMetalTextureType(texture.Descriptor.Dimension);
+            viewDescriptor.LevelRange = new NSRange { location = descriptor.BaseMipLevel, length = descriptor.MipCount };
+            viewDescriptor.SliceRange = new NSRange { location = descriptor.BaseArraySlice, length = descriptor.ArrayCount };
+            m_ResourceID = pool.SetTextureView(texture.NativeTexture.NativePtr, viewDescriptor.NativePtr, m_PoolIndex);
+            ObjectiveCRuntime.Release(viewDescriptor.NativePtr);
         }
 
         protected override void Release()
         {
-            if (m_OwnsTextureView && m_NativeTexture.NativePtr != IntPtr.Zero)
-            {
-                ObjectiveCRuntime.Release(m_NativeTexture);
-            }
-
-            m_NativeTexture = default;
         }
     }
 }
