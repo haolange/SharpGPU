@@ -667,6 +667,13 @@ namespace Infinity.Graphics
             }
         }
 
+        public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetComputeRoot32BitConstants(dx12PipelineLayout.PushConstantRootParameterIndex, size / 4, data.ToPointer(), offset / 4);
+        }
+
         public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1545,6 +1552,13 @@ namespace Infinity.Graphics
                     dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
                 }
             }
+        }
+
+        public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetGraphicsRoot32BitConstants(dx12PipelineLayout.PushConstantRootParameterIndex, size / 4, data.ToPointer(), offset / 4);
         }
 
         public override void SetIndexBuffer(RHIBuffer buffer, in uint offset)

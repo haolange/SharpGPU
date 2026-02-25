@@ -133,6 +133,7 @@ namespace Infinity.Graphics
     {
         internal const ulong RtVisibleFunctionTableSlot = 29;
         internal const ulong RtIntersectionFunctionTableSlot = 30;
+        internal const ulong PushConstantBufferIndex = 31;
 
         internal static bool IsBufferBindingType(in ERHIBindType type)
         {

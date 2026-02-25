@@ -667,6 +667,18 @@ namespace Infinity.Graphics
             m_BindingBackend.SetArgumentTable(table, tableIndex);
         }
 
+        public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
+        {
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.SetBytes(data + (int)offset, size, MetalBindingHelpers.PushConstantBufferIndex);
+            }
+            else if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder4.SetBytes(data + (int)offset, size, MetalBindingHelpers.PushConstantBufferIndex);
+            }
+        }
+
         public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
             if (m_CachedPipeline is not MetalComputePipeline computePipeline)
@@ -1719,6 +1731,21 @@ namespace Infinity.Graphics
 
             MetalArgumentTable table = (MetalArgumentTable)resourceTable;
             m_BindingBackend.SetArgumentTable(table, tableIndex);
+        }
+
+        public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
+        {
+            IntPtr offsetData = data + (int)offset;
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder.SetVertexBytes(offsetData, size, MetalBindingHelpers.PushConstantBufferIndex);
+                m_NativeEncoder.SetFragmentBytes(offsetData, size, MetalBindingHelpers.PushConstantBufferIndex);
+            }
+            else if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder4.SetVertexBytes(offsetData, size, MetalBindingHelpers.PushConstantBufferIndex);
+                m_NativeEncoder4.SetFragmentBytes(offsetData, size, MetalBindingHelpers.PushConstantBufferIndex);
+            }
         }
 
         public override void SetIndexBuffer(RHIBuffer buffer, in uint offset)

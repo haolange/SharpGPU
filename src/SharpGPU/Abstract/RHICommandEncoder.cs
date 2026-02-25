@@ -276,6 +276,7 @@ namespace Infinity.Graphics
         public abstract void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState);
         public abstract void SetPipeline(RHIComputePipeline pipeline);
         public abstract void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex);
+        public abstract void SetPushConstants(IntPtr data, in uint size, in uint offset = 0);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
         public abstract void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer);
@@ -356,6 +357,7 @@ namespace Infinity.Graphics
         public abstract void SetBlendFactor(in float4 value);
         public abstract void SetPipeline(RHIRasterPipeline pipeline);
         public abstract void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex);
+        public abstract void SetPushConstants(IntPtr data, in uint size, in uint offset = 0);
         public abstract void SetIndexBuffer(RHIBuffer buffer, in uint offset);
         public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset);
         public abstract void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner);

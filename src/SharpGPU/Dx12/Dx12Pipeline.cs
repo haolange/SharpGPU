@@ -24,6 +24,13 @@ namespace Infinity.Graphics
                 return m_ParameterCount;
             }
         }
+        public uint PushConstantRootParameterIndex
+        {
+            get
+            {
+                return m_PushConstantRootParameterIndex;
+            }
+        }
         public ID3D12RootSignature* NativeRootSignature
         {
             get
@@ -33,6 +40,7 @@ namespace Infinity.Graphics
         }
 
         private int m_ParameterCount;
+        private uint m_PushConstantRootParameterIndex;
         private ID3D12RootSignature* m_NativeRootSignature;
         private Dictionary<int, Dx12BindTypeAndParameterSlot> m_AllParameterMap;
         private Dictionary<int, Dx12BindTypeAndParameterSlot> m_VertexParameterMap;
@@ -53,11 +61,14 @@ namespace Infinity.Graphics
                 m_ParameterCount += resourceTableLayout.BindInfos.Length;
             }
 
+            bool hasPushConstants = descriptor.PushConstantSize > 0;
+            int totalRootParameters = m_ParameterCount + (hasPushConstants ? 1 : 0);
+
             D3D12_DESCRIPTOR_RANGE1* rootDescriptorRangePtr = stackalloc D3D12_DESCRIPTOR_RANGE1[m_ParameterCount];
             Span<D3D12_DESCRIPTOR_RANGE1> rootDescriptorRangeViews = new Span<D3D12_DESCRIPTOR_RANGE1>(rootDescriptorRangePtr, m_ParameterCount);
 
-            D3D12_ROOT_PARAMETER1* rootParameterPtr = stackalloc D3D12_ROOT_PARAMETER1[m_ParameterCount];
-            Span<D3D12_ROOT_PARAMETER1> rootParameterViews = new Span<D3D12_ROOT_PARAMETER1>(rootParameterPtr, m_ParameterCount);
+            D3D12_ROOT_PARAMETER1* rootParameterPtr = stackalloc D3D12_ROOT_PARAMETER1[totalRootParameters];
+            Span<D3D12_ROOT_PARAMETER1> rootParameterViews = new Span<D3D12_ROOT_PARAMETER1>(rootParameterPtr, totalRootParameters);
 
             for (int i = 0; i < descriptor.ArgumentTableLayouts.Length; ++i)
             {
@@ -101,6 +112,13 @@ namespace Infinity.Graphics
                 }
             }
 
+            if (hasPushConstants)
+            {
+                m_PushConstantRootParameterIndex = (uint)m_ParameterCount;
+                ref D3D12_ROOT_PARAMETER1 pushConstantParam = ref rootParameterViews[m_ParameterCount];
+                pushConstantParam.InitAsConstants(descriptor.PushConstantSize / 4, 0, 0, D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL);
+            }
+
             D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlag = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_NONE;
             rootSignatureFlag |= D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS;
             rootSignatureFlag |= D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS;
@@ -116,7 +134,7 @@ namespace Infinity.Graphics
             }
 
             D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc = new D3D12_VERSIONED_ROOT_SIGNATURE_DESC();
-            rootSignatureDesc.Init_1_1((uint)m_ParameterCount, rootParameterPtr, 0, null, rootSignatureFlag);
+            rootSignatureDesc.Init_1_1((uint)totalRootParameters, rootParameterPtr, 0, null, rootSignatureFlag);
 
             ID3DBlob* signature;
             Dx12Utility.CHECK_HR(DirectX.D3DX12SerializeVersionedRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1_1, &signature, null));

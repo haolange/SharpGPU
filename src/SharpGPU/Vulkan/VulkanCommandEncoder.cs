@@ -443,6 +443,13 @@ namespace Infinity.Graphics
             VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_COMPUTE, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
         }
 
+        public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
+        {
+            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanComputePipeline vkPipeline = m_CachedPipeline as VulkanComputePipeline;
+            VulkanNative.vkCmdPushConstants(vkCmdBuf.NativeCommandBuffer, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, VkShaderStageFlags.VK_SHADER_STAGE_ALL, offset, size, data.ToPointer());
+        }
+
         public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
@@ -813,6 +820,13 @@ namespace Infinity.Graphics
             VulkanRasterPipeline vkPipeline = m_CachedPipeline as VulkanRasterPipeline;
             VkDescriptorSet set = vkArgumentTable.NativeDescriptorSet;
             VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
+        }
+
+        public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
+        {
+            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanRasterPipeline vkPipeline = m_CachedPipeline as VulkanRasterPipeline;
+            VulkanNative.vkCmdPushConstants(vkCmdBuf.NativeCommandBuffer, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, VkShaderStageFlags.VK_SHADER_STAGE_ALL, offset, size, data.ToPointer());
         }
 
         public override void SetIndexBuffer(RHIBuffer buffer, in uint offset)

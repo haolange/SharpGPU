@@ -26,13 +26,20 @@ namespace Infinity.Graphics
                 setLayouts[i] = vkLayout.NativeDescriptorSetLayout;
             }
 
+            VkPushConstantRange pushConstantRange = new VkPushConstantRange()
+            {
+                stageFlags = VkShaderStageFlags.VK_SHADER_STAGE_ALL,
+                offset = 0,
+                size = descriptor.PushConstantSize,
+            };
+
             VkPipelineLayoutCreateInfo layoutInfo = new VkPipelineLayoutCreateInfo()
             {
                 sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                 setLayoutCount = (uint)layoutCount,
                 pSetLayouts = layoutCount > 0 ? setLayouts : null,
-                pushConstantRangeCount = 0,
-                pPushConstantRanges = null,
+                pushConstantRangeCount = descriptor.PushConstantSize > 0 ? 1u : 0u,
+                pPushConstantRanges = descriptor.PushConstantSize > 0 ? &pushConstantRange : null,
             };
 
             fixed (VkPipelineLayout* layoutPtr = &m_NativePipelineLayout)
