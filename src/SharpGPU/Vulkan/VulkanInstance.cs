@@ -13,17 +13,41 @@ namespace Infinity.Graphics
         public override ERHIBackend BackendType => ERHIBackend.Vulkan;
 
         public VkInstance NativeInstance => m_VkInstance;
+        public bool HasDebugUtils => m_HasDebugUtils;
 
         private VkInstance m_VkInstance;
+        private bool m_HasDebugUtils;
         private List<VulkanDevice> m_Devices;
         private List<string> m_ValidationLayers;
         private List<string> m_RequiredExtensions;
+
+        // Debug utils function pointers (loaded at runtime via vkGetInstanceProcAddr)
+        [StructLayout(LayoutKind.Sequential)]
+        private struct VkDebugUtilsLabelEXT_
+        {
+            public uint sType; // VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT = 1000128002
+            public void* pNext;
+            public byte* pLabelName;
+            public float color0, color1, color2, color3;
+        }
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        private delegate IntPtr PFN_vkGetInstanceProcAddr(VkInstance instance, byte* pName);
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        private delegate void PFN_vkCmdBeginDebugUtilsLabel(VkCommandBuffer commandBuffer, VkDebugUtilsLabelEXT_* pLabelInfo);
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        private delegate void PFN_vkCmdEndDebugUtilsLabel(VkCommandBuffer commandBuffer);
+        private PFN_vkCmdBeginDebugUtilsLabel m_CmdBeginDebugUtilsLabel;
+        private PFN_vkCmdEndDebugUtilsLabel m_CmdEndDebugUtilsLabel;
 
         public VulkanInstance(in RHIInstanceDescriptor descriptor)
         {
             CheckExtensionSupport(descriptor);
             CheckValidationLayerSupport(descriptor);
             CreateVulkanInstance(descriptor);
+            if (m_HasDebugUtils)
+            {
+                LoadDebugUtilsFunctions();
+            }
             EnumeratePhysicalDevices(descriptor);
         }
 
@@ -83,6 +107,7 @@ namespace Infinity.Graphics
                 if (array.Any((string e) => e == "VK_EXT_debug_utils"))
                 {
                     m_RequiredExtensions.Add("VK_EXT_debug_utils");
+                    m_HasDebugUtils = true;
                 }
                 else
                 {
@@ -204,6 +229,92 @@ namespace Infinity.Graphics
             {
                 m_Devices.Add(new VulkanDevice(this, physicalDevices[i], descriptor.ComputeQueueRequestCount, descriptor.TransferQueueRequestCount, descriptor.GraphicsQueueRequestCount));
             }
+        }
+
+        private void LoadDebugUtilsFunctions()
+        {
+            try
+            {
+                // The Vulkan loader is already loaded by Evergine bindings.
+                // NativeLibrary.TryLoad returns the existing handle if already loaded.
+                IntPtr vkLib = IntPtr.Zero;
+                if (!System.Runtime.InteropServices.NativeLibrary.TryLoad("vulkan-1", out vkLib) &&
+                    !System.Runtime.InteropServices.NativeLibrary.TryLoad("libvulkan.so.1", out vkLib) &&
+                    !System.Runtime.InteropServices.NativeLibrary.TryLoad("libvulkan.so", out vkLib) &&
+                    !System.Runtime.InteropServices.NativeLibrary.TryLoad("libvulkan.dylib", out vkLib) &&
+                    !System.Runtime.InteropServices.NativeLibrary.TryLoad("libMoltenVK.dylib", out vkLib))
+                {
+                    m_HasDebugUtils = false;
+                    return;
+                }
+
+                // Get vkGetInstanceProcAddr to load extension functions
+                if (!System.Runtime.InteropServices.NativeLibrary.TryGetExport(vkLib, "vkGetInstanceProcAddr", out IntPtr getProcAddrPtr))
+                {
+                    m_HasDebugUtils = false;
+                    return;
+                }
+
+                var vkGetInstanceProcAddr = Marshal.GetDelegateForFunctionPointer<PFN_vkGetInstanceProcAddr>(getProcAddrPtr);
+
+                IntPtr beginPtr, endPtr;
+                byte* beginName = (byte*)"vkCmdBeginDebugUtilsLabelEXT".ToPointer();
+                byte* endName = (byte*)"vkCmdEndDebugUtilsLabelEXT".ToPointer();
+                try
+                {
+                    beginPtr = vkGetInstanceProcAddr(m_VkInstance, beginName);
+                    endPtr = vkGetInstanceProcAddr(m_VkInstance, endName);
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal((IntPtr)beginName);
+                    Marshal.FreeHGlobal((IntPtr)endName);
+                }
+
+                if (beginPtr != IntPtr.Zero && endPtr != IntPtr.Zero)
+                {
+                    m_CmdBeginDebugUtilsLabel = Marshal.GetDelegateForFunctionPointer<PFN_vkCmdBeginDebugUtilsLabel>(beginPtr);
+                    m_CmdEndDebugUtilsLabel = Marshal.GetDelegateForFunctionPointer<PFN_vkCmdEndDebugUtilsLabel>(endPtr);
+                }
+                else
+                {
+                    m_HasDebugUtils = false;
+                }
+            }
+            catch
+            {
+                m_HasDebugUtils = false;
+            }
+        }
+
+        internal void CmdBeginDebugUtilsLabel(VkCommandBuffer commandBuffer, string name)
+        {
+            if (!m_HasDebugUtils || m_CmdBeginDebugUtilsLabel == null)
+                return;
+
+            byte* namePtr = (byte*)Marshal.StringToHGlobalAnsi(name);
+            try
+            {
+                VkDebugUtilsLabelEXT_ labelInfo = default;
+                labelInfo.sType = 1000128002; // VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT
+                labelInfo.pLabelName = namePtr;
+                labelInfo.color0 = 1.0f;
+                labelInfo.color1 = 1.0f;
+                labelInfo.color2 = 1.0f;
+                labelInfo.color3 = 1.0f;
+                m_CmdBeginDebugUtilsLabel(commandBuffer, &labelInfo);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal((IntPtr)namePtr);
+            }
+        }
+
+        internal void CmdEndDebugUtilsLabel(VkCommandBuffer commandBuffer)
+        {
+            if (!m_HasDebugUtils || m_CmdEndDebugUtilsLabel == null)
+                return;
+            m_CmdEndDebugUtilsLabel(commandBuffer);
         }
 
         public override RHIDevice GetDevice(in int index)

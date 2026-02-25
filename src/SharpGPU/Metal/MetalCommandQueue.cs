@@ -1,4 +1,5 @@
 ﻿using System;
+using SharpMetal.Foundation;
 using SharpMetal.Metal;
 using SharpMetal.ObjectiveCCore;
 using SharpMetal.QuartzCore;
@@ -16,12 +17,14 @@ namespace Infinity.Graphics
                                                 m_Mtl4CompletionEvent.NativePtr != IntPtr.Zero;
 
         internal MTL4CommandAllocator NativeMtl4CommandAllocator => m_NativeMtl4CommandAllocator;
+        internal bool HasResidencySet => m_ResidencySet.NativePtr != IntPtr.Zero;
 
         private readonly MetalDevice m_MetalDevice;
         private MTLCommandQueue m_NativeQueue;
         private MTL4CommandQueue m_NativeQueue4;
         private MTL4CommandAllocator m_NativeMtl4CommandAllocator;
         private MTLSharedEvent m_Mtl4CompletionEvent;
+        private MTLResidencySet m_ResidencySet;
         private MTLCommandBuffer m_LastSubmittedCommandBuffer;
         private ulong m_LastSubmittedMtl4Value;
         private ulong m_NextMtl4CompletionValue;
@@ -35,6 +38,7 @@ namespace Infinity.Graphics
             m_NativeQueue4 = default;
             m_NativeMtl4CommandAllocator = default;
             m_Mtl4CompletionEvent = default;
+            m_ResidencySet = default;
             m_LastSubmittedCommandBuffer = default;
             m_LastSubmittedMtl4Value = 0;
             m_NextMtl4CompletionValue = 1;
@@ -57,7 +61,11 @@ namespace Infinity.Graphics
                     }
                 }
 
-                if (!SupportsMtl4Submission)
+                if (SupportsMtl4Submission)
+                {
+                    InitializeResidencySet();
+                }
+                else
                 {
                     Console.WriteLine("[MetalQueue] MTL4 queue/allocator/event is unavailable. MTL4 command submission is disabled for this queue.");
                     ReleaseMtl4Handles();
@@ -278,6 +286,46 @@ namespace Infinity.Graphics
             }
         }
 
+        internal void AddResidencyAllocation(in MTLAllocation allocation)
+        {
+            if (m_ResidencySet.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (allocation.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (!m_ResidencySet.ContainsAllocation(allocation))
+            {
+                m_ResidencySet.AddAllocation(allocation);
+                m_ResidencySet.Commit();
+            }
+        }
+
+        private void InitializeResidencySet()
+        {
+            MTLResidencySetDescriptor descriptor = MTLResidencySetDescriptor.New();
+            descriptor.InitialCapacity = 256;
+
+            NSError error = default;
+            IntPtr residencySetPtr = m_MetalDevice.NativeDevice.NewResidencySetWithDescriptor(descriptor, ref error);
+            ObjectiveCRuntime.Release(descriptor.NativePtr);
+
+            if (residencySetPtr == IntPtr.Zero)
+            {
+                Console.WriteLine("[MetalQueue] Failed to create MTLResidencySet. Residency tracking is disabled for this queue.");
+                return;
+            }
+
+            m_ResidencySet = new MTLResidencySet(residencySetPtr);
+            m_ResidencySet.RequestResidency();
+            m_ResidencySet.Commit();
+            m_NativeQueue4.AddResidencySet(m_ResidencySet);
+        }
+
         private void WaitLastSubmission()
         {
             if (m_LastSubmittedCommandBuffer.NativePtr != IntPtr.Zero)
@@ -416,6 +464,13 @@ namespace Infinity.Graphics
 
         private void ReleaseMtl4Handles()
         {
+            if (m_ResidencySet.NativePtr != IntPtr.Zero)
+            {
+                m_ResidencySet.EndResidency();
+                ObjectiveCRuntime.Release(m_ResidencySet.NativePtr);
+                m_ResidencySet = default;
+            }
+
             if (m_Mtl4CompletionEvent.NativePtr != IntPtr.Zero)
             {
                 ObjectiveCRuntime.Release(m_Mtl4CompletionEvent);

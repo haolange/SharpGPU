@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Infinity.Mathmatics;
 using SharpMetal.Foundation;
 using SharpMetal.Metal;
@@ -669,6 +670,10 @@ namespace Infinity.Graphics
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
+#if DEBUG
+            MetalPipelineLayout metalLayout = m_CachedPipeline?.Descriptor.PipelineLayout as MetalPipelineLayout;
+            Debug.Assert(metalLayout == null || offset + size <= metalLayout.Descriptor.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({metalLayout?.Descriptor.PushConstantSize ?? 0}).");
+#endif
             if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.SetBytes(data + (int)offset, size, MetalBindingHelpers.PushConstantBufferIndex);
@@ -776,7 +781,8 @@ namespace Infinity.Graphics
             if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
             {
                 m_BindingBackend?.Dispose();
-                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Compute);
+                MetalCommandQueue? queue = commandBuffer.CommandQueue as MetalCommandQueue;
+                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Compute, queue);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
@@ -1251,7 +1257,8 @@ namespace Infinity.Graphics
             if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
             {
                 m_BindingBackend?.Dispose();
-                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raytracing);
+                MetalCommandQueue? queue = commandBuffer.CommandQueue as MetalCommandQueue;
+                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raytracing, queue);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
@@ -1735,6 +1742,10 @@ namespace Infinity.Graphics
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
+#if DEBUG
+            MetalPipelineLayout metalLayout = m_CachedPipeline?.Descriptor.PipelineLayout as MetalPipelineLayout;
+            Debug.Assert(metalLayout == null || offset + size <= metalLayout.Descriptor.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({metalLayout?.Descriptor.PushConstantSize ?? 0}).");
+#endif
             IntPtr offsetData = data + (int)offset;
             if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
@@ -1959,7 +1970,8 @@ namespace Infinity.Graphics
             if (m_BindingBackend == null || m_BindingBackend.Mode != mode)
             {
                 m_BindingBackend?.Dispose();
-                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raster);
+                MetalCommandQueue? queue = commandBuffer.CommandQueue as MetalCommandQueue;
+                m_BindingBackend = MetalBindingBackendFactory.Create(m_MetalDevice, mode, MetalBindingPipelineType.Raster, queue);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);

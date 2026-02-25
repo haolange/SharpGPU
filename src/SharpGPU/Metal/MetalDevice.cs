@@ -237,7 +237,7 @@ namespace Infinity.Graphics
                 isFlipProjection: true,
                 isHDRPresentSupported: true,
                 isUnifiedMemorySupported: m_NativeDevice.HasUnifiedMemory,
-                isRootConstantSupport: false,
+                isRootConstantSupport: true,
                 isIndirectRootConstantSupport: false,
                 isPixelShaderUAVSupported: true,
                 isRasterizerOrderedSupported: m_NativeDevice.RasterOrderGroupsSupported,

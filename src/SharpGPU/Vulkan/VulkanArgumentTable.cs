@@ -187,6 +187,23 @@ namespace Infinity.Graphics
                     }
                     break;
                 }
+                case ERHIBindType.AccelStruct:
+                {
+                    if (element.AccelStruct != null)
+                    {
+                        VulkanTopLevelAccelStruct vkTLAS = element.AccelStruct as VulkanTopLevelAccelStruct;
+                        VkAccelerationStructureKHR accelStructHandle = vkTLAS.NativeAccelerationStructure;
+                        VkWriteDescriptorSetAccelerationStructureKHR accelInfo = new VkWriteDescriptorSetAccelerationStructureKHR()
+                        {
+                            sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+                            accelerationStructureCount = 1,
+                            pAccelerationStructures = &accelStructHandle,
+                        };
+                        writeDescriptor.pNext = &accelInfo;
+                        VulkanNative.vkUpdateDescriptorSets(m_VulkanDevice.NativeDevice, 1, &writeDescriptor, 0, null);
+                    }
+                    break;
+                }
             }
         }
 
@@ -258,6 +275,23 @@ namespace Infinity.Graphics
                         VulkanTextureView vkTextureView = element.TextureView as VulkanTextureView;
                         VkDescriptorImageInfo imageInfo = vkTextureView.GetDescriptorImageInfo(VkImageLayout.VK_IMAGE_LAYOUT_GENERAL);
                         writeDescriptor.pImageInfo = &imageInfo;
+                        VulkanNative.vkUpdateDescriptorSets(m_VulkanDevice.NativeDevice, 1, &writeDescriptor, 0, null);
+                    }
+                    break;
+                }
+                case ERHIBindType.AccelStruct:
+                {
+                    if (element.AccelStruct != null)
+                    {
+                        VulkanTopLevelAccelStruct vkTLAS = element.AccelStruct as VulkanTopLevelAccelStruct;
+                        VkAccelerationStructureKHR accelStructHandle = vkTLAS.NativeAccelerationStructure;
+                        VkWriteDescriptorSetAccelerationStructureKHR accelInfo = new VkWriteDescriptorSetAccelerationStructureKHR()
+                        {
+                            sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+                            accelerationStructureCount = 1,
+                            pAccelerationStructures = &accelStructHandle,
+                        };
+                        writeDescriptor.pNext = &accelInfo;
                         VulkanNative.vkUpdateDescriptorSets(m_VulkanDevice.NativeDevice, 1, &writeDescriptor, 0, null);
                     }
                     break;
