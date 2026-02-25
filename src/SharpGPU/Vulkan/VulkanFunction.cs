@@ -106,31 +106,31 @@ namespace Infinity.Graphics
             m_CallableRegion = default;
         }
 
-        public override void SetRayGenerationProgram(string exportName, RHIResourceTable[]? resourceTables = null)
+        public override void SetRayGenerationProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             m_RayGenGroupIndex = 0; // Raygen is always group 0
         }
 
-        public override int AddMissProgram(string exportName, RHIResourceTable[]? resourceTables = null)
+        public override int AddMissProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             int index = m_MissGroupIndices.Count;
             m_MissGroupIndices.Add(1 + index); // Miss groups start after raygen
             return index;
         }
 
-        public override int AddHitGroupProgram(string exportName, RHIResourceTable[]? resourceTables = null)
+        public override int AddHitGroupProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             int index = m_HitGroupIndices.Count;
             m_HitGroupIndices.Add(1 + m_MissGroupIndices.Count + index); // Hit groups start after raygen + miss
             return index;
         }
 
-        public override void SetMissProgram(in int index, string exportName, RHIResourceTable[]? resourceTables = null)
+        public override void SetMissProgram(in int index, string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             m_MissGroupIndices[index] = 1 + index;
         }
 
-        public override void SetHitGroupProgram(in int index, string exportName, RHIResourceTable[]? resourceTables = null)
+        public override void SetHitGroupProgram(in int index, string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             m_HitGroupIndices[index] = 1 + m_MissGroupIndices.Count + index;
         }

@@ -321,6 +321,15 @@ namespace Infinity.Graphics
             vulkan12Features.sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
             vulkan12Features.pNext = &vulkan13Features;
             vulkan12Features.descriptorIndexing = true;
+            vulkan12Features.shaderSampledImageArrayNonUniformIndexing = true;
+            vulkan12Features.shaderStorageBufferArrayNonUniformIndexing = true;
+            vulkan12Features.shaderStorageImageArrayNonUniformIndexing = true;
+            vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = true;
+            vulkan12Features.descriptorBindingStorageImageUpdateAfterBind = true;
+            vulkan12Features.descriptorBindingStorageBufferUpdateAfterBind = true;
+            vulkan12Features.descriptorBindingUniformBufferUpdateAfterBind = true;
+            vulkan12Features.descriptorBindingPartiallyBound = true;
+            vulkan12Features.runtimeDescriptorArray = true;
             vulkan12Features.timelineSemaphore = true;
             vulkan12Features.bufferDeviceAddress = true;
             pNextChain = &vulkan12Features;
@@ -509,7 +518,7 @@ namespace Infinity.Graphics
             VkDescriptorPoolCreateInfo poolInfo = new VkDescriptorPoolCreateInfo()
             {
                 sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                flags = VkDescriptorPoolCreateFlags.VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+                flags = VkDescriptorPoolCreateFlags.VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT | VkDescriptorPoolCreateFlags.VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
                 maxSets = 8192,
                 poolSizeCount = 7,
                 pPoolSizes = poolSizes,
@@ -588,14 +597,14 @@ namespace Infinity.Graphics
             return new VulkanBottomLevelAccelStruct(this, descriptor);
         }
 
-        public override RHIResourceTableLayout CreateResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor)
+        public override RHIArgumentTableLayout CreateArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor)
         {
-            return new VulkanResourceTableLayout(this, descriptor);
+            return new VulkanArgumentTableLayout(this, descriptor);
         }
 
-        public override RHIResourceTable CreateResourceTable(in RHIResourceTableDescriptor descriptor)
+        public override RHIArgumentTable CreateArgumentTable(in RHIArgumentTableDescriptor descriptor)
         {
-            return new VulkanResourceTable(this, descriptor);
+            return new VulkanArgumentTable(this, descriptor);
         }
 
         public override RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor)
@@ -661,6 +670,11 @@ namespace Infinity.Graphics
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
         {
             return new VulkanTensor(this, descriptor);
+        }
+
+        public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
+        {
+            return new VulkanWorkGraphPipeline(descriptor);
         }
 
         public int GetQueueFamilyIndex(in ERHIPipelineType pipeline)

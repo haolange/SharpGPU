@@ -640,31 +640,38 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
 
-        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            Dx12ResourceTable dx12ResourceTable = resourceTable as Dx12ResourceTable;
-            Dx12ResourceTableLayout dx12ResourceTableLayout = dx12ResourceTable.ResourceTableLayout;
+            Dx12ArgumentTable dx12ArgumentTable = resourceTable as Dx12ArgumentTable;
+            Dx12ArgumentTableLayout dx12ArgumentTableLayout = dx12ArgumentTable.ArgumentTableLayout;
             Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
 #if DEBUG
-            Debug.Assert(tableIndex == dx12ResourceTableLayout.Index, "error resourceTable index");
+            Debug.Assert(tableIndex == dx12ArgumentTableLayout.Index, "error resourceTable index");
 #endif
 
-            for (int i = 0; i < dx12ResourceTable.NativeGpuDescriptorHandles.Length; ++i)
+            for (int i = 0; i < dx12ArgumentTable.NativeGpuDescriptorHandles.Length; ++i)
             {
                 Dx12BindTypeAndParameterSlot? parameter = null;
-                ref Dx12BindInfo bindInfo = ref dx12ResourceTableLayout.BindInfos[i];
+                ref Dx12BindInfo bindInfo = ref dx12ArgumentTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Compute, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Compute, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type);
 #endif
-                    dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
+                    dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
                 }
             }
+        }
+
+        public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetComputeRoot32BitConstants(dx12PipelineLayout.PushConstantRootParameterIndex, size / 4, data.ToPointer(), offset / 4);
         }
 
         public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
@@ -969,29 +976,29 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
 
-        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            Dx12ResourceTable dx12ResourceTable = resourceTable as Dx12ResourceTable;
-            Dx12ResourceTableLayout dx12ResourceTableLayout = dx12ResourceTable.ResourceTableLayout;
+            Dx12ArgumentTable dx12ArgumentTable = resourceTable as Dx12ArgumentTable;
+            Dx12ArgumentTableLayout dx12ArgumentTableLayout = dx12ArgumentTable.ArgumentTableLayout;
             Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
 #if DEBUG
-            Debug.Assert(tableIndex == dx12ResourceTableLayout.Index, "error resourceTable index");
+            Debug.Assert(tableIndex == dx12ArgumentTableLayout.Index, "error resourceTable index");
 #endif
 
-            for (int i = 0; i < dx12ResourceTable.NativeGpuDescriptorHandles.Length; ++i)
+            for (int i = 0; i < dx12ArgumentTable.NativeGpuDescriptorHandles.Length; ++i)
             {
                 Dx12BindTypeAndParameterSlot? parameter = null;
-                ref Dx12BindInfo bindInfo = ref dx12ResourceTableLayout.BindInfos[i];
+                ref Dx12BindInfo bindInfo = ref dx12ArgumentTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.RayTracing, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.RayTracing, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type);
 #endif
-                    dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
+                    dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
                 }
             }
         }
@@ -1502,49 +1509,56 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList->SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
 
-        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            Dx12ResourceTable dx12ResourceTable = resourceTable as Dx12ResourceTable;
-            Dx12ResourceTableLayout dx12ResourceTableLayout = dx12ResourceTable.ResourceTableLayout;
+            Dx12ArgumentTable dx12ArgumentTable = resourceTable as Dx12ArgumentTable;
+            Dx12ArgumentTableLayout dx12ArgumentTableLayout = dx12ArgumentTable.ArgumentTableLayout;
             Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
 #if DEBUG
-            Debug.Assert(tableIndex == dx12ResourceTableLayout.Index, "error resourceTable index");
+            Debug.Assert(tableIndex == dx12ArgumentTableLayout.Index, "error resourceTable index");
 #endif
 
-            for (int i = 0; i < dx12ResourceTable.NativeGpuDescriptorHandles.Length; ++i)
+            for (int i = 0; i < dx12ArgumentTable.NativeGpuDescriptorHandles.Length; ++i)
             {
                 Dx12BindTypeAndParameterSlot? parameter = null;
-                ref Dx12BindInfo bindInfo = ref dx12ResourceTableLayout.BindInfos[i];
+                ref Dx12BindInfo bindInfo = ref dx12ArgumentTableLayout.BindInfos[i];
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.All, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.All, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in graphics at index {0}.", i));
 #endif
-                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
+                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
                 }
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Vertex, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Vertex, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in vertex at index {0}.", i));
 #endif
-                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
+                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
                 }
 
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Fragment, dx12ResourceTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Fragment, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
                 if (parameter.HasValue)
                 {
 #if DEBUG
                     Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in fragment at index {0}.", i));
 #endif
-                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
+                    dx12CommandBuffer.NativeCommandList->SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
                 }
             }
+        }
+
+        public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
+            dx12CommandBuffer.NativeCommandList->SetGraphicsRoot32BitConstants(dx12PipelineLayout.PushConstantRootParameterIndex, size / 4, data.ToPointer(), offset / 4);
         }
 
         public override void SetIndexBuffer(RHIBuffer buffer, in uint offset)
@@ -1630,11 +1644,6 @@ namespace Infinity.Graphics
                 Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
                 dx12CommandBuffer.NativeCommandList->ExecuteIndirect(dx12Device.DispatchMeshIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
             }
-        }
-
-        public override void DispatchGraph()
-        {
-            throw new NotImplementedException();
         }
 
         public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
@@ -1897,15 +1906,15 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void SetResourceTable(RHIResourceTable resourceTable, in uint tableIndex)
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
             // Bind resource table descriptors to compute root signature slots
-            Dx12ResourceTable dx12ResourceTable = resourceTable as Dx12ResourceTable;
+            Dx12ArgumentTable dx12ArgumentTable = resourceTable as Dx12ArgumentTable;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
-            for (int i = 0; i < dx12ResourceTable.NativeGpuDescriptorHandles.Length; ++i)
+            for (int i = 0; i < dx12ArgumentTable.NativeGpuDescriptorHandles.Length; ++i)
             {
-                dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable(tableIndex + (uint)i, dx12ResourceTable.NativeGpuDescriptorHandles[i]);
+                dx12CommandBuffer.NativeCommandList->SetComputeRootDescriptorTable(tableIndex + (uint)i, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
             }
         }
 

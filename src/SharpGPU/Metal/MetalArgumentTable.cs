@@ -22,7 +22,7 @@ namespace Infinity.Graphics
         }
     }
 
-    internal sealed class MetalResourceTableLayout : RHIResourceTableLayout
+    internal sealed class MetalArgumentTableLayout : RHIArgumentTableLayout
     {
         public uint Index => m_Index;
         public MetalBindInfo[] BindInfos => m_BindInfos;
@@ -33,17 +33,17 @@ namespace Infinity.Graphics
         private readonly int[] m_ElementOffsets;
         private readonly int m_TotalElementCount;
 
-        public MetalResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor)
+        public MetalArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor)
         {
             m_Index = descriptor.Index;
             m_BindInfos = new MetalBindInfo[descriptor.Elements.Length];
             m_ElementOffsets = new int[descriptor.Elements.Length];
 
-            Span<RHIResourceTableLayoutElement> elements = descriptor.Elements.Span;
+            Span<RHIArgumentTableLayoutElement> elements = descriptor.Elements.Span;
             int offset = 0;
             for (int i = 0; i < elements.Length; ++i)
             {
-                ref RHIResourceTableLayoutElement element = ref elements[i];
+                ref RHIArgumentTableLayoutElement element = ref elements[i];
                 m_BindInfos[i] = new MetalBindInfo(element.Slot, descriptor.Index, element.Count, element.Type, element.Stage);
                 m_ElementOffsets[i] = offset;
                 offset += (int)Math.Max(1u, element.Count);
@@ -61,23 +61,23 @@ namespace Infinity.Graphics
         }
     }
 
-    internal sealed class MetalResourceTable : RHIResourceTable
+    internal sealed class MetalArgumentTable : RHIArgumentTable
     {
-        public MetalResourceTableLayout ResourceTableLayout => m_Layout;
-        public RHIResourceTableElement[] Elements => m_Elements;
+        public MetalArgumentTableLayout ArgumentTableLayout => m_Layout;
+        public RHIArgumentTableElement[] Elements => m_Elements;
 
-        private readonly MetalResourceTableLayout m_Layout;
-        private readonly RHIResourceTableElement[] m_Elements;
+        private readonly MetalArgumentTableLayout m_Layout;
+        private readonly RHIArgumentTableElement[] m_Elements;
 
-        public MetalResourceTable(in RHIResourceTableDescriptor descriptor)
+        public MetalArgumentTable(in RHIArgumentTableDescriptor descriptor)
         {
-            m_Layout = descriptor.Layout as MetalResourceTableLayout ?? throw new ArgumentException("Invalid resource table layout type.", nameof(descriptor));
+            m_Layout = descriptor.Layout as MetalArgumentTableLayout ?? throw new ArgumentException("Invalid resource table layout type.", nameof(descriptor));
 
             // Allocate expanded element array to hold all elements including bindless arrays
-            m_Elements = new RHIResourceTableElement[m_Layout.TotalElementCount];
+            m_Elements = new RHIArgumentTableElement[m_Layout.TotalElementCount];
 
             // Copy initial elements from descriptor (one per bind slot)
-            Span<RHIResourceTableElement> srcElements = descriptor.Elements.Span;
+            Span<RHIArgumentTableElement> srcElements = descriptor.Elements.Span;
             for (int i = 0; i < m_Layout.BindInfos.Length && i < srcElements.Length; ++i)
             {
                 int elementOffset = m_Layout.GetElementOffset(i);
@@ -85,7 +85,7 @@ namespace Infinity.Graphics
             }
         }
 
-        public RHIResourceTableElement GetElement(int bindIndex, int arrayIndex)
+        public RHIArgumentTableElement GetElement(int bindIndex, int arrayIndex)
         {
             int offset = m_Layout.GetElementOffset(bindIndex) + arrayIndex;
             return m_Elements[offset];
@@ -96,7 +96,7 @@ namespace Infinity.Graphics
             return m_Layout.BindInfos.Length;
         }
 
-        public override void SetBindElement(in RHIResourceTableElement element, in ERHIBindType bindType, in int slot)
+        public override void SetBindElement(in RHIArgumentTableElement element, in ERHIBindType bindType, in int slot)
         {
             for (int i = 0; i < m_Layout.BindInfos.Length; ++i)
             {
@@ -110,7 +110,7 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void SetBindElement(in RHIResourceTableElement element, in ERHIBindType bindType, in int slot, in int arrayIndex)
+        public override void SetBindElement(in RHIArgumentTableElement element, in ERHIBindType bindType, in int slot, in int arrayIndex)
         {
             for (int i = 0; i < m_Layout.BindInfos.Length; ++i)
             {

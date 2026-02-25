@@ -15,26 +15,86 @@ namespace Infinity.Graphics
         {
             switch (format)
             {
+                // 8-Bits
+                case ERHIPixelFormat.R8_UInt:
+                    return MTLPixelFormat.R8Uint;
+                case ERHIPixelFormat.R8_SInt:
+                    return MTLPixelFormat.R8Sint;
+                case ERHIPixelFormat.R8_UNorm:
+                    return MTLPixelFormat.R8Unorm;
+                case ERHIPixelFormat.R8_SNorm:
+                    return MTLPixelFormat.R8Snorm;
+                // 16-Bits
+                case ERHIPixelFormat.R16_UInt:
+                    return MTLPixelFormat.R16Uint;
+                case ERHIPixelFormat.R16_SInt:
+                    return MTLPixelFormat.R16Sint;
+                case ERHIPixelFormat.R16_Float:
+                    return MTLPixelFormat.R16Float;
+                case ERHIPixelFormat.R8G8_UInt:
+                    return MTLPixelFormat.RG8Uint;
+                case ERHIPixelFormat.R8G8_SInt:
+                    return MTLPixelFormat.RG8Sint;
+                case ERHIPixelFormat.R8G8_UNorm:
+                    return MTLPixelFormat.RG8Unorm;
+                case ERHIPixelFormat.R8G8_SNorm:
+                    return MTLPixelFormat.RG8Snorm;
+                // 32-Bits
+                case ERHIPixelFormat.R32_UInt:
+                    return MTLPixelFormat.R32Uint;
+                case ERHIPixelFormat.R32_SInt:
+                    return MTLPixelFormat.R32Sint;
+                case ERHIPixelFormat.R32_Float:
+                    return MTLPixelFormat.R32Float;
+                case ERHIPixelFormat.R16G16_UInt:
+                    return MTLPixelFormat.RG16Uint;
+                case ERHIPixelFormat.R16G16_SInt:
+                    return MTLPixelFormat.RG16Sint;
+                case ERHIPixelFormat.R16G16_Float:
+                    return MTLPixelFormat.RG16Float;
+                case ERHIPixelFormat.R8G8B8A8_UInt:
+                    return MTLPixelFormat.RGBA8Uint;
+                case ERHIPixelFormat.R8G8B8A8_SInt:
+                    return MTLPixelFormat.RGBA8Sint;
                 case ERHIPixelFormat.R8G8B8A8_UNorm:
                     return MTLPixelFormat.RGBA8Unorm;
                 case ERHIPixelFormat.R8G8B8A8_UNorm_Srgb:
                     return MTLPixelFormat.RGBA8UnormsRGB;
+                case ERHIPixelFormat.R8G8B8A8_SNorm:
+                    return MTLPixelFormat.RGBA8Snorm;
                 case ERHIPixelFormat.B8G8R8A8_UNorm:
                     return MTLPixelFormat.BGRA8Unorm;
                 case ERHIPixelFormat.B8G8R8A8_UNorm_Srgb:
                     return MTLPixelFormat.BGRA8UnormsRGB;
-                case ERHIPixelFormat.R10G10B10A2_UNorm:
-                    return MTLPixelFormat.RGB10A2Unorm;
+                case ERHIPixelFormat.R99GB99_E5_Float:
+                    return MTLPixelFormat.RGB9E5Float;
                 case ERHIPixelFormat.R10G10B10A2_UInt:
                     return MTLPixelFormat.RGB10A2Uint;
+                case ERHIPixelFormat.R10G10B10A2_UNorm:
+                    return MTLPixelFormat.RGB10A2Unorm;
+                case ERHIPixelFormat.R11G11B10_Float:
+                    return MTLPixelFormat.RG11B10Float;
+                // 64-Bits
+                case ERHIPixelFormat.RG32_UInt:
+                    return MTLPixelFormat.RG32Uint;
+                case ERHIPixelFormat.RG32_SInt:
+                    return MTLPixelFormat.RG32Sint;
+                case ERHIPixelFormat.RG32_Float:
+                    return MTLPixelFormat.RG32Float;
+                case ERHIPixelFormat.R16G16B16A16_UInt:
+                    return MTLPixelFormat.RGBA16Uint;
+                case ERHIPixelFormat.R16G16B16A16_SInt:
+                    return MTLPixelFormat.RGBA16Sint;
                 case ERHIPixelFormat.R16G16B16A16_Float:
                     return MTLPixelFormat.RGBA16Float;
+                // 128-Bits
+                case ERHIPixelFormat.R32G32B32A32_UInt:
+                    return MTLPixelFormat.RGBA32Uint;
+                case ERHIPixelFormat.R32G32B32A32_SInt:
+                    return MTLPixelFormat.RGBA32Sint;
                 case ERHIPixelFormat.R32G32B32A32_Float:
                     return MTLPixelFormat.RGBA32Float;
-                case ERHIPixelFormat.R32_Float:
-                    return MTLPixelFormat.R32Float;
-                case ERHIPixelFormat.R32_UInt:
-                    return MTLPixelFormat.R32Uint;
+                // Depth-Stencil
                 case ERHIPixelFormat.D16_UNorm:
                     return MTLPixelFormat.Depth16Unorm;
                 case ERHIPixelFormat.D24_UNorm_S8_UInt:
@@ -43,6 +103,73 @@ namespace Infinity.Graphics
                     return MTLPixelFormat.Depth32Float;
                 case ERHIPixelFormat.D32_Float_S8_UInt:
                     return MTLPixelFormat.Depth32FloatStencil8;
+                // Block-Compressed (BC formats available on macOS, not iOS)
+                case ERHIPixelFormat.RGBA_DXT1_SRGB:
+                    return MTLPixelFormat.BC1RGBAsRGB;
+                case ERHIPixelFormat.RGB_DXT1_UNorm:
+                case ERHIPixelFormat.RGBA_DXT1_UNorm:
+                    return MTLPixelFormat.BC1RGBA;
+                case ERHIPixelFormat.RGBA_DXT3_SRGB:
+                    return MTLPixelFormat.BC2RGBAsRGB;
+                case ERHIPixelFormat.RGBA_DXT3_UNorm:
+                    return MTLPixelFormat.BC2RGBA;
+                case ERHIPixelFormat.RGBA_DXT5_SRGB:
+                    return MTLPixelFormat.BC3RGBAsRGB;
+                case ERHIPixelFormat.RGBA_DXT5_UNorm:
+                    return MTLPixelFormat.BC3RGBA;
+                case ERHIPixelFormat.R_BC4_UNorm:
+                    return MTLPixelFormat.BC4RUnorm;
+                case ERHIPixelFormat.R_BC4_SNorm:
+                    return MTLPixelFormat.BC4RSnorm;
+                case ERHIPixelFormat.RG_BC5_UNorm:
+                    return MTLPixelFormat.BC5RGUnorm;
+                case ERHIPixelFormat.RG_BC5_SNorm:
+                    return MTLPixelFormat.BC5RGSnorm;
+                case ERHIPixelFormat.RGB_BC6H_UFloat:
+                    return MTLPixelFormat.BC6HRGBUfloat;
+                case ERHIPixelFormat.RGB_BC6H_SFloat:
+                    return MTLPixelFormat.BC6HRGBFloat;
+                case ERHIPixelFormat.RGBA_BC7_SRGB:
+                    return MTLPixelFormat.BC7RGBAUnormsRGB;
+                case ERHIPixelFormat.RGBA_BC7_UNorm:
+                    return MTLPixelFormat.BC7RGBAUnorm;
+                // ASTC (available on iOS and Apple Silicon Macs)
+                case ERHIPixelFormat.RGBA_ASTC4X4_SRGB:
+                    return MTLPixelFormat.ASTC4x4sRGB;
+                case ERHIPixelFormat.RGBA_ASTC4X4_UNorm:
+                    return MTLPixelFormat.ASTC4x4LDR;
+                case ERHIPixelFormat.RGBA_ASTC4X4_UFloat:
+                    return MTLPixelFormat.ASTC4x4HDR;
+                case ERHIPixelFormat.RGBA_ASTC5X5_SRGB:
+                    return MTLPixelFormat.ASTC5x5sRGB;
+                case ERHIPixelFormat.RGBA_ASTC5X5_UNorm:
+                    return MTLPixelFormat.ASTC5x5LDR;
+                case ERHIPixelFormat.RGBA_ASTC5X5_UFloat:
+                    return MTLPixelFormat.ASTC5x5HDR;
+                case ERHIPixelFormat.RGBA_ASTC6X6_SRGB:
+                    return MTLPixelFormat.ASTC6x6sRGB;
+                case ERHIPixelFormat.RGBA_ASTC6X6_UNorm:
+                    return MTLPixelFormat.ASTC6x6LDR;
+                case ERHIPixelFormat.RGBA_ASTC6X6_UFloat:
+                    return MTLPixelFormat.ASTC6x6HDR;
+                case ERHIPixelFormat.RGBA_ASTC8X8_SRGB:
+                    return MTLPixelFormat.ASTC8x8sRGB;
+                case ERHIPixelFormat.RGBA_ASTC8X8_UNorm:
+                    return MTLPixelFormat.ASTC8x8LDR;
+                case ERHIPixelFormat.RGBA_ASTC8X8_UFloat:
+                    return MTLPixelFormat.ASTC8x8HDR;
+                case ERHIPixelFormat.RGBA_ASTC10X10_SRGB:
+                    return MTLPixelFormat.ASTC10x10sRGB;
+                case ERHIPixelFormat.RGBA_ASTC10X10_UNorm:
+                    return MTLPixelFormat.ASTC10x10LDR;
+                case ERHIPixelFormat.RGBA_ASTC10X10_UFloat:
+                    return MTLPixelFormat.ASTC10x10HDR;
+                case ERHIPixelFormat.RGBA_ASTC12X12_SRGB:
+                    return MTLPixelFormat.ASTC12x12sRGB;
+                case ERHIPixelFormat.RGBA_ASTC12X12_UNorm:
+                    return MTLPixelFormat.ASTC12x12LDR;
+                case ERHIPixelFormat.RGBA_ASTC12X12_UFloat:
+                    return MTLPixelFormat.ASTC12x12HDR;
                 default:
                     return MTLPixelFormat.Invalid;
             }
@@ -52,22 +179,86 @@ namespace Infinity.Graphics
         {
             switch (format)
             {
+                // 8-Bits
+                case MTLPixelFormat.R8Uint:
+                    return ERHIPixelFormat.R8_UInt;
+                case MTLPixelFormat.R8Sint:
+                    return ERHIPixelFormat.R8_SInt;
+                case MTLPixelFormat.R8Unorm:
+                    return ERHIPixelFormat.R8_UNorm;
+                case MTLPixelFormat.R8Snorm:
+                    return ERHIPixelFormat.R8_SNorm;
+                // 16-Bits
+                case MTLPixelFormat.R16Uint:
+                    return ERHIPixelFormat.R16_UInt;
+                case MTLPixelFormat.R16Sint:
+                    return ERHIPixelFormat.R16_SInt;
+                case MTLPixelFormat.R16Float:
+                    return ERHIPixelFormat.R16_Float;
+                case MTLPixelFormat.RG8Uint:
+                    return ERHIPixelFormat.R8G8_UInt;
+                case MTLPixelFormat.RG8Sint:
+                    return ERHIPixelFormat.R8G8_SInt;
+                case MTLPixelFormat.RG8Unorm:
+                    return ERHIPixelFormat.R8G8_UNorm;
+                case MTLPixelFormat.RG8Snorm:
+                    return ERHIPixelFormat.R8G8_SNorm;
+                // 32-Bits
+                case MTLPixelFormat.R32Uint:
+                    return ERHIPixelFormat.R32_UInt;
+                case MTLPixelFormat.R32Sint:
+                    return ERHIPixelFormat.R32_SInt;
+                case MTLPixelFormat.R32Float:
+                    return ERHIPixelFormat.R32_Float;
+                case MTLPixelFormat.RG16Uint:
+                    return ERHIPixelFormat.R16G16_UInt;
+                case MTLPixelFormat.RG16Sint:
+                    return ERHIPixelFormat.R16G16_SInt;
+                case MTLPixelFormat.RG16Float:
+                    return ERHIPixelFormat.R16G16_Float;
+                case MTLPixelFormat.RGBA8Uint:
+                    return ERHIPixelFormat.R8G8B8A8_UInt;
+                case MTLPixelFormat.RGBA8Sint:
+                    return ERHIPixelFormat.R8G8B8A8_SInt;
                 case MTLPixelFormat.RGBA8Unorm:
                     return ERHIPixelFormat.R8G8B8A8_UNorm;
                 case MTLPixelFormat.RGBA8UnormsRGB:
                     return ERHIPixelFormat.R8G8B8A8_UNorm_Srgb;
+                case MTLPixelFormat.RGBA8Snorm:
+                    return ERHIPixelFormat.R8G8B8A8_SNorm;
                 case MTLPixelFormat.BGRA8Unorm:
                     return ERHIPixelFormat.B8G8R8A8_UNorm;
                 case MTLPixelFormat.BGRA8UnormsRGB:
                     return ERHIPixelFormat.B8G8R8A8_UNorm_Srgb;
+                case MTLPixelFormat.RGB9E5Float:
+                    return ERHIPixelFormat.R99GB99_E5_Float;
                 case MTLPixelFormat.RGB10A2Unorm:
                     return ERHIPixelFormat.R10G10B10A2_UNorm;
                 case MTLPixelFormat.RGB10A2Uint:
                     return ERHIPixelFormat.R10G10B10A2_UInt;
+                case MTLPixelFormat.RG11B10Float:
+                    return ERHIPixelFormat.R11G11B10_Float;
+                // 64-Bits
+                case MTLPixelFormat.RG32Uint:
+                    return ERHIPixelFormat.RG32_UInt;
+                case MTLPixelFormat.RG32Sint:
+                    return ERHIPixelFormat.RG32_SInt;
+                case MTLPixelFormat.RG32Float:
+                    return ERHIPixelFormat.RG32_Float;
+                case MTLPixelFormat.RGBA16Uint:
+                    return ERHIPixelFormat.R16G16B16A16_UInt;
+                case MTLPixelFormat.RGBA16Sint:
+                    return ERHIPixelFormat.R16G16B16A16_SInt;
                 case MTLPixelFormat.RGBA16Float:
                     return ERHIPixelFormat.R16G16B16A16_Float;
+                // 128-Bits
+                case MTLPixelFormat.RGBA32Uint:
+                    return ERHIPixelFormat.R32G32B32A32_UInt;
+                case MTLPixelFormat.RGBA32Sint:
+                    return ERHIPixelFormat.R32G32B32A32_SInt;
                 case MTLPixelFormat.RGBA32Float:
                     return ERHIPixelFormat.R32G32B32A32_Float;
+                // Depth-Stencil
                 case MTLPixelFormat.Depth16Unorm:
                     return ERHIPixelFormat.D16_UNorm;
                 case MTLPixelFormat.Depth24UnormStencil8:
@@ -456,6 +647,54 @@ namespace Infinity.Graphics
                     return MTLVertexFormat.Half2;
                 case ERHISemanticFormat.Half4:
                     return MTLVertexFormat.Half4;
+                case ERHISemanticFormat.Short:
+                    return MTLVertexFormat.Short;
+                case ERHISemanticFormat.Short2:
+                    return MTLVertexFormat.Short2;
+                case ERHISemanticFormat.Short4:
+                    return MTLVertexFormat.Short4;
+                case ERHISemanticFormat.UShort:
+                    return MTLVertexFormat.UShort;
+                case ERHISemanticFormat.UShort2:
+                    return MTLVertexFormat.UShort2;
+                case ERHISemanticFormat.UShort4:
+                    return MTLVertexFormat.UShort4;
+                case ERHISemanticFormat.ShortNormalized:
+                    return MTLVertexFormat.ShortNormalized;
+                case ERHISemanticFormat.Short2Normalized:
+                    return MTLVertexFormat.Short2Normalized;
+                case ERHISemanticFormat.Short4Normalized:
+                    return MTLVertexFormat.Short4Normalized;
+                case ERHISemanticFormat.UShortNormalized:
+                    return MTLVertexFormat.UShortNormalized;
+                case ERHISemanticFormat.UShort2Normalized:
+                    return MTLVertexFormat.UShort2Normalized;
+                case ERHISemanticFormat.UShort4Normalized:
+                    return MTLVertexFormat.UShort4Normalized;
+                case ERHISemanticFormat.Byte:
+                    return MTLVertexFormat.Char;
+                case ERHISemanticFormat.Byte2:
+                    return MTLVertexFormat.Char2;
+                case ERHISemanticFormat.Byte4:
+                    return MTLVertexFormat.Char4;
+                case ERHISemanticFormat.UByte:
+                    return MTLVertexFormat.UChar;
+                case ERHISemanticFormat.UByte2:
+                    return MTLVertexFormat.UChar2;
+                case ERHISemanticFormat.UByte4:
+                    return MTLVertexFormat.UChar4;
+                case ERHISemanticFormat.ByteNormalized:
+                    return MTLVertexFormat.CharNormalized;
+                case ERHISemanticFormat.Byte2Normalized:
+                    return MTLVertexFormat.Char2Normalized;
+                case ERHISemanticFormat.Byte4Normalized:
+                    return MTLVertexFormat.Char4Normalized;
+                case ERHISemanticFormat.UByteNormalized:
+                    return MTLVertexFormat.UCharNormalized;
+                case ERHISemanticFormat.UByte2Normalized:
+                    return MTLVertexFormat.UChar2Normalized;
+                case ERHISemanticFormat.UByte4Normalized:
+                    return MTLVertexFormat.UChar4Normalized;
                 default:
                     return MTLVertexFormat.Invalid;
             }
@@ -641,7 +880,10 @@ namespace Infinity.Graphics
                 case ERHIPipelineStage.Fragment:
                     return 1UL << 1;
                 case ERHIPipelineStage.Compute:
+                case ERHIPipelineStage.MachineLearning:
                     return 1UL << 27;
+                case ERHIPipelineStage.Mesh:
+                    return 1UL << 28;
                 case ERHIPipelineStage.RayTracing:
                     return 1UL << 29;
                 case ERHIPipelineStage.Common:

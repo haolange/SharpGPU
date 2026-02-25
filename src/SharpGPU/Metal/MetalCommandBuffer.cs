@@ -12,7 +12,8 @@ namespace Infinity.Graphics
         Compute,
         Raster,
         Raytracing,
-        ML
+        ML,
+        WorkGraph
     }
 
     internal enum MetalCommandEncodingPath : byte
@@ -52,6 +53,7 @@ namespace Infinity.Graphics
         private readonly MetalRasterEncoder m_RasterEncoder;
         private readonly MetalRaytracingEncoder m_RaytracingEncoder;
         private readonly MetalMLEncoder m_MLEncoder;
+        private readonly MetalWorkGraphEncoder m_WorkGraphEncoder;
         private readonly MTLFence m_BarrierFence;
 
         private MTLCommandBuffer m_NativeCommandBuffer;
@@ -80,6 +82,7 @@ namespace Infinity.Graphics
             m_RasterEncoder = new MetalRasterEncoder(this);
             m_RaytracingEncoder = new MetalRaytracingEncoder(this);
             m_MLEncoder = new MetalMLEncoder(this);
+            m_WorkGraphEncoder = new MetalWorkGraphEncoder(this);
             m_BarrierFence = commandQueue.MetalDevice.NativeDevice.NewFence;
 
             ResetState();
@@ -200,6 +203,24 @@ namespace Infinity.Graphics
             m_ActiveEncoder = MetalActiveEncoderType.None;
         }
 
+        public override RHIWorkGraphEncoder BeginWorkGraphPass(in RHIWorkGraphPassDescriptor descriptor)
+        {
+            m_WorkGraphEncoder.BeginPass(descriptor);
+            m_ActiveEncoder = MetalActiveEncoderType.WorkGraph;
+            return m_WorkGraphEncoder;
+        }
+
+        public override void EndWorkGraphPass()
+        {
+            if (m_ActiveEncoder != MetalActiveEncoderType.WorkGraph)
+            {
+                return;
+            }
+
+            m_WorkGraphEncoder.EndPass();
+            m_ActiveEncoder = MetalActiveEncoderType.None;
+        }
+
         public override void End()
         {
             switch (m_ActiveEncoder)
@@ -218,6 +239,9 @@ namespace Infinity.Graphics
                     break;
                 case MetalActiveEncoderType.ML:
                     EndMLPass();
+                    break;
+                case MetalActiveEncoderType.WorkGraph:
+                    EndWorkGraphPass();
                     break;
             }
 
@@ -253,6 +277,11 @@ namespace Infinity.Graphics
         public override RHIMLEncoder GetMLEncoder()
         {
             return m_MLEncoder;
+        }
+
+        public override RHIWorkGraphEncoder GetWorkGraphEncoder()
+        {
+            return m_WorkGraphEncoder;
         }
 
         internal void SetPresentDrawable(in CAMetalDrawable drawable)
@@ -399,6 +428,7 @@ namespace Infinity.Graphics
             m_RasterEncoder.Dispose();
             m_RaytracingEncoder.Dispose();
             m_MLEncoder.Dispose();
+            m_WorkGraphEncoder.Dispose();
 
             if (m_BarrierFence.NativePtr != IntPtr.Zero)
             {

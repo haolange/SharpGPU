@@ -529,6 +529,8 @@ namespace Infinity.Graphics
                     return VkPipelineStageFlags.VK_PIPELINE_STAGE_MESH_SHADER_BIT_EXT;
                 case ERHIPipelineStage.RayTracing:
                     return VkPipelineStageFlags.VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
+                case ERHIPipelineStage.MachineLearning:
+                    return VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
                 default:
                     return VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
             }
@@ -931,6 +933,8 @@ namespace Infinity.Graphics
                 result |= VkShaderStageFlags.VK_SHADER_STAGE_MESH_BIT_EXT;
             if ((stage & ERHIShaderStage.RayTracing) == ERHIShaderStage.RayTracing)
                 result |= VkShaderStageFlags.VK_SHADER_STAGE_RAYGEN_BIT_KHR | VkShaderStageFlags.VK_SHADER_STAGE_MISS_BIT_KHR | VkShaderStageFlags.VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VkShaderStageFlags.VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VkShaderStageFlags.VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+            if ((stage & ERHIShaderStage.MachineLearning) == ERHIShaderStage.MachineLearning)
+                result |= VkShaderStageFlags.VK_SHADER_STAGE_COMPUTE_BIT;
 
             return result == 0 ? VkShaderStageFlags.VK_SHADER_STAGE_ALL : result;
         }
@@ -1007,6 +1011,8 @@ namespace Infinity.Graphics
                     return VkShaderStageFlagBits.VK_SHADER_STAGE_MESH_BIT_EXT;
                 case ERHIFunctionType.RayTracing:
                     return VkShaderStageFlagBits.VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+                case ERHIFunctionType.MachineLearning:
+                    return VkShaderStageFlagBits.VK_SHADER_STAGE_COMPUTE_BIT;
                 default:
                     return VkShaderStageFlagBits.VK_SHADER_STAGE_ALL;
             }

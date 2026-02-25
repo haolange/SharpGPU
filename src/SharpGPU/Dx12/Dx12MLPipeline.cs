@@ -35,7 +35,7 @@ namespace Infinity.Graphics
             RHIComputePipelineDescriptor computeDesc;
             computeDesc.Name = descriptor.Name;
             computeDesc.ComputeFunction = descriptor.Function;
-            computeDesc.PipelineLayout = null!; // Pipeline layout bound separately via SetResourceTable
+            computeDesc.PipelineLayout = null!; // Pipeline layout bound separately via SetArgumentTable
             computeDesc.ThreadSize = new Infinity.Mathmatics.int3(1, 1, 1);
 
             // Estimate intermediates heap size from input tensor dimensions

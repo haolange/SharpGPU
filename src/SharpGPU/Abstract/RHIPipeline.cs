@@ -8,7 +8,8 @@ namespace Infinity.Graphics
     {
         public bool bLocalSignature;
         public bool bUseVertexLayout;
-        public RHIResourceTableLayout[] ResourceTableLayouts;
+        public uint PushConstantSize;
+        public RHIArgumentTableLayout[] ArgumentTableLayouts;
         //public RHIPipelineConstantLayout[] PipelineConstantLayouts;
         public Memory<RHIStaticSamplerDescriptor>? StaticSamplers;
     };

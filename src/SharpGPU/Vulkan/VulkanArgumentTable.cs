@@ -4,26 +4,28 @@ using Evergine.Bindings.Vulkan;
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CS8618
-    internal unsafe class VulkanResourceTableLayout : RHIResourceTableLayout
+    internal unsafe class VulkanArgumentTableLayout : RHIArgumentTableLayout
     {
         public VkDescriptorSetLayout NativeDescriptorSetLayout => m_NativeDescriptorSetLayout;
-        public RHIResourceTableLayoutDescriptor Descriptor => m_Descriptor;
+        public RHIArgumentTableLayoutDescriptor Descriptor => m_Descriptor;
 
         private VulkanDevice m_VulkanDevice;
         private VkDescriptorSetLayout m_NativeDescriptorSetLayout;
-        private RHIResourceTableLayoutDescriptor m_Descriptor;
+        private RHIArgumentTableLayoutDescriptor m_Descriptor;
 
-        public VulkanResourceTableLayout(VulkanDevice device, in RHIResourceTableLayoutDescriptor descriptor)
+        public VulkanArgumentTableLayout(VulkanDevice device, in RHIArgumentTableLayoutDescriptor descriptor)
         {
             m_VulkanDevice = device;
             m_Descriptor = descriptor;
 
             int elementCount = descriptor.Elements.Length;
             VkDescriptorSetLayoutBinding* bindings = stackalloc VkDescriptorSetLayoutBinding[elementCount];
+            VkDescriptorBindingFlags* bindingFlags = stackalloc VkDescriptorBindingFlags[elementCount];
 
+            bool hasBindless = false;
             for (int i = 0; i < elementCount; ++i)
             {
-                ref RHIResourceTableLayoutElement element = ref descriptor.Elements.Span[i];
+                ref RHIArgumentTableLayoutElement element = ref descriptor.Elements.Span[i];
                 bindings[i] = new VkDescriptorSetLayoutBinding()
                 {
                     binding = element.Slot,
@@ -32,11 +34,31 @@ namespace Infinity.Graphics
                     stageFlags = VulkanUtility.ConvertToVkShaderStage(element.Stage),
                     pImmutableSamplers = null,
                 };
+
+                if (element.Count > 1)
+                {
+                    hasBindless = true;
+                    bindingFlags[i] = VkDescriptorBindingFlags.VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+                                    | VkDescriptorBindingFlags.VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+                }
+                else
+                {
+                    bindingFlags[i] = 0;
+                }
             }
+
+            VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo = new VkDescriptorSetLayoutBindingFlagsCreateInfo()
+            {
+                sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+                bindingCount = (uint)elementCount,
+                pBindingFlags = bindingFlags,
+            };
 
             VkDescriptorSetLayoutCreateInfo layoutInfo = new VkDescriptorSetLayoutCreateInfo()
             {
                 sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                pNext = hasBindless ? &bindingFlagsInfo : null,
+                flags = hasBindless ? VkDescriptorSetLayoutCreateFlags.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT : 0,
                 bindingCount = (uint)elementCount,
                 pBindings = bindings,
             };
@@ -53,18 +75,18 @@ namespace Infinity.Graphics
         }
     }
 
-    internal unsafe class VulkanResourceTable : RHIResourceTable
+    internal unsafe class VulkanArgumentTable : RHIArgumentTable
     {
         public VkDescriptorSet NativeDescriptorSet => m_NativeDescriptorSet;
 
         private VulkanDevice m_VulkanDevice;
         private VkDescriptorSet m_NativeDescriptorSet;
-        private VulkanResourceTableLayout m_Layout;
+        private VulkanArgumentTableLayout m_Layout;
 
-        public VulkanResourceTable(VulkanDevice device, in RHIResourceTableDescriptor descriptor)
+        public VulkanArgumentTable(VulkanDevice device, in RHIArgumentTableDescriptor descriptor)
         {
             m_VulkanDevice = device;
-            m_Layout = descriptor.Layout as VulkanResourceTableLayout;
+            m_Layout = descriptor.Layout as VulkanArgumentTableLayout;
 
             VkDescriptorSetLayout layout = m_Layout.NativeDescriptorSetLayout;
 
@@ -83,17 +105,17 @@ namespace Infinity.Graphics
 
             // Update descriptor set with initial elements
             int elementCount = descriptor.Elements.Length;
-            Span<RHIResourceTableLayoutElement> layoutElements = m_Layout.Descriptor.Elements.Span;
+            Span<RHIArgumentTableLayoutElement> layoutElements = m_Layout.Descriptor.Elements.Span;
 
             for (int i = 0; i < elementCount; ++i)
             {
-                ref RHIResourceTableElement element = ref descriptor.Elements.Span[i];
-                ref RHIResourceTableLayoutElement layoutElement = ref layoutElements[i];
+                ref RHIArgumentTableElement element = ref descriptor.Elements.Span[i];
+                ref RHIArgumentTableLayoutElement layoutElement = ref layoutElements[i];
                 SetBindElement(element, layoutElement.Type, (int)layoutElement.Slot);
             }
         }
 
-        public override void SetBindElement(in RHIResourceTableElement element, in ERHIBindType bindType, in int slot)
+        public override void SetBindElement(in RHIArgumentTableElement element, in ERHIBindType bindType, in int slot)
         {
             VkWriteDescriptorSet writeDescriptor = new VkWriteDescriptorSet()
             {
@@ -168,7 +190,7 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void SetBindElement(in RHIResourceTableElement element, in ERHIBindType bindType, in int slot, in int arrayIndex)
+        public override void SetBindElement(in RHIArgumentTableElement element, in ERHIBindType bindType, in int slot, in int arrayIndex)
         {
             VkWriteDescriptorSet writeDescriptor = new VkWriteDescriptorSet()
             {

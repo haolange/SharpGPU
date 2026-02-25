@@ -17,22 +17,29 @@ namespace Infinity.Graphics
         {
             m_VulkanDevice = device;
 
-            int layoutCount = descriptor.ResourceTableLayouts != null ? descriptor.ResourceTableLayouts.Length : 0;
+            int layoutCount = descriptor.ArgumentTableLayouts != null ? descriptor.ArgumentTableLayouts.Length : 0;
             VkDescriptorSetLayout* setLayouts = stackalloc VkDescriptorSetLayout[Math.Max(layoutCount, 1)];
 
             for (int i = 0; i < layoutCount; ++i)
             {
-                VulkanResourceTableLayout vkLayout = descriptor.ResourceTableLayouts[i] as VulkanResourceTableLayout;
+                VulkanArgumentTableLayout vkLayout = descriptor.ArgumentTableLayouts[i] as VulkanArgumentTableLayout;
                 setLayouts[i] = vkLayout.NativeDescriptorSetLayout;
             }
+
+            VkPushConstantRange pushConstantRange = new VkPushConstantRange()
+            {
+                stageFlags = VkShaderStageFlags.VK_SHADER_STAGE_ALL,
+                offset = 0,
+                size = descriptor.PushConstantSize,
+            };
 
             VkPipelineLayoutCreateInfo layoutInfo = new VkPipelineLayoutCreateInfo()
             {
                 sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                 setLayoutCount = (uint)layoutCount,
                 pSetLayouts = layoutCount > 0 ? setLayouts : null,
-                pushConstantRangeCount = 0,
-                pPushConstantRanges = null,
+                pushConstantRangeCount = descriptor.PushConstantSize > 0 ? 1u : 0u,
+                pPushConstantRanges = descriptor.PushConstantSize > 0 ? &pushConstantRange : null,
             };
 
             fixed (VkPipelineLayout* layoutPtr = &m_NativePipelineLayout)

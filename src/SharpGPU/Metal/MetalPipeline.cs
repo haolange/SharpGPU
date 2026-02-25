@@ -10,7 +10,7 @@ namespace Infinity.Graphics
     internal sealed class MetalPipelineLayout : RHIPipelineLayout
     {
         public RHIPipelineLayoutDescriptor Descriptor => m_Descriptor;
-        internal int ResourceTableLayoutCount => m_Descriptor.ResourceTableLayouts?.Length ?? 0;
+        internal int ArgumentTableLayoutCount => m_Descriptor.ArgumentTableLayouts?.Length ?? 0;
 
         private readonly RHIPipelineLayoutDescriptor m_Descriptor;
 

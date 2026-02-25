@@ -316,14 +316,14 @@ namespace Infinity.Graphics
             return new Dx12BottomLevelAccelStruct(this, descriptor);
         }
 
-        public override RHIResourceTableLayout CreateResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor)
+        public override RHIArgumentTableLayout CreateArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor)
         {
-            return new Dx12ResourceTableLayout(descriptor);
+            return new Dx12ArgumentTableLayout(descriptor);
         }
 
-        public override RHIResourceTable CreateResourceTable(in RHIResourceTableDescriptor descriptor)
+        public override RHIArgumentTable CreateArgumentTable(in RHIArgumentTableDescriptor descriptor)
         {
-            return new Dx12ResourceTable(this, descriptor);
+            return new Dx12ArgumentTable(this, descriptor);
         }
 
         public override RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor)
@@ -389,6 +389,11 @@ namespace Infinity.Graphics
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
         {
             return new Dx12Tensor(this, descriptor);
+        }
+
+        public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
+        {
+            return new Dx12WorkGraphPipeline(descriptor);
         }
 
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)

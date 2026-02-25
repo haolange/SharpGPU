@@ -23,7 +23,7 @@ namespace Infinity.Graphics
         public bool IsSampler;
     }
 
-    internal unsafe class Dx12ResourceTableLayout : RHIResourceTableLayout
+    internal unsafe class Dx12ArgumentTableLayout : RHIArgumentTableLayout
     {
         public uint Index
         {
@@ -43,15 +43,15 @@ namespace Infinity.Graphics
         private uint m_Index;
         private Dx12BindInfo[] m_BindInfos;
 
-        public Dx12ResourceTableLayout(in RHIResourceTableLayoutDescriptor descriptor)
+        public Dx12ArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor)
         {
             m_Index = descriptor.Index;
             m_BindInfos = new Dx12BindInfo[descriptor.Elements.Length];
 
-            Span<RHIResourceTableLayoutElement> elements = descriptor.Elements.Span;
+            Span<RHIArgumentTableLayoutElement> elements = descriptor.Elements.Span;
             for (int i = 0; i < descriptor.Elements.Length; ++i)
             {
-                ref RHIResourceTableLayoutElement element = ref elements[i];
+                ref RHIArgumentTableLayoutElement element = ref elements[i];
                 ref Dx12BindInfo bindInfo = ref m_BindInfos[i];
                 bindInfo.Index = descriptor.Index;
                 bindInfo.Slot = element.Slot;
@@ -67,13 +67,13 @@ namespace Infinity.Graphics
         }
     }
 
-    internal unsafe class Dx12ResourceTable : RHIResourceTable
+    internal unsafe class Dx12ArgumentTable : RHIArgumentTable
     {
-        public Dx12ResourceTableLayout ResourceTableLayout
+        public Dx12ArgumentTableLayout ArgumentTableLayout
         {
             get
             {
-                return m_ResourceTableLayout;
+                return m_ArgumentTableLayout;
             }
         }
         public D3D12_GPU_DESCRIPTOR_HANDLE[] NativeGpuDescriptorHandles
@@ -85,18 +85,18 @@ namespace Infinity.Graphics
         }
 
         private Dx12Device m_Dx12Device;
-        private Dx12ResourceTableLayout m_ResourceTableLayout;
+        private Dx12ArgumentTableLayout m_ArgumentTableLayout;
         private D3D12_GPU_DESCRIPTOR_HANDLE[] m_NativeGpuDescriptorHandles;
         private Dx12BindlessSlotAllocation[] m_BindlessAllocations;
 
-        public Dx12ResourceTable(Dx12Device device, in RHIResourceTableDescriptor descriptor)
+        public Dx12ArgumentTable(Dx12Device device, in RHIArgumentTableDescriptor descriptor)
         {
-            Dx12ResourceTableLayout resourceTableLayout = descriptor.Layout as Dx12ResourceTableLayout;
+            Dx12ArgumentTableLayout resourceTableLayout = descriptor.Layout as Dx12ArgumentTableLayout;
 #if DEBUG
-            Debug.Assert(resourceTableLayout != null, "ResourceTableLayout is null in descriptor");
+            Debug.Assert(resourceTableLayout != null, "ArgumentTableLayout is null in descriptor");
 #endif
             m_Dx12Device = device;
-            m_ResourceTableLayout = resourceTableLayout;
+            m_ArgumentTableLayout = resourceTableLayout;
             m_NativeGpuDescriptorHandles = new D3D12_GPU_DESCRIPTOR_HANDLE[resourceTableLayout.BindInfos.Length];
             m_BindlessAllocations = new Dx12BindlessSlotAllocation[resourceTableLayout.BindInfos.Length];
 
@@ -137,7 +137,7 @@ namespace Infinity.Graphics
                     // If the first element is provided in the descriptor, copy it to array index 0
                     if (i < descriptor.Elements.Length)
                     {
-                        ref RHIResourceTableElement element = ref descriptor.Elements.Span[i];
+                        ref RHIArgumentTableElement element = ref descriptor.Elements.Span[i];
                         CopyElementToBindlessSlot(i, 0, element, bindInfo.Type);
                     }
                 }
@@ -146,7 +146,7 @@ namespace Infinity.Graphics
                     // Non-bindless (Count <= 1): directly reference the view's existing descriptor
                     if (i < descriptor.Elements.Length)
                     {
-                        ref RHIResourceTableElement element = ref descriptor.Elements.Span[i];
+                        ref RHIArgumentTableElement element = ref descriptor.Elements.Span[i];
                         ref D3D12_GPU_DESCRIPTOR_HANDLE nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[i];
                         SetGpuHandleFromElement(ref nativeGpuDescriptorHandle, element, bindInfo.Type);
                     }
@@ -154,12 +154,12 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void SetBindElement(in RHIResourceTableElement element, in ERHIBindType bindType, in int slot)
+        public override void SetBindElement(in RHIArgumentTableElement element, in ERHIBindType bindType, in int slot)
         {
             int bindIndex = FindBindIndex(slot, bindType);
             if (bindIndex < 0) return;
 
-            ref Dx12BindInfo bindInfo = ref m_ResourceTableLayout.BindInfos[bindIndex];
+            ref Dx12BindInfo bindInfo = ref m_ArgumentTableLayout.BindInfos[bindIndex];
 
             if (bindInfo.IsBindless)
             {
@@ -173,12 +173,12 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void SetBindElement(in RHIResourceTableElement element, in ERHIBindType bindType, in int slot, in int arrayIndex)
+        public override void SetBindElement(in RHIArgumentTableElement element, in ERHIBindType bindType, in int slot, in int arrayIndex)
         {
             int bindIndex = FindBindIndex(slot, bindType);
             if (bindIndex < 0) return;
 
-            ref Dx12BindInfo bindInfo = ref m_ResourceTableLayout.BindInfos[bindIndex];
+            ref Dx12BindInfo bindInfo = ref m_ArgumentTableLayout.BindInfos[bindIndex];
 
 #if DEBUG
             Debug.Assert(bindInfo.IsBindless, $"SetBindElement with arrayIndex called on non-bindless slot {slot}");
@@ -213,9 +213,9 @@ namespace Infinity.Graphics
         private int FindBindIndex(in int slot, in ERHIBindType bindType)
         {
             // For non-bindless tables, slot maps directly to bind index (preserving original behavior)
-            if (slot >= 0 && slot < m_ResourceTableLayout.BindInfos.Length)
+            if (slot >= 0 && slot < m_ArgumentTableLayout.BindInfos.Length)
             {
-                ref Dx12BindInfo bindInfo = ref m_ResourceTableLayout.BindInfos[slot];
+                ref Dx12BindInfo bindInfo = ref m_ArgumentTableLayout.BindInfos[slot];
                 if (bindInfo.Slot == (uint)slot)
                 {
                     return slot;
@@ -223,9 +223,9 @@ namespace Infinity.Graphics
             }
 
             // Fallback: linear search by slot number
-            for (int i = 0; i < m_ResourceTableLayout.BindInfos.Length; ++i)
+            for (int i = 0; i < m_ArgumentTableLayout.BindInfos.Length; ++i)
             {
-                ref Dx12BindInfo bindInfo = ref m_ResourceTableLayout.BindInfos[i];
+                ref Dx12BindInfo bindInfo = ref m_ArgumentTableLayout.BindInfos[i];
                 if (bindInfo.Slot == (uint)slot && bindInfo.Type == bindType)
                 {
                     return i;
@@ -235,7 +235,7 @@ namespace Infinity.Graphics
             return -1;
         }
 
-        private static void SetGpuHandleFromElement(ref D3D12_GPU_DESCRIPTOR_HANDLE handle, in RHIResourceTableElement element, in ERHIBindType bindType)
+        private static void SetGpuHandleFromElement(ref D3D12_GPU_DESCRIPTOR_HANDLE handle, in RHIArgumentTableElement element, in ERHIBindType bindType)
         {
             switch (bindType)
             {
@@ -271,7 +271,7 @@ namespace Infinity.Graphics
             }
         }
 
-        private void CopyElementToBindlessSlot(in int bindIndex, in int arrayIndex, in RHIResourceTableElement element, in ERHIBindType bindType)
+        private void CopyElementToBindlessSlot(in int bindIndex, in int arrayIndex, in RHIArgumentTableElement element, in ERHIBindType bindType)
         {
             ref Dx12BindlessSlotAllocation alloc = ref m_BindlessAllocations[bindIndex];
             if (alloc.HeapIndex < 0) return;

@@ -260,12 +260,12 @@ namespace Infinity.Graphics
     internal struct MetalFunctionTableEntry
     {
         internal string ExportName;
-        internal RHIResourceTable[]? ResourceTables;
+        internal RHIArgumentTable[]? ArgumentTables;
 
-        internal MetalFunctionTableEntry(string exportName, RHIResourceTable[]? resourceTables)
+        internal MetalFunctionTableEntry(string exportName, RHIArgumentTable[]? resourceTables)
         {
             ExportName = exportName;
-            ResourceTables = resourceTables;
+            ArgumentTables = resourceTables;
         }
     }
 
@@ -277,7 +277,7 @@ namespace Infinity.Graphics
         internal bool IsGenerated => m_IsGenerated;
 
         private string m_RayGenerationExportName;
-        private RHIResourceTable[]? m_RayGenerationResourceTables;
+        private RHIArgumentTable[]? m_RayGenerationArgumentTables;
         private readonly List<MetalFunctionTableEntry> m_MissPrograms;
         private readonly List<MetalFunctionTableEntry> m_HitGroupPrograms;
         private MTLIntersectionFunctionTable m_IntersectionFunctionTable;
@@ -294,7 +294,7 @@ namespace Infinity.Graphics
             m_IsGenerated = false;
         }
 
-        public override void SetRayGenerationProgram(string exportName, RHIResourceTable[]? resourceTables = null)
+        public override void SetRayGenerationProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             if (string.IsNullOrWhiteSpace(exportName))
             {
@@ -302,11 +302,11 @@ namespace Infinity.Graphics
             }
 
             m_RayGenerationExportName = exportName;
-            m_RayGenerationResourceTables = resourceTables;
+            m_RayGenerationArgumentTables = resourceTables;
             m_IsGenerated = false;
         }
 
-        public override int AddMissProgram(string exportName, RHIResourceTable[]? resourceTables = null)
+        public override int AddMissProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             if (string.IsNullOrWhiteSpace(exportName))
             {
@@ -318,7 +318,7 @@ namespace Infinity.Graphics
             return m_MissPrograms.Count - 1;
         }
 
-        public override int AddHitGroupProgram(string exportName, RHIResourceTable[]? resourceTables = null)
+        public override int AddHitGroupProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             if (string.IsNullOrWhiteSpace(exportName))
             {
@@ -330,7 +330,7 @@ namespace Infinity.Graphics
             return m_HitGroupPrograms.Count - 1;
         }
 
-        public override void SetMissProgram(in int index, string exportName, RHIResourceTable[]? resourceTables = null)
+        public override void SetMissProgram(in int index, string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             if ((uint)index >= (uint)m_MissPrograms.Count)
             {
@@ -341,7 +341,7 @@ namespace Infinity.Graphics
             m_IsGenerated = false;
         }
 
-        public override void SetHitGroupProgram(in int index, string exportName, RHIResourceTable[]? resourceTables = null)
+        public override void SetHitGroupProgram(in int index, string exportName, RHIArgumentTable[]? resourceTables = null)
         {
             if ((uint)index >= (uint)m_HitGroupPrograms.Count)
             {
@@ -503,7 +503,7 @@ namespace Infinity.Graphics
             m_MissPrograms.Clear();
             m_HitGroupPrograms.Clear();
             m_RayGenerationExportName = string.Empty;
-            m_RayGenerationResourceTables = null;
+            m_RayGenerationArgumentTables = null;
         }
     }
 }
