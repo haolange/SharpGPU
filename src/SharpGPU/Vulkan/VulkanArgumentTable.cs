@@ -20,7 +20,9 @@ namespace Infinity.Graphics
 
             int elementCount = descriptor.Elements.Length;
             VkDescriptorSetLayoutBinding* bindings = stackalloc VkDescriptorSetLayoutBinding[elementCount];
+            VkDescriptorBindingFlags* bindingFlags = stackalloc VkDescriptorBindingFlags[elementCount];
 
+            bool hasBindless = false;
             for (int i = 0; i < elementCount; ++i)
             {
                 ref RHIArgumentTableLayoutElement element = ref descriptor.Elements.Span[i];
@@ -32,11 +34,31 @@ namespace Infinity.Graphics
                     stageFlags = VulkanUtility.ConvertToVkShaderStage(element.Stage),
                     pImmutableSamplers = null,
                 };
+
+                if (element.Count > 1)
+                {
+                    hasBindless = true;
+                    bindingFlags[i] = VkDescriptorBindingFlags.VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+                                    | VkDescriptorBindingFlags.VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+                }
+                else
+                {
+                    bindingFlags[i] = 0;
+                }
             }
+
+            VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo = new VkDescriptorSetLayoutBindingFlagsCreateInfo()
+            {
+                sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+                bindingCount = (uint)elementCount,
+                pBindingFlags = bindingFlags,
+            };
 
             VkDescriptorSetLayoutCreateInfo layoutInfo = new VkDescriptorSetLayoutCreateInfo()
             {
                 sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                pNext = hasBindless ? &bindingFlagsInfo : null,
+                flags = hasBindless ? VkDescriptorSetLayoutCreateFlags.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT : 0,
                 bindingCount = (uint)elementCount,
                 pBindings = bindings,
             };

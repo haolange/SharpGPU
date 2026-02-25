@@ -6,16 +6,44 @@ namespace Infinity.Graphics
 #pragma warning disable CS8618
     internal unsafe class VulkanMLPipeline : RHIMLPipeline
     {
-        private VulkanDevice m_VulkanDevice;
+        internal string Name => m_Name;
+
+        private readonly string m_Name;
+        private readonly VulkanDevice m_VulkanDevice;
 
         public VulkanMLPipeline(VulkanDevice device, in RHIMLPipelineDescriptor descriptor)
         {
             m_VulkanDevice = device;
-            m_IntermediatesHeapSize = 0;
+            m_Name = descriptor.Name;
 
-            // ML pipelines are not natively supported in Vulkan.
-            // This is a stub implementation. In practice, ML inference would be
-            // implemented via compute shaders or an external ML runtime.
+            // Vulkan does not have native ML pipeline support.
+            // Estimate intermediates heap size from input tensor dimensions
+            // so that the RHI abstraction reports consistent sizes across backends.
+            ulong intermediatesSize = 0;
+            for (int i = 0; i < descriptor.InputTensors.Length; ++i)
+            {
+                ref readonly RHIMLTensorDescriptor td = ref descriptor.InputTensors.Span[i];
+                ulong tensorSize = 1;
+                Span<uint> dims = td.Dimensions.Span;
+                for (int d = 0; d < dims.Length; ++d)
+                {
+                    tensorSize *= dims[d];
+                }
+                tensorSize *= GetElementSize(td.DataType);
+                intermediatesSize += tensorSize;
+            }
+            m_IntermediatesHeapSize = intermediatesSize;
+        }
+
+        private static ulong GetElementSize(ERHIMLDataType dataType)
+        {
+            return dataType switch
+            {
+                ERHIMLDataType.Float32 or ERHIMLDataType.Int32 or ERHIMLDataType.UInt32 => 4,
+                ERHIMLDataType.Float16 or ERHIMLDataType.BFloat16 or ERHIMLDataType.Int16 or ERHIMLDataType.UInt16 => 2,
+                ERHIMLDataType.Int8 or ERHIMLDataType.UInt8 => 1,
+                _ => 4,
+            };
         }
 
         protected override void Release()
