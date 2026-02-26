@@ -3158,7 +3158,6 @@ namespace Infinity.Graphics
         {
         }
     }
-}
 
     // ========== WorkGraph Encoder ==========
     internal sealed class MetalWorkGraphEncoder : RHIWorkGraphEncoder
