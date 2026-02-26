@@ -253,4 +253,35 @@ namespace Infinity.Graphics
         public abstract RHIRasterPipeline LoadRasterPipeline(RHIRasterPipelineDescriptor rasterPipelineDescriptor);
         public abstract RHIPipelineLibraryResult Serialize();
     }
+
+    public struct RHIWorkGraphPipelineDescriptor
+    {
+        public string Name;
+        public RHIFunctionLibrary FunctionLibrary;
+        public RHIPipelineLayout PipelineLayout;
+    }
+
+    public struct RHIMLPipelineDescriptor
+    {
+        public string Name;
+        public RHIFunction Function;
+        public Memory<RHIMLTensorDescriptor> InputTensors;
+    }
+
+    public abstract class RHIMLPipeline : Disposal
+    {
+        public RHIMLPipelineDescriptor Descriptor => m_Descriptor;
+
+        public ulong IntermediatesHeapSize => m_IntermediatesHeapSize;
+
+        protected RHIMLPipelineDescriptor m_Descriptor;
+        protected ulong m_IntermediatesHeapSize;
+    }
+
+    public abstract class RHIWorkGraphPipeline : Disposal
+    {
+        public RHIWorkGraphPipelineDescriptor Descriptor => m_Descriptor;
+
+        protected RHIWorkGraphPipelineDescriptor m_Descriptor;
+    }
 }

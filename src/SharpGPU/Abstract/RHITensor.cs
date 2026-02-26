@@ -18,18 +18,4 @@ namespace Infinity.Graphics
 
         protected RHIMLTensorDescriptor m_Descriptor;
     }
-
-    public struct RHIMLPipelineDescriptor
-    {
-        public string Name;
-        public RHIFunction Function;
-        public Memory<RHIMLTensorDescriptor> InputTensors;
-    }
-
-    public abstract class RHIMLPipeline : Disposal
-    {
-        public ulong IntermediatesHeapSize => m_IntermediatesHeapSize;
-
-        protected ulong m_IntermediatesHeapSize;
-    }
 }
