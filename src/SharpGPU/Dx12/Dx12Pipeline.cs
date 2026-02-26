@@ -801,6 +801,26 @@ namespace Infinity.Graphics
         private Dx12Device m_Dx12Device;
         private ID3D12PipelineLibrary1* m_NativePipelineLibrary;
 
+        private static string GetComputePipelineCacheKey(in RHIComputePipelineDescriptor descriptor)
+        {
+            string entry = descriptor.ComputeFunction?.Descriptor.EntryName ?? "compute";
+            return $"compute:{entry}";
+        }
+
+        private static string GetRasterPipelineCacheKey(in RHIRasterPipelineDescriptor descriptor)
+        {
+            string vertex = descriptor.PrimitiveAssembler.VertexAssembler?.VertexFunction?.Descriptor.EntryName ?? "none";
+            string task = descriptor.PrimitiveAssembler.MeshletAssembler?.TaskFunction?.Descriptor.EntryName ?? "none";
+            string mesh = descriptor.PrimitiveAssembler.MeshletAssembler?.MeshFunction?.Descriptor.EntryName ?? "none";
+            string fragment = descriptor.FragmentFunction?.Descriptor.EntryName ?? "none";
+
+            return
+                $"raster:{descriptor.PrimitiveAssembler.PrimitiveType}:" +
+                $"{descriptor.PrimitiveAssembler.PrimitiveTopology}:" +
+                $"{vertex}:{task}:{mesh}:{fragment}:" +
+                $"{descriptor.SampleCount}:{descriptor.ColorFormats.Length}:{descriptor.DepthFormat}";
+        }
+
         public Dx12PipelineLibrary(Dx12Device device, in RHIPipelineLibraryDescriptor descriptor) : base(descriptor)
         {
             m_Dx12Device = device;
@@ -864,8 +884,9 @@ namespace Infinity.Graphics
             description.CS.BytecodeLength = computeFunction.NativeShaderBytecode.BytecodeLength;
             description.CS.pShaderBytecode = computeFunction.NativeShaderBytecode.pShaderBytecode;
 
+            string pipelineName = GetComputePipelineCacheKey(computePipelineDescriptor);
             ID3D12PipelineState* nativePipelineState;
-            fixed (char* pName = computePipelineDescriptor.Name)
+            fixed (char* pName = pipelineName)
             {
                 HRESULT hResult = m_NativePipelineLibrary->LoadComputePipeline(pName, &description, __uuidof<ID3D12PipelineState>(), (void**)&nativePipelineState);
 
@@ -873,7 +894,7 @@ namespace Infinity.Graphics
                 {
                     // Cache miss: create the pipeline normally and store it for next time
                     Dx12ComputePipeline fallbackPipeline = new Dx12ComputePipeline(m_Dx12Device, computePipelineDescriptor);
-                    StoreComputePipeline(computePipelineDescriptor.Name, fallbackPipeline);
+                    StoreComputePipeline(pipelineName, fallbackPipeline);
                     return fallbackPipeline;
                 }
 #if DEBUG
@@ -897,14 +918,15 @@ namespace Infinity.Graphics
             // Build the graphics pipeline state description for library lookup
             D3D12_GRAPHICS_PIPELINE_STATE_DESC description = new D3D12_GRAPHICS_PIPELINE_STATE_DESC();
             description.pRootSignature = pipelineLayout.NativeRootSignature;
-            description.PrimitiveTopologyType = Dx12Utility.ConvertToDx12PrimitiveTopologyType(rasterPipelineDescriptor.PrimitiveTopology);
+            description.PrimitiveTopologyType = Dx12Utility.ConvertToDx12PrimitiveTopologyType(rasterPipelineDescriptor.PrimitiveAssembler.PrimitiveTopology);
             description.SampleMask = uint.MaxValue;
             description.SampleDesc.Count = (uint)rasterPipelineDescriptor.SampleCount;
             description.SampleDesc.Quality = 0;
-            description.NumRenderTargets = (uint)rasterPipelineDescriptor.OutputStateDescriptor.ColorAttachmentFormats.Length;
+            description.NumRenderTargets = (uint)rasterPipelineDescriptor.ColorFormats.Length;
 
+            string pipelineName = GetRasterPipelineCacheKey(rasterPipelineDescriptor);
             ID3D12PipelineState* nativePipelineState;
-            fixed (char* pName = rasterPipelineDescriptor.Name)
+            fixed (char* pName = pipelineName)
             {
                 HRESULT hResult = m_NativePipelineLibrary->LoadGraphicsPipeline(pName, &description, __uuidof<ID3D12PipelineState>(), (void**)&nativePipelineState);
 
@@ -912,7 +934,7 @@ namespace Infinity.Graphics
                 {
                     // Cache miss: create the pipeline normally and store it for next time
                     Dx12RasterPipeline fallbackPipeline = new Dx12RasterPipeline(m_Dx12Device, rasterPipelineDescriptor);
-                    StoreRasterPipeline(rasterPipelineDescriptor.Name, fallbackPipeline);
+                    StoreRasterPipeline(pipelineName, fallbackPipeline);
                     return fallbackPipeline;
                 }
 #if DEBUG

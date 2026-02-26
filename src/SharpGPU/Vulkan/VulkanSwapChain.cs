@@ -55,7 +55,7 @@ namespace Infinity.Graphics
                     VkXlibSurfaceCreateInfoKHR surfaceCreateInfo = new VkXlibSurfaceCreateInfoKHR()
                     {
                         sType = VkStructureType.VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
-                        window = (nuint)descriptor.Surface.ToInt64(),
+                        window = (nint)descriptor.Surface.ToInt64(),
                     };
 
                     fixed (VkSurfaceKHR* surfacePtr = &m_Surface)

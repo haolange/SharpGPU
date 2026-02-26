@@ -26,7 +26,7 @@ namespace Infinity.Graphics
             m_VulkanDevice = device;
             m_Descriptor = descriptor;
 
-            uint instanceCount = descriptor.InstanceCount;
+            uint instanceCount = (uint)descriptor.Instances.Length;
 
             // Create instance buffer for VkAccelerationStructureInstanceKHR data
             ulong instanceBufferSize = instanceCount * 64; // sizeof(VkAccelerationStructureInstanceKHR) = 64
@@ -139,17 +139,18 @@ namespace Infinity.Graphics
             m_VulkanDevice = device;
             m_Descriptor = descriptor;
 
-            int geometryCount = descriptor.Geometrys.Length;
+            int geometryCount = descriptor.Geometries.Length;
             VkAccelerationStructureGeometryKHR* geometries = stackalloc VkAccelerationStructureGeometryKHR[Math.Max(geometryCount, 1)];
             uint* maxPrimitiveCounts = stackalloc uint[Math.Max(geometryCount, 1)];
 
             for (int i = 0; i < geometryCount; ++i)
             {
-                ref RHIAccelStructGeometry geom = ref descriptor.Geometrys.Span[i];
+                RHIAccelStructGeometry geom = descriptor.Geometries[i];
 
-                if (geom.GeometryType == ERHIAccelStructGeometryType.Triangle)
+                if (geom.GeometryType == EAccelStructGeometryType.Triangle)
                 {
-                    VulkanBuffer vertexBuffer = geom.TriangleGeometry.VertexBuffer as VulkanBuffer;
+                    RHIAccelStructTriangles triangleGeometry = (RHIAccelStructTriangles)geom;
+                    VulkanBuffer vertexBuffer = triangleGeometry.VertexBuffer as VulkanBuffer;
                     VkBufferDeviceAddressInfo vertexAddrInfo = new VkBufferDeviceAddressInfo()
                     {
                         sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
@@ -161,36 +162,37 @@ namespace Infinity.Graphics
                     {
                         sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
                         geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_TRIANGLES_KHR,
-                        flags = geom.IsOpaque ? VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR : 0,
+                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR : 0,
                     };
                     geometries[i].geometry.triangles.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-                    geometries[i].geometry.triangles.vertexFormat = VkFormat.VK_FORMAT_R32G32B32_SFLOAT;
-                    geometries[i].geometry.triangles.vertexData.deviceAddress = vertexAddress + geom.TriangleGeometry.VertexOffset;
-                    geometries[i].geometry.triangles.vertexStride = geom.TriangleGeometry.VertexStride;
-                    geometries[i].geometry.triangles.maxVertex = geom.TriangleGeometry.VertexCount;
+                    geometries[i].geometry.triangles.vertexFormat = VulkanUtility.ConvertToVkFormat(triangleGeometry.VertexFormat);
+                    geometries[i].geometry.triangles.vertexData.deviceAddress = vertexAddress + triangleGeometry.VertexOffset;
+                    geometries[i].geometry.triangles.vertexStride = triangleGeometry.VertexStride;
+                    geometries[i].geometry.triangles.maxVertex = triangleGeometry.VertexCount;
 
-                    if (geom.TriangleGeometry.IndexBuffer != null)
+                    if (triangleGeometry.IndexBuffer != null)
                     {
-                        VulkanBuffer indexBuffer = geom.TriangleGeometry.IndexBuffer as VulkanBuffer;
+                        VulkanBuffer indexBuffer = triangleGeometry.IndexBuffer as VulkanBuffer;
                         VkBufferDeviceAddressInfo indexAddrInfo = new VkBufferDeviceAddressInfo()
                         {
                             sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
                             buffer = indexBuffer.NativeBuffer,
                         };
                         ulong indexAddress = VulkanNative.vkGetBufferDeviceAddress(device.NativeDevice, &indexAddrInfo);
-                        geometries[i].geometry.triangles.indexType = VkIndexType.VK_INDEX_TYPE_UINT32;
-                        geometries[i].geometry.triangles.indexData.deviceAddress = indexAddress + geom.TriangleGeometry.IndexOffset;
-                        maxPrimitiveCounts[i] = geom.TriangleGeometry.IndexCount / 3;
+                        geometries[i].geometry.triangles.indexType = VulkanUtility.ConvertToVkIndexType(triangleGeometry.IndexFormat);
+                        geometries[i].geometry.triangles.indexData.deviceAddress = indexAddress + triangleGeometry.IndexOffset;
+                        maxPrimitiveCounts[i] = triangleGeometry.IndexCount / 3;
                     }
                     else
                     {
                         geometries[i].geometry.triangles.indexType = VkIndexType.VK_INDEX_TYPE_NONE_KHR;
-                        maxPrimitiveCounts[i] = geom.TriangleGeometry.VertexCount / 3;
+                        maxPrimitiveCounts[i] = triangleGeometry.VertexCount / 3;
                     }
                 }
-                else if (geom.GeometryType == ERHIAccelStructGeometryType.BoundingBox)
+                else if (geom.GeometryType == EAccelStructGeometryType.AABB)
                 {
-                    VulkanBuffer aabbBuffer = geom.BoundingBoxGeometry.BoundingBoxBuffer as VulkanBuffer;
+                    RHIAccelStructAABBs aabbGeometry = (RHIAccelStructAABBs)geom;
+                    VulkanBuffer aabbBuffer = aabbGeometry.AABBBuffer as VulkanBuffer;
                     VkBufferDeviceAddressInfo aabbAddrInfo = new VkBufferDeviceAddressInfo()
                     {
                         sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
@@ -202,12 +204,12 @@ namespace Infinity.Graphics
                     {
                         sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
                         geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_AABBS_KHR,
-                        flags = geom.IsOpaque ? VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR : 0,
+                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR : 0,
                     };
                     geometries[i].geometry.aabbs.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
-                    geometries[i].geometry.aabbs.data.deviceAddress = aabbAddress + geom.BoundingBoxGeometry.Offset;
-                    geometries[i].geometry.aabbs.stride = geom.BoundingBoxGeometry.Stride;
-                    maxPrimitiveCounts[i] = geom.BoundingBoxGeometry.Count;
+                    geometries[i].geometry.aabbs.data.deviceAddress = aabbAddress + aabbGeometry.Offset;
+                    geometries[i].geometry.aabbs.stride = aabbGeometry.Stride;
+                    maxPrimitiveCounts[i] = aabbGeometry.Count;
                 }
             }
 

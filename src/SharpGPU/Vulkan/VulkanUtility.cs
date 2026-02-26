@@ -995,26 +995,26 @@ namespace Infinity.Graphics
             }
         }
 
-        public static VkShaderStageFlagBits ConvertToVkShaderStageBit(in ERHIFunctionType type)
+        public static VkShaderStageFlags ConvertToVkShaderStageBit(in ERHIFunctionType type)
         {
             switch (type)
             {
                 case ERHIFunctionType.Vertex:
-                    return VkShaderStageFlagBits.VK_SHADER_STAGE_VERTEX_BIT;
+                    return VkShaderStageFlags.VK_SHADER_STAGE_VERTEX_BIT;
                 case ERHIFunctionType.Fragment:
-                    return VkShaderStageFlagBits.VK_SHADER_STAGE_FRAGMENT_BIT;
+                    return VkShaderStageFlags.VK_SHADER_STAGE_FRAGMENT_BIT;
                 case ERHIFunctionType.Compute:
-                    return VkShaderStageFlagBits.VK_SHADER_STAGE_COMPUTE_BIT;
+                    return VkShaderStageFlags.VK_SHADER_STAGE_COMPUTE_BIT;
                 case ERHIFunctionType.Task:
-                    return VkShaderStageFlagBits.VK_SHADER_STAGE_TASK_BIT_EXT;
+                    return VkShaderStageFlags.VK_SHADER_STAGE_TASK_BIT_EXT;
                 case ERHIFunctionType.Mesh:
-                    return VkShaderStageFlagBits.VK_SHADER_STAGE_MESH_BIT_EXT;
+                    return VkShaderStageFlags.VK_SHADER_STAGE_MESH_BIT_EXT;
                 case ERHIFunctionType.RayTracing:
-                    return VkShaderStageFlagBits.VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+                    return VkShaderStageFlags.VK_SHADER_STAGE_RAYGEN_BIT_KHR;
                 case ERHIFunctionType.MachineLearning:
-                    return VkShaderStageFlagBits.VK_SHADER_STAGE_COMPUTE_BIT;
+                    return VkShaderStageFlags.VK_SHADER_STAGE_COMPUTE_BIT;
                 default:
-                    return VkShaderStageFlagBits.VK_SHADER_STAGE_ALL;
+                    return VkShaderStageFlags.VK_SHADER_STAGE_ALL;
             }
         }
     }

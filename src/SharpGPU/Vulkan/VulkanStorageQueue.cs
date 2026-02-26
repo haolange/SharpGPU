@@ -232,9 +232,9 @@ namespace Infinity.Graphics
                     imageOffset = new VkOffset3D() { x = 0, y = 0, z = 0 },
                     imageExtent = new VkExtent3D()
                     {
-                        width = vkDstTexture.Descriptor.Width,
-                        height = vkDstTexture.Descriptor.Height,
-                        depth = Math.Max(1u, vkDstTexture.Descriptor.Depth),
+                        width = vkDstTexture.Descriptor.Extent.x,
+                        height = vkDstTexture.Descriptor.Extent.y,
+                        depth = Math.Max(1u, vkDstTexture.Descriptor.Extent.z),
                     },
                 };
                 VulkanNative.vkCmdCopyBufferToImage(m_CommandBuffer, stagingBuffer.NativeBuffer, vkDstTexture.NativeImage, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);

@@ -379,10 +379,13 @@ namespace Infinity.Graphics
             m_Descriptor = descriptor;
             m_VulkanPipelineLayout = descriptor.PipelineLayout as VulkanPipelineLayout;
 
+            VulkanFunctionLibrary functionLibrary = descriptor.FunctionLibrary as VulkanFunctionLibrary
+                ?? throw new InvalidOperationException("Vulkan raytracing pipeline requires a VulkanFunctionLibrary.");
+
             // Collect shader stages and groups
-            bool hasRayGen = descriptor.RayGenFunction != null;
-            int missCount = descriptor.MissFunction != null ? descriptor.MissFunction.Length : 0;
-            int hitGroupCount = descriptor.HitGroups != null ? descriptor.HitGroups.Length : 0;
+            bool hasRayGen = !string.IsNullOrEmpty(descriptor.RayGeneration.General.EntryName);
+            int missCount = descriptor.RayMissGroups.Length;
+            int hitGroupCount = descriptor.RayHitGroups.Length;
 
             int maxStages = (hasRayGen ? 1 : 0) + missCount + hitGroupCount * 3;
             int maxGroups = (hasRayGen ? 1 : 0) + missCount + hitGroupCount;
@@ -397,8 +400,13 @@ namespace Infinity.Graphics
             // Ray generation
             if (hasRayGen)
             {
-                VulkanFunction rayGenFunc = descriptor.RayGenFunction as VulkanFunction;
-                stages[stageIdx] = rayGenFunc.GetShaderStageCreateInfo();
+                stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
+                {
+                    sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    stage = VkShaderStageFlags.VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+                    module = functionLibrary.NativeShaderModule,
+                    pName = descriptor.RayGeneration.General.EntryName.ToPointer(),
+                };
                 groups[groupIdx] = new VkRayTracingShaderGroupCreateInfoKHR()
                 {
                     sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
@@ -415,8 +423,14 @@ namespace Infinity.Graphics
             // Miss shaders
             for (int i = 0; i < missCount; ++i)
             {
-                VulkanFunction missFunc = descriptor.MissFunction.Span[i] as VulkanFunction;
-                stages[stageIdx] = missFunc.GetShaderStageCreateInfo();
+                ref RHIRayGeneralGroupDescriptor missGroup = ref descriptor.RayMissGroups.Span[i];
+                stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
+                {
+                    sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    stage = VkShaderStageFlags.VK_SHADER_STAGE_MISS_BIT_KHR,
+                    module = functionLibrary.NativeShaderModule,
+                    pName = missGroup.General.EntryName.ToPointer(),
+                };
                 groups[groupIdx] = new VkRayTracingShaderGroupCreateInfoKHR()
                 {
                     sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
@@ -433,8 +447,8 @@ namespace Infinity.Graphics
             // Hit groups
             for (int i = 0; i < hitGroupCount; ++i)
             {
-                ref RHIRayHitGroupDescriptor hitGroup = ref descriptor.HitGroups.Span[i];
-                bool hasIntersection = hitGroup.IntersectionFunction != null;
+                ref RHIRayHitGroupDescriptor hitGroup = ref descriptor.RayHitGroups.Span[i];
+                bool hasIntersection = hitGroup.Intersect.HasValue;
                 var groupType = hasIntersection
                     ? VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR
                     : VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
@@ -443,23 +457,41 @@ namespace Infinity.Graphics
                 uint anyHitIdx = unusedShader;
                 uint intersectionIdx = unusedShader;
 
-                VulkanFunction closestHitFunc = hitGroup.ClosestHitFunction as VulkanFunction;
-                stages[stageIdx] = closestHitFunc.GetShaderStageCreateInfo();
-                closestHitIdx = (uint)stageIdx;
-                stageIdx++;
-
-                if (hitGroup.AnyHitFunction != null)
+                if (hitGroup.ClosestHit.HasValue)
                 {
-                    VulkanFunction anyHitFunc = hitGroup.AnyHitFunction as VulkanFunction;
-                    stages[stageIdx] = anyHitFunc.GetShaderStageCreateInfo();
+                    stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
+                    {
+                        sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                        stage = VkShaderStageFlags.VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+                        module = functionLibrary.NativeShaderModule,
+                        pName = hitGroup.ClosestHit.Value.EntryName.ToPointer(),
+                    };
+                    closestHitIdx = (uint)stageIdx;
+                    stageIdx++;
+                }
+
+                if (hitGroup.AnyHit.HasValue)
+                {
+                    stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
+                    {
+                        sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                        stage = VkShaderStageFlags.VK_SHADER_STAGE_ANY_HIT_BIT_KHR,
+                        module = functionLibrary.NativeShaderModule,
+                        pName = hitGroup.AnyHit.Value.EntryName.ToPointer(),
+                    };
                     anyHitIdx = (uint)stageIdx;
                     stageIdx++;
                 }
 
-                if (hasIntersection)
+                if (hitGroup.Intersect.HasValue)
                 {
-                    VulkanFunction intersectionFunc = hitGroup.IntersectionFunction as VulkanFunction;
-                    stages[stageIdx] = intersectionFunc.GetShaderStageCreateInfo();
+                    stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
+                    {
+                        sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                        stage = VkShaderStageFlags.VK_SHADER_STAGE_INTERSECTION_BIT_KHR,
+                        module = functionLibrary.NativeShaderModule,
+                        pName = hitGroup.Intersect.Value.EntryName.ToPointer(),
+                    };
                     intersectionIdx = (uint)stageIdx;
                     stageIdx++;
                 }
@@ -485,7 +517,7 @@ namespace Infinity.Graphics
                 pStages = stages,
                 groupCount = (uint)groupIdx,
                 pGroups = groups,
-                maxPipelineRayRecursionDepth = descriptor.MaxTraceRecursionDepth,
+                maxPipelineRayRecursionDepth = descriptor.MaxRecursionDepth,
                 layout = m_VulkanPipelineLayout.NativePipelineLayout,
             };
 

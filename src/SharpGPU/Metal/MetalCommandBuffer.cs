@@ -455,7 +455,7 @@ namespace Infinity.Graphics
             icbDesc.InheritBuffers = false;
             icbDesc.InheritPipelineState = false;
 
-            m_NativeICB = device.NativeDevice.NewIndirectCommandBuffer(icbDesc, m_MaxCommandCount, MTLResourceOptions.StorageModeShared);
+            m_NativeICB = device.NativeDevice.NewIndirectCommandBuffer(icbDesc, m_MaxCommandCount, MTLResourceOptions.ResourceStorageModeShared);
             ObjectiveCRuntime.Release(icbDesc);
         }
 
@@ -487,7 +487,7 @@ namespace Infinity.Graphics
             icbDesc.InheritBuffers = false;
             icbDesc.InheritPipelineState = false;
 
-            m_NativeICB = device.NativeDevice.NewIndirectCommandBuffer(icbDesc, m_MaxCommandCount, MTLResourceOptions.StorageModeShared);
+            m_NativeICB = device.NativeDevice.NewIndirectCommandBuffer(icbDesc, m_MaxCommandCount, MTLResourceOptions.ResourceStorageModeShared);
             ObjectiveCRuntime.Release(icbDesc);
         }
 
@@ -520,7 +520,7 @@ namespace Infinity.Graphics
             icbDesc.InheritBuffers = false;
             icbDesc.InheritPipelineState = false;
 
-            m_NativeICB = device.NativeDevice.NewIndirectCommandBuffer(icbDesc, m_MaxCommandCount, MTLResourceOptions.StorageModeShared);
+            m_NativeICB = device.NativeDevice.NewIndirectCommandBuffer(icbDesc, m_MaxCommandCount, MTLResourceOptions.ResourceStorageModeShared);
             ObjectiveCRuntime.Release(icbDesc);
         }
 

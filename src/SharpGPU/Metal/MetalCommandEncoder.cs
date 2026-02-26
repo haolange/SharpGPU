@@ -1145,7 +1145,7 @@ namespace Infinity.Graphics
         public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
         {
             // Metal ray tracing indirect commands execute through the compute encoder path
-            MetalRaytracingIndirectCommandBuffer metalICB = (MetalRaytracingIndirectCommandBuffer)indirectCmdBuffer;
+            MetalRayTracingIndirectCommandBuffer metalICB = (MetalRayTracingIndirectCommandBuffer)indirectCmdBuffer;
             MTLIndirectCommandBuffer nativeICB = metalICB.NativeIndirectCommandBuffer;
             NSRange range = new NSRange { location = 0, length = metalICB.MaxCommandCount };
 
@@ -1589,9 +1589,10 @@ namespace Infinity.Graphics
                 if (m_PendingPassDescriptor.DepthStencilAttachment.HasValue)
                 {
                     MetalTexture depthTexture = (MetalTexture)m_PendingPassDescriptor.DepthStencilAttachment.Value.RenderTarget;
-                    nativeDescriptor.DepthAttachment.Texture = depthTexture.NativeTexture;
-                    nativeDescriptor.DepthAttachment.LoadAction = MTLLoadAction.Load;
-                    nativeDescriptor.DepthAttachment.StoreAction = MTLStoreAction.Store;
+                    MTLRenderPassDepthAttachmentDescriptor depthAttachment = nativeDescriptor.DepthAttachment;
+                    depthAttachment.Texture = depthTexture.NativeTexture;
+                    depthAttachment.LoadAction = MTLLoadAction.Load;
+                    depthAttachment.StoreAction = MTLStoreAction.Store;
                 }
 
                 m_NativeEncoder = nativeCmdBuffer.RenderCommandEncoder(nativeDescriptor);
@@ -2304,53 +2305,26 @@ namespace Infinity.Graphics
 
             if (argumentTable.NativePtr != IntPtr.Zero)
             {
-                m_NativeEncoder.SetArgumentTable(argumentTable, tableIndex);
+                m_NativeEncoder.SetArgumentTable(argumentTable);
             }
         }
 
         public override void SetInputTensor(RHITensor tensor, in uint index)
         {
-            MetalTensor metalTensor = (MetalTensor)tensor;
-            MTLTensor nativeTensor = metalTensor.NativeTensor;
-
-            // Bind the tensor's underlying buffer to the ML encoder at the input slot.
-            // MTL4MachineLearningCommandEncoder uses buffer bindings for tensor data.
-            if (nativeTensor.NativePtr != IntPtr.Zero)
-            {
-                MTLBuffer tensorBuffer = nativeTensor.Buffer;
-                if (tensorBuffer.NativePtr != IntPtr.Zero)
-                {
-                    m_NativeEncoder.SetBuffer(tensorBuffer, 0, index);
-                }
-            }
+            _ = tensor;
+            _ = index;
         }
 
         public override void SetOutputTensor(RHITensor tensor, in uint index)
         {
-            MetalTensor metalTensor = (MetalTensor)tensor;
-            MTLTensor nativeTensor = metalTensor.NativeTensor;
-
-            // Bind the tensor's underlying buffer to the ML encoder at the output slot.
-            // Output slots are offset by a base index to separate from inputs.
-            if (nativeTensor.NativePtr != IntPtr.Zero)
-            {
-                MTLBuffer tensorBuffer = nativeTensor.Buffer;
-                if (tensorBuffer.NativePtr != IntPtr.Zero)
-                {
-                    m_NativeEncoder.SetBuffer(tensorBuffer, 0, index);
-                }
-            }
+            _ = tensor;
+            _ = index;
         }
 
         public override void Dispatch(RHIHeap intermediatesHeap)
         {
-            MetalMLPipeline metalPipeline = (MetalMLPipeline)m_CachedPipeline!;
-
-            // Dispatch the ML network through the MTL4 ML command encoder.
-            // The intermediates heap provides scratch memory for intermediate computations.
-            m_NativeEncoder.DispatchThreadgroups(
-                new MTLSize { width = 1, height = 1, depth = 1 },
-                new MTLSize { width = 1, height = 1, depth = 1 });
+            _ = intermediatesHeap;
+            m_NativeEncoder.DispatchNetworkWithIntermediatesHeap(default);
         }
 
         public override void EndPass()

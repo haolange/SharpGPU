@@ -28,12 +28,13 @@ namespace Infinity.Graphics
             ulong bufferSize = elementCount * elementSize;
 
             // Create a backing buffer for the tensor data
-            RHIBufferDescriptor bufferDescriptor;
-            bufferDescriptor.Count = 1;
-            bufferDescriptor.Stride = (uint)bufferSize;
-            bufferDescriptor.State = ERHIBufferState.UnorderedAccess;
-            bufferDescriptor.StorageMode = descriptor.StorageMode;
-            bufferDescriptor.UsageFlag = ERHIBufferUsage.UnorderedAccess | ERHIBufferUsage.ShaderResource;
+            RHIBufferDescriptor bufferDescriptor = new RHIBufferDescriptor
+            {
+                ByteSize = (int)bufferSize,
+                Format = ERHIBufferFormat.Undefine,
+                StorageMode = descriptor.StorageMode,
+                UsageFlag = ERHIBufferUsage.UnorderedAccess | ERHIBufferUsage.ShaderResource,
+            };
             m_BackingBuffer = device.CreateBuffer(bufferDescriptor);
         }
 

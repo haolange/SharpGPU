@@ -29,15 +29,6 @@ namespace Infinity.Graphics
             m_Function = descriptor.Function;
             m_InputTensors = descriptor.InputTensors.ToArray();
 
-            // DirectML requires IDMLDevice which is not available through TerraFX bindings.
-            // Use compute shader bridge: treat the ML function's DXIL payload as a compute
-            // shader and dispatch through the standard compute pipeline path.
-            RHIComputePipelineDescriptor computeDesc;
-            computeDesc.Name = descriptor.Name;
-            computeDesc.ComputeFunction = descriptor.Function;
-            computeDesc.PipelineLayout = null!; // Pipeline layout bound separately via SetArgumentTable
-            computeDesc.ThreadSize = new Infinity.Mathmatics.int3(1, 1, 1);
-
             // Estimate intermediates heap size from input tensor dimensions
             ulong intermediatesSize = 0;
             for (int i = 0; i < m_InputTensors.Length; ++i)

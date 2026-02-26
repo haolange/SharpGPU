@@ -558,10 +558,10 @@ namespace Infinity.Graphics
                 VulkanNative.vkCreateImageView(vkQueue.VulkanDevice.NativeDevice, &viewInfo, null, &imageView);
 
                 VkClearValue clearValue = default;
-                clearValue.color.float32_0 = colorDesc.ClearValue.x;
-                clearValue.color.float32_1 = colorDesc.ClearValue.y;
-                clearValue.color.float32_2 = colorDesc.ClearValue.z;
-                clearValue.color.float32_3 = colorDesc.ClearValue.w;
+                clearValue.color.float32[0] = colorDesc.ClearValue.x;
+                clearValue.color.float32[1] = colorDesc.ClearValue.y;
+                clearValue.color.float32[2] = colorDesc.ClearValue.z;
+                clearValue.color.float32[3] = colorDesc.ClearValue.w;
 
                 colorAttachments[i] = new VkRenderingAttachmentInfo()
                 {
@@ -587,7 +587,7 @@ namespace Infinity.Graphics
 
             if (descriptor.DepthStencilAttachment.HasValue)
             {
-                ref RHIDepthStencilAttachmentDescriptor depthDesc = ref System.Runtime.CompilerServices.Unsafe.AsRef(in descriptor.DepthStencilAttachment.Value);
+                RHIDepthStencilAttachmentDescriptor depthDesc = descriptor.DepthStencilAttachment.Value;
                 VulkanTexture vkDepthTexture = depthDesc.RenderTarget as VulkanTexture;
 
                 VkImageViewCreateInfo depthViewInfo = new VkImageViewCreateInfo()
@@ -765,7 +765,7 @@ namespace Infinity.Graphics
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
             VkRect2D scissor = new VkRect2D()
             {
-                offset = new VkOffset2D() { x = rect.left, y = rect.top },
+                offset = new VkOffset2D() { x = (int)rect.left, y = (int)rect.top },
                 extent = new VkExtent2D() { width = (uint)(rect.right - rect.left), height = (uint)(rect.bottom - rect.top) },
             };
             VulkanNative.vkCmdSetScissor(vkCmdBuf.NativeCommandBuffer, 0, 1, &scissor);
@@ -780,7 +780,7 @@ namespace Infinity.Graphics
                 ref Rect rect = ref rects.Span[i];
                 scissors[i] = new VkRect2D()
                 {
-                    offset = new VkOffset2D() { x = rect.left, y = rect.top },
+                    offset = new VkOffset2D() { x = (int)rect.left, y = (int)rect.top },
                     extent = new VkExtent2D() { width = (uint)(rect.right - rect.left), height = (uint)(rect.bottom - rect.top) },
                 };
             }
@@ -831,8 +831,7 @@ namespace Infinity.Graphics
         public override void SetBlendFactor(in float4 value)
         {
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            float* blendConstants = stackalloc float[4] { value.x, value.y, value.z, value.w };
-            VulkanNative.vkCmdSetBlendConstants(vkCmdBuf.NativeCommandBuffer, blendConstants);
+            VulkanNative.vkCmdSetBlendConstants(vkCmdBuf.NativeCommandBuffer, value.x);
         }
 
         public override void SetPipeline(RHIRasterPipeline pipeline)
@@ -883,11 +882,9 @@ namespace Infinity.Graphics
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
 
             VkExtent2D fragmentSize = VulkanUtility.ConvertToVkFragmentExtent(shadingRate);
-            VkFragmentShadingRateCombinerOpKHR* combiners = stackalloc VkFragmentShadingRateCombinerOpKHR[2];
-            combiners[0] = VulkanUtility.ConvertToVkShadingRateCombiner(shadingRateCombiner);
-            combiners[1] = VkFragmentShadingRateCombinerOpKHR.VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR;
+            VkFragmentShadingRateCombinerOpKHR combiner0 = VulkanUtility.ConvertToVkShadingRateCombiner(shadingRateCombiner);
 
-            VulkanNative.vkCmdSetFragmentShadingRateKHR(vkCmdBuf.NativeCommandBuffer, &fragmentSize, combiners);
+            VulkanNative.vkCmdSetFragmentShadingRateKHR(vkCmdBuf.NativeCommandBuffer, &fragmentSize, combiner0);
         }
 
         public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
@@ -1159,7 +1156,7 @@ namespace Infinity.Graphics
                 scratchData = new VkDeviceOrHostAddressKHR() { deviceAddress = scratchAddress },
             };
 
-            uint instanceCount = topLevelAccelStruct.Descriptor.InstanceCount;
+            uint instanceCount = (uint)topLevelAccelStruct.Descriptor.Instances.Length;
             VkAccelerationStructureBuildRangeInfoKHR rangeInfo = new VkAccelerationStructureBuildRangeInfoKHR()
             {
                 primitiveCount = instanceCount,
@@ -1178,18 +1175,19 @@ namespace Infinity.Graphics
             VulkanBottomLevelAccelStruct vkBLAS = bottomLevelAccelStruct as VulkanBottomLevelAccelStruct;
             VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
 
-            ref RHIBottomLevelAccelStructDescriptor descriptor = ref System.Runtime.CompilerServices.Unsafe.AsRef(in bottomLevelAccelStruct.Descriptor);
-            int geometryCount = descriptor.Geometrys.Length;
+            RHIBottomLevelAccelStructDescriptor descriptor = bottomLevelAccelStruct.Descriptor;
+            int geometryCount = descriptor.Geometries.Length;
             VkAccelerationStructureGeometryKHR* geometries = stackalloc VkAccelerationStructureGeometryKHR[Math.Max(geometryCount, 1)];
             VkAccelerationStructureBuildRangeInfoKHR* rangeInfos = stackalloc VkAccelerationStructureBuildRangeInfoKHR[Math.Max(geometryCount, 1)];
 
             for (int i = 0; i < geometryCount; ++i)
             {
-                ref RHIAccelStructGeometry geom = ref descriptor.Geometrys.Span[i];
+                RHIAccelStructGeometry geom = descriptor.Geometries[i];
 
-                if (geom.GeometryType == ERHIAccelStructGeometryType.Triangle)
+                if (geom.GeometryType == EAccelStructGeometryType.Triangle)
                 {
-                    VulkanBuffer vertexBuffer = geom.TriangleGeometry.VertexBuffer as VulkanBuffer;
+                    RHIAccelStructTriangles triangleGeometry = (RHIAccelStructTriangles)geom;
+                    VulkanBuffer vertexBuffer = triangleGeometry.VertexBuffer as VulkanBuffer;
                     VkBufferDeviceAddressInfo vertexAddrInfo = new VkBufferDeviceAddressInfo()
                     {
                         sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
@@ -1201,36 +1199,37 @@ namespace Infinity.Graphics
                     {
                         sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
                         geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_TRIANGLES_KHR,
-                        flags = geom.IsOpaque ? VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR : 0,
+                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR : 0,
                     };
                     geometries[i].geometry.triangles.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-                    geometries[i].geometry.triangles.vertexFormat = VkFormat.VK_FORMAT_R32G32B32_SFLOAT;
-                    geometries[i].geometry.triangles.vertexData.deviceAddress = vertexAddress + geom.TriangleGeometry.VertexOffset;
-                    geometries[i].geometry.triangles.vertexStride = geom.TriangleGeometry.VertexStride;
-                    geometries[i].geometry.triangles.maxVertex = geom.TriangleGeometry.VertexCount;
+                    geometries[i].geometry.triangles.vertexFormat = VulkanUtility.ConvertToVkFormat(triangleGeometry.VertexFormat);
+                    geometries[i].geometry.triangles.vertexData.deviceAddress = vertexAddress + triangleGeometry.VertexOffset;
+                    geometries[i].geometry.triangles.vertexStride = triangleGeometry.VertexStride;
+                    geometries[i].geometry.triangles.maxVertex = triangleGeometry.VertexCount;
 
-                    if (geom.TriangleGeometry.IndexBuffer != null)
+                    if (triangleGeometry.IndexBuffer != null)
                     {
-                        VulkanBuffer indexBuffer = geom.TriangleGeometry.IndexBuffer as VulkanBuffer;
+                        VulkanBuffer indexBuffer = triangleGeometry.IndexBuffer as VulkanBuffer;
                         VkBufferDeviceAddressInfo indexAddrInfo = new VkBufferDeviceAddressInfo()
                         {
                             sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
                             buffer = indexBuffer.NativeBuffer,
                         };
                         ulong indexAddress = VulkanNative.vkGetBufferDeviceAddress(vkQueue.VulkanDevice.NativeDevice, &indexAddrInfo);
-                        geometries[i].geometry.triangles.indexType = VkIndexType.VK_INDEX_TYPE_UINT32;
-                        geometries[i].geometry.triangles.indexData.deviceAddress = indexAddress + geom.TriangleGeometry.IndexOffset;
-                        rangeInfos[i].primitiveCount = geom.TriangleGeometry.IndexCount / 3;
+                        geometries[i].geometry.triangles.indexType = VulkanUtility.ConvertToVkIndexType(triangleGeometry.IndexFormat);
+                        geometries[i].geometry.triangles.indexData.deviceAddress = indexAddress + triangleGeometry.IndexOffset;
+                        rangeInfos[i].primitiveCount = triangleGeometry.IndexCount / 3;
                     }
                     else
                     {
                         geometries[i].geometry.triangles.indexType = VkIndexType.VK_INDEX_TYPE_NONE_KHR;
-                        rangeInfos[i].primitiveCount = geom.TriangleGeometry.VertexCount / 3;
+                        rangeInfos[i].primitiveCount = triangleGeometry.VertexCount / 3;
                     }
                 }
-                else if (geom.GeometryType == ERHIAccelStructGeometryType.BoundingBox)
+                else if (geom.GeometryType == EAccelStructGeometryType.AABB)
                 {
-                    VulkanBuffer aabbBuffer = geom.BoundingBoxGeometry.BoundingBoxBuffer as VulkanBuffer;
+                    RHIAccelStructAABBs aabbGeometry = (RHIAccelStructAABBs)geom;
+                    VulkanBuffer aabbBuffer = aabbGeometry.AABBBuffer as VulkanBuffer;
                     VkBufferDeviceAddressInfo aabbAddrInfo = new VkBufferDeviceAddressInfo()
                     {
                         sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
@@ -1242,12 +1241,12 @@ namespace Infinity.Graphics
                     {
                         sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
                         geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_AABBS_KHR,
-                        flags = geom.IsOpaque ? VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR : 0,
+                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR : 0,
                     };
                     geometries[i].geometry.aabbs.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
-                    geometries[i].geometry.aabbs.data.deviceAddress = aabbAddress + geom.BoundingBoxGeometry.Offset;
-                    geometries[i].geometry.aabbs.stride = geom.BoundingBoxGeometry.Stride;
-                    rangeInfos[i].primitiveCount = geom.BoundingBoxGeometry.Count;
+                    geometries[i].geometry.aabbs.data.deviceAddress = aabbAddress + aabbGeometry.Offset;
+                    geometries[i].geometry.aabbs.stride = aabbGeometry.Stride;
+                    rangeInfos[i].primitiveCount = aabbGeometry.Count;
                 }
             }
 
