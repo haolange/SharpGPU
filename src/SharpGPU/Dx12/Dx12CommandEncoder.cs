@@ -1028,6 +1028,11 @@ namespace Infinity.Graphics
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
 
+#if DEBUG
+            Debug.Assert(dx12FunctionTable != null, "Raytracing dispatch requires a Dx12FunctionTable.");
+            Debug.Assert(dx12FunctionTable.IsGenerated, "FunctionTable must call Generate() before Dispatch().");
+#endif
+
             if (dx12Device.Feature.IsRaytracingSupported)
             {
                 D3D12_DISPATCH_RAYS_DESC dispatchRayDescriptor;
@@ -1043,7 +1048,9 @@ namespace Infinity.Graphics
                     dispatchRayDescriptor.HitGroupTable.StrideInBytes = dx12FunctionTable.HitGroupStride;
                     dispatchRayDescriptor.RayGenerationShaderRecord.SizeInBytes = dx12FunctionTable.RayGenSize;
                     dispatchRayDescriptor.RayGenerationShaderRecord.StartAddress = dx12FunctionTable.RayGenAddress;
-                    dispatchRayDescriptor.CallableShaderTable = default;
+                    dispatchRayDescriptor.CallableShaderTable.SizeInBytes = dx12FunctionTable.CallableSize;
+                    dispatchRayDescriptor.CallableShaderTable.StartAddress = dx12FunctionTable.CallableAddress;
+                    dispatchRayDescriptor.CallableShaderTable.StrideInBytes = dx12FunctionTable.CallableStride;
                 }
 
                 dx12CommandBuffer.NativeCommandList->DispatchRays(&dispatchRayDescriptor);

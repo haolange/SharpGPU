@@ -129,7 +129,6 @@ namespace Infinity.Graphics
     {
         public string Name;
         public ERHIHitGroupType Type;
-        internal RHIPipelineLayout PipelineLayout;
         public RHIRayFunctionDescriptor? AnyHit;
         public RHIRayFunctionDescriptor? Intersect;
         public RHIRayFunctionDescriptor? ClosestHit;
@@ -139,7 +138,6 @@ namespace Infinity.Graphics
     {
         public string Name;
         public RHIRayFunctionDescriptor General;
-        internal RHIPipelineLayout PipelineLayout;
     }
 
     public struct RHIRaytracingPipelineDescriptor
@@ -153,6 +151,8 @@ namespace Infinity.Graphics
         public RHIRayGeneralGroupDescriptor RayGeneration;
         public Memory<RHIRayHitGroupDescriptor> RayHitGroups;
         public Memory<RHIRayGeneralGroupDescriptor> RayMissGroups;
+        public Memory<RHIRayGeneralGroupDescriptor> RayCallableGroups;
+        public uint LocalDataStrideInBytes;
     }
 
     public struct RHIVertexAssemblerDescriptor

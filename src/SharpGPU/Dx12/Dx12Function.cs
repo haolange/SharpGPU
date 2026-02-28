@@ -122,89 +122,174 @@ namespace Infinity.Graphics
 
     internal struct Dx12FunctionTableEntry
     {
-        public string ShaderIdentifier;
-        public RHIArgumentTable[]? ArgumentTables;
-    };
+        public int GroupIndex;
+        public byte[] LocalData;
+
+        public Dx12FunctionTableEntry(in int groupIndex, in byte[] localData)
+        {
+            GroupIndex = groupIndex;
+            LocalData = localData;
+        }
+    }
 
     internal unsafe class Dx12FunctionTable : RHIFunctionTable
     {
-        public ulong RayGenSize => m_EntryStride * 1;
+        internal bool IsGenerated => m_NativeResource != null;
+        public ulong RayGenSize => m_EntryStride;
         public ulong RayGeStride => m_EntryStride;
-        public ulong RayGenAddress => m_NativeResource->GetGPUVirtualAddress();
+        public ulong RayGenAddress => m_NativeResource != null ? m_NativeResource->GetGPUVirtualAddress() : 0;
         public ulong MissSize => (ulong)(m_EntryStride * m_MissPrograms.length);
         public ulong MissStride => m_EntryStride;
-        public ulong MissAddress => m_NativeResource->GetGPUVirtualAddress() + m_EntryStride;
+        public ulong MissAddress => m_NativeResource != null ? m_NativeResource->GetGPUVirtualAddress() + m_EntryStride : 0;
         public ulong HitGroupSize => (ulong)(m_EntryStride * m_HitGroupPrograms.length);
         public ulong HitGroupStride => m_EntryStride;
-        public ulong HitGroupAddress => m_NativeResource->GetGPUVirtualAddress() + (ulong)(m_EntryStride * m_MissPrograms.length);
+        public ulong HitGroupAddress => m_NativeResource != null ? m_NativeResource->GetGPUVirtualAddress() + (ulong)(m_EntryStride * (1 + m_MissPrograms.length)) : 0;
+        public ulong CallableSize => (ulong)(m_EntryStride * m_CallablePrograms.length);
+        public ulong CallableStride => m_EntryStride;
+        public ulong CallableAddress => m_NativeResource != null ? m_NativeResource->GetGPUVirtualAddress() + (ulong)(m_EntryStride * (1 + m_MissPrograms.length + m_HitGroupPrograms.length)) : 0;
 
         private uint m_EntryCount;
         private uint m_EntryStride;
+        private uint m_LocalDataStrideInBytes;
         private Dx12Device m_Dx12Device;
         private ID3D12Resource* m_NativeResource;
+        private Dx12RaytracingPipeline m_CachedPipeline;
         private Dx12FunctionTableEntry m_RayGenerationProgram;
+        private bool m_HasRayGenerationRecord;
         private TArray<Dx12FunctionTableEntry> m_MissPrograms;
         private TArray<Dx12FunctionTableEntry> m_HitGroupPrograms;
+        private TArray<Dx12FunctionTableEntry> m_CallablePrograms;
 
         public Dx12FunctionTable(Dx12Device device)
         {
             m_Dx12Device = device;
             m_MissPrograms = new TArray<Dx12FunctionTableEntry>(2);
             m_HitGroupPrograms = new TArray<Dx12FunctionTableEntry>(8);
+            m_CallablePrograms = new TArray<Dx12FunctionTableEntry>(2);
+            m_RayGenerationProgram = default;
+            m_HasRayGenerationRecord = false;
+            m_NativeResource = null;
+            m_CachedPipeline = null;
         }
 
-        public override void SetRayGenerationProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
+        public override void SetRayGenerationRecord(in RHIRayRecordDescriptor record)
         {
-            m_RayGenerationProgram.ArgumentTables = resourceTables;
-            m_RayGenerationProgram.ShaderIdentifier = exportName;
+            ValidateGroupIndex(record.GroupIndex, nameof(record));
+            m_RayGenerationProgram = CreateEntry(record);
+            m_HasRayGenerationRecord = true;
         }
 
-        public override int AddMissProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
+        public override int AddMissRecord(in RHIRayRecordDescriptor record)
         {
-            Dx12FunctionTableEntry missEntry;
-            missEntry.ArgumentTables = resourceTables;
-            missEntry.ShaderIdentifier = exportName;
+            Dx12FunctionTableEntry missEntry = CreateEntry(record);
             return m_MissPrograms.Add(missEntry);
         }
 
-        public override int AddHitGroupProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
+        public override int AddHitGroupRecord(in RHIRayRecordDescriptor record)
         {
-            Dx12FunctionTableEntry hitGroupEntry;
-            hitGroupEntry.ArgumentTables = resourceTables;
-            hitGroupEntry.ShaderIdentifier = exportName;
+            Dx12FunctionTableEntry hitGroupEntry = CreateEntry(record);
             return m_HitGroupPrograms.Add(hitGroupEntry);
         }
 
-        public override void SetMissProgram(in int index, string exportName, RHIArgumentTable[]? resourceTables = null)
+        public override int AddCallableRecord(in RHIRayRecordDescriptor record)
         {
-            ref Dx12FunctionTableEntry missEntry = ref m_MissPrograms[index];
-            missEntry.ArgumentTables = resourceTables;
-            missEntry.ShaderIdentifier = exportName;
+            Dx12FunctionTableEntry callableEntry = CreateEntry(record);
+            return m_CallablePrograms.Add(callableEntry);
         }
 
-        public override void SetHitGroupProgram(in int index, string exportName, RHIArgumentTable[]? resourceTables = null)
+        public override void SetMissRecord(in int index, in RHIRayRecordDescriptor record)
         {
-            ref Dx12FunctionTableEntry hitGroupEntry = ref m_HitGroupPrograms[index];
-            hitGroupEntry.ArgumentTables = resourceTables;
-            hitGroupEntry.ShaderIdentifier = exportName;
+            ValidateEntryIndex(index, m_MissPrograms.length, nameof(index));
+            m_MissPrograms[index] = CreateEntry(record);
         }
 
-        public override void ClearMissPrograms()
+        public override void SetHitGroupRecord(in int index, in RHIRayRecordDescriptor record)
+        {
+            ValidateEntryIndex(index, m_HitGroupPrograms.length, nameof(index));
+            m_HitGroupPrograms[index] = CreateEntry(record);
+        }
+
+        public override void SetCallableRecord(in int index, in RHIRayRecordDescriptor record)
+        {
+            ValidateEntryIndex(index, m_CallablePrograms.length, nameof(index));
+            m_CallablePrograms[index] = CreateEntry(record);
+        }
+
+        public override void ClearMissRecords()
         {
             m_MissPrograms.Clear();
         }
 
-        public override void ClearHitGroupPrograms()
+        public override void ClearHitGroupRecords()
         {
             m_HitGroupPrograms.Clear();
         }
 
+        public override void ClearCallableRecords()
+        {
+            m_CallablePrograms.Clear();
+        }
+
+        public override void UpdateRecord(in ERHIRayShaderTableSection section, in int index, in RHIRayRecordDescriptor record)
+        {
+            switch (section)
+            {
+                case ERHIRayShaderTableSection.RayGeneration:
+                    if (index != 0)
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(index), "RayGeneration section only supports index 0.");
+                    }
+
+                    SetRayGenerationRecord(record);
+                    if (m_NativeResource != null && m_CachedPipeline != null)
+                    {
+                        WriteSingleRecord(m_CachedPipeline, section, index, m_RayGenerationProgram);
+                    }
+                    break;
+                case ERHIRayShaderTableSection.Miss:
+                    SetMissRecord(index, record);
+                    if (m_NativeResource != null && m_CachedPipeline != null)
+                    {
+                        WriteSingleRecord(m_CachedPipeline, section, index, m_MissPrograms[index]);
+                    }
+                    break;
+                case ERHIRayShaderTableSection.Hit:
+                    SetHitGroupRecord(index, record);
+                    if (m_NativeResource != null && m_CachedPipeline != null)
+                    {
+                        WriteSingleRecord(m_CachedPipeline, section, index, m_HitGroupPrograms[index]);
+                    }
+                    break;
+                case ERHIRayShaderTableSection.Callable:
+                    SetCallableRecord(index, record);
+                    if (m_NativeResource != null && m_CachedPipeline != null)
+                    {
+                        WriteSingleRecord(m_CachedPipeline, section, index, m_CallablePrograms[index]);
+                    }
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(section));
+            }
+        }
+
         public override void Generate(RHIRaytracingPipeline pipeline)
         {
-            Dx12RaytracingPipeline dx12RaytracingPipeline = pipeline as Dx12RaytracingPipeline;
+            Dx12RaytracingPipeline dx12RaytracingPipeline = pipeline as Dx12RaytracingPipeline
+                ?? throw new ArgumentException("DX12 function table requires a Dx12RaytracingPipeline.", nameof(pipeline));
 
-            m_EntryCount = (uint)(1 + m_MissPrograms.length + m_HitGroupPrograms.length);
-            m_EntryStride = (uint)(RHIUtility.AlignTo(0x20, D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES) + (sizeof(ulong) * (int)dx12RaytracingPipeline.MaxLocalRootParameters));
+            if (!m_HasRayGenerationRecord)
+            {
+                throw new InvalidOperationException("Ray generation record is not set.");
+            }
+
+            m_CachedPipeline = dx12RaytracingPipeline;
+            m_LocalDataStrideInBytes = dx12RaytracingPipeline.Descriptor.LocalDataStrideInBytes;
+            ValidateAllRecords(dx12RaytracingPipeline);
+
+            m_EntryCount = (uint)(1 + m_MissPrograms.length + m_HitGroupPrograms.length + m_CallablePrograms.length);
+            m_EntryStride = RHIUtility.AlignTo(0x20, D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + m_LocalDataStrideInBytes);
+
+            ReleaseNativeResource();
 
             ID3D12Resource* dx12Resource;
             D3D12_RESOURCE_DESC resourceDesc = D3D12_RESOURCE_DESC.Buffer(m_EntryCount * m_EntryStride, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE);
@@ -217,114 +302,60 @@ namespace Infinity.Graphics
 
             void* pTableData;
             hResult = m_NativeResource->Map(0, null, &pTableData);
-            IntPtr tableDataHandle = new IntPtr(pTableData);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
-            ID3D12StateObjectProperties* objectProperties = dx12RaytracingPipeline.NativeStateObjectProperties;
 
-            // copy ray generation shader identifier
-            {
-                char[] rayGenChar = m_RayGenerationProgram.ShaderIdentifier.ToCharArray();
-                fixed (char* pRayGenChar = rayGenChar)
-                {
-                    void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pRayGenChar);
-                    Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, m_EntryStride);
-                    /*if (m_RayGenerationProgram.ArgumentTables != null)
-                    {
-                        // To do local binding...
-                    }*/
-                }
-                tableDataHandle += (int)m_EntryStride;
-            }
-
-            // copy miss shader identifiers
+            byte* tableData = (byte*)pTableData;
+            WriteRecord(dx12RaytracingPipeline, tableData + 0 * m_EntryStride, ERHIRayShaderTableSection.RayGeneration, m_RayGenerationProgram);
             for (int i = 0; i < m_MissPrograms.length; ++i)
             {
-                ref Dx12FunctionTableEntry missEntry = ref m_MissPrograms[i];
-                char[] missChar = missEntry.ShaderIdentifier.ToCharArray();
-                fixed (char* pMissChar = missChar)
-                {
-                    void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pMissChar);
-                    Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, m_EntryStride);
-                    /*if (missEntry.ArgumentTables != null)
-                    {
-                        // To do local binding...
-                    }*/
-                }
-                tableDataHandle += (int)m_EntryStride;
+                WriteRecord(dx12RaytracingPipeline, tableData + (1 + i) * m_EntryStride, ERHIRayShaderTableSection.Miss, m_MissPrograms[i]);
             }
 
-            // copy hit group shader identifiers
             for (int i = 0; i < m_HitGroupPrograms.length; ++i)
             {
-                ref Dx12FunctionTableEntry hitGroupEntry = ref m_HitGroupPrograms[i];
-                char[] hitGroupChar = hitGroupEntry.ShaderIdentifier.ToCharArray();
-                fixed (char* pHitGroupChar = hitGroupChar)
-                {
-                    void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pHitGroupChar);
-                    Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, m_EntryStride);
-                    /*if (hitGroupEntry.ArgumentTables != null)
-                    {
-                        // To do local binding...
-                    }*/
-                }
-                tableDataHandle += (int)m_EntryStride;
+                WriteRecord(dx12RaytracingPipeline, tableData + (1 + m_MissPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Hit, m_HitGroupPrograms[i]);
+            }
+
+            for (int i = 0; i < m_CallablePrograms.length; ++i)
+            {
+                WriteRecord(dx12RaytracingPipeline, tableData + (1 + m_MissPrograms.length + m_HitGroupPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Callable, m_CallablePrograms[i]);
             }
 
             m_NativeResource->Unmap(0, null);
         }
 
-        public override void Update(RHIRaytracingPipeline pipeline)
+        public override void Update()
         {
 #if DEBUG
             System.Diagnostics.Debug.Assert(m_NativeResource != null, "SBT buffer not initialized. Call Generate() before Update().");
 #endif
-            Dx12RaytracingPipeline dx12RaytracingPipeline = pipeline as Dx12RaytracingPipeline;
+            if (m_NativeResource == null || m_CachedPipeline == null)
+            {
+                throw new InvalidOperationException("SBT buffer not initialized. Call Generate() before Update().");
+            }
 
             void* pTableData;
             HRESULT hResult = m_NativeResource->Map(0, null, &pTableData);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
-            IntPtr tableDataHandle = new IntPtr(pTableData);
-            ID3D12StateObjectProperties* objectProperties = dx12RaytracingPipeline.NativeStateObjectProperties;
-
-            // update ray generation shader identifier
-            {
-                char[] rayGenChar = m_RayGenerationProgram.ShaderIdentifier.ToCharArray();
-                fixed (char* pRayGenChar = rayGenChar)
-                {
-                    void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pRayGenChar);
-                    Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-                }
-                tableDataHandle += (int)m_EntryStride;
-            }
-
-            // update miss shader identifiers
+            byte* tableData = (byte*)pTableData;
+            WriteRecord(m_CachedPipeline, tableData + 0 * m_EntryStride, ERHIRayShaderTableSection.RayGeneration, m_RayGenerationProgram);
             for (int i = 0; i < m_MissPrograms.length; ++i)
             {
-                ref Dx12FunctionTableEntry missEntry = ref m_MissPrograms[i];
-                char[] missChar = missEntry.ShaderIdentifier.ToCharArray();
-                fixed (char* pMissChar = missChar)
-                {
-                    void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pMissChar);
-                    Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-                }
-                tableDataHandle += (int)m_EntryStride;
+                WriteRecord(m_CachedPipeline, tableData + (1 + i) * m_EntryStride, ERHIRayShaderTableSection.Miss, m_MissPrograms[i]);
             }
 
-            // update hit group shader identifiers
             for (int i = 0; i < m_HitGroupPrograms.length; ++i)
             {
-                ref Dx12FunctionTableEntry hitGroupEntry = ref m_HitGroupPrograms[i];
-                char[] hitGroupChar = hitGroupEntry.ShaderIdentifier.ToCharArray();
-                fixed (char* pHitGroupChar = hitGroupChar)
-                {
-                    void* pShaderIdentifier = objectProperties->GetShaderIdentifier(pHitGroupChar);
-                    Unsafe.CopyBlock(tableDataHandle.ToPointer(), pShaderIdentifier, D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-                }
-                tableDataHandle += (int)m_EntryStride;
+                WriteRecord(m_CachedPipeline, tableData + (1 + m_MissPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Hit, m_HitGroupPrograms[i]);
+            }
+
+            for (int i = 0; i < m_CallablePrograms.length; ++i)
+            {
+                WriteRecord(m_CachedPipeline, tableData + (1 + m_MissPrograms.length + m_HitGroupPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Callable, m_CallablePrograms[i]);
             }
 
             m_NativeResource->Unmap(0, null);
@@ -332,7 +363,152 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            m_NativeResource->Release();
+            ReleaseNativeResource();
+        }
+
+        private Dx12FunctionTableEntry CreateEntry(in RHIRayRecordDescriptor record)
+        {
+            ValidateGroupIndex(record.GroupIndex, nameof(record));
+            byte[] localData = CloneLocalData(record.LocalData);
+            return new Dx12FunctionTableEntry(record.GroupIndex, localData);
+        }
+
+        private void ValidateAllRecords(Dx12RaytracingPipeline pipeline)
+        {
+            ValidateRecordAgainstSection(pipeline, ERHIRayShaderTableSection.RayGeneration, m_RayGenerationProgram);
+            for (int i = 0; i < m_MissPrograms.length; ++i)
+            {
+                ValidateRecordAgainstSection(pipeline, ERHIRayShaderTableSection.Miss, m_MissPrograms[i]);
+            }
+
+            for (int i = 0; i < m_HitGroupPrograms.length; ++i)
+            {
+                ValidateRecordAgainstSection(pipeline, ERHIRayShaderTableSection.Hit, m_HitGroupPrograms[i]);
+            }
+
+            for (int i = 0; i < m_CallablePrograms.length; ++i)
+            {
+                ValidateRecordAgainstSection(pipeline, ERHIRayShaderTableSection.Callable, m_CallablePrograms[i]);
+            }
+        }
+
+        private void ValidateRecordAgainstSection(Dx12RaytracingPipeline pipeline, ERHIRayShaderTableSection section, in Dx12FunctionTableEntry entry)
+        {
+            if ((uint)entry.LocalData.Length > m_LocalDataStrideInBytes)
+            {
+                throw new InvalidOperationException($"Local data ({entry.LocalData.Length} bytes) exceeds LocalDataStrideInBytes ({m_LocalDataStrideInBytes}).");
+            }
+
+            int sectionCount = GetSectionGroupCount(pipeline, section);
+            if ((uint)entry.GroupIndex >= (uint)sectionCount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(entry.GroupIndex), $"Group index {entry.GroupIndex} is out of range for {section} section (count={sectionCount}).");
+            }
+        }
+
+        private static int GetSectionGroupCount(Dx12RaytracingPipeline pipeline, ERHIRayShaderTableSection section)
+        {
+            return section switch
+            {
+                ERHIRayShaderTableSection.RayGeneration => 1,
+                ERHIRayShaderTableSection.Miss => pipeline.Descriptor.RayMissGroups.Length,
+                ERHIRayShaderTableSection.Hit => pipeline.Descriptor.RayHitGroups.Length,
+                ERHIRayShaderTableSection.Callable => pipeline.Descriptor.RayCallableGroups.Length,
+                _ => 0,
+            };
+        }
+
+        private void WriteSingleRecord(Dx12RaytracingPipeline pipeline, ERHIRayShaderTableSection section, in int index, in Dx12FunctionTableEntry entry)
+        {
+            void* pTableData;
+            HRESULT hResult = m_NativeResource->Map(0, null, &pTableData);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
+            int absoluteIndex = GetAbsoluteEntryIndex(section, index);
+            byte* destination = (byte*)pTableData + absoluteIndex * m_EntryStride;
+            WriteRecord(pipeline, destination, section, entry);
+            m_NativeResource->Unmap(0, null);
+        }
+
+        private int GetAbsoluteEntryIndex(ERHIRayShaderTableSection section, in int sectionIndex)
+        {
+            return section switch
+            {
+                ERHIRayShaderTableSection.RayGeneration => 0,
+                ERHIRayShaderTableSection.Miss => 1 + sectionIndex,
+                ERHIRayShaderTableSection.Hit => 1 + m_MissPrograms.length + sectionIndex,
+                ERHIRayShaderTableSection.Callable => 1 + m_MissPrograms.length + m_HitGroupPrograms.length + sectionIndex,
+                _ => throw new ArgumentOutOfRangeException(nameof(section)),
+            };
+        }
+
+        private void WriteRecord(Dx12RaytracingPipeline pipeline, byte* destination, ERHIRayShaderTableSection section, in Dx12FunctionTableEntry entry)
+        {
+            ValidateRecordAgainstSection(pipeline, section, entry);
+            Unsafe.InitBlock(destination, 0, m_EntryStride);
+
+            string exportName = pipeline.GetExportName(section, entry.GroupIndex);
+            IntPtr exportPtr = Marshal.StringToHGlobalUni(exportName);
+            try
+            {
+                void* shaderIdentifier = pipeline.NativeStateObjectProperties->GetShaderIdentifier((char*)exportPtr.ToPointer());
+                if (shaderIdentifier == null)
+                {
+                    throw new InvalidOperationException($"Failed to resolve shader identifier for export '{exportName}'.");
+                }
+
+                Unsafe.CopyBlock(destination, shaderIdentifier, D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(exportPtr);
+            }
+
+            if (entry.LocalData.Length > 0)
+            {
+                fixed (byte* localDataPtr = entry.LocalData)
+                {
+                    Unsafe.CopyBlock(destination + D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, localDataPtr, (uint)entry.LocalData.Length);
+                }
+            }
+        }
+
+        private static void ValidateGroupIndex(in int groupIndex, string parameterName)
+        {
+            if (groupIndex < 0)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, "GroupIndex must be non-negative.");
+            }
+        }
+
+        private static void ValidateEntryIndex(in int index, in int count, string parameterName)
+        {
+            if ((uint)index >= (uint)count)
+            {
+                throw new ArgumentOutOfRangeException(parameterName);
+            }
+        }
+
+        private static byte[] CloneLocalData(in ReadOnlyMemory<byte> localData)
+        {
+            if (localData.IsEmpty)
+            {
+                return Array.Empty<byte>();
+            }
+
+            byte[] cloned = new byte[localData.Length];
+            localData.Span.CopyTo(cloned);
+            return cloned;
+        }
+
+        private void ReleaseNativeResource()
+        {
+            if (m_NativeResource != null)
+            {
+                m_NativeResource->Release();
+                m_NativeResource = null;
+            }
         }
     }
 #pragma warning restore CS8600, CS8602, CA1416

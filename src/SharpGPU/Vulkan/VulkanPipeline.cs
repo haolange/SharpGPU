@@ -367,11 +367,27 @@ namespace Infinity.Graphics
         public VkPipeline NativePipeline => m_NativePipeline;
         public VulkanPipelineLayout VulkanPipelineLayout => m_VulkanPipelineLayout;
         public uint ShaderGroupCount => m_ShaderGroupCount;
+        public int RayGenerationGroupBase => m_RayGenerationGroupBase;
+        public int RayGenerationGroupCount => m_RayGenerationGroupCount;
+        public int MissGroupBase => m_MissGroupBase;
+        public int MissGroupCount => m_MissGroupCount;
+        public int HitGroupBase => m_HitGroupBase;
+        public int HitGroupCount => m_HitGroupCount;
+        public int CallableGroupBase => m_CallableGroupBase;
+        public int CallableGroupCount => m_CallableGroupCount;
 
         private VulkanDevice m_VulkanDevice;
         private VkPipeline m_NativePipeline;
         private VulkanPipelineLayout m_VulkanPipelineLayout;
         private uint m_ShaderGroupCount;
+        private int m_RayGenerationGroupBase;
+        private int m_RayGenerationGroupCount;
+        private int m_MissGroupBase;
+        private int m_MissGroupCount;
+        private int m_HitGroupBase;
+        private int m_HitGroupCount;
+        private int m_CallableGroupBase;
+        private int m_CallableGroupCount;
 
         public VulkanRaytracingPipeline(VulkanDevice device, in RHIRaytracingPipelineDescriptor descriptor)
         {
@@ -384,11 +400,17 @@ namespace Infinity.Graphics
 
             // Collect shader stages and groups
             bool hasRayGen = !string.IsNullOrEmpty(descriptor.RayGeneration.General.EntryName);
+            if (!hasRayGen)
+            {
+                throw new InvalidOperationException("Vulkan ray tracing pipeline requires a ray generation entry.");
+            }
+
             int missCount = descriptor.RayMissGroups.Length;
             int hitGroupCount = descriptor.RayHitGroups.Length;
+            int callableCount = descriptor.RayCallableGroups.Length;
 
-            int maxStages = (hasRayGen ? 1 : 0) + missCount + hitGroupCount * 3;
-            int maxGroups = (hasRayGen ? 1 : 0) + missCount + hitGroupCount;
+            int maxStages = 1 + missCount + hitGroupCount * 3 + callableCount;
+            int maxGroups = 1 + missCount + hitGroupCount + callableCount;
 
             VkPipelineShaderStageCreateInfo* stages = stackalloc VkPipelineShaderStageCreateInfo[Math.Max(maxStages, 1)];
             VkRayTracingShaderGroupCreateInfoKHR* groups = stackalloc VkRayTracingShaderGroupCreateInfoKHR[Math.Max(maxGroups, 1)];
@@ -398,27 +420,24 @@ namespace Infinity.Graphics
             uint unusedShader = unchecked((uint)(-1)); // VK_SHADER_UNUSED_KHR
 
             // Ray generation
-            if (hasRayGen)
+            stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
             {
-                stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
-                {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                    stage = VkShaderStageFlags.VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-                    module = functionLibrary.NativeShaderModule,
-                    pName = descriptor.RayGeneration.General.EntryName.ToPointer(),
-                };
-                groups[groupIdx] = new VkRayTracingShaderGroupCreateInfoKHR()
-                {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-                    type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
-                    generalShader = (uint)stageIdx,
-                    closestHitShader = unusedShader,
-                    anyHitShader = unusedShader,
-                    intersectionShader = unusedShader,
-                };
-                stageIdx++;
-                groupIdx++;
-            }
+                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                stage = VkShaderStageFlags.VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+                module = functionLibrary.NativeShaderModule,
+                pName = descriptor.RayGeneration.General.EntryName.ToPointer(),
+            };
+            groups[groupIdx] = new VkRayTracingShaderGroupCreateInfoKHR()
+            {
+                sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+                type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+                generalShader = (uint)stageIdx,
+                closestHitShader = unusedShader,
+                anyHitShader = unusedShader,
+                intersectionShader = unusedShader,
+            };
+            stageIdx++;
+            groupIdx++;
 
             // Miss shaders
             for (int i = 0; i < missCount; ++i)
@@ -508,7 +527,39 @@ namespace Infinity.Graphics
                 groupIdx++;
             }
 
+            // Callable shaders
+            for (int i = 0; i < callableCount; ++i)
+            {
+                ref RHIRayGeneralGroupDescriptor callableGroup = ref descriptor.RayCallableGroups.Span[i];
+                stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
+                {
+                    sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    stage = VkShaderStageFlags.VK_SHADER_STAGE_CALLABLE_BIT_KHR,
+                    module = functionLibrary.NativeShaderModule,
+                    pName = callableGroup.General.EntryName.ToPointer(),
+                };
+                groups[groupIdx] = new VkRayTracingShaderGroupCreateInfoKHR()
+                {
+                    sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+                    type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+                    generalShader = (uint)stageIdx,
+                    closestHitShader = unusedShader,
+                    anyHitShader = unusedShader,
+                    intersectionShader = unusedShader,
+                };
+                stageIdx++;
+                groupIdx++;
+            }
+
             m_ShaderGroupCount = (uint)groupIdx;
+            m_RayGenerationGroupBase = 0;
+            m_RayGenerationGroupCount = 1;
+            m_MissGroupBase = m_RayGenerationGroupBase + m_RayGenerationGroupCount;
+            m_MissGroupCount = missCount;
+            m_HitGroupBase = m_MissGroupBase + m_MissGroupCount;
+            m_HitGroupCount = hitGroupCount;
+            m_CallableGroupBase = m_HitGroupBase + m_HitGroupCount;
+            m_CallableGroupCount = callableCount;
 
             VkRayTracingPipelineCreateInfoKHR pipelineInfo = new VkRayTracingPipelineCreateInfoKHR()
             {

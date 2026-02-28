@@ -292,305 +292,339 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12RaytracingPipeline : RHIRaytracingPipeline
     {
-        public uint MaxLocalRootParameters
-        {
-            get
-            {
-                return m_MaxLocalRootParameters;
-            }
-        }
-        public ID3D12StateObject* NativePipeline
-        {
-            get
-            {
-                return m_NativePipeline;
-            }
-        }
-        public ID3D12StateObjectProperties* NativeStateObjectProperties
-        {
-            get
-            {
-                return m_NativeStateObjectProperties;
-            }
-        }
+        public ID3D12StateObject* NativePipeline => m_NativePipeline;
+        public ID3D12StateObjectProperties* NativeStateObjectProperties => m_NativeStateObjectProperties;
 
-        private uint m_MaxLocalRootParameters;
+        private ID3D12RootSignature* m_LocalConstantsRootSignature;
         private ID3D12StateObject* m_NativePipeline;
         private ID3D12StateObjectProperties* m_NativeStateObjectProperties;
+        private string m_RayGenerationExport;
+        private string[] m_MissExports;
+        private string[] m_HitGroupExports;
+        private string[] m_CallableExports;
 
         public Dx12RaytracingPipeline(Dx12Device device, in RHIRaytracingPipelineDescriptor descriptor)
         {
             m_Descriptor = descriptor;
+            m_LocalConstantsRootSignature = null;
+            m_NativePipeline = null;
+            m_NativeStateObjectProperties = null;
+            m_RayGenerationExport = descriptor.RayGeneration.General.EntryName;
+            m_MissExports = Array.Empty<string>();
+            m_HitGroupExports = Array.Empty<string>();
+            m_CallableExports = Array.Empty<string>();
 
-            m_MaxLocalRootParameters = 0;
-            Span<RHIRayHitGroupDescriptor> rayHitGroupSpan = descriptor.RayHitGroups.Span;
-            Span<RHIRayGeneralGroupDescriptor> rayMissGroupSpan = descriptor.RayMissGroups.Span;
-            D3D12_STATE_SUBOBJECT* stateSubObjects = stackalloc D3D12_STATE_SUBOBJECT[descriptor.RayMissGroups.Length * 2 + descriptor.RayHitGroups.Length * 3 + 6];
-
-            #region ExportDescriptors
-            D3D12_EXPORT_DESC* exports = stackalloc D3D12_EXPORT_DESC[descriptor.RayHitGroups.Length * 3 + descriptor.RayMissGroups.Length];
-
-            int exportCount = 0;
-            ref D3D12_EXPORT_DESC rayGenerationExport = ref exports[exportCount];
+            if (string.IsNullOrWhiteSpace(m_RayGenerationExport))
             {
-                rayGenerationExport.Name = (char*)Marshal.StringToHGlobalUni(descriptor.RayGeneration.General.EntryName).ToPointer();
-                rayGenerationExport.Flags = D3D12_EXPORT_FLAGS.D3D12_EXPORT_FLAG_NONE;
-                rayGenerationExport.ExportToRename = null;
+                throw new InvalidOperationException("Ray generation entry name is empty.");
             }
 
-            for (int i = 0; i < descriptor.RayMissGroups.Length; ++i) 
-            {
-                ref RHIRayGeneralGroupDescriptor rayMissGroupDescriptor = ref rayMissGroupSpan[i];
+            Span<RHIRayGeneralGroupDescriptor> missGroups = descriptor.RayMissGroups.Span;
+            Span<RHIRayHitGroupDescriptor> hitGroups = descriptor.RayHitGroups.Span;
+            Span<RHIRayGeneralGroupDescriptor> callableGroups = descriptor.RayCallableGroups.Span;
 
-                ++exportCount;
-                ref D3D12_EXPORT_DESC rayMissExport = ref exports[exportCount];
-                rayMissExport.Name = (char*)Marshal.StringToHGlobalUni(rayMissGroupDescriptor.General.EntryName).ToPointer();
-                rayMissExport.Flags = D3D12_EXPORT_FLAGS.D3D12_EXPORT_FLAG_NONE;
-                rayMissExport.ExportToRename = null;
+            m_MissExports = new string[missGroups.Length];
+            for (int i = 0; i < missGroups.Length; ++i)
+            {
+                m_MissExports[i] = missGroups[i].General.EntryName;
             }
 
-            for (int i = 0; i < descriptor.RayHitGroups.Length; ++i)
+            m_HitGroupExports = new string[hitGroups.Length];
+            for (int i = 0; i < hitGroups.Length; ++i)
             {
-                ref RHIRayHitGroupDescriptor rayHitGroupDescriptor = ref rayHitGroupSpan[i];
-
-                if(rayHitGroupDescriptor.AnyHit.HasValue)
-                {
-                    ++exportCount;
-                    ref D3D12_EXPORT_DESC anyHitExport = ref exports[exportCount];
-                    anyHitExport.Name = (char*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.AnyHit?.EntryName).ToPointer();
-                    anyHitExport.Flags = D3D12_EXPORT_FLAGS.D3D12_EXPORT_FLAG_NONE;
-                    anyHitExport.ExportToRename = null;
-                }
-
-                if (rayHitGroupDescriptor.Intersect.HasValue)
-                {
-                    ++exportCount;
-                    ref D3D12_EXPORT_DESC intersectExport = ref exports[exportCount];
-                    intersectExport.Name = (char*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.Intersect?.EntryName).ToPointer();
-                    intersectExport.Flags = D3D12_EXPORT_FLAGS.D3D12_EXPORT_FLAG_NONE;
-                    intersectExport.ExportToRename = null;
-                }
-
-                if (rayHitGroupDescriptor.ClosestHit.HasValue)
-                {
-                    ++exportCount;
-                    ref D3D12_EXPORT_DESC closestHitExport = ref exports[exportCount];
-                    closestHitExport.Name = (char*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.ClosestHit?.EntryName).ToPointer();
-                    closestHitExport.Flags = D3D12_EXPORT_FLAGS.D3D12_EXPORT_FLAG_NONE;
-                    closestHitExport.ExportToRename = null;
-                }
+                m_HitGroupExports[i] = hitGroups[i].Name;
             }
-            #endregion ExportDescriptors
 
-            #region DxilLibrary
-            int stateSubObjectCount = 0;
-            D3D12_DXIL_LIBRARY_DESC dxilLibraryDescriptor;
+            m_CallableExports = new string[callableGroups.Length];
+            for (int i = 0; i < callableGroups.Length; ++i)
             {
-                dxilLibraryDescriptor.pExports = exports;
-                dxilLibraryDescriptor.NumExports = (uint)exportCount;
-                dxilLibraryDescriptor.DXILLibrary = new D3D12_SHADER_BYTECODE(descriptor.FunctionLibrary.Descriptor.ByteCode.ToPointer(), descriptor.FunctionLibrary.Descriptor.ByteSize);
+                m_CallableExports[i] = callableGroups[i].General.EntryName;
             }
-            ref D3D12_STATE_SUBOBJECT dxilLibrary = ref stateSubObjects[stateSubObjectCount];
-            dxilLibrary.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY;
-            dxilLibrary.pDesc = &dxilLibraryDescriptor;
-            #endregion DxilLibrary
 
-            #region RayGeneration
-            Dx12PipelineLayout rayGenPipelineLayout = descriptor.RayGeneration.PipelineLayout as Dx12PipelineLayout;
-            if (rayGenPipelineLayout != null)
+            int maxExportDescriptors = 1 + missGroups.Length + callableGroups.Length + hitGroups.Length * 3;
+            int maxStateSubObjects = 1 + hitGroups.Length + 3 + (descriptor.LocalDataStrideInBytes > 0 ? 2 : 0);
+
+            D3D12_EXPORT_DESC* exportDescriptors = stackalloc D3D12_EXPORT_DESC[Math.Max(maxExportDescriptors, 1)];
+            D3D12_HIT_GROUP_DESC* hitGroupDescriptors = stackalloc D3D12_HIT_GROUP_DESC[Math.Max(hitGroups.Length, 1)];
+            D3D12_STATE_SUBOBJECT* stateSubObjects = stackalloc D3D12_STATE_SUBOBJECT[Math.Max(maxStateSubObjects, 1)];
+
+            List<IntPtr> allocatedStrings = new List<IntPtr>(maxExportDescriptors + hitGroups.Length * 4 + m_MissExports.Length + m_HitGroupExports.Length + m_CallableExports.Length);
+            IntPtr associationExportBuffer = IntPtr.Zero;
+
+            try
             {
-                ++stateSubObjectCount;
-                D3D12_LOCAL_ROOT_SIGNATURE rayGenRootSiganture;
+                int exportCount = 0;
+                AddLibraryExport(exportDescriptors, ref exportCount, m_RayGenerationExport, allocatedStrings);
+                for (int i = 0; i < missGroups.Length; ++i)
                 {
-                    rayGenRootSiganture.pLocalRootSignature = rayGenPipelineLayout.NativeRootSignature;
+                    AddLibraryExport(exportDescriptors, ref exportCount, missGroups[i].General.EntryName, allocatedStrings);
                 }
-                ref D3D12_STATE_SUBOBJECT rayGenSignatureInfo = ref stateSubObjects[stateSubObjectCount];
-                rayGenSignatureInfo.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE;
-                rayGenSignatureInfo.pDesc = &rayGenRootSiganture;
 
-                ++stateSubObjectCount;
-                D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION rayGenGroupDescriptor;
+                for (int i = 0; i < callableGroups.Length; ++i)
                 {
-                    rayGenGroupDescriptor.NumExports = 1;
-                    rayGenGroupDescriptor.pExports = (char**)Marshal.StringToHGlobalUni(descriptor.RayGeneration.General.EntryName).ToPointer();
-                    rayGenGroupDescriptor.pSubobjectToAssociate = &stateSubObjects[stateSubObjectCount - 1];
+                    AddLibraryExport(exportDescriptors, ref exportCount, callableGroups[i].General.EntryName, allocatedStrings);
                 }
-                ref D3D12_STATE_SUBOBJECT rayGenGroupInfo = ref stateSubObjects[stateSubObjectCount];
-                rayGenGroupInfo.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
-                rayGenGroupInfo.pDesc = &rayGenGroupDescriptor;
 
-                m_MaxLocalRootParameters = math.max(m_MaxLocalRootParameters, (uint)rayGenPipelineLayout.ParameterCount); 
-            }
-            else
-            {
-                ++stateSubObjectCount;
-                D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION rayGenGroupDescriptor;
+                for (int i = 0; i < hitGroups.Length; ++i)
                 {
-                    rayGenGroupDescriptor.NumExports = 1;
-                    rayGenGroupDescriptor.pExports = (char**)Marshal.StringToHGlobalUni(descriptor.RayGeneration.General.EntryName).ToPointer();
-                    rayGenGroupDescriptor.pSubobjectToAssociate = null;
-                }
-                ref D3D12_STATE_SUBOBJECT rayGenGroupInfo = ref stateSubObjects[stateSubObjectCount];
-                rayGenGroupInfo.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
-                rayGenGroupInfo.pDesc = &rayGenGroupDescriptor;
-            }
-            #endregion RayGeneration
-
-            #region MissGroup
-            for (int i = 0; i < descriptor.RayMissGroups.Length; ++i)
-            {
-                ref RHIRayGeneralGroupDescriptor rayMissGroupDescriptor = ref rayMissGroupSpan[i];
-                Dx12PipelineLayout rayMissPipelineLayout = rayMissGroupDescriptor.PipelineLayout as Dx12PipelineLayout;
-
-                if (rayMissPipelineLayout != null)
-                {
-                    ++stateSubObjectCount;
-                    D3D12_LOCAL_ROOT_SIGNATURE rayMissRootSiganture;
+                    ref RHIRayHitGroupDescriptor hitGroup = ref hitGroups[i];
+                    if (hitGroup.AnyHit.HasValue)
                     {
-                        rayMissRootSiganture.pLocalRootSignature = rayMissPipelineLayout.NativeRootSignature;
+                        AddLibraryExport(exportDescriptors, ref exportCount, hitGroup.AnyHit.Value.EntryName, allocatedStrings);
                     }
-                    ref D3D12_STATE_SUBOBJECT rayMissSignatureInfo = ref stateSubObjects[stateSubObjectCount];
-                    rayMissSignatureInfo.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE;
-                    rayMissSignatureInfo.pDesc = &rayMissRootSiganture;
 
-                    ++stateSubObjectCount;
-                    D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION missGroupDescriptor;
+                    if (hitGroup.Intersect.HasValue)
                     {
-                        missGroupDescriptor.NumExports = 1;
-                        missGroupDescriptor.pExports = (char**)Marshal.StringToHGlobalUni(rayMissGroupDescriptor.General.EntryName).ToPointer();
-                        missGroupDescriptor.pSubobjectToAssociate = &stateSubObjects[stateSubObjectCount - 1];
+                        AddLibraryExport(exportDescriptors, ref exportCount, hitGroup.Intersect.Value.EntryName, allocatedStrings);
                     }
-                    ref D3D12_STATE_SUBOBJECT missGroupInfo = ref stateSubObjects[stateSubObjectCount];
-                    missGroupInfo.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
-                    missGroupInfo.pDesc = &missGroupDescriptor;
 
-                    m_MaxLocalRootParameters = math.max(m_MaxLocalRootParameters, (uint)rayMissPipelineLayout.ParameterCount);
+                    if (hitGroup.ClosestHit.HasValue)
+                    {
+                        AddLibraryExport(exportDescriptors, ref exportCount, hitGroup.ClosestHit.Value.EntryName, allocatedStrings);
+                    }
                 }
-                else
+
+                int subObjectCount = 0;
+
+                D3D12_DXIL_LIBRARY_DESC dxilLibraryDesc = new D3D12_DXIL_LIBRARY_DESC
                 {
-                    ++stateSubObjectCount;
-                    D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION missGroupDescriptor;
-                    {
-                        missGroupDescriptor.NumExports = 1;
-                        missGroupDescriptor.pExports = (char**)Marshal.StringToHGlobalUni(rayMissGroupDescriptor.General.EntryName).ToPointer();
-                        missGroupDescriptor.pSubobjectToAssociate = null;
-                    }
-                    ref D3D12_STATE_SUBOBJECT missGroupInfo = ref stateSubObjects[stateSubObjectCount];
-                    missGroupInfo.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
-                    missGroupInfo.pDesc = &missGroupDescriptor;
-                }
-            }
-            #endregion MissGroup
+                    DXILLibrary = new D3D12_SHADER_BYTECODE(descriptor.FunctionLibrary.Descriptor.ByteCode.ToPointer(), descriptor.FunctionLibrary.Descriptor.ByteSize),
+                    NumExports = (uint)exportCount,
+                    pExports = exportDescriptors,
+                };
+                stateSubObjects[subObjectCount].Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY;
+                stateSubObjects[subObjectCount].pDesc = &dxilLibraryDesc;
+                subObjectCount++;
 
-            #region HitGroup
-            for (int i = 0; i < descriptor.RayHitGroups.Length; ++i)
-            {
-                ref RHIRayHitGroupDescriptor rayHitGroupDescriptor = ref rayHitGroupSpan[i];
-                Dx12PipelineLayout rayHitPipelineLayout = rayHitGroupDescriptor.PipelineLayout as Dx12PipelineLayout;
-                char* exportName = (char*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.Name).ToPointer();
-
-                // HitGroup 
-                ++stateSubObjectCount;
-                D3D12_HIT_GROUP_DESC hitGroupDescriptor;
+                // Hit-group declarations
+                for (int i = 0; i < hitGroups.Length; ++i)
                 {
-                    hitGroupDescriptor.Type = Dx12Utility.ConverteToDx12HitGroupType(rayHitGroupDescriptor.Type);
-                    hitGroupDescriptor.HitGroupExport = exportName;
-                    hitGroupDescriptor.AnyHitShaderImport = rayHitGroupDescriptor.AnyHit.HasValue ? (char*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.AnyHit?.EntryName).ToPointer() : null;
-                    hitGroupDescriptor.ClosestHitShaderImport = rayHitGroupDescriptor.ClosestHit.HasValue ? (char*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.ClosestHit?.EntryName).ToPointer() : null;
-                    hitGroupDescriptor.IntersectionShaderImport = rayHitGroupDescriptor.Intersect.HasValue ? (char*)Marshal.StringToHGlobalUni(rayHitGroupDescriptor.Intersect?.EntryName).ToPointer() : null;
-                }
-                ref D3D12_STATE_SUBOBJECT hitGroupInfo = ref stateSubObjects[stateSubObjectCount];
-                hitGroupInfo.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP;
-                hitGroupInfo.pDesc = &hitGroupDescriptor;
+                    ref RHIRayHitGroupDescriptor hitGroup = ref hitGroups[i];
+                    IntPtr hitGroupName = Marshal.StringToHGlobalUni(hitGroup.Name);
+                    allocatedStrings.Add(hitGroupName);
 
-                // Local RootSignature
-                if (rayHitPipelineLayout != null)
+                    hitGroupDescriptors[i] = new D3D12_HIT_GROUP_DESC
+                    {
+                        Type = Dx12Utility.ConverteToDx12HitGroupType(hitGroup.Type),
+                        HitGroupExport = (char*)hitGroupName.ToPointer(),
+                        AnyHitShaderImport = hitGroup.AnyHit.HasValue ? AllocateOptionalUnicode(hitGroup.AnyHit.Value.EntryName, allocatedStrings) : null,
+                        ClosestHitShaderImport = hitGroup.ClosestHit.HasValue ? AllocateOptionalUnicode(hitGroup.ClosestHit.Value.EntryName, allocatedStrings) : null,
+                        IntersectionShaderImport = hitGroup.Intersect.HasValue ? AllocateOptionalUnicode(hitGroup.Intersect.Value.EntryName, allocatedStrings) : null,
+                    };
+
+                    stateSubObjects[subObjectCount].Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP;
+                    stateSubObjects[subObjectCount].pDesc = &hitGroupDescriptors[i];
+                    subObjectCount++;
+                }
+
+                D3D12_LOCAL_ROOT_SIGNATURE localRootSignatureDesc = default;
+                D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION localRootAssociationDesc = default;
+                nint* associationExportHandles = null;
+                if (descriptor.LocalDataStrideInBytes > 0)
                 {
-                    ++stateSubObjectCount;
-                    D3D12_LOCAL_ROOT_SIGNATURE rayHitRootSiganture;
-                    {
-                        rayHitRootSiganture.pLocalRootSignature = rayHitPipelineLayout.NativeRootSignature;
-                    }
-                    ref D3D12_STATE_SUBOBJECT rayHitSignatureInfo = ref stateSubObjects[stateSubObjectCount];
-                    rayHitSignatureInfo.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE;
-                    rayHitSignatureInfo.pDesc = &rayHitRootSiganture;
+                    m_LocalConstantsRootSignature = BuildLocalConstantsRootSignature(device, descriptor.LocalDataStrideInBytes);
+                    localRootSignatureDesc.pLocalRootSignature = m_LocalConstantsRootSignature;
+                    int localRootSubObjectIndex = subObjectCount;
+                    stateSubObjects[subObjectCount].Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE;
+                    stateSubObjects[subObjectCount].pDesc = &localRootSignatureDesc;
+                    subObjectCount++;
 
-                    ++stateSubObjectCount;
-                    D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION hitGroupRootDescriptor;
+                    int associationCount = 1 + missGroups.Length + hitGroups.Length + callableGroups.Length;
+                    int associationCapacity = associationCount > 0 ? associationCount : 1;
+                    associationExportBuffer = Marshal.AllocHGlobal(IntPtr.Size * associationCapacity);
+                    associationExportHandles = (nint*)associationExportBuffer.ToPointer();
+                    int associationIndex = 0;
+                    associationExportHandles[associationIndex++] = (IntPtr)AllocateRequiredUnicode(m_RayGenerationExport, allocatedStrings);
+                    for (int i = 0; i < missGroups.Length; ++i)
                     {
-                        hitGroupRootDescriptor.NumExports = 1;
-                        hitGroupRootDescriptor.pExports = (char**)exportName;
-                        hitGroupRootDescriptor.pSubobjectToAssociate = &stateSubObjects[stateSubObjectCount - 1];
+                        associationExportHandles[associationIndex++] = (IntPtr)AllocateRequiredUnicode(missGroups[i].General.EntryName, allocatedStrings);
                     }
-                    ref D3D12_STATE_SUBOBJECT missGroupInfo = ref stateSubObjects[stateSubObjectCount];
-                    missGroupInfo.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
-                    missGroupInfo.pDesc = &hitGroupRootDescriptor;
 
-                    m_MaxLocalRootParameters = math.max(m_MaxLocalRootParameters, (uint)rayHitPipelineLayout.ParameterCount);
+                    for (int i = 0; i < hitGroups.Length; ++i)
+                    {
+                        associationExportHandles[associationIndex++] = (IntPtr)AllocateRequiredUnicode(hitGroups[i].Name, allocatedStrings);
+                    }
+
+                    for (int i = 0; i < callableGroups.Length; ++i)
+                    {
+                        associationExportHandles[associationIndex++] = (IntPtr)AllocateRequiredUnicode(callableGroups[i].General.EntryName, allocatedStrings);
+                    }
+
+                    localRootAssociationDesc = new D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION
+                    {
+                        NumExports = (uint)associationIndex,
+                        pExports = (char**)associationExportHandles,
+                        pSubobjectToAssociate = &stateSubObjects[localRootSubObjectIndex],
+                    };
+
+                    stateSubObjects[subObjectCount].Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
+                    stateSubObjects[subObjectCount].pDesc = &localRootAssociationDesc;
+                    subObjectCount++;
                 }
-            }
-            #endregion HitGroup
 
-            #region ShaderConfig
-            ++stateSubObjectCount;
-            D3D12_RAYTRACING_SHADER_CONFIG shaderConfigDescriptor;
-            {
-                shaderConfigDescriptor.MaxPayloadSizeInBytes = descriptor.MaxPayloadSize;
-                shaderConfigDescriptor.MaxAttributeSizeInBytes = descriptor.MaxAttributeSize;
-            }
-            ref D3D12_STATE_SUBOBJECT shaderConfig = ref stateSubObjects[stateSubObjectCount];
-            shaderConfig.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG;
-            shaderConfig.pDesc = &shaderConfigDescriptor;
-            #endregion ShaderConfig
+                D3D12_RAYTRACING_SHADER_CONFIG shaderConfigDesc = new D3D12_RAYTRACING_SHADER_CONFIG
+                {
+                    MaxPayloadSizeInBytes = descriptor.MaxPayloadSize,
+                    MaxAttributeSizeInBytes = descriptor.MaxAttributeSize,
+                };
+                stateSubObjects[subObjectCount].Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG;
+                stateSubObjects[subObjectCount].pDesc = &shaderConfigDesc;
+                subObjectCount++;
 
-            #region PipelineConfig
-            ++stateSubObjectCount;
-            D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfigDescriptor;
-            {
-                pipelineConfigDescriptor.MaxTraceRecursionDepth = descriptor.MaxRecursionDepth;
-            }
-            ref D3D12_STATE_SUBOBJECT pipelineConfig = ref stateSubObjects[stateSubObjectCount];
-            pipelineConfig.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG;
-            pipelineConfig.pDesc = &pipelineConfigDescriptor;
-            #endregion PipelineConfig
+                D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfigDesc = new D3D12_RAYTRACING_PIPELINE_CONFIG
+                {
+                    MaxTraceRecursionDepth = descriptor.MaxRecursionDepth,
+                };
+                stateSubObjects[subObjectCount].Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG;
+                stateSubObjects[subObjectCount].pDesc = &pipelineConfigDesc;
+                subObjectCount++;
 
-            #region GlobalRootSignature
-            ++stateSubObjectCount;
-            D3D12_GLOBAL_ROOT_SIGNATURE globalRootSignatureDescriptor;
-            {
-                globalRootSignatureDescriptor.pGlobalRootSignature = ((Dx12PipelineLayout)descriptor.PipelineLayout).NativeRootSignature;
-            }
-            ref D3D12_STATE_SUBOBJECT globalRootSignature = ref stateSubObjects[stateSubObjectCount];
-            globalRootSignature.Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE;
-            globalRootSignature.pDesc = &globalRootSignatureDescriptor;
-            #endregion GlobalRootSignature
+                D3D12_GLOBAL_ROOT_SIGNATURE globalRootSignatureDesc = new D3D12_GLOBAL_ROOT_SIGNATURE
+                {
+                    pGlobalRootSignature = ((Dx12PipelineLayout)descriptor.PipelineLayout).NativeRootSignature,
+                };
+                stateSubObjects[subObjectCount].Type = D3D12_STATE_SUBOBJECT_TYPE.D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE;
+                stateSubObjects[subObjectCount].pDesc = &globalRootSignatureDesc;
+                subObjectCount++;
 
-            #region Pipeline
-            D3D12_STATE_OBJECT_DESC stateObjectDescriptor;
-            {
-                stateObjectDescriptor.pSubobjects = stateSubObjects;
-                stateObjectDescriptor.NumSubobjects = (uint)stateSubObjectCount;
-                stateObjectDescriptor.Type = D3D12_STATE_OBJECT_TYPE.D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE;
-            }
-            ID3D12StateObject* pipeline;
-            HRESULT hResult = device.NativeDevice->CreateStateObject(&stateObjectDescriptor, __uuidof<ID3D12StateObject>(), (void**)&pipeline);
+                D3D12_STATE_OBJECT_DESC stateObjectDesc = new D3D12_STATE_OBJECT_DESC
+                {
+                    Type = D3D12_STATE_OBJECT_TYPE.D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
+                    NumSubobjects = (uint)subObjectCount,
+                    pSubobjects = stateSubObjects,
+                };
+
+                ID3D12StateObject* nativePipeline = null;
+                HRESULT hResult = device.NativeDevice->CreateStateObject(&stateObjectDesc, __uuidof<ID3D12StateObject>(), (void**)&nativePipeline);
 #if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
+                Dx12Utility.CHECK_HR(hResult);
 #endif
-            m_NativePipeline = pipeline;
+                m_NativePipeline = nativePipeline;
 
-            ID3D12StateObjectProperties* nativeStateObjectProperties;
-            hResult = pipeline->QueryInterface(__uuidof<ID3D12StateObjectProperties>(), (void**)&nativeStateObjectProperties);
+                ID3D12StateObjectProperties* stateObjectProperties = null;
+                hResult = m_NativePipeline->QueryInterface(__uuidof<ID3D12StateObjectProperties>(), (void**)&stateObjectProperties);
 #if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
+                Dx12Utility.CHECK_HR(hResult);
 #endif
-            m_NativeStateObjectProperties = nativeStateObjectProperties;
-            #endregion Pipeline
+                m_NativeStateObjectProperties = stateObjectProperties;
+            }
+            finally
+            {
+                if (associationExportBuffer != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(associationExportBuffer);
+                }
+
+                for (int i = 0; i < allocatedStrings.Count; ++i)
+                {
+                    Marshal.FreeHGlobal(allocatedStrings[i]);
+                }
+            }
+        }
+
+        internal string GetExportName(in ERHIRayShaderTableSection section, in int groupIndex)
+        {
+            return section switch
+            {
+                ERHIRayShaderTableSection.RayGeneration => groupIndex == 0 ? m_RayGenerationExport : throw new ArgumentOutOfRangeException(nameof(groupIndex)),
+                ERHIRayShaderTableSection.Miss => m_MissExports[groupIndex],
+                ERHIRayShaderTableSection.Hit => m_HitGroupExports[groupIndex],
+                ERHIRayShaderTableSection.Callable => m_CallableExports[groupIndex],
+                _ => throw new ArgumentOutOfRangeException(nameof(section)),
+            };
+        }
+
+        private static void AddLibraryExport(D3D12_EXPORT_DESC* exportDescriptors, ref int exportCount, string entryName, List<IntPtr> allocatedStrings)
+        {
+            if (string.IsNullOrWhiteSpace(entryName))
+            {
+                throw new InvalidOperationException("Ray-tracing library export entry name is empty.");
+            }
+
+            IntPtr namePtr = Marshal.StringToHGlobalUni(entryName);
+            allocatedStrings.Add(namePtr);
+            exportDescriptors[exportCount] = new D3D12_EXPORT_DESC
+            {
+                Name = (char*)namePtr.ToPointer(),
+                ExportToRename = null,
+                Flags = D3D12_EXPORT_FLAGS.D3D12_EXPORT_FLAG_NONE,
+            };
+            exportCount++;
+        }
+
+        private static char* AllocateRequiredUnicode(string text, List<IntPtr> allocatedStrings)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                throw new InvalidOperationException("Unexpected empty Unicode export name.");
+            }
+
+            IntPtr ptr = Marshal.StringToHGlobalUni(text);
+            allocatedStrings.Add(ptr);
+            return (char*)ptr.ToPointer();
+        }
+
+        private static char* AllocateOptionalUnicode(string? text, List<IntPtr> allocatedStrings)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            IntPtr ptr = Marshal.StringToHGlobalUni(text);
+            allocatedStrings.Add(ptr);
+            return (char*)ptr.ToPointer();
+        }
+
+        private static ID3D12RootSignature* BuildLocalConstantsRootSignature(Dx12Device device, in uint localDataStrideInBytes)
+        {
+            uint dwordCount = Math.Max(1u, (localDataStrideInBytes + 3u) / 4u);
+            D3D12_ROOT_PARAMETER1 localRootParameter = default;
+            localRootParameter.InitAsConstants(dwordCount, 0, 0, D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL);
+
+            D3D12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc = default;
+            rootSigDesc.Init_1_1(
+                1,
+                &localRootParameter,
+                0,
+                null,
+                D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
+
+            ID3DBlob* signatureBlob = null;
+            Dx12Utility.CHECK_HR(DirectX.D3DX12SerializeVersionedRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1_1, &signatureBlob, null));
+
+            ID3D12RootSignature* localRootSignature = null;
+            HRESULT hResult = device.NativeDevice->CreateRootSignature(
+                0,
+                signatureBlob->GetBufferPointer(),
+                signatureBlob->GetBufferSize(),
+                __uuidof<ID3D12RootSignature>(),
+                (void**)&localRootSignature);
+            signatureBlob->Release();
+            Dx12Utility.CHECK_HR(hResult);
+
+            return localRootSignature;
         }
 
         protected override void Release()
         {
-            m_NativePipeline->Release();
+            if (m_NativeStateObjectProperties != null)
+            {
+                m_NativeStateObjectProperties->Release();
+                m_NativeStateObjectProperties = null;
+            }
+
+            if (m_NativePipeline != null)
+            {
+                m_NativePipeline->Release();
+                m_NativePipeline = null;
+            }
+
+            if (m_LocalConstantsRootSignature != null)
+            {
+                m_LocalConstantsRootSignature->Release();
+                m_LocalConstantsRootSignature = null;
+            }
         }
     }
 

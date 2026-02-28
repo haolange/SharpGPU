@@ -33,6 +33,26 @@ namespace Infinity.Graphics
         public ERHIShaderPayloadKind PayloadKind;
     }
 
+    public enum ERHIRayShaderTableSection : byte
+    {
+        RayGeneration = 0,
+        Miss = 1,
+        Hit = 2,
+        Callable = 3,
+    }
+
+    public readonly struct RHIRayRecordDescriptor
+    {
+        public readonly int GroupIndex;
+        public readonly ReadOnlyMemory<byte> LocalData;
+
+        public RHIRayRecordDescriptor(in int groupIndex, in ReadOnlyMemory<byte> localData)
+        {
+            GroupIndex = groupIndex;
+            LocalData = localData;
+        }
+    }
+
     public abstract class RHIFunction : Disposal
     {
         public RHIFunctionDescriptor Descriptor
@@ -61,14 +81,18 @@ namespace Infinity.Graphics
 
     public abstract class RHIFunctionTable : Disposal
     {
-        public abstract void SetRayGenerationProgram(string exportName, RHIArgumentTable[]? resourceTables = null);
-        public abstract int AddMissProgram(string exportName, RHIArgumentTable[]? resourceTables = null);
-        public abstract int AddHitGroupProgram(string exportName, RHIArgumentTable[]? resourceTables = null);
-        public abstract void SetMissProgram(in int index, string exportName, RHIArgumentTable[]? resourceTables = null);
-        public abstract void SetHitGroupProgram(in int index, string exportName, RHIArgumentTable[]? resourceTables = null);
-        public abstract void ClearMissPrograms();
-        public abstract void ClearHitGroupPrograms();
+        public abstract void SetRayGenerationRecord(in RHIRayRecordDescriptor record);
+        public abstract int AddMissRecord(in RHIRayRecordDescriptor record);
+        public abstract int AddHitGroupRecord(in RHIRayRecordDescriptor record);
+        public abstract int AddCallableRecord(in RHIRayRecordDescriptor record);
+        public abstract void SetMissRecord(in int index, in RHIRayRecordDescriptor record);
+        public abstract void SetHitGroupRecord(in int index, in RHIRayRecordDescriptor record);
+        public abstract void SetCallableRecord(in int index, in RHIRayRecordDescriptor record);
+        public abstract void ClearMissRecords();
+        public abstract void ClearHitGroupRecords();
+        public abstract void ClearCallableRecords();
+        public abstract void UpdateRecord(in ERHIRayShaderTableSection section, in int index, in RHIRayRecordDescriptor record);
         public abstract void Generate(RHIRaytracingPipeline pipeline);
-        public abstract void Update(RHIRaytracingPipeline pipeline);
+        public abstract void Update();
     }
 }

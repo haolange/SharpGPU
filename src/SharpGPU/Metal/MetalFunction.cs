@@ -89,6 +89,40 @@ namespace Infinity.Graphics
 
     internal static class MetalRayFunctionTableValidator
     {
+        internal static void ValidateRecord(
+            in string sectionName,
+            in int recordIndex,
+            in int groupIndex,
+            in int sectionGroupCount,
+            in int localDataLength,
+            in uint localDataStrideInBytes)
+        {
+            if (groupIndex < 0 || groupIndex >= sectionGroupCount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(groupIndex), $"{sectionName} record[{recordIndex}] group index {groupIndex} is out of range [0, {sectionGroupCount}).");
+            }
+
+            if ((uint)localDataLength > localDataStrideInBytes)
+            {
+                throw new InvalidOperationException($"{sectionName} record[{recordIndex}] local data {localDataLength} bytes exceeds stride {localDataStrideInBytes} bytes.");
+            }
+        }
+
+        internal static int ResolveVisibleTableIndex(in ERHIRayShaderTableSection section, in int sectionIndex, in int missCount)
+        {
+            return section switch
+            {
+                ERHIRayShaderTableSection.Miss => sectionIndex,
+                ERHIRayShaderTableSection.Callable => missCount + sectionIndex,
+                _ => throw new ArgumentOutOfRangeException(nameof(section), "Visible function table only supports Miss/Callable sections."),
+            };
+        }
+
+        internal static int ResolveVisibleTableCount(in int missCount, in int callableCount)
+        {
+            return missCount + callableCount;
+        }
+
         internal static void ValidateHitGroupExports(IReadOnlyList<string> exports, Func<string, bool> pipelineContainsHitGroup)
         {
             if (exports == null)
@@ -259,13 +293,13 @@ namespace Infinity.Graphics
 
     internal struct MetalFunctionTableEntry
     {
-        internal string ExportName;
-        internal RHIArgumentTable[]? ArgumentTables;
+        internal int GroupIndex;
+        internal byte[] LocalData;
 
-        internal MetalFunctionTableEntry(string exportName, RHIArgumentTable[]? resourceTables)
+        internal MetalFunctionTableEntry(in int groupIndex, in byte[] localData)
         {
-            ExportName = exportName;
-            ArgumentTables = resourceTables;
+            GroupIndex = groupIndex;
+            LocalData = localData;
         }
     }
 
@@ -273,211 +307,305 @@ namespace Infinity.Graphics
     {
         internal MTLIntersectionFunctionTable IntersectionFunctionTable => m_IntersectionFunctionTable;
         internal MTLVisibleFunctionTable VisibleFunctionTable => m_VisibleFunctionTable;
-        internal string RayGenerationExportName => m_RayGenerationExportName;
         internal bool IsGenerated => m_IsGenerated;
 
-        private string m_RayGenerationExportName;
-        private RHIArgumentTable[]? m_RayGenerationArgumentTables;
-        private readonly List<MetalFunctionTableEntry> m_MissPrograms;
-        private readonly List<MetalFunctionTableEntry> m_HitGroupPrograms;
+        private MetalRaytracingPipeline m_GeneratedPipeline;
+        private MetalFunctionTableEntry m_RayGenerationRecord;
+        private bool m_HasRayGenerationRecord;
+        private readonly List<MetalFunctionTableEntry> m_MissRecords;
+        private readonly List<MetalFunctionTableEntry> m_HitRecords;
+        private readonly List<MetalFunctionTableEntry> m_CallableRecords;
         private MTLIntersectionFunctionTable m_IntersectionFunctionTable;
         private MTLVisibleFunctionTable m_VisibleFunctionTable;
         private bool m_IsGenerated;
+        private uint m_LocalDataStrideInBytes;
 
         public MetalFunctionTable()
         {
-            m_RayGenerationExportName = string.Empty;
-            m_MissPrograms = new List<MetalFunctionTableEntry>(4);
-            m_HitGroupPrograms = new List<MetalFunctionTableEntry>(8);
+            m_GeneratedPipeline = null;
+            m_RayGenerationRecord = default;
+            m_HasRayGenerationRecord = false;
+            m_MissRecords = new List<MetalFunctionTableEntry>(4);
+            m_HitRecords = new List<MetalFunctionTableEntry>(8);
+            m_CallableRecords = new List<MetalFunctionTableEntry>(2);
             m_IntersectionFunctionTable = default;
             m_VisibleFunctionTable = default;
             m_IsGenerated = false;
+            m_LocalDataStrideInBytes = 0;
         }
 
-        public override void SetRayGenerationProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
+        public override void SetRayGenerationRecord(in RHIRayRecordDescriptor record)
         {
-            if (string.IsNullOrWhiteSpace(exportName))
+            ValidateGroupIndex(record.GroupIndex, nameof(record));
+            m_RayGenerationRecord = CreateEntry(record);
+            m_HasRayGenerationRecord = true;
+        }
+
+        public override int AddMissRecord(in RHIRayRecordDescriptor record)
+        {
+            m_MissRecords.Add(CreateEntry(record));
+            return m_MissRecords.Count - 1;
+        }
+
+        public override int AddHitGroupRecord(in RHIRayRecordDescriptor record)
+        {
+            m_HitRecords.Add(CreateEntry(record));
+            return m_HitRecords.Count - 1;
+        }
+
+        public override int AddCallableRecord(in RHIRayRecordDescriptor record)
+        {
+            m_CallableRecords.Add(CreateEntry(record));
+            return m_CallableRecords.Count - 1;
+        }
+
+        public override void SetMissRecord(in int index, in RHIRayRecordDescriptor record)
+        {
+            ValidateRecordIndex(index, m_MissRecords.Count, nameof(index));
+            m_MissRecords[index] = CreateEntry(record);
+        }
+
+        public override void SetHitGroupRecord(in int index, in RHIRayRecordDescriptor record)
+        {
+            ValidateRecordIndex(index, m_HitRecords.Count, nameof(index));
+            m_HitRecords[index] = CreateEntry(record);
+        }
+
+        public override void SetCallableRecord(in int index, in RHIRayRecordDescriptor record)
+        {
+            ValidateRecordIndex(index, m_CallableRecords.Count, nameof(index));
+            m_CallableRecords[index] = CreateEntry(record);
+        }
+
+        public override void ClearMissRecords()
+        {
+            m_MissRecords.Clear();
+            m_IsGenerated = false;
+        }
+
+        public override void ClearHitGroupRecords()
+        {
+            m_HitRecords.Clear();
+            m_IsGenerated = false;
+        }
+
+        public override void ClearCallableRecords()
+        {
+            m_CallableRecords.Clear();
+            m_IsGenerated = false;
+        }
+
+        public override void UpdateRecord(in ERHIRayShaderTableSection section, in int index, in RHIRayRecordDescriptor record)
+        {
+            switch (section)
             {
-                throw new ArgumentException("Ray generation export name is empty.", nameof(exportName));
+                case ERHIRayShaderTableSection.RayGeneration:
+                    if (index != 0)
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(index), "RayGeneration section only supports index 0.");
+                    }
+                    SetRayGenerationRecord(record);
+                    break;
+                case ERHIRayShaderTableSection.Miss:
+                    SetMissRecord(index, record);
+                    break;
+                case ERHIRayShaderTableSection.Hit:
+                    SetHitGroupRecord(index, record);
+                    break;
+                case ERHIRayShaderTableSection.Callable:
+                    SetCallableRecord(index, record);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(section));
             }
 
-            m_RayGenerationExportName = exportName;
-            m_RayGenerationArgumentTables = resourceTables;
-            m_IsGenerated = false;
-        }
-
-        public override int AddMissProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
-        {
-            if (string.IsNullOrWhiteSpace(exportName))
+            if (!m_IsGenerated || m_GeneratedPipeline == null)
             {
-                throw new ArgumentException("Miss export name is empty.", nameof(exportName));
+                return;
             }
 
-            m_MissPrograms.Add(new MetalFunctionTableEntry(exportName, resourceTables));
-            m_IsGenerated = false;
-            return m_MissPrograms.Count - 1;
-        }
-
-        public override int AddHitGroupProgram(string exportName, RHIArgumentTable[]? resourceTables = null)
-        {
-            if (string.IsNullOrWhiteSpace(exportName))
+            // Metal tables can update entries in place.
+            switch (section)
             {
-                throw new ArgumentException("Hit-group export name is empty.", nameof(exportName));
+                case ERHIRayShaderTableSection.Miss:
+                    ApplyVisibleRecord(section, index, m_MissRecords[index], m_GeneratedPipeline);
+                    break;
+                case ERHIRayShaderTableSection.Callable:
+                    ApplyVisibleRecord(section, index, m_CallableRecords[index], m_GeneratedPipeline);
+                    break;
+                case ERHIRayShaderTableSection.Hit:
+                    ApplyHitRecord(index, m_HitRecords[index], m_GeneratedPipeline);
+                    break;
             }
-
-            m_HitGroupPrograms.Add(new MetalFunctionTableEntry(exportName, resourceTables));
-            m_IsGenerated = false;
-            return m_HitGroupPrograms.Count - 1;
-        }
-
-        public override void SetMissProgram(in int index, string exportName, RHIArgumentTable[]? resourceTables = null)
-        {
-            if ((uint)index >= (uint)m_MissPrograms.Count)
-            {
-                throw new ArgumentOutOfRangeException(nameof(index));
-            }
-
-            m_MissPrograms[index] = new MetalFunctionTableEntry(exportName, resourceTables);
-            m_IsGenerated = false;
-        }
-
-        public override void SetHitGroupProgram(in int index, string exportName, RHIArgumentTable[]? resourceTables = null)
-        {
-            if ((uint)index >= (uint)m_HitGroupPrograms.Count)
-            {
-                throw new ArgumentOutOfRangeException(nameof(index));
-            }
-
-            m_HitGroupPrograms[index] = new MetalFunctionTableEntry(exportName, resourceTables);
-            m_IsGenerated = false;
-        }
-
-        public override void ClearMissPrograms()
-        {
-            m_MissPrograms.Clear();
-            m_IsGenerated = false;
-        }
-
-        public override void ClearHitGroupPrograms()
-        {
-            m_HitGroupPrograms.Clear();
-            m_IsGenerated = false;
         }
 
         public override void Generate(RHIRaytracingPipeline pipeline)
         {
-            MetalRaytracingPipeline metalPipeline = pipeline as MetalRaytracingPipeline ?? throw new ArgumentException("Function table requires a Metal ray tracing pipeline.", nameof(pipeline));
-            if (string.IsNullOrWhiteSpace(m_RayGenerationExportName))
+            MetalRaytracingPipeline metalPipeline = pipeline as MetalRaytracingPipeline
+                ?? throw new ArgumentException("Function table requires a Metal ray tracing pipeline.", nameof(pipeline));
+
+            if (!m_HasRayGenerationRecord)
             {
-                throw new InvalidOperationException("Ray generation program is not set.");
+                throw new InvalidOperationException("Ray generation record is not set.");
             }
 
-            if (!string.Equals(m_RayGenerationExportName, metalPipeline.RayGenerationEntryName, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException($"Ray generation export '{m_RayGenerationExportName}' does not match pipeline entry '{metalPipeline.RayGenerationEntryName}'.");
-            }
-
-            if (m_HitGroupPrograms.Count > metalPipeline.HitGroupCount)
-            {
-                throw new InvalidOperationException($"Function table hit-group count ({m_HitGroupPrograms.Count}) exceeds pipeline hit-group count ({metalPipeline.HitGroupCount}).");
-            }
-
-            if (m_MissPrograms.Count > metalPipeline.MissGroupCount)
-            {
-                throw new InvalidOperationException($"Function table miss count ({m_MissPrograms.Count}) exceeds pipeline miss-group count ({metalPipeline.MissGroupCount}).");
-            }
-
-            string[] hitGroupExports = new string[m_HitGroupPrograms.Count];
-            for (int i = 0; i < m_HitGroupPrograms.Count; ++i)
-            {
-                hitGroupExports[i] = m_HitGroupPrograms[i].ExportName;
-            }
-            MetalRayFunctionTableValidator.ValidateHitGroupExports(hitGroupExports, metalPipeline.ContainsHitGroup);
-
-            string[] missExports = new string[m_MissPrograms.Count];
-            for (int i = 0; i < m_MissPrograms.Count; ++i)
-            {
-                missExports[i] = m_MissPrograms[i].ExportName;
-            }
-            MetalRayFunctionTableValidator.ValidateMissExports(missExports, metalPipeline.ContainsMissEntry);
-
+            m_LocalDataStrideInBytes = metalPipeline.Descriptor.LocalDataStrideInBytes;
+            ValidateAllRecords(metalPipeline);
             ReleaseGeneratedTables();
 
-            if (m_HitGroupPrograms.Count > 0)
+            if (m_HitRecords.Count > 0)
             {
-                MTLIntersectionFunctionTableDescriptor descriptor = MTLIntersectionFunctionTableDescriptor.New();
-                descriptor.FunctionCount = (ulong)m_HitGroupPrograms.Count;
-                m_IntersectionFunctionTable = metalPipeline.NativePipelineState.NewIntersectionFunctionTable(descriptor);
+                MTLIntersectionFunctionTableDescriptor intersectionDescriptor = MTLIntersectionFunctionTableDescriptor.New();
+                intersectionDescriptor.FunctionCount = (ulong)m_HitRecords.Count;
+                m_IntersectionFunctionTable = metalPipeline.NativePipelineState.NewIntersectionFunctionTable(intersectionDescriptor);
                 if (m_IntersectionFunctionTable.NativePtr == IntPtr.Zero)
                 {
                     throw new InvalidOperationException("Failed to create Metal intersection function table.");
                 }
 
-                for (int i = 0; i < m_HitGroupPrograms.Count; ++i)
+                for (int i = 0; i < m_HitRecords.Count; ++i)
                 {
-                    string hitGroupExport = m_HitGroupPrograms[i].ExportName;
-                    RHIRayHitGroupDescriptor hitGroup = metalPipeline.GetHitGroupDescriptor(hitGroupExport);
-                    switch (hitGroup.Type)
-                    {
-                        case ERHIHitGroupType.Triangles:
-                            m_IntersectionFunctionTable.SetOpaqueTriangleIntersectionFunction(MTLIntersectionFunctionSignature.Instancing | MTLIntersectionFunctionSignature.TriangleData, (ulong)i);
-                            break;
-                        case ERHIHitGroupType.Curve:
-                            m_IntersectionFunctionTable.SetOpaqueCurveIntersectionFunction(MTLIntersectionFunctionSignature.Instancing | MTLIntersectionFunctionSignature.CurveData, (ulong)i);
-                            break;
-                        case ERHIHitGroupType.Procedural:
-                        {
-                            string? intersectionName = hitGroup.Intersect?.EntryName;
-                            if (string.IsNullOrWhiteSpace(intersectionName))
-                            {
-                                throw new InvalidOperationException($"Hit group '{hitGroupExport}' is procedural but has no intersection function.");
-                            }
-
-                            MTLFunction function = metalPipeline.ResolveIntersectionFunction(intersectionName);
-                            MTLFunctionHandle handle = metalPipeline.NativePipelineState.FunctionHandle(function);
-                            if (handle.NativePtr == IntPtr.Zero)
-                            {
-                                throw new InvalidOperationException($"Failed to create function handle for procedural intersection '{intersectionName}'.");
-                            }
-
-                            m_IntersectionFunctionTable.SetFunction(handle, (ulong)i);
-                            break;
-                        }
-                        default:
-                            throw new NotSupportedException($"Unsupported hit group type '{hitGroup.Type}'.");
-                    }
+                    ApplyHitRecord(i, m_HitRecords[i], metalPipeline);
                 }
             }
 
-            if (m_MissPrograms.Count > 0)
+            int visibleCount = MetalRayFunctionTableValidator.ResolveVisibleTableCount(m_MissRecords.Count, m_CallableRecords.Count);
+            if (visibleCount > 0)
             {
-                MTLVisibleFunctionTableDescriptor descriptor = MTLVisibleFunctionTableDescriptor.New();
-                descriptor.FunctionCount = (ulong)m_MissPrograms.Count;
-                m_VisibleFunctionTable = metalPipeline.NativePipelineState.NewVisibleFunctionTable(descriptor);
+                MTLVisibleFunctionTableDescriptor visibleDescriptor = MTLVisibleFunctionTableDescriptor.New();
+                visibleDescriptor.FunctionCount = (ulong)visibleCount;
+                m_VisibleFunctionTable = metalPipeline.NativePipelineState.NewVisibleFunctionTable(visibleDescriptor);
                 if (m_VisibleFunctionTable.NativePtr == IntPtr.Zero)
                 {
                     throw new InvalidOperationException("Failed to create Metal visible function table.");
                 }
 
-                for (int i = 0; i < m_MissPrograms.Count; ++i)
+                for (int i = 0; i < m_MissRecords.Count; ++i)
                 {
-                    MTLFunction function = metalPipeline.ResolveVisibleFunction(m_MissPrograms[i].ExportName);
-                    MTLFunctionHandle handle = metalPipeline.NativePipelineState.FunctionHandle(function);
-                    if (handle.NativePtr == IntPtr.Zero)
-                    {
-                        throw new InvalidOperationException($"Failed to create function handle for visible miss function '{m_MissPrograms[i].ExportName}'.");
-                    }
+                    ApplyVisibleRecord(ERHIRayShaderTableSection.Miss, i, m_MissRecords[i], metalPipeline);
+                }
 
-                    m_VisibleFunctionTable.SetFunction(handle, (ulong)i);
+                for (int i = 0; i < m_CallableRecords.Count; ++i)
+                {
+                    ApplyVisibleRecord(ERHIRayShaderTableSection.Callable, i, m_CallableRecords[i], metalPipeline);
                 }
             }
 
+            m_GeneratedPipeline = metalPipeline;
             m_IsGenerated = true;
         }
 
-        public override void Update(RHIRaytracingPipeline pipeline)
+        public override void Update()
         {
-            Generate(pipeline);
+            if (m_GeneratedPipeline == null)
+            {
+                throw new InvalidOperationException("Function table has not been generated yet.");
+            }
+
+            Generate(m_GeneratedPipeline);
+        }
+
+        private void ValidateAllRecords(MetalRaytracingPipeline pipeline)
+        {
+            ValidateRecord(ERHIRayShaderTableSection.RayGeneration, 0, m_RayGenerationRecord, pipeline);
+            for (int i = 0; i < m_MissRecords.Count; ++i)
+            {
+                ValidateRecord(ERHIRayShaderTableSection.Miss, i, m_MissRecords[i], pipeline);
+            }
+
+            for (int i = 0; i < m_HitRecords.Count; ++i)
+            {
+                ValidateRecord(ERHIRayShaderTableSection.Hit, i, m_HitRecords[i], pipeline);
+            }
+
+            for (int i = 0; i < m_CallableRecords.Count; ++i)
+            {
+                ValidateRecord(ERHIRayShaderTableSection.Callable, i, m_CallableRecords[i], pipeline);
+            }
+        }
+
+        private void ValidateRecord(ERHIRayShaderTableSection section, int recordIndex, in MetalFunctionTableEntry entry, MetalRaytracingPipeline pipeline)
+        {
+            int groupCount = section switch
+            {
+                ERHIRayShaderTableSection.RayGeneration => 1,
+                ERHIRayShaderTableSection.Miss => pipeline.MissGroupCount,
+                ERHIRayShaderTableSection.Hit => pipeline.HitGroupCount,
+                ERHIRayShaderTableSection.Callable => pipeline.CallableGroupCount,
+                _ => 0,
+            };
+
+            MetalRayFunctionTableValidator.ValidateRecord(section.ToString(), recordIndex, entry.GroupIndex, groupCount, entry.LocalData.Length, m_LocalDataStrideInBytes);
+        }
+
+        private void ApplyHitRecord(in int tableIndex, in MetalFunctionTableEntry record, MetalRaytracingPipeline pipeline)
+        {
+            if (m_IntersectionFunctionTable.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            RHIRayHitGroupDescriptor hitGroup = pipeline.GetHitGroupDescriptor(record.GroupIndex);
+            switch (hitGroup.Type)
+            {
+                case ERHIHitGroupType.Triangles:
+                    m_IntersectionFunctionTable.SetOpaqueTriangleIntersectionFunction(MTLIntersectionFunctionSignature.Instancing | MTLIntersectionFunctionSignature.TriangleData, (ulong)tableIndex);
+                    break;
+                case ERHIHitGroupType.Curve:
+                    m_IntersectionFunctionTable.SetOpaqueCurveIntersectionFunction(MTLIntersectionFunctionSignature.Instancing | MTLIntersectionFunctionSignature.CurveData, (ulong)tableIndex);
+                    break;
+                case ERHIHitGroupType.Procedural:
+                {
+                    string? intersectionName = hitGroup.Intersect?.EntryName;
+                    if (string.IsNullOrWhiteSpace(intersectionName))
+                    {
+                        throw new InvalidOperationException($"Hit group '{hitGroup.Name}' is procedural but has no intersection function.");
+                    }
+
+                    MTLFunction function = pipeline.ResolveIntersectionFunction(intersectionName);
+                    MTLFunctionHandle handle = pipeline.NativePipelineState.FunctionHandle(function);
+                    if (handle.NativePtr == IntPtr.Zero)
+                    {
+                        throw new InvalidOperationException($"Failed to create function handle for procedural intersection '{intersectionName}'.");
+                    }
+
+                    m_IntersectionFunctionTable.SetFunction(handle, (ulong)tableIndex);
+                    break;
+                }
+                default:
+                    throw new NotSupportedException($"Unsupported hit group type '{hitGroup.Type}'.");
+            }
+        }
+
+        private void ApplyVisibleRecord(in ERHIRayShaderTableSection section, in int sectionIndex, in MetalFunctionTableEntry record, MetalRaytracingPipeline pipeline)
+        {
+            if (m_VisibleFunctionTable.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            string entryName = section switch
+            {
+                ERHIRayShaderTableSection.Miss => pipeline.GetMissGroupDescriptor(record.GroupIndex).General.EntryName,
+                ERHIRayShaderTableSection.Callable => pipeline.GetCallableGroupDescriptor(record.GroupIndex).General.EntryName,
+                _ => throw new ArgumentOutOfRangeException(nameof(section)),
+            };
+
+            MTLFunction function = pipeline.ResolveVisibleFunction(entryName);
+            MTLFunctionHandle handle = pipeline.NativePipelineState.FunctionHandle(function);
+            if (handle.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException($"Failed to create function handle for visible function '{entryName}'.");
+            }
+
+            int visibleIndex = MetalRayFunctionTableValidator.ResolveVisibleTableIndex(section, sectionIndex, m_MissRecords.Count);
+            m_VisibleFunctionTable.SetFunction(handle, (ulong)visibleIndex);
+        }
+
+        private static MetalFunctionTableEntry CreateEntry(in RHIRayRecordDescriptor record)
+        {
+            ValidateGroupIndex(record.GroupIndex, nameof(record));
+            return new MetalFunctionTableEntry(record.GroupIndex, CloneLocalData(record.LocalData));
         }
 
         private void ReleaseGeneratedTables()
@@ -495,15 +623,45 @@ namespace Infinity.Graphics
             }
 
             m_IsGenerated = false;
+            m_GeneratedPipeline = null;
+        }
+
+        private static void ValidateGroupIndex(in int groupIndex, string parameterName)
+        {
+            if (groupIndex < 0)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, "GroupIndex must be non-negative.");
+            }
+        }
+
+        private static void ValidateRecordIndex(in int index, in int count, string parameterName)
+        {
+            if ((uint)index >= (uint)count)
+            {
+                throw new ArgumentOutOfRangeException(parameterName);
+            }
+        }
+
+        private static byte[] CloneLocalData(in ReadOnlyMemory<byte> localData)
+        {
+            if (localData.IsEmpty)
+            {
+                return Array.Empty<byte>();
+            }
+
+            byte[] cloned = new byte[localData.Length];
+            localData.Span.CopyTo(cloned);
+            return cloned;
         }
 
         protected override void Release()
         {
             ReleaseGeneratedTables();
-            m_MissPrograms.Clear();
-            m_HitGroupPrograms.Clear();
-            m_RayGenerationExportName = string.Empty;
-            m_RayGenerationArgumentTables = null;
+            m_MissRecords.Clear();
+            m_HitRecords.Clear();
+            m_CallableRecords.Clear();
+            m_HasRayGenerationRecord = false;
+            m_LocalDataStrideInBytes = 0;
         }
     }
 }

@@ -62,14 +62,17 @@ namespace Infinity.Graphics
         internal string RayGenerationEntryName => m_RayGenerationEntryName;
         internal int HitGroupCount => m_HitGroups.Length;
         internal int MissGroupCount => m_MissGroups.Length;
+        internal int CallableGroupCount => m_CallableGroups.Length;
 
         private readonly MetalFunctionLibrary m_FunctionLibrary;
         private readonly uint3 m_ThreadgroupSize;
         private readonly string m_RayGenerationEntryName;
         private readonly RHIRayHitGroupDescriptor[] m_HitGroups;
         private readonly RHIRayGeneralGroupDescriptor[] m_MissGroups;
+        private readonly RHIRayGeneralGroupDescriptor[] m_CallableGroups;
         private readonly Dictionary<string, RHIRayHitGroupDescriptor> m_HitGroupsByName;
         private readonly HashSet<string> m_MissEntryNames;
+        private readonly HashSet<string> m_CallableEntryNames;
         private readonly Dictionary<string, MTLFunction> m_VisibleFunctionCache;
         private readonly Dictionary<string, MTLFunction> m_IntersectionFunctionCache;
         private readonly MTLFunction m_RayGenerationFunction;
@@ -89,8 +92,10 @@ namespace Infinity.Graphics
             m_ThreadgroupSize = new uint3(Math.Max(1u, descriptor.ThreadSize.x), Math.Max(1u, descriptor.ThreadSize.y), Math.Max(1u, descriptor.ThreadSize.z));
             m_HitGroups = descriptor.RayHitGroups.Span.ToArray();
             m_MissGroups = descriptor.RayMissGroups.Span.ToArray();
+            m_CallableGroups = descriptor.RayCallableGroups.Span.ToArray();
             m_HitGroupsByName = new Dictionary<string, RHIRayHitGroupDescriptor>(m_HitGroups.Length, StringComparer.Ordinal);
             m_MissEntryNames = new HashSet<string>(StringComparer.Ordinal);
+            m_CallableEntryNames = new HashSet<string>(StringComparer.Ordinal);
             m_VisibleFunctionCache = new Dictionary<string, MTLFunction>(StringComparer.Ordinal);
             m_IntersectionFunctionCache = new Dictionary<string, MTLFunction>(StringComparer.Ordinal);
 
@@ -121,11 +126,28 @@ namespace Infinity.Graphics
                 m_MissEntryNames.Add(entryName);
             }
 
-            List<IntPtr> linkedFunctionPointers = new List<IntPtr>(Math.Max(1, m_MissGroups.Length + m_HitGroups.Length));
+            for (int i = 0; i < m_CallableGroups.Length; ++i)
+            {
+                string entryName = m_CallableGroups[i].General.EntryName;
+                if (string.IsNullOrWhiteSpace(entryName))
+                {
+                    throw new InvalidOperationException($"Ray callable-group[{i}] has an empty function entry.");
+                }
+
+                m_CallableEntryNames.Add(entryName);
+            }
+
+            List<IntPtr> linkedFunctionPointers = new List<IntPtr>(Math.Max(1, m_MissGroups.Length + m_CallableGroups.Length + m_HitGroups.Length));
             for (int i = 0; i < m_MissGroups.Length; ++i)
             {
                 MTLFunction missFunction = ResolveVisibleFunction(m_MissGroups[i].General.EntryName);
                 linkedFunctionPointers.Add(missFunction.NativePtr);
+            }
+
+            for (int i = 0; i < m_CallableGroups.Length; ++i)
+            {
+                MTLFunction callableFunction = ResolveVisibleFunction(m_CallableGroups[i].General.EntryName);
+                linkedFunctionPointers.Add(callableFunction.NativePtr);
             }
 
             for (int i = 0; i < m_HitGroups.Length; ++i)
@@ -209,6 +231,16 @@ namespace Infinity.Graphics
             return m_MissEntryNames.Contains(entryName);
         }
 
+        internal bool ContainsCallableEntry(string entryName)
+        {
+            if (string.IsNullOrWhiteSpace(entryName))
+            {
+                return false;
+            }
+
+            return m_CallableEntryNames.Contains(entryName);
+        }
+
         internal RHIRayGeneralGroupDescriptor GetMissGroupDescriptor(int index)
         {
             if ((uint)index >= (uint)m_MissGroups.Length)
@@ -217,6 +249,16 @@ namespace Infinity.Graphics
             }
 
             return m_MissGroups[index];
+        }
+
+        internal RHIRayGeneralGroupDescriptor GetCallableGroupDescriptor(int index)
+        {
+            if ((uint)index >= (uint)m_CallableGroups.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            return m_CallableGroups[index];
         }
 
         internal MTLFunction ResolveVisibleFunction(string entryName)
@@ -318,6 +360,7 @@ namespace Infinity.Graphics
             m_IntersectionFunctionCache.Clear();
             m_HitGroupsByName.Clear();
             m_MissEntryNames.Clear();
+            m_CallableEntryNames.Clear();
         }
     }
 
