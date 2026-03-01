@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using TerraFX.Interop.DirectX;
 using TerraFX.Interop.Windows;
 using Infinity.Collections.LowLevel;
@@ -188,14 +189,29 @@ namespace Infinity.Graphics
         private ID3D12Resource* m_NativeResultBuffer;
         private ID3D12Resource* m_NativeScratchBuffer;
         private ID3D12Resource* m_NativeCurveAabbBuffer;
+        private D3D12_RAYTRACING_GEOMETRY_DESC* m_NativeGeometryDescriptions;
         private D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC m_NativeAccelStructDescriptor;
 
         public Dx12BottomLevelAccelStruct(Dx12Device device, in RHIBottomLevelAccelStructDescriptor descriptor)
         {
             m_Dx12Device = device;
             m_Descriptor = descriptor;
+            m_NativeCurveAabbBuffer = null;
 
-            D3D12_RAYTRACING_GEOMETRY_DESC* nativeGeometryDescriptions = stackalloc D3D12_RAYTRACING_GEOMETRY_DESC[descriptor.Geometries.Length];
+            int geometryCount = descriptor.Geometries.Length;
+            if (geometryCount == 0)
+            {
+                throw new InvalidOperationException("Bottom-level acceleration structure requires at least one geometry descriptor.");
+            }
+
+            nuint geometryBytes = (nuint)(geometryCount * sizeof(D3D12_RAYTRACING_GEOMETRY_DESC));
+            m_NativeGeometryDescriptions = (D3D12_RAYTRACING_GEOMETRY_DESC*)NativeMemory.AllocZeroed(geometryBytes);
+            if (m_NativeGeometryDescriptions == null)
+            {
+                throw new OutOfMemoryException($"Failed to allocate {geometryBytes} bytes for BLAS geometry descriptors.");
+            }
+
+            D3D12_RAYTRACING_GEOMETRY_DESC* nativeGeometryDescriptions = m_NativeGeometryDescriptions;
 
             for (int i = 0; i < descriptor.Geometries.Length; ++i)
             {
@@ -232,7 +248,14 @@ namespace Infinity.Graphics
                         nativeTriangleGeometry.VertexCount = triangleGeometry.VertexCount;
                         nativeTriangleGeometry.VertexBuffer.StartAddress = vertexBuffer.NativeResource->GetGPUVirtualAddress() + triangleGeometry.VertexOffset;
                         nativeTriangleGeometry.VertexBuffer.StrideInBytes = triangleGeometry.VertexStride;
-                        nativeTriangleGeometry.VertexFormat = Dx12Utility.ConvertToDx12Format(triangleGeometry.VertexFormat);
+                        DXGI_FORMAT vertexFormat = Dx12Utility.ConvertToDx12ViewFormat(triangleGeometry.VertexFormat);
+                        if (vertexFormat == DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT)
+                        {
+                            // DXR triangles require xyz vertex format. Keep float4 layout by using xyz format + explicit stride.
+                            vertexFormat = DXGI_FORMAT.DXGI_FORMAT_R32G32B32_FLOAT;
+                        }
+
+                        nativeTriangleGeometry.VertexFormat = vertexFormat;
                         break;
 
                     case EAccelStructGeometryType.Curves:
@@ -247,8 +270,8 @@ namespace Infinity.Graphics
                         m_NativeCurveAabbBuffer = Dx12RaytracingHelper.CreateBuffer(
                             m_Dx12Device.NativeDevice,
                             curveAabbBufferSize,
-                            D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
-                            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON,
+                            D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE,
+                            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
                             Dx12RaytracingHelper.kUploadHeapProps);
 
                         // Compute AABBs from control points with radius inflation
@@ -293,7 +316,7 @@ namespace Infinity.Graphics
                 nativeAccelStructDescriptor.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
                 nativeAccelStructDescriptor.DescsLayout = D3D12_ELEMENTS_LAYOUT.D3D12_ELEMENTS_LAYOUT_ARRAY;
                 nativeAccelStructDescriptor.NumDescs = (uint)descriptor.Geometries.Length;
-                nativeAccelStructDescriptor.pGeometryDescs = nativeGeometryDescriptions;
+                nativeAccelStructDescriptor.pGeometryDescs = m_NativeGeometryDescriptions;
             }
 
             D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO nativeAccelStructPrebuildInfo;
@@ -309,6 +332,12 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
+            if (m_NativeGeometryDescriptions != null)
+            {
+                NativeMemory.Free(m_NativeGeometryDescriptions);
+                m_NativeGeometryDescriptions = null;
+            }
+
             if (m_NativeCurveAabbBuffer != null)
             {
                 m_NativeCurveAabbBuffer->Release();

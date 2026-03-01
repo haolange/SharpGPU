@@ -225,6 +225,71 @@ namespace Infinity.Graphics
         public DXGI_FORMAT DSVFormat;
     }
 
+    internal static unsafe class Dx12PipelineDebug
+    {
+        private const ulong MaxMessagesToDump = 32;
+
+        public static void DumpDeviceMessages(Dx12Device device, string scope)
+        {
+            ID3D12InfoQueue* infoQueue = null;
+            HRESULT hr = device.NativeDevice->QueryInterface(__uuidof<ID3D12InfoQueue>(), (void**)&infoQueue);
+            if (FAILED(hr) || infoQueue == null)
+            {
+                Console.WriteLine($"{scope} Failed to query ID3D12InfoQueue. HRESULT=0x{hr:X8}");
+                return;
+            }
+
+            try
+            {
+                ulong messageCount = infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter();
+                if (messageCount == 0)
+                {
+                    Console.WriteLine($"{scope} D3D12 info queue has no stored messages.");
+                    return;
+                }
+
+                ulong startIndex = messageCount > MaxMessagesToDump ? messageCount - MaxMessagesToDump : 0;
+                for (ulong messageIndex = startIndex; messageIndex < messageCount; ++messageIndex)
+                {
+                    nuint messageBytes = 0;
+                    if (FAILED(infoQueue->GetMessage(messageIndex, null, &messageBytes)) || messageBytes == 0)
+                    {
+                        continue;
+                    }
+
+                    if (messageBytes > int.MaxValue)
+                    {
+                        Console.WriteLine($"{scope} D3D12 message is too large to dump (bytes={messageBytes}).");
+                        continue;
+                    }
+
+                    IntPtr messageBuffer = Marshal.AllocHGlobal((int)messageBytes);
+                    try
+                    {
+                        D3D12_MESSAGE* message = (D3D12_MESSAGE*)messageBuffer.ToPointer();
+                        if (FAILED(infoQueue->GetMessage(messageIndex, message, &messageBytes)))
+                        {
+                            continue;
+                        }
+
+                        string text = Marshal.PtrToStringAnsi((IntPtr)message->pDescription) ?? string.Empty;
+                        Console.WriteLine($"{scope} [D3D12 {message->Severity}] {text}");
+                    }
+                    finally
+                    {
+                        Marshal.FreeHGlobal(messageBuffer);
+                    }
+                }
+
+                infoQueue->ClearStoredMessages();
+            }
+            finally
+            {
+                infoQueue->Release();
+            }
+        }
+    }
+
     internal unsafe class Dx12ComputePipeline : RHIComputePipeline
     {
         public ID3D12PipelineState* NativePipelineState
@@ -249,16 +314,6 @@ namespace Infinity.Graphics
             Dx12Function computeFunction = descriptor.ComputeFunction as Dx12Function;
             Dx12PipelineLayout pipelineLayout = descriptor.PipelineLayout as Dx12PipelineLayout;
 
-#if false
-            D3D12_COMPUTE_PIPELINE_STATE_DESC description = new D3D12_COMPUTE_PIPELINE_STATE_DESC();
-            description.pRootSignature = pipelineLayout.NativeRootSignature;
-            description.Flags = D3D12_PIPELINE_STATE_FLAGS.D3D12_PIPELINE_STATE_FLAG_NONE;
-            description.CS.BytecodeLength = computeFunction.NativeShaderBytecode.BytecodeLength;
-            description.CS.pShaderBytecode = computeFunction.NativeShaderBytecode.pShaderBytecode;
-
-            ID3D12Pipeline* pipeline;
-            HRESULT hResult = device.NativeDevice->CreateComputePipeline(&description, __uuidof<ID3D12Pipeline>(), (void**)&pipeline);
-#else
             D3D12_CUSTOM_COMPUTE_PIPELINE_STATE_DESC description;
             description.RootSignature_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_ROOT_SIGNATURE;
             description.pRootSignature = pipelineLayout.NativeRootSignature;
@@ -267,8 +322,8 @@ namespace Infinity.Graphics
             description.CS.BytecodeLength = computeFunction.NativeShaderBytecode.BytecodeLength;
             description.CS.pShaderBytecode = computeFunction.NativeShaderBytecode.pShaderBytecode;
 
-            description.Flags = D3D12_PIPELINE_STATE_FLAGS.D3D12_PIPELINE_STATE_FLAG_NONE;
             description.Flags_Type = D3D12_PIPELINE_STATE_SUBOBJECT_TYPE.D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_FLAGS;
+            description.Flags = D3D12_PIPELINE_STATE_FLAGS.D3D12_PIPELINE_STATE_FLAG_NONE;
 
             D3D12_PIPELINE_STATE_STREAM_DESC streamDesc;
             streamDesc.SizeInBytes = (uint)sizeof(D3D12_CUSTOM_COMPUTE_PIPELINE_STATE_DESC);
@@ -276,9 +331,22 @@ namespace Infinity.Graphics
 
             ID3D12PipelineState* nativePipelineState;
             HRESULT hResult = device.NativeDevice->CreatePipelineState(&streamDesc, __uuidof<ID3D12PipelineState>(), (void**)&nativePipelineState);
-#endif
 
 #if DEBUG
+            if (FAILED(hResult))
+            {
+                ulong rootSignaturePtr = (ulong)description.pRootSignature;
+                ulong shaderPtr = (ulong)description.CS.pShaderBytecode;
+                ulong shaderSize = (ulong)description.CS.BytecodeLength;
+                uint shaderMagic = 0;
+                if (description.CS.pShaderBytecode != null && shaderSize >= sizeof(uint))
+                {
+                    shaderMagic = *(uint*)description.CS.pShaderBytecode;
+                }
+
+                Console.WriteLine($"[Dx12ComputePipeline] CreatePipelineState failed. HRESULT=0x{hResult:X8}, RootSignature=0x{rootSignaturePtr:X}, ShaderPtr=0x{shaderPtr:X}, ShaderSize={shaderSize}, ShaderMagic=0x{shaderMagic:X8}");
+                Dx12PipelineDebug.DumpDeviceMessages(device, "[Dx12ComputePipeline]");
+            }
             Dx12Utility.CHECK_HR(hResult);
 #endif
             m_NativePipelineState = nativePipelineState;
@@ -497,6 +565,11 @@ namespace Infinity.Graphics
                 ID3D12StateObject* nativePipeline = null;
                 HRESULT hResult = device.NativeDevice->CreateStateObject(&stateObjectDesc, __uuidof<ID3D12StateObject>(), (void**)&nativePipeline);
 #if DEBUG
+                if (FAILED(hResult))
+                {
+                    Console.WriteLine($"[Dx12RaytracingPipeline] CreateStateObject failed. HRESULT=0x{hResult:X8}");
+                    Dx12PipelineDebug.DumpDeviceMessages(device, "[Dx12RaytracingPipeline]");
+                }
                 Dx12Utility.CHECK_HR(hResult);
 #endif
                 m_NativePipeline = nativePipeline;
