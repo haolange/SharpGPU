@@ -57,11 +57,15 @@ namespace Infinity.Graphics
     {
         public Dx12Device Dx12Device => m_Dx12Device;
         public int DescriptionHeapIndex => m_DescriptionHeapIndex;
+        public D3D12_CPU_DESCRIPTOR_HANDLE NativeCpuDescriptorHandle => m_NativeCpuDescriptorHandle;
+        public D3D12_GPU_DESCRIPTOR_HANDLE NativeGpuDescriptorHandle => m_NativeGpuDescriptorHandle;
         public ID3D12Resource* ResultBuffer => m_NativeResultBuffer;
         public D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC NativeAccelStructDescriptor => m_NativeAccelStructDescriptor;
 
         private Dx12Device m_Dx12Device;
         private int m_DescriptionHeapIndex;
+        private D3D12_CPU_DESCRIPTOR_HANDLE m_NativeCpuDescriptorHandle;
+        private D3D12_GPU_DESCRIPTOR_HANDLE m_NativeGpuDescriptorHandle;
         private ID3D12Resource* m_NativeResultBuffer;
         private ID3D12Resource* m_NativeScratchBuffer;
         private ID3D12Resource* m_NativeInstancesBuffer;
@@ -71,6 +75,9 @@ namespace Infinity.Graphics
         {
             m_Dx12Device = device;
             m_Descriptor = descriptor;
+            m_DescriptionHeapIndex = -1;
+            m_NativeCpuDescriptorHandle = default;
+            m_NativeGpuDescriptorHandle = default;
 
             Span<RHIAccelStructInstance> asInstances = descriptor.Instances.Span;
             D3D12_RAYTRACING_INSTANCE_DESC* nativeInstanceDescriptions = stackalloc D3D12_RAYTRACING_INSTANCE_DESC[descriptor.Instances.Length];
@@ -83,10 +90,10 @@ namespace Infinity.Graphics
                 ref D3D12_RAYTRACING_INSTANCE_DESC nativeInstanceDescription = ref nativeInstanceDescriptions[i];
                 {
                     ref D3D12_RAYTRACING_INSTANCE_DESC._Transform_e__FixedBuffer transform = ref nativeInstanceDescription.Transform;
-                    transform[0] = asInstance.TransformMatrix.c0.x; transform[1] = asInstance.TransformMatrix.c0.y; transform[2] = asInstance.TransformMatrix.c0.z;
-                    transform[3] = asInstance.TransformMatrix.c1.x; transform[4] = asInstance.TransformMatrix.c1.y; transform[5] = asInstance.TransformMatrix.c1.z;
-                    transform[6] = asInstance.TransformMatrix.c2.x; transform[7] = asInstance.TransformMatrix.c2.y; transform[8] = asInstance.TransformMatrix.c2.z;
-                    transform[9] = 1; transform[10] = 1; transform[11] = 1;
+                    // D3D12 expects a row-major 3x4 transform matrix.
+                    transform[0] = asInstance.TransformMatrix.c0.x; transform[1] = asInstance.TransformMatrix.c1.x; transform[2] = asInstance.TransformMatrix.c2.x; transform[3] = asInstance.TransformMatrix.c3.x;
+                    transform[4] = asInstance.TransformMatrix.c0.y; transform[5] = asInstance.TransformMatrix.c1.y; transform[6] = asInstance.TransformMatrix.c2.y; transform[7] = asInstance.TransformMatrix.c3.y;
+                    transform[8] = asInstance.TransformMatrix.c0.z; transform[9] = asInstance.TransformMatrix.c1.z; transform[10] = asInstance.TransformMatrix.c2.z; transform[11] = asInstance.TransformMatrix.c3.z;
 
                     nativeInstanceDescription.Flags = (uint)(D3D12_RAYTRACING_INSTANCE_FLAGS)asInstance.Flag;
                     nativeInstanceDescription.InstanceID = asInstance.InstanceID;
@@ -118,6 +125,18 @@ namespace Infinity.Graphics
             m_NativeScratchBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS, Dx12RaytracingHelper.kDefaultHeapProps);
             m_NativeResultBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, Dx12RaytracingHelper.kDefaultHeapProps);
 
+            Dx12DescriptorInfo accelStructDescriptor = m_Dx12Device.AllocateCbvSrvUavDescriptor(1);
+            m_DescriptionHeapIndex = accelStructDescriptor.Index;
+            m_NativeCpuDescriptorHandle = accelStructDescriptor.CpuHandle;
+            m_NativeGpuDescriptorHandle = accelStructDescriptor.GpuHandle;
+
+            D3D12_SHADER_RESOURCE_VIEW_DESC accelStructSrvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC();
+            accelStructSrvDesc.Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
+            accelStructSrvDesc.ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+            accelStructSrvDesc.Shader4ComponentMapping = 5768;
+            accelStructSrvDesc.RaytracingAccelerationStructure.Location = m_NativeResultBuffer->GetGPUVirtualAddress();
+            m_Dx12Device.NativeDevice->CreateShaderResourceView(null, &accelStructSrvDesc, m_NativeCpuDescriptorHandle);
+
             m_NativeAccelStructDescriptor.Inputs = nativeAccelStructDescriptor;
             m_NativeAccelStructDescriptor.DestAccelerationStructureData = m_NativeResultBuffer->GetGPUVirtualAddress();
             m_NativeAccelStructDescriptor.ScratchAccelerationStructureData = m_NativeScratchBuffer->GetGPUVirtualAddress();
@@ -138,10 +157,10 @@ namespace Infinity.Graphics
                 ref D3D12_RAYTRACING_INSTANCE_DESC nativeInstanceDescription = ref nativeInstanceDescriptions[i];
                 {
                     ref D3D12_RAYTRACING_INSTANCE_DESC._Transform_e__FixedBuffer transform = ref nativeInstanceDescription.Transform;
-                    transform[0] = asInstance.TransformMatrix.c0.x; transform[1] = asInstance.TransformMatrix.c0.y; transform[2] = asInstance.TransformMatrix.c0.z;
-                    transform[3] = asInstance.TransformMatrix.c1.x; transform[4] = asInstance.TransformMatrix.c1.y; transform[5] = asInstance.TransformMatrix.c1.z;
-                    transform[6] = asInstance.TransformMatrix.c2.x; transform[7] = asInstance.TransformMatrix.c2.y; transform[8] = asInstance.TransformMatrix.c2.z;
-                    transform[9] = 1; transform[10] = 1; transform[11] = 1;
+                    // D3D12 expects a row-major 3x4 transform matrix.
+                    transform[0] = asInstance.TransformMatrix.c0.x; transform[1] = asInstance.TransformMatrix.c1.x; transform[2] = asInstance.TransformMatrix.c2.x; transform[3] = asInstance.TransformMatrix.c3.x;
+                    transform[4] = asInstance.TransformMatrix.c0.y; transform[5] = asInstance.TransformMatrix.c1.y; transform[6] = asInstance.TransformMatrix.c2.y; transform[7] = asInstance.TransformMatrix.c3.y;
+                    transform[8] = asInstance.TransformMatrix.c0.z; transform[9] = asInstance.TransformMatrix.c1.z; transform[10] = asInstance.TransformMatrix.c2.z; transform[11] = asInstance.TransformMatrix.c3.z;
 
                     nativeInstanceDescription.Flags = (uint)(D3D12_RAYTRACING_INSTANCE_FLAGS)asInstance.Flag;
                     nativeInstanceDescription.InstanceID = asInstance.InstanceID;
@@ -173,6 +192,11 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
+            if (m_DescriptionHeapIndex >= 0)
+            {
+                m_Dx12Device.FreeCbvSrvUavDescriptor(m_DescriptionHeapIndex);
+                m_DescriptionHeapIndex = -1;
+            }
             m_NativeResultBuffer->Release();
             m_NativeScratchBuffer->Release();
             m_NativeInstancesBuffer->Release();
@@ -260,10 +284,43 @@ namespace Infinity.Graphics
 
                     case EAccelStructGeometryType.Curves:
                         // DXR does not support native curve geometry. Map each curve segment to an AABB
-                        // for procedural intersection. Callers must provide an intersection shader that
-                        // performs the real curve–ray test inside the AABB hit callback.
+                        // for procedural intersection. The intersection shader performs the exact test.
                         RHIAccelStructCurves curveGeometry = asGeometry as RHIAccelStructCurves;
+                        Dx12Buffer controlPointBuffer = curveGeometry.ControlPointBuffer as Dx12Buffer;
+                        Dx12Buffer radiusBuffer = curveGeometry.RadiusBuffer as Dx12Buffer;
+                        Dx12Buffer curveIndexBuffer = curveGeometry.IndexBuffer as Dx12Buffer;
+                        if (controlPointBuffer == null || radiusBuffer == null)
+                        {
+                            throw new InvalidOperationException("Curve geometry requires control-point and radius buffers.");
+                        }
+
                         uint curveAabbCount = curveGeometry.SegmentCount;
+                        if (curveAabbCount == 0)
+                        {
+                            throw new InvalidOperationException("Curve geometry has no segments.");
+                        }
+
+                        uint segmentControlPointCount = curveGeometry.SegmentControlPointCount;
+                        if (segmentControlPointCount == 0)
+                        {
+                            throw new InvalidOperationException("Curve geometry segment control-point count must be greater than zero.");
+                        }
+
+                        if (curveGeometry.ControlPointStride < 12u)
+                        {
+                            throw new InvalidOperationException($"Curve control-point stride ({curveGeometry.ControlPointStride}) is smaller than 3-float position size.");
+                        }
+
+                        if (curveGeometry.RadiusStride < 4u)
+                        {
+                            throw new InvalidOperationException($"Curve radius stride ({curveGeometry.RadiusStride}) is smaller than float size.");
+                        }
+
+                        if (curveGeometry.IndexBuffer != null && curveIndexBuffer == null)
+                        {
+                            throw new InvalidOperationException("Curve index buffer is not a DX12 buffer.");
+                        }
+
                         uint curveAabbBufferSize = curveAabbCount * (uint)sizeof(D3D12_RAYTRACING_AABB);
 
                         // Allocate GPU buffer for AABB data
@@ -274,29 +331,42 @@ namespace Infinity.Graphics
                             D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
                             Dx12RaytracingHelper.kUploadHeapProps);
 
-                        // Compute AABBs from control points with radius inflation
+                        // Compute conservative AABBs from curve control points with per-point radius inflation.
                         {
                             void* pAabbData;
                             m_NativeCurveAabbBuffer->Map(0, null, &pAabbData);
                             D3D12_RAYTRACING_AABB* aabbs = (D3D12_RAYTRACING_AABB*)pAabbData;
 
-                            Dx12Buffer controlPointBuffer = curveGeometry.ControlPointBuffer as Dx12Buffer;
-                            Dx12Buffer radiusBuffer = curveGeometry.RadiusBuffer as Dx12Buffer;
-
-                            // Initialize conservative AABBs covering the entire control point range
-                            // per segment with radius inflation. The actual bounding is approximate;
-                            // the intersection shader refines the test.
-                            for (uint seg = 0; seg < curveAabbCount; ++seg)
+                            void* pControlPointData = null;
+                            void* pRadiusData = null;
+                            void* pIndexData = null;
+                            controlPointBuffer.NativeResource->Map(0, null, &pControlPointData);
+                            radiusBuffer.NativeResource->Map(0, null, &pRadiusData);
+                            if (curveIndexBuffer != null)
                             {
-                                aabbs[seg].MinX = float.MaxValue;
-                                aabbs[seg].MinY = float.MaxValue;
-                                aabbs[seg].MinZ = float.MaxValue;
-                                aabbs[seg].MaxX = float.MinValue;
-                                aabbs[seg].MaxY = float.MinValue;
-                                aabbs[seg].MaxZ = float.MinValue;
+                                curveIndexBuffer.NativeResource->Map(0, null, &pIndexData);
                             }
-
-                            m_NativeCurveAabbBuffer->Unmap(0, null);
+                            try
+                            {
+                                BuildCurveAabbs(
+                                    aabbs,
+                                    curveAabbCount,
+                                    segmentControlPointCount,
+                                    curveGeometry,
+                                    (byte*)pControlPointData,
+                                    (byte*)pRadiusData,
+                                    (byte*)pIndexData);
+                            }
+                            finally
+                            {
+                                if (curveIndexBuffer != null)
+                                {
+                                    curveIndexBuffer.NativeResource->Unmap(0, null);
+                                }
+                                radiusBuffer.NativeResource->Unmap(0, null);
+                                controlPointBuffer.NativeResource->Unmap(0, null);
+                                m_NativeCurveAabbBuffer->Unmap(0, null);
+                            }
                         }
 
                         nativeGeometryDescription.Type = D3D12_RAYTRACING_GEOMETRY_TYPE.D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS;
@@ -328,6 +398,84 @@ namespace Infinity.Graphics
             m_NativeAccelStructDescriptor.Inputs = nativeAccelStructDescriptor;
             m_NativeAccelStructDescriptor.DestAccelerationStructureData = m_NativeResultBuffer->GetGPUVirtualAddress();
             m_NativeAccelStructDescriptor.ScratchAccelerationStructureData = m_NativeScratchBuffer->GetGPUVirtualAddress();
+        }
+
+        private static void BuildCurveAabbs(
+            D3D12_RAYTRACING_AABB* aabbs,
+            in uint segmentCount,
+            in uint segmentControlPointCount,
+            in RHIAccelStructCurves curveGeometry,
+            byte* controlPointData,
+            byte* radiusData,
+            byte* indexData)
+        {
+            byte* controlPointBase = controlPointData + curveGeometry.ControlPointOffset;
+            byte* radiusBase = radiusData + curveGeometry.RadiusOffset;
+            byte* indexBase = indexData != null ? indexData + curveGeometry.IndexOffset : null;
+            uint sequentialSegmentStep = segmentControlPointCount > 1u ? segmentControlPointCount - 1u : 1u;
+
+            for (uint segmentIndex = 0; segmentIndex < segmentCount; ++segmentIndex)
+            {
+                float minX = float.PositiveInfinity;
+                float minY = float.PositiveInfinity;
+                float minZ = float.PositiveInfinity;
+                float maxX = float.NegativeInfinity;
+                float maxY = float.NegativeInfinity;
+                float maxZ = float.NegativeInfinity;
+
+                for (uint localControlPoint = 0; localControlPoint < segmentControlPointCount; ++localControlPoint)
+                {
+                    uint controlPointIndex;
+                    if (indexBase != null)
+                    {
+                        uint indexElement = segmentIndex * segmentControlPointCount + localControlPoint;
+                        controlPointIndex = ReadCurveControlPointIndex(indexBase, curveGeometry.IndexFormat, indexElement);
+                    }
+                    else
+                    {
+                        controlPointIndex = segmentIndex * sequentialSegmentStep + localControlPoint;
+                    }
+
+                    if (controlPointIndex >= curveGeometry.ControlPointCount)
+                    {
+                        throw new InvalidOperationException($"Curve control-point index {controlPointIndex} out of range (count={curveGeometry.ControlPointCount}).");
+                    }
+
+                    float* controlPoint = (float*)(controlPointBase + (controlPointIndex * curveGeometry.ControlPointStride));
+                    float* radius = (float*)(radiusBase + (controlPointIndex * curveGeometry.RadiusStride));
+                    float inflatedRadius = *radius;
+                    float candidateMinX = controlPoint[0] - inflatedRadius;
+                    float candidateMinY = controlPoint[1] - inflatedRadius;
+                    float candidateMinZ = controlPoint[2] - inflatedRadius;
+                    float candidateMaxX = controlPoint[0] + inflatedRadius;
+                    float candidateMaxY = controlPoint[1] + inflatedRadius;
+                    float candidateMaxZ = controlPoint[2] + inflatedRadius;
+
+                    if (candidateMinX < minX) minX = candidateMinX;
+                    if (candidateMinY < minY) minY = candidateMinY;
+                    if (candidateMinZ < minZ) minZ = candidateMinZ;
+                    if (candidateMaxX > maxX) maxX = candidateMaxX;
+                    if (candidateMaxY > maxY) maxY = candidateMaxY;
+                    if (candidateMaxZ > maxZ) maxZ = candidateMaxZ;
+                }
+
+                aabbs[segmentIndex].MinX = minX;
+                aabbs[segmentIndex].MinY = minY;
+                aabbs[segmentIndex].MinZ = minZ;
+                aabbs[segmentIndex].MaxX = maxX;
+                aabbs[segmentIndex].MaxY = maxY;
+                aabbs[segmentIndex].MaxZ = maxZ;
+            }
+        }
+
+        private static uint ReadCurveControlPointIndex(byte* indexBase, in ERHIBufferFormat format, in uint elementIndex)
+        {
+            return format switch
+            {
+                ERHIBufferFormat.UInt16 => ((ushort*)indexBase)[elementIndex],
+                ERHIBufferFormat.UInt32 => ((uint*)indexBase)[elementIndex],
+                _ => throw new NotSupportedException($"Unsupported curve index format '{format}'."),
+            };
         }
 
         protected override void Release()

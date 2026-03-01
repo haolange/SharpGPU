@@ -239,6 +239,11 @@ namespace Infinity.Graphics
         {
             switch (bindType)
             {
+                case ERHIBindType.AccelStruct:
+                    Dx12TopLevelAccelStruct accelStruct = element.AccelStruct as Dx12TopLevelAccelStruct;
+                    if (accelStruct != null) handle = accelStruct.NativeGpuDescriptorHandle;
+                    break;
+
                 case ERHIBindType.Buffer:
                 case ERHIBindType.StorageBuffer:
                 case ERHIBindType.UniformBuffer:
@@ -281,6 +286,11 @@ namespace Infinity.Graphics
 
             switch (bindType)
             {
+                case ERHIBindType.AccelStruct:
+                    Dx12TopLevelAccelStruct accelStruct = element.AccelStruct as Dx12TopLevelAccelStruct;
+                    if (accelStruct != null) { srcHandle = accelStruct.NativeCpuDescriptorHandle; hasSource = true; }
+                    break;
+
                 case ERHIBindType.Buffer:
                 case ERHIBindType.StorageBuffer:
                 case ERHIBindType.UniformBuffer:

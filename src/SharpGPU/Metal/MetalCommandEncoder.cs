@@ -1905,8 +1905,14 @@ namespace Infinity.Graphics
                 table.Generate(pipeline);
             }
 
-            MTLSize threadgroupCount = new MTLSize(width, height, depth);
-            MTLSize threadsPerGroup = new MTLSize(pipeline.ThreadgroupSize.x, pipeline.ThreadgroupSize.y, pipeline.ThreadgroupSize.z);
+            uint threadsPerGroupX = math.max(pipeline.ThreadgroupSize.x, 1u);
+            uint threadsPerGroupY = math.max(pipeline.ThreadgroupSize.y, 1u);
+            uint threadsPerGroupZ = math.max(pipeline.ThreadgroupSize.z, 1u);
+            uint threadgroupCountX = (width + threadsPerGroupX - 1u) / threadsPerGroupX;
+            uint threadgroupCountY = (height + threadsPerGroupY - 1u) / threadsPerGroupY;
+            uint threadgroupCountZ = (depth + threadsPerGroupZ - 1u) / threadsPerGroupZ;
+            MTLSize threadgroupCount = new MTLSize(threadgroupCountX, threadgroupCountY, threadgroupCountZ);
+            MTLSize threadsPerGroup = new MTLSize(threadsPerGroupX, threadsPerGroupY, threadsPerGroupZ);
             if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 m_BindingBackend?.CommitRaytracing(m_NativeEncoder, table);

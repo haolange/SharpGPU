@@ -996,6 +996,15 @@ namespace Infinity.Graphics
                 ref Dx12BindInfo bindInfo = ref dx12ArgumentTableLayout.BindInfos[i];
 
                 parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.RayTracing, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                if (!parameter.HasValue)
+                {
+                    // DX12 RT pass uses SetComputeRoot* APIs. Allow tables authored as Compute-stage descriptors.
+                    parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Compute, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                }
+                if (!parameter.HasValue)
+                {
+                    parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.All, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                }
                 if (parameter.HasValue)
                 {
 #if DEBUG
@@ -1012,6 +1021,9 @@ namespace Infinity.Graphics
             Dx12TopLevelAccelStruct dx12TopLevelAccelStruct = topLevelAccelStruct as Dx12TopLevelAccelStruct;
             D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC accelStructDescription = dx12TopLevelAccelStruct.NativeAccelStructDescriptor;
             dx12CommandBuffer.NativeCommandList->BuildRaytracingAccelerationStructure(&accelStructDescription, 0, null);
+
+            D3D12_RESOURCE_BARRIER uavBarrier = D3D12_RESOURCE_BARRIER.InitUAV(dx12TopLevelAccelStruct.ResultBuffer);
+            dx12CommandBuffer.NativeCommandList->ResourceBarrier(1, &uavBarrier);
         }
 
         public override void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct)
@@ -1020,6 +1032,9 @@ namespace Infinity.Graphics
             Dx12BottomLevelAccelStruct dx12BottomLevelAccelStruct = bottomLevelAccelStruct as Dx12BottomLevelAccelStruct;
             D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC accelStructDescription = dx12BottomLevelAccelStruct.NativeAccelStructDescriptor;
             dx12CommandBuffer.NativeCommandList->BuildRaytracingAccelerationStructure(&accelStructDescription, 0, null);
+
+            D3D12_RESOURCE_BARRIER uavBarrier = D3D12_RESOURCE_BARRIER.InitUAV(dx12BottomLevelAccelStruct.NativeResultBuffer);
+            dx12CommandBuffer.NativeCommandList->ResourceBarrier(1, &uavBarrier);
         }
 
         public override void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable)
