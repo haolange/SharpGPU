@@ -1,21 +1,18 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using TerraFX.Interop.DirectX;
-using TerraFX.Interop.Windows;
 using Infinity.Collections.LowLevel;
-using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal static unsafe class Dx12RaytracingHelper
     {
-        public static D3D12_HEAP_PROPERTIES kUploadHeapProps = CreateHeapProperties(D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD, D3D12_CPU_PAGE_PROPERTY.D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL.D3D12_MEMORY_POOL_UNKNOWN, 0, 0);
-        public static D3D12_HEAP_PROPERTIES kDefaultHeapProps = CreateHeapProperties(D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, D3D12_CPU_PAGE_PROPERTY.D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL.D3D12_MEMORY_POOL_UNKNOWN, 0, 0);
+        public static Vortice.Direct3D12.HeapProperties kUploadHeapProps = CreateHeapProperties(Vortice.Direct3D12.HeapType.Upload, Vortice.Direct3D12.CpuPageProperty.Unknown, Vortice.Direct3D12.MemoryPool.Unknown, 0, 0);
+        public static Vortice.Direct3D12.HeapProperties kDefaultHeapProps = CreateHeapProperties(Vortice.Direct3D12.HeapType.Default, Vortice.Direct3D12.CpuPageProperty.Unknown, Vortice.Direct3D12.MemoryPool.Unknown, 0, 0);
 
-        private static D3D12_HEAP_PROPERTIES CreateHeapProperties(in D3D12_HEAP_TYPE heapType, in D3D12_CPU_PAGE_PROPERTY cpuPage, in D3D12_MEMORY_POOL memoryPool, in uint creationNodeMask, in uint visibleNodeMask)
+        private static Vortice.Direct3D12.HeapProperties CreateHeapProperties(in Vortice.Direct3D12.HeapType heapType, in Vortice.Direct3D12.CpuPageProperty cpuPage, in Vortice.Direct3D12.MemoryPool memoryPool, in uint creationNodeMask, in uint visibleNodeMask)
         {
-            D3D12_HEAP_PROPERTIES outHeapProperties;
+            Vortice.Direct3D12.HeapProperties outHeapProperties;
             outHeapProperties.Type = heapType;
             outHeapProperties.CPUPageProperty = cpuPage;
             outHeapProperties.MemoryPoolPreference = memoryPool;
@@ -24,28 +21,28 @@ namespace Infinity.Graphics
             return outHeapProperties;
         }
 
-        public static ID3D12Resource* CreateBuffer(in ID3D12Device10* pDevice, in uint size, in D3D12_RESOURCE_FLAGS flags, in D3D12_RESOURCE_STATES initState, D3D12_HEAP_PROPERTIES heapProps)
+        public static Vortice.Direct3D12.ID3D12Resource CreateBuffer(in Vortice.Direct3D12.ID3D12Device10 pDevice, in uint size, in Vortice.Direct3D12.ResourceFlags flags, in Vortice.Direct3D12.ResourceStates initState, Vortice.Direct3D12.HeapProperties heapProps)
         {
-            DXGI_SAMPLE_DESC sampleDesc = new DXGI_SAMPLE_DESC();
+            Vortice.DXGI.SampleDescription sampleDesc = new Vortice.DXGI.SampleDescription();
             sampleDesc.Count = 1;
             sampleDesc.Quality = 0;
 
-            D3D12_RESOURCE_DESC description = new D3D12_RESOURCE_DESC
+            Vortice.Direct3D12.ResourceDescription description = new Vortice.Direct3D12.ResourceDescription
             {
                 Alignment = 0UL,
                 DepthOrArraySize = 1,
-                Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_BUFFER,
+                Dimension = Vortice.Direct3D12.ResourceDimension.Buffer,
                 Flags = flags,
-                Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN,
+                Format = Vortice.DXGI.Format.Unknown,
                 Height = 1,
-                Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+                Layout = Vortice.Direct3D12.TextureLayout.RowMajor,
                 MipLevels = 1,
-                SampleDesc = sampleDesc,
+                SampleDescription = sampleDesc,
                 Width = size
             };
 
-            ID3D12Resource* nativeResource;
-            HRESULT hResult = pDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ALL_BUFFERS_AND_TEXTURES, &description, initState, null, __uuidof<ID3D12Resource>(), (void**)&nativeResource);
+            Vortice.Direct3D12.ID3D12Resource nativeResource;
+            SharpGen.Runtime.Result hResult = pDevice.CreateCommittedResource(heapProps, Vortice.Direct3D12.HeapFlags.AllowAllBuffersAndTextures, description, initState, null, out nativeResource);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -57,19 +54,19 @@ namespace Infinity.Graphics
     {
         public Dx12Device Dx12Device => m_Dx12Device;
         public int DescriptionHeapIndex => m_DescriptionHeapIndex;
-        public D3D12_CPU_DESCRIPTOR_HANDLE NativeCpuDescriptorHandle => m_NativeCpuDescriptorHandle;
-        public D3D12_GPU_DESCRIPTOR_HANDLE NativeGpuDescriptorHandle => m_NativeGpuDescriptorHandle;
-        public ID3D12Resource* ResultBuffer => m_NativeResultBuffer;
-        public D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC NativeAccelStructDescriptor => m_NativeAccelStructDescriptor;
+        public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuDescriptorHandle => m_NativeCpuDescriptorHandle;
+        public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuDescriptorHandle => m_NativeGpuDescriptorHandle;
+        public Vortice.Direct3D12.ID3D12Resource ResultBuffer => m_NativeResultBuffer;
+        public Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription NativeAccelStructDescriptor => m_NativeAccelStructDescriptor;
 
         private Dx12Device m_Dx12Device;
         private int m_DescriptionHeapIndex;
-        private D3D12_CPU_DESCRIPTOR_HANDLE m_NativeCpuDescriptorHandle;
-        private D3D12_GPU_DESCRIPTOR_HANDLE m_NativeGpuDescriptorHandle;
-        private ID3D12Resource* m_NativeResultBuffer;
-        private ID3D12Resource* m_NativeScratchBuffer;
-        private ID3D12Resource* m_NativeInstancesBuffer;
-        private D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC m_NativeAccelStructDescriptor;
+        private Vortice.Direct3D12.CpuDescriptorHandle m_NativeCpuDescriptorHandle;
+        private Vortice.Direct3D12.GpuDescriptorHandle m_NativeGpuDescriptorHandle;
+        private Vortice.Direct3D12.ID3D12Resource m_NativeResultBuffer;
+        private Vortice.Direct3D12.ID3D12Resource m_NativeScratchBuffer;
+        private Vortice.Direct3D12.ID3D12Resource m_NativeInstancesBuffer;
+        private Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription m_NativeAccelStructDescriptor;
 
         public Dx12TopLevelAccelStruct(Dx12Device device, in RHITopLevelAccelStructDescriptor descriptor)
         {
@@ -80,66 +77,64 @@ namespace Infinity.Graphics
             m_NativeGpuDescriptorHandle = default;
 
             Span<RHIAccelStructInstance> asInstances = descriptor.Instances.Span;
-            D3D12_RAYTRACING_INSTANCE_DESC* nativeInstanceDescriptions = stackalloc D3D12_RAYTRACING_INSTANCE_DESC[descriptor.Instances.Length];
+            Vortice.Direct3D12.RaytracingInstanceDescription* nativeInstanceDescriptions = stackalloc Vortice.Direct3D12.RaytracingInstanceDescription[descriptor.Instances.Length];
 
             for (int i = 0; i < descriptor.Instances.Length; ++i)
             {
                 ref RHIAccelStructInstance asInstance = ref asInstances[i];
                 Dx12BottomLevelAccelStruct accelStruct = asInstance.BottomLevelAccelStruct as Dx12BottomLevelAccelStruct;
 
-                ref D3D12_RAYTRACING_INSTANCE_DESC nativeInstanceDescription = ref nativeInstanceDescriptions[i];
+                ref Vortice.Direct3D12.RaytracingInstanceDescription nativeInstanceDescription = ref nativeInstanceDescriptions[i];
                 {
-                    ref D3D12_RAYTRACING_INSTANCE_DESC._Transform_e__FixedBuffer transform = ref nativeInstanceDescription.Transform;
-                    // D3D12 expects a row-major 3x4 transform matrix.
-                    transform[0] = asInstance.TransformMatrix.c0.x; transform[1] = asInstance.TransformMatrix.c1.x; transform[2] = asInstance.TransformMatrix.c2.x; transform[3] = asInstance.TransformMatrix.c3.x;
-                    transform[4] = asInstance.TransformMatrix.c0.y; transform[5] = asInstance.TransformMatrix.c1.y; transform[6] = asInstance.TransformMatrix.c2.y; transform[7] = asInstance.TransformMatrix.c3.y;
-                    transform[8] = asInstance.TransformMatrix.c0.z; transform[9] = asInstance.TransformMatrix.c1.z; transform[10] = asInstance.TransformMatrix.c2.z; transform[11] = asInstance.TransformMatrix.c3.z;
+                    nativeInstanceDescription.Transform = new Vortice.Mathematics.Matrix3x4(
+                        asInstance.TransformMatrix.c0.x, asInstance.TransformMatrix.c1.x, asInstance.TransformMatrix.c2.x, asInstance.TransformMatrix.c3.x,
+                        asInstance.TransformMatrix.c0.y, asInstance.TransformMatrix.c1.y, asInstance.TransformMatrix.c2.y, asInstance.TransformMatrix.c3.y,
+                        asInstance.TransformMatrix.c0.z, asInstance.TransformMatrix.c1.z, asInstance.TransformMatrix.c2.z, asInstance.TransformMatrix.c3.z);
 
-                    nativeInstanceDescription.Flags = (uint)(D3D12_RAYTRACING_INSTANCE_FLAGS)asInstance.Flag;
-                    nativeInstanceDescription.InstanceID = asInstance.InstanceID;
+                    nativeInstanceDescription.Flags = (Vortice.Direct3D12.RaytracingInstanceFlags)asInstance.Flag;
+                    nativeInstanceDescription.InstanceID = (Vortice.UInt24)asInstance.InstanceID;
                     nativeInstanceDescription.InstanceMask = asInstance.InstanceMask;
-                    nativeInstanceDescription.InstanceContributionToHitGroupIndex = asInstance.HitGroupIndex;
-                    nativeInstanceDescription.AccelerationStructure = accelStruct.NativeResultBuffer->GetGPUVirtualAddress();
+                    nativeInstanceDescription.InstanceContributionToHitGroupIndex = (Vortice.UInt24)asInstance.HitGroupIndex;
+                    nativeInstanceDescription.AccelerationStructure = accelStruct.NativeResultBuffer.GPUVirtualAddress;
                 }
             }
 
-            m_NativeInstancesBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * (uint)descriptor.Instances.Length, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDEX_BUFFER | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, Dx12RaytracingHelper.kUploadHeapProps);
+            m_NativeInstancesBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)sizeof(Vortice.Direct3D12.RaytracingInstanceDescription) * (uint)descriptor.Instances.Length, Vortice.Direct3D12.ResourceFlags.None, Vortice.Direct3D12.ResourceStates.AllShaderResource | Vortice.Direct3D12.ResourceStates.CopySource | Vortice.Direct3D12.ResourceStates.IndexBuffer | Vortice.Direct3D12.ResourceStates.IndirectArgument | Vortice.Direct3D12.ResourceStates.VertexAndConstantBuffer, Dx12RaytracingHelper.kUploadHeapProps);
 
             void* data;
-            m_NativeInstancesBuffer->Map(0, null, &data);
-            MemoryUtility.MemCpy(nativeInstanceDescriptions, data, (uint)sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * (uint)descriptor.Instances.Length);
-            m_NativeInstancesBuffer->Unmap(0, null);
+            m_NativeInstancesBuffer.Map(0, null, &data);
+            MemoryUtility.MemCpy(nativeInstanceDescriptions, data, (uint)sizeof(Vortice.Direct3D12.RaytracingInstanceDescription) * (uint)descriptor.Instances.Length);
+            m_NativeInstancesBuffer.Unmap(0, null);
 
-            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS nativeAccelStructDescriptor = new D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS();
+            Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs nativeAccelStructDescriptor = new Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs();
             {
-                nativeAccelStructDescriptor.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+                nativeAccelStructDescriptor.Type = Vortice.Direct3D12.RaytracingAccelerationStructureType.TopLevel;
                 nativeAccelStructDescriptor.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(descriptor.Flag);
-                nativeAccelStructDescriptor.DescsLayout = D3D12_ELEMENTS_LAYOUT.D3D12_ELEMENTS_LAYOUT_ARRAY;
-                nativeAccelStructDescriptor.NumDescs = (uint)descriptor.Instances.Length;
-                nativeAccelStructDescriptor.InstanceDescs = m_NativeInstancesBuffer->GetGPUVirtualAddress() + descriptor.Offset;
+                nativeAccelStructDescriptor.Layout = Vortice.Direct3D12.ElementsLayout.Array;
+                nativeAccelStructDescriptor.DescriptorsCount = (uint)descriptor.Instances.Length;
+                nativeAccelStructDescriptor.InstanceDescriptions = m_NativeInstancesBuffer.GPUVirtualAddress + descriptor.Offset;
             }
 
-            D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO nativeAccelStructPrebuildInfo;
-            m_Dx12Device.NativeDevice->GetRaytracingAccelerationStructurePrebuildInfo(&nativeAccelStructDescriptor, &nativeAccelStructPrebuildInfo);
+            Vortice.Direct3D12.RaytracingAccelerationStructurePrebuildInfo nativeAccelStructPrebuildInfo = m_Dx12Device.NativeDevice.GetRaytracingAccelerationStructurePrebuildInfo(nativeAccelStructDescriptor);
 
-            m_NativeScratchBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS, Dx12RaytracingHelper.kDefaultHeapProps);
-            m_NativeResultBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, Dx12RaytracingHelper.kDefaultHeapProps);
+            m_NativeScratchBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ScratchDataSizeInBytes, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess, Vortice.Direct3D12.ResourceStates.Common | Vortice.Direct3D12.ResourceStates.UnorderedAccess, Dx12RaytracingHelper.kDefaultHeapProps);
+            m_NativeResultBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ResultDataMaxSizeInBytes, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess, Vortice.Direct3D12.ResourceStates.Common | Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure, Dx12RaytracingHelper.kDefaultHeapProps);
 
             Dx12DescriptorInfo accelStructDescriptor = m_Dx12Device.AllocateCbvSrvUavDescriptor(1);
             m_DescriptionHeapIndex = accelStructDescriptor.Index;
             m_NativeCpuDescriptorHandle = accelStructDescriptor.CpuHandle;
             m_NativeGpuDescriptorHandle = accelStructDescriptor.GpuHandle;
 
-            D3D12_SHADER_RESOURCE_VIEW_DESC accelStructSrvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC();
-            accelStructSrvDesc.Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
-            accelStructSrvDesc.ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+            Vortice.Direct3D12.ShaderResourceViewDescription accelStructSrvDesc = new Vortice.Direct3D12.ShaderResourceViewDescription();
+            accelStructSrvDesc.Format = Vortice.DXGI.Format.Unknown;
+            accelStructSrvDesc.ViewDimension = Vortice.Direct3D12.ShaderResourceViewDimension.RaytracingAccelerationStructure;
             accelStructSrvDesc.Shader4ComponentMapping = 5768;
-            accelStructSrvDesc.RaytracingAccelerationStructure.Location = m_NativeResultBuffer->GetGPUVirtualAddress();
-            m_Dx12Device.NativeDevice->CreateShaderResourceView(null, &accelStructSrvDesc, m_NativeCpuDescriptorHandle);
+            accelStructSrvDesc.RaytracingAccelerationStructure.Location = m_NativeResultBuffer.GPUVirtualAddress;
+            m_Dx12Device.NativeDevice.CreateShaderResourceView(null, accelStructSrvDesc, m_NativeCpuDescriptorHandle);
 
             m_NativeAccelStructDescriptor.Inputs = nativeAccelStructDescriptor;
-            m_NativeAccelStructDescriptor.DestAccelerationStructureData = m_NativeResultBuffer->GetGPUVirtualAddress();
-            m_NativeAccelStructDescriptor.ScratchAccelerationStructureData = m_NativeScratchBuffer->GetGPUVirtualAddress();
+            m_NativeAccelStructDescriptor.DestinationAccelerationStructureData = m_NativeResultBuffer.GPUVirtualAddress;
+            m_NativeAccelStructDescriptor.ScratchAccelerationStructureData = m_NativeScratchBuffer.GPUVirtualAddress;
         }
 
         public override void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
@@ -147,47 +142,46 @@ namespace Infinity.Graphics
             m_Descriptor = descriptor;
 
             Span<RHIAccelStructInstance> asInstances = descriptor.Instances.Span;
-            D3D12_RAYTRACING_INSTANCE_DESC* nativeInstanceDescriptions = stackalloc D3D12_RAYTRACING_INSTANCE_DESC[descriptor.Instances.Length];
+            Vortice.Direct3D12.RaytracingInstanceDescription* nativeInstanceDescriptions = stackalloc Vortice.Direct3D12.RaytracingInstanceDescription[descriptor.Instances.Length];
 
             for (int i = 0; i < descriptor.Instances.Length; ++i)
             {
                 ref RHIAccelStructInstance asInstance = ref asInstances[i];
                 Dx12BottomLevelAccelStruct accelStruct = asInstance.BottomLevelAccelStruct as Dx12BottomLevelAccelStruct;
 
-                ref D3D12_RAYTRACING_INSTANCE_DESC nativeInstanceDescription = ref nativeInstanceDescriptions[i];
+                ref Vortice.Direct3D12.RaytracingInstanceDescription nativeInstanceDescription = ref nativeInstanceDescriptions[i];
                 {
-                    ref D3D12_RAYTRACING_INSTANCE_DESC._Transform_e__FixedBuffer transform = ref nativeInstanceDescription.Transform;
-                    // D3D12 expects a row-major 3x4 transform matrix.
-                    transform[0] = asInstance.TransformMatrix.c0.x; transform[1] = asInstance.TransformMatrix.c1.x; transform[2] = asInstance.TransformMatrix.c2.x; transform[3] = asInstance.TransformMatrix.c3.x;
-                    transform[4] = asInstance.TransformMatrix.c0.y; transform[5] = asInstance.TransformMatrix.c1.y; transform[6] = asInstance.TransformMatrix.c2.y; transform[7] = asInstance.TransformMatrix.c3.y;
-                    transform[8] = asInstance.TransformMatrix.c0.z; transform[9] = asInstance.TransformMatrix.c1.z; transform[10] = asInstance.TransformMatrix.c2.z; transform[11] = asInstance.TransformMatrix.c3.z;
+                    nativeInstanceDescription.Transform = new Vortice.Mathematics.Matrix3x4(
+                        asInstance.TransformMatrix.c0.x, asInstance.TransformMatrix.c1.x, asInstance.TransformMatrix.c2.x, asInstance.TransformMatrix.c3.x,
+                        asInstance.TransformMatrix.c0.y, asInstance.TransformMatrix.c1.y, asInstance.TransformMatrix.c2.y, asInstance.TransformMatrix.c3.y,
+                        asInstance.TransformMatrix.c0.z, asInstance.TransformMatrix.c1.z, asInstance.TransformMatrix.c2.z, asInstance.TransformMatrix.c3.z);
 
-                    nativeInstanceDescription.Flags = (uint)(D3D12_RAYTRACING_INSTANCE_FLAGS)asInstance.Flag;
-                    nativeInstanceDescription.InstanceID = asInstance.InstanceID;
+                    nativeInstanceDescription.Flags = (Vortice.Direct3D12.RaytracingInstanceFlags)asInstance.Flag;
+                    nativeInstanceDescription.InstanceID = (Vortice.UInt24)asInstance.InstanceID;
                     nativeInstanceDescription.InstanceMask = asInstance.InstanceMask;
-                    nativeInstanceDescription.InstanceContributionToHitGroupIndex = asInstance.HitGroupIndex;
-                    nativeInstanceDescription.AccelerationStructure = accelStruct.NativeResultBuffer->GetGPUVirtualAddress();
+                    nativeInstanceDescription.InstanceContributionToHitGroupIndex = (Vortice.UInt24)asInstance.HitGroupIndex;
+                    nativeInstanceDescription.AccelerationStructure = accelStruct.NativeResultBuffer.GPUVirtualAddress;
                 }
             }
 
             void* data;
-            m_NativeInstancesBuffer->Map(0, null, &data);
-            MemoryUtility.MemCpy(nativeInstanceDescriptions, data, (uint)sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * (uint)descriptor.Instances.Length);
-            m_NativeInstancesBuffer->Unmap(0, null);
+            m_NativeInstancesBuffer.Map(0, null, &data);
+            MemoryUtility.MemCpy(nativeInstanceDescriptions, data, (uint)sizeof(Vortice.Direct3D12.RaytracingInstanceDescription) * (uint)descriptor.Instances.Length);
+            m_NativeInstancesBuffer.Unmap(0, null);
 
-            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS nativeAccelStructDescriptor = new D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS();
+            Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs nativeAccelStructDescriptor = new Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs();
             {
-                nativeAccelStructDescriptor.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-                nativeAccelStructDescriptor.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(descriptor.Flag) | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
-                nativeAccelStructDescriptor.DescsLayout = D3D12_ELEMENTS_LAYOUT.D3D12_ELEMENTS_LAYOUT_ARRAY;
-                nativeAccelStructDescriptor.NumDescs = (uint)descriptor.Instances.Length;
-                nativeAccelStructDescriptor.InstanceDescs = m_NativeInstancesBuffer->GetGPUVirtualAddress() + descriptor.Offset;
+                nativeAccelStructDescriptor.Type = Vortice.Direct3D12.RaytracingAccelerationStructureType.TopLevel;
+                nativeAccelStructDescriptor.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(descriptor.Flag) | Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PerformUpdate;
+                nativeAccelStructDescriptor.Layout = Vortice.Direct3D12.ElementsLayout.Array;
+                nativeAccelStructDescriptor.DescriptorsCount = (uint)descriptor.Instances.Length;
+                nativeAccelStructDescriptor.InstanceDescriptions = m_NativeInstancesBuffer.GPUVirtualAddress + descriptor.Offset;
             }
 
             m_NativeAccelStructDescriptor.Inputs = nativeAccelStructDescriptor;
-            m_NativeAccelStructDescriptor.DestAccelerationStructureData = m_NativeResultBuffer->GetGPUVirtualAddress();
-            m_NativeAccelStructDescriptor.SourceAccelerationStructureData = m_NativeResultBuffer->GetGPUVirtualAddress();
-            m_NativeAccelStructDescriptor.ScratchAccelerationStructureData = m_NativeScratchBuffer->GetGPUVirtualAddress();
+            m_NativeAccelStructDescriptor.DestinationAccelerationStructureData = m_NativeResultBuffer.GPUVirtualAddress;
+            m_NativeAccelStructDescriptor.SourceAccelerationStructureData = m_NativeResultBuffer.GPUVirtualAddress;
+            m_NativeAccelStructDescriptor.ScratchAccelerationStructureData = m_NativeScratchBuffer.GPUVirtualAddress;
         }
 
         protected override void Release()
@@ -197,24 +191,24 @@ namespace Infinity.Graphics
                 m_Dx12Device.FreeCbvSrvUavDescriptor(m_DescriptionHeapIndex);
                 m_DescriptionHeapIndex = -1;
             }
-            m_NativeResultBuffer->Release();
-            m_NativeScratchBuffer->Release();
-            m_NativeInstancesBuffer->Release();
+            m_NativeResultBuffer.Release();
+            m_NativeScratchBuffer.Release();
+            m_NativeInstancesBuffer.Release();
         }
     }
 
     internal unsafe class Dx12BottomLevelAccelStruct : RHIBottomLevelAccelStruct
     {
         public Dx12Device Dx12Device => m_Dx12Device;
-        public ID3D12Resource* NativeResultBuffer => m_NativeResultBuffer;
-        public D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC NativeAccelStructDescriptor => m_NativeAccelStructDescriptor;
+        public Vortice.Direct3D12.ID3D12Resource NativeResultBuffer => m_NativeResultBuffer;
+        public Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription NativeAccelStructDescriptor => m_NativeAccelStructDescriptor;
 
         private Dx12Device m_Dx12Device;
-        private ID3D12Resource* m_NativeResultBuffer;
-        private ID3D12Resource* m_NativeScratchBuffer;
-        private ID3D12Resource* m_NativeCurveAabbBuffer;
-        private D3D12_RAYTRACING_GEOMETRY_DESC* m_NativeGeometryDescriptions;
-        private D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC m_NativeAccelStructDescriptor;
+        private Vortice.Direct3D12.ID3D12Resource m_NativeResultBuffer;
+        private Vortice.Direct3D12.ID3D12Resource m_NativeScratchBuffer;
+        private Vortice.Direct3D12.ID3D12Resource m_NativeCurveAabbBuffer;
+        private Vortice.Direct3D12.RaytracingGeometryDescription[] m_NativeGeometryDescriptions;
+        private Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription m_NativeAccelStructDescriptor;
 
         public Dx12BottomLevelAccelStruct(Dx12Device device, in RHIBottomLevelAccelStructDescriptor descriptor)
         {
@@ -228,19 +222,13 @@ namespace Infinity.Graphics
                 throw new InvalidOperationException("Bottom-level acceleration structure requires at least one geometry descriptor.");
             }
 
-            nuint geometryBytes = (nuint)(geometryCount * sizeof(D3D12_RAYTRACING_GEOMETRY_DESC));
-            m_NativeGeometryDescriptions = (D3D12_RAYTRACING_GEOMETRY_DESC*)NativeMemory.AllocZeroed(geometryBytes);
-            if (m_NativeGeometryDescriptions == null)
-            {
-                throw new OutOfMemoryException($"Failed to allocate {geometryBytes} bytes for BLAS geometry descriptors.");
-            }
-
-            D3D12_RAYTRACING_GEOMETRY_DESC* nativeGeometryDescriptions = m_NativeGeometryDescriptions;
+            m_NativeGeometryDescriptions = new Vortice.Direct3D12.RaytracingGeometryDescription[geometryCount];
+            Span<Vortice.Direct3D12.RaytracingGeometryDescription> nativeGeometryDescriptions = m_NativeGeometryDescriptions;
 
             for (int i = 0; i < descriptor.Geometries.Length; ++i)
             {
                 RHIAccelStructGeometry asGeometry = descriptor.Geometries[i];
-                ref D3D12_RAYTRACING_GEOMETRY_DESC nativeGeometryDescription = ref nativeGeometryDescriptions[i];
+                ref Vortice.Direct3D12.RaytracingGeometryDescription nativeGeometryDescription = ref nativeGeometryDescriptions[i];
 
                 switch (asGeometry.GeometryType)
                 {
@@ -248,12 +236,12 @@ namespace Infinity.Graphics
                         RHIAccelStructAABBs aabbGeometry = asGeometry as RHIAccelStructAABBs;
                         Dx12Buffer aabbBuffer = aabbGeometry.AABBBuffer as Dx12Buffer;
 
-                        nativeGeometryDescription.Type = D3D12_RAYTRACING_GEOMETRY_TYPE.D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS;
+                        nativeGeometryDescription.Type = Vortice.Direct3D12.RaytracingGeometryType.ProceduralPrimitiveAabbs;
                         nativeGeometryDescription.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(asGeometry.GeometryFlag);
 
-                        ref D3D12_RAYTRACING_GEOMETRY_AABBS_DESC nativeAABBGeometry = ref nativeGeometryDescription.AABBs;
+                        ref Vortice.Direct3D12.RaytracingGeometryAabbsDescription nativeAABBGeometry = ref nativeGeometryDescription.AABBs;
                         nativeAABBGeometry.AABBCount = aabbGeometry.Count;
-                        nativeAABBGeometry.AABBs.StartAddress = aabbBuffer.NativeResource->GetGPUVirtualAddress() + aabbGeometry.Offset;
+                        nativeAABBGeometry.AABBs.StartAddress = aabbBuffer.NativeResource.GPUVirtualAddress + aabbGeometry.Offset;
                         nativeAABBGeometry.AABBs.StrideInBytes = aabbGeometry.Stride;
                         break;
 
@@ -262,21 +250,21 @@ namespace Infinity.Graphics
                         Dx12Buffer indexBuffer = triangleGeometry.IndexBuffer as Dx12Buffer;
                         Dx12Buffer vertexBuffer = triangleGeometry.VertexBuffer as Dx12Buffer;
 
-                        nativeGeometryDescription.Type = D3D12_RAYTRACING_GEOMETRY_TYPE.D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+                        nativeGeometryDescription.Type = Vortice.Direct3D12.RaytracingGeometryType.Triangles;
                         nativeGeometryDescription.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(asGeometry.GeometryFlag);
 
-                        ref D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC nativeTriangleGeometry = ref nativeGeometryDescription.Triangles;
+                        ref Vortice.Direct3D12.RaytracingGeometryTrianglesDescription nativeTriangleGeometry = ref nativeGeometryDescription.Triangles;
                         nativeTriangleGeometry.IndexCount = triangleGeometry.IndexCount;
-                        nativeTriangleGeometry.IndexBuffer = indexBuffer.NativeResource->GetGPUVirtualAddress() + triangleGeometry.IndexOffset;
+                        nativeTriangleGeometry.IndexBuffer = indexBuffer.NativeResource.GPUVirtualAddress + triangleGeometry.IndexOffset;
                         nativeTriangleGeometry.IndexFormat = Dx12Utility.ConvertToDx12IndexFormat(triangleGeometry.IndexFormat);
                         nativeTriangleGeometry.VertexCount = triangleGeometry.VertexCount;
-                        nativeTriangleGeometry.VertexBuffer.StartAddress = vertexBuffer.NativeResource->GetGPUVirtualAddress() + triangleGeometry.VertexOffset;
+                        nativeTriangleGeometry.VertexBuffer.StartAddress = vertexBuffer.NativeResource.GPUVirtualAddress + triangleGeometry.VertexOffset;
                         nativeTriangleGeometry.VertexBuffer.StrideInBytes = triangleGeometry.VertexStride;
-                        DXGI_FORMAT vertexFormat = Dx12Utility.ConvertToDx12ViewFormat(triangleGeometry.VertexFormat);
-                        if (vertexFormat == DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT)
+                        Vortice.DXGI.Format vertexFormat = Dx12Utility.ConvertToDx12ViewFormat(triangleGeometry.VertexFormat);
+                        if (vertexFormat == Vortice.DXGI.Format.R32G32B32A32_Float)
                         {
                             // DXR triangles require xyz vertex format. Keep float4 layout by using xyz format + explicit stride.
-                            vertexFormat = DXGI_FORMAT.DXGI_FORMAT_R32G32B32_FLOAT;
+                            vertexFormat = Vortice.DXGI.Format.R32G32B32_Float;
                         }
 
                         nativeTriangleGeometry.VertexFormat = vertexFormat;
@@ -321,30 +309,30 @@ namespace Infinity.Graphics
                             throw new InvalidOperationException("Curve index buffer is not a DX12 buffer.");
                         }
 
-                        uint curveAabbBufferSize = curveAabbCount * (uint)sizeof(D3D12_RAYTRACING_AABB);
+                        uint curveAabbBufferSize = curveAabbCount * (uint)sizeof(Vortice.Direct3D12.RaytracingAabb);
 
                         // Allocate GPU buffer for AABB data
                         m_NativeCurveAabbBuffer = Dx12RaytracingHelper.CreateBuffer(
                             m_Dx12Device.NativeDevice,
                             curveAabbBufferSize,
-                            D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE,
-                            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
+                            Vortice.Direct3D12.ResourceFlags.None,
+                            Vortice.Direct3D12.ResourceStates.GenericRead,
                             Dx12RaytracingHelper.kUploadHeapProps);
 
                         // Compute conservative AABBs from curve control points with per-point radius inflation.
                         {
                             void* pAabbData;
-                            m_NativeCurveAabbBuffer->Map(0, null, &pAabbData);
-                            D3D12_RAYTRACING_AABB* aabbs = (D3D12_RAYTRACING_AABB*)pAabbData;
+                            m_NativeCurveAabbBuffer.Map(0, null, &pAabbData);
+                            Vortice.Direct3D12.RaytracingAabb* aabbs = (Vortice.Direct3D12.RaytracingAabb*)pAabbData;
 
                             void* pControlPointData = null;
                             void* pRadiusData = null;
                             void* pIndexData = null;
-                            controlPointBuffer.NativeResource->Map(0, null, &pControlPointData);
-                            radiusBuffer.NativeResource->Map(0, null, &pRadiusData);
+                            controlPointBuffer.NativeResource.Map(0, null, &pControlPointData);
+                            radiusBuffer.NativeResource.Map(0, null, &pRadiusData);
                             if (curveIndexBuffer != null)
                             {
-                                curveIndexBuffer.NativeResource->Map(0, null, &pIndexData);
+                                curveIndexBuffer.NativeResource.Map(0, null, &pIndexData);
                             }
                             try
                             {
@@ -361,47 +349,46 @@ namespace Infinity.Graphics
                             {
                                 if (curveIndexBuffer != null)
                                 {
-                                    curveIndexBuffer.NativeResource->Unmap(0, null);
+                                    curveIndexBuffer.NativeResource.Unmap(0, null);
                                 }
-                                radiusBuffer.NativeResource->Unmap(0, null);
-                                controlPointBuffer.NativeResource->Unmap(0, null);
-                                m_NativeCurveAabbBuffer->Unmap(0, null);
+                                radiusBuffer.NativeResource.Unmap(0, null);
+                                controlPointBuffer.NativeResource.Unmap(0, null);
+                                m_NativeCurveAabbBuffer.Unmap(0, null);
                             }
                         }
 
-                        nativeGeometryDescription.Type = D3D12_RAYTRACING_GEOMETRY_TYPE.D3D12_RAYTRACING_GEOMETRY_TYPE_PROCEDURAL_PRIMITIVE_AABBS;
+                        nativeGeometryDescription.Type = Vortice.Direct3D12.RaytracingGeometryType.ProceduralPrimitiveAabbs;
                         nativeGeometryDescription.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(asGeometry.GeometryFlag);
 
-                        ref D3D12_RAYTRACING_GEOMETRY_AABBS_DESC nativeCurveAABBGeometry = ref nativeGeometryDescription.AABBs;
+                        ref Vortice.Direct3D12.RaytracingGeometryAabbsDescription nativeCurveAABBGeometry = ref nativeGeometryDescription.AABBs;
                         nativeCurveAABBGeometry.AABBCount = curveAabbCount;
-                        nativeCurveAABBGeometry.AABBs.StartAddress = m_NativeCurveAabbBuffer->GetGPUVirtualAddress();
-                        nativeCurveAABBGeometry.AABBs.StrideInBytes = (ulong)sizeof(D3D12_RAYTRACING_AABB);
+                        nativeCurveAABBGeometry.AABBs.StartAddress = m_NativeCurveAabbBuffer.GPUVirtualAddress;
+                        nativeCurveAABBGeometry.AABBs.StrideInBytes = (ulong)sizeof(Vortice.Direct3D12.RaytracingAabb);
                         break;
                 }
             }
 
-            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS nativeAccelStructDescriptor = new D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS();
+            Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs nativeAccelStructDescriptor = new Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs();
             {
-                nativeAccelStructDescriptor.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-                nativeAccelStructDescriptor.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
-                nativeAccelStructDescriptor.DescsLayout = D3D12_ELEMENTS_LAYOUT.D3D12_ELEMENTS_LAYOUT_ARRAY;
-                nativeAccelStructDescriptor.NumDescs = (uint)descriptor.Geometries.Length;
-                nativeAccelStructDescriptor.pGeometryDescs = m_NativeGeometryDescriptions;
+                nativeAccelStructDescriptor.Type = Vortice.Direct3D12.RaytracingAccelerationStructureType.BottomLevel;
+                nativeAccelStructDescriptor.Flags = Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.None;
+                nativeAccelStructDescriptor.Layout = Vortice.Direct3D12.ElementsLayout.Array;
+                nativeAccelStructDescriptor.DescriptorsCount = (uint)descriptor.Geometries.Length;
+                nativeAccelStructDescriptor.GeometryDescriptions = m_NativeGeometryDescriptions;
             }
 
-            D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO nativeAccelStructPrebuildInfo;
-            m_Dx12Device.NativeDevice->GetRaytracingAccelerationStructurePrebuildInfo(&nativeAccelStructDescriptor, &nativeAccelStructPrebuildInfo);
+            Vortice.Direct3D12.RaytracingAccelerationStructurePrebuildInfo nativeAccelStructPrebuildInfo = m_Dx12Device.NativeDevice.GetRaytracingAccelerationStructurePrebuildInfo(nativeAccelStructDescriptor);
 
-            m_NativeScratchBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ScratchDataSizeInBytes, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS, Dx12RaytracingHelper.kDefaultHeapProps);
-            m_NativeResultBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, Dx12RaytracingHelper.kDefaultHeapProps);
+            m_NativeScratchBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ScratchDataSizeInBytes, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess, Vortice.Direct3D12.ResourceStates.Common | Vortice.Direct3D12.ResourceStates.UnorderedAccess, Dx12RaytracingHelper.kDefaultHeapProps);
+            m_NativeResultBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ResultDataMaxSizeInBytes, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess, Vortice.Direct3D12.ResourceStates.Common | Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure, Dx12RaytracingHelper.kDefaultHeapProps);
 
             m_NativeAccelStructDescriptor.Inputs = nativeAccelStructDescriptor;
-            m_NativeAccelStructDescriptor.DestAccelerationStructureData = m_NativeResultBuffer->GetGPUVirtualAddress();
-            m_NativeAccelStructDescriptor.ScratchAccelerationStructureData = m_NativeScratchBuffer->GetGPUVirtualAddress();
+            m_NativeAccelStructDescriptor.DestinationAccelerationStructureData = m_NativeResultBuffer.GPUVirtualAddress;
+            m_NativeAccelStructDescriptor.ScratchAccelerationStructureData = m_NativeScratchBuffer.GPUVirtualAddress;
         }
 
         private static void BuildCurveAabbs(
-            D3D12_RAYTRACING_AABB* aabbs,
+            Vortice.Direct3D12.RaytracingAabb* aabbs,
             in uint segmentCount,
             in uint segmentControlPointCount,
             in RHIAccelStructCurves curveGeometry,
@@ -480,19 +467,13 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            if (m_NativeGeometryDescriptions != null)
-            {
-                NativeMemory.Free(m_NativeGeometryDescriptions);
-                m_NativeGeometryDescriptions = null;
-            }
-
             if (m_NativeCurveAabbBuffer != null)
             {
-                m_NativeCurveAabbBuffer->Release();
+                m_NativeCurveAabbBuffer.Release();
                 m_NativeCurveAabbBuffer = null;
             }
-            m_NativeResultBuffer->Release();
-            m_NativeScratchBuffer->Release();
+            m_NativeResultBuffer.Release();
+            m_NativeScratchBuffer.Release();
         }
     }
 #pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416

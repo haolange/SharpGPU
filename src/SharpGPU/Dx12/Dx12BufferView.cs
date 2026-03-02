@@ -1,25 +1,24 @@
 ﻿using Infinity.Mathmatics;
-using TerraFX.Interop.DirectX;
 
 namespace Infinity.Graphics
 {
     internal unsafe class Dx12BufferView : RHIBufferView
     {
-        public ID3D12DescriptorHeap* NativeDescriptorHeap
+        public Vortice.Direct3D12.ID3D12DescriptorHeap NativeDescriptorHeap
         {
             get
             {
                 return m_NativeDescriptorHeap;
             }
         }
-        public D3D12_CPU_DESCRIPTOR_HANDLE NativeCpuDescriptorHandle
+        public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuDescriptorHandle
         {
             get
             {
                 return m_NativeCpuDescriptorHandle;
             }
         }
-        public D3D12_GPU_DESCRIPTOR_HANDLE NativeGpuDescriptorHandle
+        public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuDescriptorHandle
         {
             get
             {
@@ -30,9 +29,9 @@ namespace Infinity.Graphics
         private int m_HeapIndex;
         private bool4 m_LifeState;
         private Dx12Buffer m_Dx12Buffer;
-        private ID3D12DescriptorHeap* m_NativeDescriptorHeap;
-        private D3D12_CPU_DESCRIPTOR_HANDLE m_NativeCpuDescriptorHandle;
-        private D3D12_GPU_DESCRIPTOR_HANDLE m_NativeGpuDescriptorHandle;
+        private Vortice.Direct3D12.ID3D12DescriptorHeap m_NativeDescriptorHeap;
+        private Vortice.Direct3D12.CpuDescriptorHandle m_NativeCpuDescriptorHandle;
+        private Vortice.Direct3D12.GpuDescriptorHandle m_NativeGpuDescriptorHandle;
 
         public Dx12BufferView(Dx12Buffer buffer, in RHIBufferViewDescriptor descriptor)
         {
@@ -45,16 +44,16 @@ namespace Infinity.Graphics
                 {
                     m_LifeState.x = true;
 
-                    D3D12_CONSTANT_BUFFER_VIEW_DESC desc = new D3D12_CONSTANT_BUFFER_VIEW_DESC();
+                    Vortice.Direct3D12.ConstantBufferViewDescription desc = new Vortice.Direct3D12.ConstantBufferViewDescription();
                     desc.SizeInBytes = (uint)descriptor.Stride;
-                    desc.BufferLocation = m_Dx12Buffer.NativeResource->GetGPUVirtualAddress() + (ulong)(descriptor.Stride * descriptor.Offset);
+                    desc.BufferLocation = m_Dx12Buffer.NativeResource.GPUVirtualAddress + (ulong)(descriptor.Stride * descriptor.Offset);
 
                     Dx12DescriptorInfo allocation = m_Dx12Buffer.Dx12Device.AllocateCbvSrvUavDescriptor(1);
                     m_HeapIndex = allocation.Index;
                     m_NativeDescriptorHeap = allocation.DescriptorHeap;
                     m_NativeCpuDescriptorHandle = allocation.CpuHandle;
                     m_NativeGpuDescriptorHandle = allocation.GpuHandle;
-                    m_Dx12Buffer.Dx12Device.NativeDevice->CreateConstantBufferView(&desc, m_NativeCpuDescriptorHandle);
+                    m_Dx12Buffer.Dx12Device.NativeDevice.CreateConstantBufferView(desc, m_NativeCpuDescriptorHandle);
                 }
             }
             else if (descriptor.ViewType == ERHIBufferViewType.AccelStruct)
@@ -63,10 +62,10 @@ namespace Infinity.Graphics
                 {
                     m_LifeState.y = true;
 
-                    D3D12_SHADER_RESOURCE_VIEW_DESC desc = new D3D12_SHADER_RESOURCE_VIEW_DESC();
-                    desc.Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
-                    desc.RaytracingAccelerationStructure.Location = m_Dx12Buffer.NativeResource->GetGPUVirtualAddress();
-                    desc.ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+                    Vortice.Direct3D12.ShaderResourceViewDescription desc = new Vortice.Direct3D12.ShaderResourceViewDescription();
+                    desc.Format = Vortice.DXGI.Format.Unknown;
+                    desc.RaytracingAccelerationStructure.Location = m_Dx12Buffer.NativeResource.GPUVirtualAddress;
+                    desc.ViewDimension = Vortice.Direct3D12.ShaderResourceViewDimension.RaytracingAccelerationStructure;
                     desc.Shader4ComponentMapping = 5768;
 
                     Dx12DescriptorInfo allocation = m_Dx12Buffer.Dx12Device.AllocateCbvSrvUavDescriptor(1);
@@ -74,7 +73,7 @@ namespace Infinity.Graphics
                     m_NativeDescriptorHeap = allocation.DescriptorHeap;
                     m_NativeCpuDescriptorHandle = allocation.CpuHandle;
                     m_NativeGpuDescriptorHandle = allocation.GpuHandle;
-                    m_Dx12Buffer.Dx12Device.NativeDevice->CreateShaderResourceView(m_Dx12Buffer.NativeResource, &desc, m_NativeCpuDescriptorHandle);
+                    m_Dx12Buffer.Dx12Device.NativeDevice.CreateShaderResourceView(m_Dx12Buffer.NativeResource, desc, m_NativeCpuDescriptorHandle);
                 }
             }
             else if (descriptor.ViewType == ERHIBufferViewType.ShaderResource)
@@ -83,12 +82,12 @@ namespace Infinity.Graphics
                 {
                     m_LifeState.z = true;
 
-                    D3D12_SHADER_RESOURCE_VIEW_DESC desc = new D3D12_SHADER_RESOURCE_VIEW_DESC();
-                    desc.Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
+                    Vortice.Direct3D12.ShaderResourceViewDescription desc = new Vortice.Direct3D12.ShaderResourceViewDescription();
+                    desc.Format = Vortice.DXGI.Format.Unknown;
                     desc.Buffer.NumElements = (uint)descriptor.Count;
                     desc.Buffer.FirstElement = (ulong)descriptor.Offset;
                     desc.Buffer.StructureByteStride = (uint)descriptor.Stride;
-                    desc.ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_BUFFER;
+                    desc.ViewDimension = Vortice.Direct3D12.ShaderResourceViewDimension.Buffer;
                     desc.Shader4ComponentMapping = 5768;
 
                     Dx12DescriptorInfo allocation = m_Dx12Buffer.Dx12Device.AllocateCbvSrvUavDescriptor(1);
@@ -96,7 +95,7 @@ namespace Infinity.Graphics
                     m_NativeDescriptorHeap = allocation.DescriptorHeap;
                     m_NativeCpuDescriptorHandle = allocation.CpuHandle;
                     m_NativeGpuDescriptorHandle = allocation.GpuHandle;
-                    m_Dx12Buffer.Dx12Device.NativeDevice->CreateShaderResourceView(m_Dx12Buffer.NativeResource, &desc, m_NativeCpuDescriptorHandle);
+                    m_Dx12Buffer.Dx12Device.NativeDevice.CreateShaderResourceView(m_Dx12Buffer.NativeResource, desc, m_NativeCpuDescriptorHandle);
                 }
             }
             else if (descriptor.ViewType == ERHIBufferViewType.UnorderedAccess)
@@ -105,19 +104,19 @@ namespace Infinity.Graphics
                 {
                     m_LifeState.w = true;
 
-                    D3D12_UNORDERED_ACCESS_VIEW_DESC desc = new D3D12_UNORDERED_ACCESS_VIEW_DESC();
-                    desc.Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
+                    Vortice.Direct3D12.UnorderedAccessViewDescription desc = new Vortice.Direct3D12.UnorderedAccessViewDescription();
+                    desc.Format = Vortice.DXGI.Format.Unknown;
                     desc.Buffer.NumElements = (uint)descriptor.Count;
                     desc.Buffer.FirstElement = (ulong)descriptor.Offset;
                     desc.Buffer.StructureByteStride = (uint)descriptor.Stride;
-                    desc.ViewDimension = D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_BUFFER;
+                    desc.ViewDimension = Vortice.Direct3D12.UnorderedAccessViewDimension.Buffer;
 
                     Dx12DescriptorInfo allocation = m_Dx12Buffer.Dx12Device.AllocateCbvSrvUavDescriptor(1);
                     m_HeapIndex = allocation.Index;
                     m_NativeDescriptorHeap = allocation.DescriptorHeap;
                     m_NativeCpuDescriptorHandle = allocation.CpuHandle;
                     m_NativeGpuDescriptorHandle = allocation.GpuHandle;
-                    m_Dx12Buffer.Dx12Device.NativeDevice->CreateUnorderedAccessView(m_Dx12Buffer.NativeResource, null, &desc, m_NativeCpuDescriptorHandle);
+                    m_Dx12Buffer.Dx12Device.NativeDevice.CreateUnorderedAccessView(m_Dx12Buffer.NativeResource, null, desc, m_NativeCpuDescriptorHandle);
                 }
             }
         }

@@ -1,7 +1,4 @@
 ﻿using System;
-using TerraFX.Interop.Windows;
-using TerraFX.Interop.DirectX;
-using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
 {
@@ -15,7 +12,7 @@ namespace Infinity.Graphics
                 return m_Dx12Device;
             }
         }
-        public ID3D12CommandQueue* NativeCommandQueue
+        public Vortice.Direct3D12.ID3D12CommandQueue NativeCommandQueue
         {
             get
             {
@@ -26,26 +23,25 @@ namespace Infinity.Graphics
         {
             get
             {
-                ulong result = 0;
-                m_NativeCommandQueue->GetTimestampFrequency(&result);
+                m_NativeCommandQueue.GetTimestampFrequency(out ulong result);
                 return result;
             }
         }
 
         private Dx12Device m_Dx12Device;
-        private ID3D12CommandQueue* m_NativeCommandQueue;
+        private Vortice.Direct3D12.ID3D12CommandQueue m_NativeCommandQueue;
 
         public Dx12CommandQueue(Dx12Device device, in ERHIPipelineType pipeline)
         {
             m_Dx12Device = device;
             m_PipelineType = pipeline;
 
-            D3D12_COMMAND_QUEUE_DESC queueDesc = new D3D12_COMMAND_QUEUE_DESC();
-            queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAGS.D3D12_COMMAND_QUEUE_FLAG_NONE;
+            Vortice.Direct3D12.CommandQueueDescription queueDesc = new Vortice.Direct3D12.CommandQueueDescription();
+            queueDesc.Flags = Vortice.Direct3D12.CommandQueueFlags.None;
             queueDesc.Type = Dx12Utility.ConvertToDx12QueueType(pipeline);
 
-            ID3D12CommandQueue* commandQueue;
-            HRESULT hResult = m_Dx12Device.NativeDevice->CreateCommandQueue(&queueDesc, __uuidof<ID3D12CommandQueue>(), (void**)&commandQueue);
+            Vortice.Direct3D12.ID3D12CommandQueue commandQueue;
+            SharpGen.Runtime.Result hResult = m_Dx12Device.NativeDevice.CreateCommandQueue(queueDesc, out commandQueue);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -63,11 +59,11 @@ namespace Infinity.Graphics
             Dx12Texture dx12Texture = tiledTextureRegions.Texture as Dx12Texture;
             int regionCount = tiledTextureRegions.Regions.Length;
 
-            D3D12_TILED_RESOURCE_COORDINATE* coordinates = stackalloc D3D12_TILED_RESOURCE_COORDINATE[regionCount];
-            D3D12_TILE_REGION_SIZE* regionSizes = stackalloc D3D12_TILE_REGION_SIZE[regionCount];
-            D3D12_TILE_RANGE_FLAGS* rangeFlags = stackalloc D3D12_TILE_RANGE_FLAGS[regionCount];
-            uint* heapRangeStartOffsets = stackalloc uint[regionCount];
-            uint* rangeTileCounts = stackalloc uint[regionCount];
+            Vortice.Direct3D12.TiledResourceCoordinate[] coordinates = new Vortice.Direct3D12.TiledResourceCoordinate[regionCount];
+            Vortice.Direct3D12.TileRegionSize[] regionSizes = new Vortice.Direct3D12.TileRegionSize[regionCount];
+            Vortice.Direct3D12.TileRangeFlags[] rangeFlags = new Vortice.Direct3D12.TileRangeFlags[regionCount];
+            int[] heapRangeStartOffsets = new int[regionCount];
+            int[] rangeTileCounts = new int[regionCount];
 
             for (int i = 0; i < regionCount; ++i)
             {
@@ -92,22 +88,20 @@ namespace Infinity.Graphics
                 regionSizes[i].Height = (ushort)height;
                 regionSizes[i].Depth = (ushort)depth;
 
-                rangeFlags[i] = D3D12_TILE_RANGE_FLAGS.D3D12_TILE_RANGE_FLAG_NONE;
+                rangeFlags[i] = Vortice.Direct3D12.TileRangeFlags.None;
                 heapRangeStartOffsets[i] = 0;
-                rangeTileCounts[i] = numTiles;
+                rangeTileCounts[i] = (int)numTiles;
             }
 
-            m_NativeCommandQueue->UpdateTileMappings(
-                (ID3D12Resource*)dx12Texture.NativeResource,
-                (uint)regionCount,
+            m_NativeCommandQueue.UpdateTileMappings(
+                (Vortice.Direct3D12.ID3D12Resource)dx12Texture.NativeResource,
                 coordinates,
                 regionSizes,
                 null,
-                (uint)regionCount,
                 rangeFlags,
                 heapRangeStartOffsets,
                 rangeTileCounts,
-                D3D12_TILE_MAPPING_FLAGS.D3D12_TILE_MAPPING_FLAG_NONE);
+                Vortice.Direct3D12.TileMappingFlags.None);
         }
 
         public override void UnMapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
@@ -115,10 +109,10 @@ namespace Infinity.Graphics
             Dx12Texture dx12Texture = tiledTextureRegions.Texture as Dx12Texture;
             int regionCount = tiledTextureRegions.Regions.Length;
 
-            D3D12_TILED_RESOURCE_COORDINATE* coordinates = stackalloc D3D12_TILED_RESOURCE_COORDINATE[regionCount];
-            D3D12_TILE_REGION_SIZE* regionSizes = stackalloc D3D12_TILE_REGION_SIZE[regionCount];
-            D3D12_TILE_RANGE_FLAGS* rangeFlags = stackalloc D3D12_TILE_RANGE_FLAGS[regionCount];
-            uint* rangeTileCounts = stackalloc uint[regionCount];
+            Vortice.Direct3D12.TiledResourceCoordinate[] coordinates = new Vortice.Direct3D12.TiledResourceCoordinate[regionCount];
+            Vortice.Direct3D12.TileRegionSize[] regionSizes = new Vortice.Direct3D12.TileRegionSize[regionCount];
+            Vortice.Direct3D12.TileRangeFlags[] rangeFlags = new Vortice.Direct3D12.TileRangeFlags[regionCount];
+            int[] rangeTileCounts = new int[regionCount];
 
             for (int i = 0; i < regionCount; ++i)
             {
@@ -143,21 +137,19 @@ namespace Infinity.Graphics
                 regionSizes[i].Height = (ushort)height;
                 regionSizes[i].Depth = (ushort)depth;
 
-                rangeFlags[i] = D3D12_TILE_RANGE_FLAGS.D3D12_TILE_RANGE_FLAG_NULL;
-                rangeTileCounts[i] = numTiles;
+                rangeFlags[i] = Vortice.Direct3D12.TileRangeFlags.Null;
+                rangeTileCounts[i] = (int)numTiles;
             }
 
-            m_NativeCommandQueue->UpdateTileMappings(
-                (ID3D12Resource*)dx12Texture.NativeResource,
-                (uint)regionCount,
+            m_NativeCommandQueue.UpdateTileMappings(
+                (Vortice.Direct3D12.ID3D12Resource)dx12Texture.NativeResource,
                 coordinates,
                 regionSizes,
                 null,
-                (uint)regionCount,
                 rangeFlags,
                 null,
                 rangeTileCounts,
-                D3D12_TILE_MAPPING_FLAGS.D3D12_TILE_MAPPING_FLAG_NONE);
+                Vortice.Direct3D12.TileMappingFlags.None);
         }
 
         public override void MapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
@@ -167,21 +159,19 @@ namespace Infinity.Graphics
                 ref RHITiledTexturePackedMip packedMip = ref tiledTexturePackedMips.PackedMips.Span[i];
                 Dx12Texture dx12Texture = packedMip.Texture as Dx12Texture;
 
-                D3D12_TILE_RANGE_FLAGS rangeFlag = D3D12_TILE_RANGE_FLAGS.D3D12_TILE_RANGE_FLAG_NONE;
-                uint startOffset = 0;
-                uint tileCount = 1;
+                Vortice.Direct3D12.TileRangeFlags[] rangeFlag = { Vortice.Direct3D12.TileRangeFlags.None };
+                int[] startOffset = { 0 };
+                int[] tileCount = { 1 };
 
-                m_NativeCommandQueue->UpdateTileMappings(
-                    (ID3D12Resource*)dx12Texture.NativeResource,
-                    1,
+                m_NativeCommandQueue.UpdateTileMappings(
+                    (Vortice.Direct3D12.ID3D12Resource)dx12Texture.NativeResource,
+                    Array.Empty<Vortice.Direct3D12.TiledResourceCoordinate>(),
+                    Array.Empty<Vortice.Direct3D12.TileRegionSize>(),
                     null,
-                    null,
-                    null,
-                    1,
-                    &rangeFlag,
-                    &startOffset,
-                    &tileCount,
-                    D3D12_TILE_MAPPING_FLAGS.D3D12_TILE_MAPPING_FLAG_NONE);
+                    rangeFlag,
+                    startOffset,
+                    tileCount,
+                    Vortice.Direct3D12.TileMappingFlags.None);
             }
         }
 
@@ -192,20 +182,18 @@ namespace Infinity.Graphics
                 ref RHITiledTexturePackedMip packedMip = ref tiledTexturePackedMips.PackedMips.Span[i];
                 Dx12Texture dx12Texture = packedMip.Texture as Dx12Texture;
 
-                D3D12_TILE_RANGE_FLAGS rangeFlag = D3D12_TILE_RANGE_FLAGS.D3D12_TILE_RANGE_FLAG_NULL;
-                uint tileCount = 1;
+                Vortice.Direct3D12.TileRangeFlags[] rangeFlag = { Vortice.Direct3D12.TileRangeFlags.Null };
+                int[] tileCount = { 1 };
 
-                m_NativeCommandQueue->UpdateTileMappings(
-                    (ID3D12Resource*)dx12Texture.NativeResource,
-                    1,
+                m_NativeCommandQueue.UpdateTileMappings(
+                    (Vortice.Direct3D12.ID3D12Resource)dx12Texture.NativeResource,
+                    Array.Empty<Vortice.Direct3D12.TiledResourceCoordinate>(),
+                    Array.Empty<Vortice.Direct3D12.TileRegionSize>(),
                     null,
+                    rangeFlag,
                     null,
-                    null,
-                    1,
-                    &rangeFlag,
-                    null,
-                    &tileCount,
-                    D3D12_TILE_MAPPING_FLAGS.D3D12_TILE_MAPPING_FLAG_NONE);
+                    tileCount,
+                    Vortice.Direct3D12.TileMappingFlags.None);
             }
         }
 
@@ -214,28 +202,28 @@ namespace Infinity.Graphics
             if (waitSemaphore != null)
             {
                 Dx12Semaphore dx12Semaphore = waitSemaphore as Dx12Semaphore;
-                m_NativeCommandQueue->Wait(dx12Semaphore.NativeFence, 1);
+                m_NativeCommandQueue.Wait(dx12Semaphore.NativeFence, 1);
             }
 
             if (cmdBuffer != null)
             {
                 Dx12CommandBuffer dx12CommandBuffer = cmdBuffer as Dx12CommandBuffer;
-                ID3D12CommandList** ppCommandLists = stackalloc ID3D12CommandList*[1] { (ID3D12CommandList*)dx12CommandBuffer.NativeCommandList };
-                m_NativeCommandQueue->ExecuteCommandLists(1, ppCommandLists);
+                Vortice.Direct3D12.ID3D12CommandList[] commandLists = { dx12CommandBuffer.NativeCommandList };
+                m_NativeCommandQueue.ExecuteCommandLists(commandLists);
             }
 
             if (signalSemaphore != null)
             {
                 Dx12Semaphore dx12Semaphore = signalSemaphore as Dx12Semaphore;
-                dx12Semaphore.NativeFence->Signal(0);
-                m_NativeCommandQueue->Signal(dx12Semaphore.NativeFence, 1);
+                dx12Semaphore.NativeFence.Signal(0);
+                m_NativeCommandQueue.Signal(dx12Semaphore.NativeFence, 1);
             }
 
             if (signalFence != null)
             {
                 Dx12Fence dx12Fence = signalFence as Dx12Fence;
-                //dx12Fence.NativeFence->Signal(0); // dx12Fence.Reset();
-                m_NativeCommandQueue->Signal(dx12Fence.NativeFence, 1);
+                //dx12Fence.NativeFence.Signal(0); // dx12Fence.Reset();
+                m_NativeCommandQueue.Signal(dx12Fence.NativeFence, 1);
             }
         }
 
@@ -246,15 +234,15 @@ namespace Infinity.Graphics
                 for (int i = 0; i < waitSemaphores.Length; ++i)
                 {
                     Dx12Semaphore dx12Semaphore = waitSemaphores[i] as Dx12Semaphore;
-                    m_NativeCommandQueue->Wait(dx12Semaphore.NativeFence, 1);
+                    m_NativeCommandQueue.Wait(dx12Semaphore.NativeFence, 1);
                 }
             }
 
             if (cmdBuffer != null)
             {
                 Dx12CommandBuffer dx12CommandBuffer = cmdBuffer as Dx12CommandBuffer;
-                ID3D12CommandList** ppCommandLists = stackalloc ID3D12CommandList*[1] { (ID3D12CommandList*)dx12CommandBuffer.NativeCommandList };
-                m_NativeCommandQueue->ExecuteCommandLists(1, ppCommandLists);
+                Vortice.Direct3D12.ID3D12CommandList[] commandLists = { dx12CommandBuffer.NativeCommandList };
+                m_NativeCommandQueue.ExecuteCommandLists(commandLists);
             }
 
             if (signalSemaphores != null)
@@ -262,16 +250,16 @@ namespace Infinity.Graphics
                 for (int i = 0; i < signalSemaphores.Length; ++i)
                 {
                     Dx12Semaphore dx12Semaphore = signalSemaphores[i] as Dx12Semaphore;
-                    dx12Semaphore.NativeFence->Signal(0);
-                    m_NativeCommandQueue->Signal(dx12Semaphore.NativeFence, 1);
+                    dx12Semaphore.NativeFence.Signal(0);
+                    m_NativeCommandQueue.Signal(dx12Semaphore.NativeFence, 1);
                 }
             }
 
             if (signalFence != null)
             {
                 Dx12Fence dx12Fence = signalFence as Dx12Fence;
-                //dx12Fence.NativeFence->Signal(0); // dx12Fence.Reset();
-                m_NativeCommandQueue->Signal(dx12Fence.NativeFence, 1);
+                //dx12Fence.NativeFence.Signal(0); // dx12Fence.Reset();
+                m_NativeCommandQueue.Signal(dx12Fence.NativeFence, 1);
             }
         }
 
@@ -282,19 +270,19 @@ namespace Infinity.Graphics
                 for (int i = 0; i < waitSemaphores.Length; ++i)
                 {
                     Dx12Semaphore dx12Semaphore = waitSemaphores[i] as Dx12Semaphore;
-                    m_NativeCommandQueue->Wait(dx12Semaphore.NativeFence, 1);
+                    m_NativeCommandQueue.Wait(dx12Semaphore.NativeFence, 1);
                 }
             }
 
             if (cmdBuffers != null)
             {
-                ID3D12CommandList** ppCommandLists = stackalloc ID3D12CommandList*[cmdBuffers.Length];
+                Vortice.Direct3D12.ID3D12CommandList[] commandLists = new Vortice.Direct3D12.ID3D12CommandList[cmdBuffers.Length];
                 for (int i = 0; i < cmdBuffers.Length; ++i)
                 {
                     Dx12CommandBuffer dx12CommandBuffer = cmdBuffers[i] as Dx12CommandBuffer;
-                    ppCommandLists[i] = (ID3D12CommandList*)dx12CommandBuffer.NativeCommandList;
+                    commandLists[i] = dx12CommandBuffer.NativeCommandList;
                 }
-                m_NativeCommandQueue->ExecuteCommandLists((uint)cmdBuffers.Length, ppCommandLists);
+                m_NativeCommandQueue.ExecuteCommandLists(commandLists);
             }
 
             if (signalSemaphores != null)
@@ -302,22 +290,22 @@ namespace Infinity.Graphics
                 for (int i = 0; i < signalSemaphores.Length; ++i)
                 {
                     Dx12Semaphore dx12Semaphore = signalSemaphores[i] as Dx12Semaphore;
-                    dx12Semaphore.NativeFence->Signal(0);
-                    m_NativeCommandQueue->Signal(dx12Semaphore.NativeFence, 1);
+                    dx12Semaphore.NativeFence.Signal(0);
+                    m_NativeCommandQueue.Signal(dx12Semaphore.NativeFence, 1);
                 }
             }
 
             if (signalFence != null)
             {
                 Dx12Fence dx12Fence = signalFence as Dx12Fence;
-                //dx12Fence.NativeFence->Signal(0); // dx12Fence.Reset();
-                m_NativeCommandQueue->Signal(dx12Fence.NativeFence, 1);
+                //dx12Fence.NativeFence.Signal(0); // dx12Fence.Reset();
+                m_NativeCommandQueue.Signal(dx12Fence.NativeFence, 1);
             }
         }
 
         protected override void Release()
         {
-            m_NativeCommandQueue->Release();
+            m_NativeCommandQueue.Release();
         }
     }
 #pragma warning restore CS8600, CS8602, CA1416

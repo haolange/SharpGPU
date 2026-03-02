@@ -1,16 +1,15 @@
 using System;
-using Infinity.Core;
 
 namespace Infinity.Graphics
 {
     internal unsafe class Dx12Tensor : RHITensor
     {
         // DirectML does not have a native tensor resource type.
-        // Tensors are backed by D3D12 buffers; the tensor descriptor
+        // Tensors are backed by Vortice.Direct3D12.D3D12 buffers; the tensor descriptor
         // is used to interpret the buffer layout during binding.
-        internal RHIBuffer? BackingBuffer => m_BackingBuffer;
+        internal Dx12Buffer? BackingBuffer => m_BackingBuffer;
 
-        private RHIBuffer? m_BackingBuffer;
+        private Dx12Buffer? m_BackingBuffer;
 
         public Dx12Tensor(Dx12Device device, in RHIMLTensorDescriptor descriptor)
         {
@@ -30,12 +29,12 @@ namespace Infinity.Graphics
             // Create a backing buffer for the tensor data
             RHIBufferDescriptor bufferDescriptor = new RHIBufferDescriptor
             {
-                ByteSize = (int)bufferSize,
+                ByteSize = checked((int)bufferSize),
                 Format = ERHIBufferFormat.Undefine,
                 StorageMode = descriptor.StorageMode,
                 UsageFlag = ERHIBufferUsage.UnorderedAccess | ERHIBufferUsage.ShaderResource,
             };
-            m_BackingBuffer = device.CreateBuffer(bufferDescriptor);
+            m_BackingBuffer = new Dx12Buffer(device, bufferDescriptor);
         }
 
         private static ulong GetElementSize(in ERHIMLDataType dataType)

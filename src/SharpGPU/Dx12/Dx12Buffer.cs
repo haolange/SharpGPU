@@ -1,9 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
 using Infinity.Mathmatics;
-using TerraFX.Interop.DirectX;
-using TerraFX.Interop.Windows;
-using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
 {
@@ -17,7 +14,7 @@ namespace Infinity.Graphics
                 return m_Dx12Device;
             }
         }
-        public ID3D12Resource* NativeResource
+        public Vortice.Direct3D12.ID3D12Resource NativeResource
         {
             get
             {
@@ -26,7 +23,7 @@ namespace Infinity.Graphics
         }
 
         private Dx12Device m_Dx12Device;
-        private ID3D12Resource* m_NativeResource;
+        private Vortice.Direct3D12.ID3D12Resource m_NativeResource;
 
         public Dx12Buffer(Dx12Device device, in RHIBufferDescriptor descriptor)
         {
@@ -34,11 +31,17 @@ namespace Infinity.Graphics
             //m_State = RHIUtility.ConvertToBufferStateFormStorageMode(descriptor.StorageMode);
             m_Descriptor = descriptor;
 
-            D3D12_RESOURCE_DESC resourceDesc = D3D12_RESOURCE_DESC.Buffer((ulong)descriptor.ByteSize, Dx12Utility.ConvertToDx12BufferFlag(descriptor.UsageFlag));
-            D3D12_HEAP_PROPERTIES heapProperties = new D3D12_HEAP_PROPERTIES(Dx12Utility.ConvertToDx12HeapTypeByStorage(descriptor.StorageMode));
+            Vortice.Direct3D12.ResourceDescription resourceDesc = Vortice.Direct3D12.ResourceDescription.Buffer((ulong)descriptor.ByteSize, Dx12Utility.ConvertToDx12BufferFlag(descriptor.UsageFlag));
+            Vortice.Direct3D12.HeapProperties heapProperties = new Vortice.Direct3D12.HeapProperties(Dx12Utility.ConvertToDx12HeapTypeByStorage(descriptor.StorageMode));
 
-            ID3D12Resource* dx12Resource;
-            HRESULT hResult = m_Dx12Device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &resourceDesc, Dx12Utility.ConvertToDx12ResourceStateFormStorageMode(descriptor.StorageMode), null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource);
+            Vortice.Direct3D12.ID3D12Resource dx12Resource;
+            SharpGen.Runtime.Result hResult = m_Dx12Device.NativeDevice.CreateCommittedResource(
+                heapProperties,
+                Vortice.Direct3D12.HeapFlags.None,
+                resourceDesc,
+                Dx12Utility.ConvertToDx12ResourceStateFormStorageMode(descriptor.StorageMode),
+                null,
+                out dx12Resource);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -51,9 +54,9 @@ namespace Infinity.Graphics
             Debug.Assert(m_Descriptor.StorageMode != ERHIStorageMode.GPULocal, "StorageMode is GPULocal it can't use Map()");
 #endif
 
-            void* data;
-            D3D12_RANGE range = new D3D12_RANGE(readBegin, math.min(readEnd, (uint)m_Descriptor.ByteSize));
-            HRESULT hResult = m_NativeResource->Map(0, &range, &data);
+            void* data = null;
+            Vortice.Direct3D12.Range range = new Vortice.Direct3D12.Range(readBegin, math.min(readEnd, (uint)m_Descriptor.ByteSize));
+            SharpGen.Runtime.Result hResult = m_NativeResource.Map(0, range, &data);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -65,8 +68,8 @@ namespace Infinity.Graphics
 #if DEBUG
             Debug.Assert(m_Descriptor.StorageMode != ERHIStorageMode.GPULocal, "StorageMode is GPULocal it can't use UnMap()");
 #endif
-            D3D12_RANGE range = new D3D12_RANGE(writeBegin, math.min(writeEnd, (uint)m_Descriptor.ByteSize));
-            m_NativeResource->Unmap(0, &range);
+            Vortice.Direct3D12.Range range = new Vortice.Direct3D12.Range(writeBegin, math.min(writeEnd, (uint)m_Descriptor.ByteSize));
+            m_NativeResource.Unmap(0, range);
         }
 
         public override RHIBufferView CreateBufferView(in RHIBufferViewDescriptor descriptor)
@@ -76,7 +79,7 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            m_NativeResource->Release();
+            m_NativeResource.Release();
         }
     }
 #pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416

@@ -4,12 +4,9 @@ using Infinity.Core;
 using NUnit.Framework;
 using System.Diagnostics;
 using Infinity.Collections;
-using TerraFX.Interop.DirectX;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
-using static TerraFX.Interop.Windows.Windows;
-using TerraFX.Interop.Windows;
 
 namespace Infinity.Graphics
 {
@@ -17,41 +14,41 @@ namespace Infinity.Graphics
     internal unsafe struct Dx12DescriptorInfo
     {
         public int Index;
-        public ID3D12DescriptorHeap* DescriptorHeap;
-        public D3D12_CPU_DESCRIPTOR_HANDLE CpuHandle;
-        public D3D12_GPU_DESCRIPTOR_HANDLE GpuHandle;
+        public Vortice.Direct3D12.ID3D12DescriptorHeap DescriptorHeap;
+        public Vortice.Direct3D12.CpuDescriptorHandle CpuHandle;
+        public Vortice.Direct3D12.GpuDescriptorHandle GpuHandle;
     };
 
     internal unsafe class Dx12DescriptorHeap : Disposal
     {
         public uint DescriptorSize => m_DescriptorSize;
-        public D3D12_DESCRIPTOR_HEAP_TYPE NativeType => m_NativeType;
-        public ID3D12DescriptorHeap* NativeDescriptorHeap => m_NativeDescriptorHeap;
-        public D3D12_CPU_DESCRIPTOR_HANDLE NativeCpuStartHandle => m_NativeDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-        public D3D12_GPU_DESCRIPTOR_HANDLE NativeGpuStartHandle => m_NativeDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+        public Vortice.Direct3D12.DescriptorHeapType NativeType => m_NativeType;
+        public Vortice.Direct3D12.ID3D12DescriptorHeap NativeDescriptorHeap => m_NativeDescriptorHeap;
+        public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuStartHandle => m_NativeDescriptorHeap.GetCPUDescriptorHandleForHeapStart();
+        public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuStartHandle => m_NativeDescriptorHeap.GetGPUDescriptorHandleForHeapStart();
 
         private int m_Capacity;
         private uint m_DescriptorSize;
         private SortedList<int, int> m_FreeBlocks;
-        private D3D12_DESCRIPTOR_HEAP_TYPE m_NativeType;
-        private ID3D12DescriptorHeap* m_NativeDescriptorHeap;
+        private Vortice.Direct3D12.DescriptorHeapType m_NativeType;
+        private Vortice.Direct3D12.ID3D12DescriptorHeap m_NativeDescriptorHeap;
 
-        public Dx12DescriptorHeap(ID3D12Device10* device, in D3D12_DESCRIPTOR_HEAP_TYPE type, in D3D12_DESCRIPTOR_HEAP_FLAGS flag, in uint count)
+        public Dx12DescriptorHeap(Vortice.Direct3D12.ID3D12Device10 device, in Vortice.Direct3D12.DescriptorHeapType type, in Vortice.Direct3D12.DescriptorHeapFlags flag, in uint count)
         {
             m_Capacity = (int)count;
             m_FreeBlocks = new SortedList<int, int>(16);
             m_FreeBlocks.Add(0, m_Capacity);
 
             m_NativeType = type;
-            m_DescriptorSize = device->GetDescriptorHandleIncrementSize(m_NativeType);
+            m_DescriptorSize = device.GetDescriptorHandleIncrementSize(m_NativeType);
 
-            D3D12_DESCRIPTOR_HEAP_DESC descriptorInfo;
+            Vortice.Direct3D12.DescriptorHeapDescription descriptorInfo = new Vortice.Direct3D12.DescriptorHeapDescription();
             descriptorInfo.Type = type;
             descriptorInfo.Flags = flag;
-            descriptorInfo.NumDescriptors = count;
+            descriptorInfo.DescriptorCount = count;
 
-            ID3D12DescriptorHeap* nativeDescriptorHeap;
-            HRESULT hResult = device->CreateDescriptorHeap(&descriptorInfo, __uuidof<ID3D12DescriptorHeap>(), (void**)&nativeDescriptorHeap);
+            Vortice.Direct3D12.ID3D12DescriptorHeap nativeDescriptorHeap;
+            SharpGen.Runtime.Result hResult = device.CreateDescriptorHeap(descriptorInfo, out nativeDescriptorHeap);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -146,7 +143,7 @@ namespace Infinity.Graphics
         protected override void Release()
         {
             m_FreeBlocks.Clear();
-            m_NativeDescriptorHeap->Release();
+            m_NativeDescriptorHeap.Release();
         }
     }
 
@@ -156,7 +153,10 @@ namespace Infinity.Graphics
             => Assert.False(!cond, $"{__FILE__}({__LINE__}): !({(string.IsNullOrEmpty(expr) ? cond : expr)})");
 
         public static void CHECK_HR(int hr, [CallerFilePath] string __FILE__ = "", [CallerLineNumber] int __LINE__ = 0, [CallerArgumentExpression("hr")] string expr = "")
-            => Assert.False(FAILED(hr), $"{__FILE__}({__LINE__}): FAILED({(string.IsNullOrEmpty(expr) ? hr.ToString("X8") : expr)})");
+            => Assert.False(hr < 0, $"{__FILE__}({__LINE__}): FAILED({(string.IsNullOrEmpty(expr) ? hr.ToString("X8") : expr)})");
+
+        public static void CHECK_HR(SharpGen.Runtime.Result hr, [CallerFilePath] string __FILE__ = "", [CallerLineNumber] int __LINE__ = 0, [CallerArgumentExpression("hr")] string expr = "")
+            => Assert.False(hr.Failure, $"{__FILE__}({__LINE__}): FAILED({(string.IsNullOrEmpty(expr) ? ((int)hr).ToString("X8") : expr)})");
 
         internal static uint GetFormatBytesPerPixel(in ERHIPixelFormat format)
         {
@@ -257,52 +257,52 @@ namespace Infinity.Graphics
             return ((rowPitch + 255) / 256) * 256;
         }
 
-        internal static D3D12_QUERY_TYPE ConvertToDx12QueryType(in ERHIQueryType queryType)
+        internal static Vortice.Direct3D12.QueryType ConvertToDx12QueryType(in ERHIQueryType queryType)
         {
             switch (queryType)
             {
                 case ERHIQueryType.Occlusion:
-                    return D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_OCCLUSION;
+                    return Vortice.Direct3D12.QueryType.Occlusion;
 
                 case ERHIQueryType.TimestampTransfer:
                 case ERHIQueryType.TimestampGenerice:
-                    return D3D12_QUERY_TYPE.D3D12_QUERY_TYPE_TIMESTAMP;
+                    return Vortice.Direct3D12.QueryType.Timestamp;
 
                 default:
                     return 0;
             }
         }
 
-        internal static D3D12_QUERY_HEAP_TYPE ConvertToDx12QueryHeapType(in ERHIQueryType queryType)
+        internal static Vortice.Direct3D12.QueryHeapType ConvertToDx12QueryHeapType(in ERHIQueryType queryType)
         {
             switch (queryType)
             {
                 case ERHIQueryType.Occlusion:
-                    return D3D12_QUERY_HEAP_TYPE.D3D12_QUERY_HEAP_TYPE_OCCLUSION;
+                    return Vortice.Direct3D12.QueryHeapType.Occlusion;
 
                 case ERHIQueryType.TimestampTransfer:
-                    return D3D12_QUERY_HEAP_TYPE.D3D12_QUERY_HEAP_TYPE_COPY_QUEUE_TIMESTAMP;
+                    return Vortice.Direct3D12.QueryHeapType.CopyQueueTimestamp;
 
                 case ERHIQueryType.TimestampGenerice:
-                    return D3D12_QUERY_HEAP_TYPE.D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
+                    return Vortice.Direct3D12.QueryHeapType.Timestamp;
 
                 default:
                     return 0;
             }
         }
 
-        internal static D3D12_COMMAND_LIST_TYPE ConvertToDx12QueueType(in ERHIPipelineType pipeline)
+        internal static Vortice.Direct3D12.CommandListType ConvertToDx12QueueType(in ERHIPipelineType pipeline)
         {
             switch (pipeline)
             {
                 case ERHIPipelineType.Compute:
-                    return D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_COMPUTE;
+                    return Vortice.Direct3D12.CommandListType.Compute;
 
                 case ERHIPipelineType.Graphics:
-                    return D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT;
+                    return Vortice.Direct3D12.CommandListType.Direct;
 
                 default:
-                    return D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_COPY;
+                    return Vortice.Direct3D12.CommandListType.Copy;
             }
         }
 
@@ -321,259 +321,259 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static DXGI_SWAP_EFFECT ConvertToDx12SwapEffect(in ERHIPresentMode presentMode)
+        internal static Vortice.DXGI.SwapEffect ConvertToDx12SwapEffect(in ERHIPresentMode presentMode)
         {
             switch (presentMode)
             {
                 case ERHIPresentMode.VSync:
-                    return DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+                    return Vortice.DXGI.SwapEffect.FlipSequential;
 
                 case ERHIPresentMode.Immediately:
-                    return DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_DISCARD;
+                    return Vortice.DXGI.SwapEffect.FlipDiscard;
 
                 default:
-                    return DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_DISCARD;
+                    return Vortice.DXGI.SwapEffect.FlipDiscard;
             }
         }
 
-        internal static D3D12_FILTER ConvertToDx12Filter(in RHISamplerDescriptor descriptor)
+        internal static Vortice.Direct3D12.Filter ConvertToDx12Filter(in RHISamplerDescriptor descriptor)
         {
             ERHIFilterMode minFilter = descriptor.MinFilter;
             ERHIFilterMode magFilter = descriptor.MagFilter;
             ERHIFilterMode mipFilter = descriptor.MipFilter;
 
-            if (minFilter == ERHIFilterMode.Point && magFilter == ERHIFilterMode.Point && mipFilter == ERHIFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT; }
-            if (minFilter == ERHIFilterMode.Point && magFilter == ERHIFilterMode.Point && mipFilter == ERHIFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR; }
-            if (minFilter == ERHIFilterMode.Point && magFilter == ERHIFilterMode.Linear && mipFilter == ERHIFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT; }
-            if (minFilter == ERHIFilterMode.Point && magFilter == ERHIFilterMode.Linear && mipFilter == ERHIFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_POINT_MAG_MIP_LINEAR; }
-            if (minFilter == ERHIFilterMode.Linear && magFilter == ERHIFilterMode.Point && mipFilter == ERHIFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_LINEAR_MAG_MIP_POINT; }
-            if (minFilter == ERHIFilterMode.Linear && magFilter == ERHIFilterMode.Point && mipFilter == ERHIFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR; }
-            if (minFilter == ERHIFilterMode.Linear && magFilter == ERHIFilterMode.Linear && mipFilter == ERHIFilterMode.Point) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT; }
-            if (minFilter == ERHIFilterMode.Linear && magFilter == ERHIFilterMode.Linear && mipFilter == ERHIFilterMode.Linear) { return D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR; }
-            if (minFilter == ERHIFilterMode.Anisotropic || magFilter == ERHIFilterMode.Anisotropic || mipFilter == ERHIFilterMode.Anisotropic) { return D3D12_FILTER.D3D12_FILTER_ANISOTROPIC; }
-            return D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_POINT;
+            if (minFilter == ERHIFilterMode.Point && magFilter == ERHIFilterMode.Point && mipFilter == ERHIFilterMode.Point) { return Vortice.Direct3D12.Filter.MinMagMipPoint; }
+            if (minFilter == ERHIFilterMode.Point && magFilter == ERHIFilterMode.Point && mipFilter == ERHIFilterMode.Linear) { return Vortice.Direct3D12.Filter.MinMagPointMipLinear; }
+            if (minFilter == ERHIFilterMode.Point && magFilter == ERHIFilterMode.Linear && mipFilter == ERHIFilterMode.Point) { return Vortice.Direct3D12.Filter.MinPointMagLinearMipPoint; }
+            if (minFilter == ERHIFilterMode.Point && magFilter == ERHIFilterMode.Linear && mipFilter == ERHIFilterMode.Linear) { return Vortice.Direct3D12.Filter.MinPointMagMipLinear; }
+            if (minFilter == ERHIFilterMode.Linear && magFilter == ERHIFilterMode.Point && mipFilter == ERHIFilterMode.Point) { return Vortice.Direct3D12.Filter.MinLinearMagMipPoint; }
+            if (minFilter == ERHIFilterMode.Linear && magFilter == ERHIFilterMode.Point && mipFilter == ERHIFilterMode.Linear) { return Vortice.Direct3D12.Filter.MinLinearMagPointMipLinear; }
+            if (minFilter == ERHIFilterMode.Linear && magFilter == ERHIFilterMode.Linear && mipFilter == ERHIFilterMode.Point) { return Vortice.Direct3D12.Filter.MinMagLinearMipPoint; }
+            if (minFilter == ERHIFilterMode.Linear && magFilter == ERHIFilterMode.Linear && mipFilter == ERHIFilterMode.Linear) { return Vortice.Direct3D12.Filter.MinMagMipLinear; }
+            if (minFilter == ERHIFilterMode.Anisotropic || magFilter == ERHIFilterMode.Anisotropic || mipFilter == ERHIFilterMode.Anisotropic) { return Vortice.Direct3D12.Filter.Anisotropic; }
+            return Vortice.Direct3D12.Filter.MinMagMipPoint;
         }
 
-        internal static D3D12_TEXTURE_ADDRESS_MODE ConvertToDx12AddressMode(in ERHIAddressMode addressMode)
+        internal static Vortice.Direct3D12.TextureAddressMode ConvertToDx12AddressMode(in ERHIAddressMode addressMode)
         {
             switch (addressMode)
             {
                 case ERHIAddressMode.MirrorRepeat:
-                    return D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
+                    return Vortice.Direct3D12.TextureAddressMode.Mirror;
 
                 case ERHIAddressMode.ClampToEdge:
-                    return D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+                    return Vortice.Direct3D12.TextureAddressMode.Clamp;
             }
-            return D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+            return Vortice.Direct3D12.TextureAddressMode.Wrap;
         }
 
         // convert to dx12 format COMPARISON func
-        internal static D3D12_COMPARISON_FUNC ConvertToDx12ComparisonMode(in ERHIComparisonMode comparisonMode)
+        internal static Vortice.Direct3D12.ComparisonFunction ConvertToDx12ComparisonMode(in ERHIComparisonMode comparisonMode)
         {
             switch (comparisonMode)
             {
                 case ERHIComparisonMode.Less:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_LESS;
+                    return Vortice.Direct3D12.ComparisonFunction.Less;
 
                 case ERHIComparisonMode.Equal:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_EQUAL;
+                    return Vortice.Direct3D12.ComparisonFunction.Equal;
 
                 case ERHIComparisonMode.LessEqual:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_LESS_EQUAL;
+                    return Vortice.Direct3D12.ComparisonFunction.LessEqual;
 
                 case ERHIComparisonMode.Greater:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_GREATER;
+                    return Vortice.Direct3D12.ComparisonFunction.Greater;
 
                 case ERHIComparisonMode.NotEqual:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NOT_EQUAL;
+                    return Vortice.Direct3D12.ComparisonFunction.NotEqual;
 
                 case ERHIComparisonMode.GreaterEqual:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+                    return Vortice.Direct3D12.ComparisonFunction.GreaterEqual;
 
                 case ERHIComparisonMode.Always:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_ALWAYS;
+                    return Vortice.Direct3D12.ComparisonFunction.Always;
             }
 
-            return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER;
+            return Vortice.Direct3D12.ComparisonFunction.Never;
         }
 
-        internal static D3D12_HEAP_TYPE ConvertToDx12HeapTypeByStorage(in ERHIStorageMode storageMode)
+        internal static Vortice.Direct3D12.HeapType ConvertToDx12HeapTypeByStorage(in ERHIStorageMode storageMode)
         {
             switch (storageMode)
             {
                 case ERHIStorageMode.HostUpload:
-                    return D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD;
+                    return Vortice.Direct3D12.HeapType.Upload;
 
                 case ERHIStorageMode.Readback:
-                    return D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK;
+                    return Vortice.Direct3D12.HeapType.Readback;
 
                 default:
-                    return D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT;
+                    return Vortice.Direct3D12.HeapType.Default;
             }
         }
 
-        internal static D3D12_SHADING_RATE ConvertToDx12ShadingRate(in ERHIShadingRate shadingRate)
+        internal static Vortice.Direct3D12.ShadingRate ConvertToDx12ShadingRate(in ERHIShadingRate shadingRate)
         {
             switch (shadingRate)
             {
                 case ERHIShadingRate.Rate1x1:
-                    return D3D12_SHADING_RATE.D3D12_SHADING_RATE_1X1;
+                    return Vortice.Direct3D12.ShadingRate.Rate1x1;
 
                 case ERHIShadingRate.Rate1x2:
-                    return D3D12_SHADING_RATE.D3D12_SHADING_RATE_1X2;
+                    return Vortice.Direct3D12.ShadingRate.Rate1x2;
 
                 case ERHIShadingRate.Rate2x1:
-                    return D3D12_SHADING_RATE.D3D12_SHADING_RATE_2X1;
+                    return Vortice.Direct3D12.ShadingRate.Rate2x1;
 
                 case ERHIShadingRate.Rate2x2:
-                    return D3D12_SHADING_RATE.D3D12_SHADING_RATE_2X2;
+                    return Vortice.Direct3D12.ShadingRate.Rate2x2;
 
                 case ERHIShadingRate.Rate2x4:
-                    return D3D12_SHADING_RATE.D3D12_SHADING_RATE_2X4;
+                    return Vortice.Direct3D12.ShadingRate.Rate2x4;
 
                 case ERHIShadingRate.Rate4x2:
-                    return D3D12_SHADING_RATE.D3D12_SHADING_RATE_4X2;
+                    return Vortice.Direct3D12.ShadingRate.Rate4x2;
 
                 default:
-                    return D3D12_SHADING_RATE.D3D12_SHADING_RATE_4X4;
+                    return Vortice.Direct3D12.ShadingRate.Rate4x4;
             }
         }
 
-        internal static D3D12_SHADING_RATE_COMBINER ConvertToDx12ShadingRateCombiner(in ERHIShadingRateCombiner shadingRateCombiner)
+        internal static Vortice.Direct3D12.ShadingRateCombiner ConvertToDx12ShadingRateCombiner(in ERHIShadingRateCombiner shadingRateCombiner)
         {
             switch (shadingRateCombiner)
             {
                 case ERHIShadingRateCombiner.Min:
-                    return D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MIN;
+                    return Vortice.Direct3D12.ShadingRateCombiner.Min;
 
                 case ERHIShadingRateCombiner.Max:
-                    return D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_MAX;
+                    return Vortice.Direct3D12.ShadingRateCombiner.Max;
 
                 case ERHIShadingRateCombiner.Sum:
-                    return D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_SUM;
+                    return Vortice.Direct3D12.ShadingRateCombiner.Sum;
 
                 case ERHIShadingRateCombiner.Override:
-                    return D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_OVERRIDE;
+                    return Vortice.Direct3D12.ShadingRateCombiner.Override;
 
                 default:
-                    return D3D12_SHADING_RATE_COMBINER.D3D12_SHADING_RATE_COMBINER_PASSTHROUGH;
+                    return Vortice.Direct3D12.ShadingRateCombiner.Passthrough;
             }
         }
 
-        internal static D3D12_FILL_MODE ConvertToDx12FillMode(in ERHIFillMode fillMode)
+        internal static Vortice.Direct3D12.FillMode ConvertToDx12FillMode(in ERHIFillMode fillMode)
         {
             switch (fillMode)
             {
                 case ERHIFillMode.Solid:
-                    return D3D12_FILL_MODE.D3D12_FILL_MODE_SOLID;
+                    return Vortice.Direct3D12.FillMode.Solid;
 
                 case ERHIFillMode.Wireframe:
-                    return D3D12_FILL_MODE.D3D12_FILL_MODE_WIREFRAME;
+                    return Vortice.Direct3D12.FillMode.Wireframe;
 
                 default:
-                    return D3D12_FILL_MODE.D3D12_FILL_MODE_SOLID;
+                    return Vortice.Direct3D12.FillMode.Solid;
             }
         }
 
-        internal static D3D12_CULL_MODE ConvertToDx12CullMode(in ERHICullMode cullMode)
+        internal static Vortice.Direct3D12.CullMode ConvertToDx12CullMode(in ERHICullMode cullMode)
         {
             switch (cullMode)
             {
                 case ERHICullMode.None:
-                    return D3D12_CULL_MODE.D3D12_CULL_MODE_NONE;
+                    return Vortice.Direct3D12.CullMode.None;
 
                 case ERHICullMode.Back:
-                    return D3D12_CULL_MODE.D3D12_CULL_MODE_BACK;
+                    return Vortice.Direct3D12.CullMode.Back;
 
                 case ERHICullMode.Front:
-                    return D3D12_CULL_MODE.D3D12_CULL_MODE_FRONT;
+                    return Vortice.Direct3D12.CullMode.Front;
 
                 default:
-                    return D3D12_CULL_MODE.D3D12_CULL_MODE_BACK;
+                    return Vortice.Direct3D12.CullMode.Back;
             }
         }
 
-        internal static D3D12_BLEND_OP ConvertToDx12BlendOp(in ERHIBlendOp blendOp)
+        internal static Vortice.Direct3D12.BlendOperation ConvertToDx12BlendOp(in ERHIBlendOp blendOp)
         {
             switch (blendOp)
             {
                 case ERHIBlendOp.Add:
-                    return D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
+                    return Vortice.Direct3D12.BlendOperation.Add;
 
                 case ERHIBlendOp.Substract:
-                    return D3D12_BLEND_OP.D3D12_BLEND_OP_SUBTRACT;
+                    return Vortice.Direct3D12.BlendOperation.Subtract;
 
                 case ERHIBlendOp.ReverseSubstract:
-                    return D3D12_BLEND_OP.D3D12_BLEND_OP_REV_SUBTRACT;
+                    return Vortice.Direct3D12.BlendOperation.RevSubtract;
 
                 case ERHIBlendOp.Min:
-                    return D3D12_BLEND_OP.D3D12_BLEND_OP_MIN;
+                    return Vortice.Direct3D12.BlendOperation.Min;
 
                 case ERHIBlendOp.Max:
-                    return D3D12_BLEND_OP.D3D12_BLEND_OP_MAX;
+                    return Vortice.Direct3D12.BlendOperation.Max;
 
                 default:
-                    return D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
+                    return Vortice.Direct3D12.BlendOperation.Add;
             }
         }
 
-        internal static D3D12_BLEND ConvertToDx12BlendMode(in ERHIBlendMode blendMode)
+        internal static Vortice.Direct3D12.Blend ConvertToDx12BlendMode(in ERHIBlendMode blendMode)
         {
             switch (blendMode)
             {
                 case ERHIBlendMode.Zero:
-                    return D3D12_BLEND.D3D12_BLEND_ZERO;
+                    return Vortice.Direct3D12.Blend.Zero;
 
                 case ERHIBlendMode.One:
-                    return D3D12_BLEND.D3D12_BLEND_ONE;
+                    return Vortice.Direct3D12.Blend.One;
 
                 case ERHIBlendMode.SrcColor:
-                    return D3D12_BLEND.D3D12_BLEND_SRC_COLOR;
+                    return Vortice.Direct3D12.Blend.SourceColor;
 
                 case ERHIBlendMode.OneMinusSrcColor:
-                    return D3D12_BLEND.D3D12_BLEND_INV_SRC_COLOR;
+                    return Vortice.Direct3D12.Blend.InverseSourceColor;
 
                 case ERHIBlendMode.SrcAlpha:
-                    return D3D12_BLEND.D3D12_BLEND_SRC_ALPHA;
+                    return Vortice.Direct3D12.Blend.SourceAlpha;
 
                 case ERHIBlendMode.OneMinusSrcAlpha:
-                    return D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
+                    return Vortice.Direct3D12.Blend.InverseSourceAlpha;
 
                 case ERHIBlendMode.DstColor:
-                    return D3D12_BLEND.D3D12_BLEND_DEST_COLOR;
+                    return Vortice.Direct3D12.Blend.DestinationColor;
 
                 case ERHIBlendMode.OneMinusDstColor:
-                    return D3D12_BLEND.D3D12_BLEND_INV_DEST_COLOR;
+                    return Vortice.Direct3D12.Blend.InverseDestinationColor;
 
                 case ERHIBlendMode.DstAlpha:
-                    return D3D12_BLEND.D3D12_BLEND_DEST_ALPHA;
+                    return Vortice.Direct3D12.Blend.DestinationAlpha;
 
                 case ERHIBlendMode.OneMinusDstAlpha:
-                    return D3D12_BLEND.D3D12_BLEND_INV_DEST_ALPHA;
+                    return Vortice.Direct3D12.Blend.InverseDestinationAlpha;
 
                 case ERHIBlendMode.SrcAlphaSaturate:
-                    return D3D12_BLEND.D3D12_BLEND_SRC_ALPHA_SAT;
+                    return Vortice.Direct3D12.Blend.SourceAlphaSaturate;
 
                 case ERHIBlendMode.BlendFactor:
-                    return D3D12_BLEND.D3D12_BLEND_BLEND_FACTOR;
+                    return Vortice.Direct3D12.Blend.BlendFactor;
 
                 case ERHIBlendMode.InverseBlendFactor:
-                    return D3D12_BLEND.D3D12_BLEND_INV_BLEND_FACTOR;
+                    return Vortice.Direct3D12.Blend.InverseBlendFactor;
 
                 case ERHIBlendMode.SecondarySourceColor:
-                    return D3D12_BLEND.D3D12_BLEND_SRC1_COLOR;
+                    return Vortice.Direct3D12.Blend.Source1Color;
 
                 case ERHIBlendMode.InverseSecondarySourceColor:
-                    return D3D12_BLEND.D3D12_BLEND_INV_SRC1_COLOR;
+                    return Vortice.Direct3D12.Blend.InverseSource1Color;
 
                 case ERHIBlendMode.SecondarySourceAlpha:
-                    return D3D12_BLEND.D3D12_BLEND_SRC1_ALPHA;
+                    return Vortice.Direct3D12.Blend.Source1Alpha;
 
                 case ERHIBlendMode.InverseSecondarySourceAlpha:
-                    return D3D12_BLEND.D3D12_BLEND_INV_SRC1_ALPHA;
+                    return Vortice.Direct3D12.Blend.InverseSource1Alpha;
 
                 default:
-                    return D3D12_BLEND.D3D12_BLEND_ZERO;
+                    return Vortice.Direct3D12.Blend.Zero;
             }
         }
 
@@ -581,27 +581,27 @@ namespace Infinity.Graphics
         {
             byte result = 0;
 
-            if ((writeChannel & ERHIColorWriteChannel.Red) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_RED;
-            if ((writeChannel & ERHIColorWriteChannel.Green) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_GREEN;
-            if ((writeChannel & ERHIColorWriteChannel.Blue) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_BLUE;
-            if ((writeChannel & ERHIColorWriteChannel.Alpha) != 0) result |= (byte)D3D12_COLOR_WRITE_ENABLE.D3D12_COLOR_WRITE_ENABLE_ALPHA;
+            if ((writeChannel & ERHIColorWriteChannel.Red) != 0) result |= (byte)Vortice.Direct3D12.ColorWriteEnable.Red;
+            if ((writeChannel & ERHIColorWriteChannel.Green) != 0) result |= (byte)Vortice.Direct3D12.ColorWriteEnable.Green;
+            if ((writeChannel & ERHIColorWriteChannel.Blue) != 0) result |= (byte)Vortice.Direct3D12.ColorWriteEnable.Blue;
+            if ((writeChannel & ERHIColorWriteChannel.Alpha) != 0) result |= (byte)Vortice.Direct3D12.ColorWriteEnable.Alpha;
 
             return result;
         }
 
-        internal static D3D12_RESOURCE_STATES ConvertToDx12BufferStateByFlag(in ERHIBufferUsage bufferFlag)
+        internal static Vortice.Direct3D12.ResourceStates ConvertToDx12BufferStateByFlag(in ERHIBufferUsage bufferFlag)
         {
-            /*Dictionary<ERHIBufferUsage, D3D12_RESOURCE_STATES> stateRules = new Dictionary<ERHIBufferUsage, D3D12_RESOURCE_STATES>();
-            stateRules.Add(ERHIBufferUsage.CopySrc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE);
-            stateRules.Add(ERHIBufferUsage.CopyDst, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST);
-            stateRules.Add(ERHIBufferUsage.Index, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
-            stateRules.Add(ERHIBufferUsage.Vertex, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
-            stateRules.Add(ERHIBufferUsage.Uniform, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
-            stateRules.Add(ERHIBufferUsage.Indirect, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ);
-            stateRules.Add(ERHIBufferUsage.StorageResource, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);*/
+            /*Dictionary<ERHIBufferUsage, Vortice.Direct3D12.ResourceStates> stateRules = new Dictionary<ERHIBufferUsage, Vortice.Direct3D12.ResourceStates>();
+            stateRules.Add(ERHIBufferUsage.CopySrc, Vortice.Direct3D12.ResourceStates.CopySource);
+            stateRules.Add(ERHIBufferUsage.CopyDst, Vortice.Direct3D12.ResourceStates.CopyDest);
+            stateRules.Add(ERHIBufferUsage.Index, Vortice.Direct3D12.ResourceStates.GenericRead);
+            stateRules.Add(ERHIBufferUsage.Vertex, Vortice.Direct3D12.ResourceStates.GenericRead);
+            stateRules.Add(ERHIBufferUsage.Uniform, Vortice.Direct3D12.ResourceStates.GenericRead);
+            stateRules.Add(ERHIBufferUsage.Indirect, Vortice.Direct3D12.ResourceStates.GenericRead);
+            stateRules.Add(ERHIBufferUsage.StorageResource, Vortice.Direct3D12.ResourceStates.UnorderedAccess);*/
 
-            D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
-            /*foreach (KeyValuePair<ERHIBufferUsage, D3D12_RESOURCE_STATES> rule in stateRules)
+            Vortice.Direct3D12.ResourceStates result = Vortice.Direct3D12.ResourceStates.Common;
+            /*foreach (KeyValuePair<ERHIBufferUsage, Vortice.Direct3D12.ResourceStates> rule in stateRules)
             {
                 if ((bufferflag & rule.Key) == rule.Key)
                 {
@@ -612,18 +612,18 @@ namespace Infinity.Graphics
             return result;
         }
 
-        internal static D3D12_RESOURCE_STATES ConvertToDx12TextureStateByFlag(in ERHITextureUsage textureflag)
+        internal static Vortice.Direct3D12.ResourceStates ConvertToDx12TextureStateByFlag(in ERHITextureUsage textureflag)
         {
-            /*Dictionary<ERHITextureUsage, D3D12_RESOURCE_STATES> stateRules = new Dictionary<ERHITextureUsage, D3D12_RESOURCE_STATES>();
-            stateRules.Add(ERHITextureUsage.CopySrc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE);
-            stateRules.Add(ERHITextureUsage.CopyDst, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST);
-            stateRules.Add(ERHITextureUsage.DepthAttachment, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_WRITE);
-            stateRules.Add(ERHITextureUsage.ColorAttachment, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET);
-            stateRules.Add(ERHITextureUsage.ShaderResource, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON);
-            stateRules.Add(ERHITextureUsage.StorageResource, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS);*/
+            /*Dictionary<ERHITextureUsage, Vortice.Direct3D12.ResourceStates> stateRules = new Dictionary<ERHITextureUsage, Vortice.Direct3D12.ResourceStates>();
+            stateRules.Add(ERHITextureUsage.CopySrc, Vortice.Direct3D12.ResourceStates.CopySource);
+            stateRules.Add(ERHITextureUsage.CopyDst, Vortice.Direct3D12.ResourceStates.CopyDest);
+            stateRules.Add(ERHITextureUsage.DepthAttachment, Vortice.Direct3D12.ResourceStates.DepthWrite);
+            stateRules.Add(ERHITextureUsage.ColorAttachment, Vortice.Direct3D12.ResourceStates.RenderTarget);
+            stateRules.Add(ERHITextureUsage.ShaderResource, Vortice.Direct3D12.ResourceStates.Common);
+            stateRules.Add(ERHITextureUsage.StorageResource, Vortice.Direct3D12.ResourceStates.UnorderedAccess);*/
 
-            D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
-            /*foreach (KeyValuePair<ERHITextureUsage, D3D12_RESOURCE_STATES> rule in stateRules)
+            Vortice.Direct3D12.ResourceStates result = Vortice.Direct3D12.ResourceStates.Common;
+            /*foreach (KeyValuePair<ERHITextureUsage, Vortice.Direct3D12.ResourceStates> rule in stateRules)
             {
                 if ((textureUsages & rule.Key) == rule.Key)
                 {
@@ -634,13 +634,13 @@ namespace Infinity.Graphics
             return result;
         }
 
-        internal static D3D12_RESOURCE_FLAGS ConvertToDx12BufferFlag(in ERHIBufferUsage bufferflag)
+        internal static Vortice.Direct3D12.ResourceFlags ConvertToDx12BufferFlag(in ERHIBufferUsage bufferflag)
         {
-            Dictionary<ERHIBufferUsage, D3D12_RESOURCE_FLAGS> stateRules = new Dictionary<ERHIBufferUsage, D3D12_RESOURCE_FLAGS>();
-            stateRules.Add(ERHIBufferUsage.UnorderedAccess, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+            Dictionary<ERHIBufferUsage, Vortice.Direct3D12.ResourceFlags> stateRules = new Dictionary<ERHIBufferUsage, Vortice.Direct3D12.ResourceFlags>();
+            stateRules.Add(ERHIBufferUsage.UnorderedAccess, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess);
 
-            D3D12_RESOURCE_FLAGS result = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE;
-            foreach (KeyValuePair<ERHIBufferUsage, D3D12_RESOURCE_FLAGS> rule in stateRules)
+            Vortice.Direct3D12.ResourceFlags result = Vortice.Direct3D12.ResourceFlags.None;
+            foreach (KeyValuePair<ERHIBufferUsage, Vortice.Direct3D12.ResourceFlags> rule in stateRules)
             {
                 if ((bufferflag & rule.Key) == rule.Key)
                 {
@@ -651,15 +651,15 @@ namespace Infinity.Graphics
             return result;
         }
 
-        internal static D3D12_RESOURCE_FLAGS ConvertToDx12TextureFlag(in ERHITextureUsage textureflag)
+        internal static Vortice.Direct3D12.ResourceFlags ConvertToDx12TextureFlag(in ERHITextureUsage textureflag)
         {
-            Dictionary<ERHITextureUsage, D3D12_RESOURCE_FLAGS> stateRules = new Dictionary<ERHITextureUsage, D3D12_RESOURCE_FLAGS>();
-            stateRules.Add(ERHITextureUsage.DepthStencil, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
-            stateRules.Add(ERHITextureUsage.RenderTarget, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
-            stateRules.Add(ERHITextureUsage.UnorderedAccess, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+            Dictionary<ERHITextureUsage, Vortice.Direct3D12.ResourceFlags> stateRules = new Dictionary<ERHITextureUsage, Vortice.Direct3D12.ResourceFlags>();
+            stateRules.Add(ERHITextureUsage.DepthStencil, Vortice.Direct3D12.ResourceFlags.AllowDepthStencil);
+            stateRules.Add(ERHITextureUsage.RenderTarget, Vortice.Direct3D12.ResourceFlags.AllowRenderTarget);
+            stateRules.Add(ERHITextureUsage.UnorderedAccess, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess);
 
-            D3D12_RESOURCE_FLAGS result = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE;
-            foreach (KeyValuePair<ERHITextureUsage, D3D12_RESOURCE_FLAGS> rule in stateRules)
+            Vortice.Direct3D12.ResourceFlags result = Vortice.Direct3D12.ResourceFlags.None;
+            foreach (KeyValuePair<ERHITextureUsage, Vortice.Direct3D12.ResourceFlags> rule in stateRules)
             {
                 if ((textureflag & rule.Key) == rule.Key)
                 {
@@ -670,7 +670,7 @@ namespace Infinity.Graphics
             return result;
         }
 
-        internal static D3D12_RESOURCE_DIMENSION ConvertToDx12TextureDimension(in ERHITextureDimension dimension)
+        internal static Vortice.Direct3D12.ResourceDimension ConvertToDx12TextureDimension(in ERHITextureDimension dimension)
         {
             switch (dimension)
             {
@@ -680,176 +680,176 @@ namespace Infinity.Graphics
                 case ERHITextureDimension.Texture2DArrayMS:
                 case ERHITextureDimension.TextureCube:
                 case ERHITextureDimension.TextureCubeArray:
-                    return D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+                    return Vortice.Direct3D12.ResourceDimension.Texture2D;
 
                 case ERHITextureDimension.Texture3D:
-                    return D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+                    return Vortice.Direct3D12.ResourceDimension.Texture3D;
 
                 default:
-                    return D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_UNKNOWN;
+                    return Vortice.Direct3D12.ResourceDimension.Unknown;
             }
         }
 
-        internal static D3D12_RESOURCE_STATES ConvertToDx12BufferState(in ERHIBufferState state)
+        internal static Vortice.Direct3D12.ResourceStates ConvertToDx12BufferState(in ERHIBufferState state)
         {
             if (state == ERHIBufferState.Undefine)
-                return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
+                return Vortice.Direct3D12.ResourceStates.Common;
 
-            D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
+            Vortice.Direct3D12.ResourceStates result = Vortice.Direct3D12.ResourceStates.Common;
 
-            if ((state & ERHIBufferState.CopyDst) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
-            if ((state & ERHIBufferState.CopySrc) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
-            if ((state & ERHIBufferState.IndexBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDEX_BUFFER;
-            if ((state & ERHIBufferState.VertexBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-            if ((state & ERHIBufferState.ConstantBuffer) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-            if ((state & ERHIBufferState.IndirectArgument) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
-            if ((state & ERHIBufferState.ShaderResource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-            if ((state & ERHIBufferState.UnorderedAccess) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            if ((state & ERHIBufferState.AccelStructRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
-            if ((state & ERHIBufferState.AccelStructWrite) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
-            if ((state & ERHIBufferState.AccelStructBuildInput) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-            if ((state & ERHIBufferState.AccelStructBuildBlast) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE;
+            if ((state & ERHIBufferState.CopyDst) != 0) result |= Vortice.Direct3D12.ResourceStates.CopyDest;
+            if ((state & ERHIBufferState.CopySrc) != 0) result |= Vortice.Direct3D12.ResourceStates.CopySource;
+            if ((state & ERHIBufferState.IndexBuffer) != 0) result |= Vortice.Direct3D12.ResourceStates.IndexBuffer;
+            if ((state & ERHIBufferState.VertexBuffer) != 0) result |= Vortice.Direct3D12.ResourceStates.VertexAndConstantBuffer;
+            if ((state & ERHIBufferState.ConstantBuffer) != 0) result |= Vortice.Direct3D12.ResourceStates.VertexAndConstantBuffer;
+            if ((state & ERHIBufferState.IndirectArgument) != 0) result |= Vortice.Direct3D12.ResourceStates.IndirectArgument;
+            if ((state & ERHIBufferState.ShaderResource) != 0) result |= Vortice.Direct3D12.ResourceStates.PixelShaderResource | Vortice.Direct3D12.ResourceStates.NonPixelShaderResource;
+            if ((state & ERHIBufferState.UnorderedAccess) != 0) result |= Vortice.Direct3D12.ResourceStates.UnorderedAccess;
+            if ((state & ERHIBufferState.AccelStructRead) != 0) result |= Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure;
+            if ((state & ERHIBufferState.AccelStructWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure;
+            if ((state & ERHIBufferState.AccelStructBuildInput) != 0) result |= Vortice.Direct3D12.ResourceStates.NonPixelShaderResource;
+            if ((state & ERHIBufferState.AccelStructBuildBlast) != 0) result |= Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure;
 
             return result;
         }
 
-        internal static D3D12_RESOURCE_STATES ConvertToDx12ResourceStateFormStorageMode(in ERHIStorageMode storageMode)
+        internal static Vortice.Direct3D12.ResourceStates ConvertToDx12ResourceStateFormStorageMode(in ERHIStorageMode storageMode)
         {
             switch (storageMode)
             {
                 case ERHIStorageMode.HostUpload:
-                    return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
+                    return Vortice.Direct3D12.ResourceStates.GenericRead;
 
                 case ERHIStorageMode.Readback:
-                    return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
+                    return Vortice.Direct3D12.ResourceStates.CopyDest;
 
                 default:
-                    return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
+                    return Vortice.Direct3D12.ResourceStates.Common;
             }
         }
 
-        internal static D3D12_RESOURCE_STATES ConvertToDx12TextureState(in ERHITextureState state)
+        internal static Vortice.Direct3D12.ResourceStates ConvertToDx12TextureState(in ERHITextureState state)
         {
             if (state == ERHITextureState.Undefine)
             {
-                return D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
+                return Vortice.Direct3D12.ResourceStates.Common;
             }
 
-            D3D12_RESOURCE_STATES result = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON;
+            Vortice.Direct3D12.ResourceStates result = Vortice.Direct3D12.ResourceStates.Common;
 
-            if ((state & ERHITextureState.Present) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
-            //if ((state & ERHITextureState.GenericRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ;
-            if ((state & ERHITextureState.CopyDst) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
-            if ((state & ERHITextureState.CopySrc) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_SOURCE;
-            if ((state & ERHITextureState.ResolveDst) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RESOLVE_DEST;
-            if ((state & ERHITextureState.ResolveSrc) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RESOLVE_SOURCE;
-            if ((state & ERHITextureState.DepthRead) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_READ;
-            if ((state & ERHITextureState.DepthWrite) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_DEPTH_WRITE;
-            if ((state & ERHITextureState.RenderTarget) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
-            if ((state & ERHITextureState.ShaderResource) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-            if ((state & ERHITextureState.UnorderedAccess) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-            if ((state & ERHITextureState.ShadingRateSurface) != 0) result |= D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_SHADING_RATE_SOURCE;
+            if ((state & ERHITextureState.Present) != 0) result |= Vortice.Direct3D12.ResourceStates.Present;
+            //if ((state & ERHITextureState.GenericRead) != 0) result |= Vortice.Direct3D12.ResourceStates.GenericRead;
+            if ((state & ERHITextureState.CopyDst) != 0) result |= Vortice.Direct3D12.ResourceStates.CopyDest;
+            if ((state & ERHITextureState.CopySrc) != 0) result |= Vortice.Direct3D12.ResourceStates.CopySource;
+            if ((state & ERHITextureState.ResolveDst) != 0) result |= Vortice.Direct3D12.ResourceStates.ResolveDest;
+            if ((state & ERHITextureState.ResolveSrc) != 0) result |= Vortice.Direct3D12.ResourceStates.ResolveSource;
+            if ((state & ERHITextureState.DepthRead) != 0) result |= Vortice.Direct3D12.ResourceStates.DepthRead;
+            if ((state & ERHITextureState.DepthWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.DepthWrite;
+            if ((state & ERHITextureState.RenderTarget) != 0) result |= Vortice.Direct3D12.ResourceStates.RenderTarget;
+            if ((state & ERHITextureState.ShaderResource) != 0) result |= Vortice.Direct3D12.ResourceStates.PixelShaderResource | Vortice.Direct3D12.ResourceStates.NonPixelShaderResource;
+            if ((state & ERHITextureState.UnorderedAccess) != 0) result |= Vortice.Direct3D12.ResourceStates.UnorderedAccess;
+            if ((state & ERHITextureState.ShadingRateSurface) != 0) result |= Vortice.Direct3D12.ResourceStates.ShadingRateSource;
 
             return result;
         }
 
-        internal static D3D12_RAYTRACING_GEOMETRY_FLAGS ConvertToDx12AccelStructGeometryFlag(in EAccelStructGeometryFlag geometryFlag)
+        internal static Vortice.Direct3D12.RaytracingGeometryFlags ConvertToDx12AccelStructGeometryFlag(in EAccelStructGeometryFlag geometryFlag)
         {
             if (geometryFlag == EAccelStructGeometryFlag.None)
             {
-                return D3D12_RAYTRACING_GEOMETRY_FLAGS.D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
+                return Vortice.Direct3D12.RaytracingGeometryFlags.None;
             }
 
-            D3D12_RAYTRACING_GEOMETRY_FLAGS result = D3D12_RAYTRACING_GEOMETRY_FLAGS.D3D12_RAYTRACING_GEOMETRY_FLAG_NONE;
+            Vortice.Direct3D12.RaytracingGeometryFlags result = Vortice.Direct3D12.RaytracingGeometryFlags.None;
 
-            if ((geometryFlag & EAccelStructGeometryFlag.Opaque) != 0) result |= D3D12_RAYTRACING_GEOMETRY_FLAGS.D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
-            if ((geometryFlag & EAccelStructGeometryFlag.NoDuplicateAnyhitInverseOcation) != 0) result |= D3D12_RAYTRACING_GEOMETRY_FLAGS.D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION;
+            if ((geometryFlag & EAccelStructGeometryFlag.Opaque) != 0) result |= Vortice.Direct3D12.RaytracingGeometryFlags.Opaque;
+            if ((geometryFlag & EAccelStructGeometryFlag.NoDuplicateAnyhitInverseOcation) != 0) result |= Vortice.Direct3D12.RaytracingGeometryFlags.NoDuplicateAnyHitInvocation;
 
             return result;
         }
 
-        internal static D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS ConvertToDx12AccelStructGeometryFlag(in EAccelStructFlag buildFlag)
+        internal static Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags ConvertToDx12AccelStructGeometryFlag(in EAccelStructFlag buildFlag)
         {
             if (buildFlag == EAccelStructFlag.None)
             {
-                return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+                return Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.None;
             }
 
-            D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS result = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+            Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags result = Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.None;
 
-            if ((buildFlag & EAccelStructFlag.AllowUpdate) != 0) result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
-            if ((buildFlag & EAccelStructFlag.PerformUpdate) != 0) result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
-            if ((buildFlag & EAccelStructFlag.MinimizeMemory) != 0) result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_MINIMIZE_MEMORY;
-            if ((buildFlag & EAccelStructFlag.PreferFastTrace) != 0) result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE; 
-            if ((buildFlag & EAccelStructFlag.PreferFastBuild) != 0) result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
-            if ((buildFlag & EAccelStructFlag.AllowCompaction) != 0) result |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS.D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION;
+            if ((buildFlag & EAccelStructFlag.AllowUpdate) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.AllowUpdate;
+            if ((buildFlag & EAccelStructFlag.PerformUpdate) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PerformUpdate;
+            if ((buildFlag & EAccelStructFlag.MinimizeMemory) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.MinimizeMemory;
+            if ((buildFlag & EAccelStructFlag.PreferFastTrace) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PreferFastTrace; 
+            if ((buildFlag & EAccelStructFlag.PreferFastBuild) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PreferFastBuild;
+            if ((buildFlag & EAccelStructFlag.AllowCompaction) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.AllowCompaction;
 
             return result;
         }
 
-        internal static D3D_PRIMITIVE_TOPOLOGY ConvertToDx12PrimitiveTopology(in ERHIPrimitiveTopology primitiveTopology)
+        internal static Vortice.Direct3D.PrimitiveTopology ConvertToDx12PrimitiveTopology(in ERHIPrimitiveTopology primitiveTopology)
         {
             switch (primitiveTopology)
             {
                 case ERHIPrimitiveTopology.PointList:
-                    return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_POINTLIST;
+                    return Vortice.Direct3D.PrimitiveTopology.PointList;
 
                 case ERHIPrimitiveTopology.LineList:
-                    return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_LINELIST;
+                    return Vortice.Direct3D.PrimitiveTopology.LineList;
 
                 case ERHIPrimitiveTopology.LineStrip:
-                    return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
+                    return Vortice.Direct3D.PrimitiveTopology.LineStrip;
 
                 case ERHIPrimitiveTopology.TriangleList:
-                    return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+                    return Vortice.Direct3D.PrimitiveTopology.TriangleList;
 
                 case ERHIPrimitiveTopology.TriangleStrip:
-                    return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+                    return Vortice.Direct3D.PrimitiveTopology.TriangleStrip;
 
                 case ERHIPrimitiveTopology.LineListAdj:
-                    return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_LINELIST_ADJ;
+                    return Vortice.Direct3D.PrimitiveTopology.LineListAdjacency;
 
                 case ERHIPrimitiveTopology.LineStripAdj:
-                    return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_LINESTRIP_ADJ;
+                    return Vortice.Direct3D.PrimitiveTopology.LineStripAdjacency;
 
                 case ERHIPrimitiveTopology.TriangleListAdj:
-                    return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST_ADJ;
+                    return Vortice.Direct3D.PrimitiveTopology.TriangleListAdjacency;
 
                 case ERHIPrimitiveTopology.TriangleStripAdj:
-                    return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP_ADJ;
+                    return Vortice.Direct3D.PrimitiveTopology.TriangleStripAdjacency;
 
                 default:
-                    return D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+                    return Vortice.Direct3D.PrimitiveTopology.Undefined;
             }
         }
 
-        internal static D3D12_PRIMITIVE_TOPOLOGY_TYPE ConvertToDx12PrimitiveTopologyType(in ERHIPrimitiveTopology primitiveTopology)
+        internal static Vortice.Direct3D12.PrimitiveTopologyType ConvertToDx12PrimitiveTopologyType(in ERHIPrimitiveTopology primitiveTopology)
         {
             switch (primitiveTopology)
             {
                 case ERHIPrimitiveTopology.PointList:
-                    return D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
+                    return Vortice.Direct3D12.PrimitiveTopologyType.Point;
 
                 case ERHIPrimitiveTopology.LineList:
                 case ERHIPrimitiveTopology.LineStrip:
                 case ERHIPrimitiveTopology.LineListAdj:
                 case ERHIPrimitiveTopology.LineStripAdj:
-                    return D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+                    return Vortice.Direct3D12.PrimitiveTopologyType.Line;
 
                 case ERHIPrimitiveTopology.TriangleList:
                 case ERHIPrimitiveTopology.TriangleStrip:
                 case ERHIPrimitiveTopology.TriangleListAdj:
                 case ERHIPrimitiveTopology.TriangleStripAdj:
-                    return D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+                    return Vortice.Direct3D12.PrimitiveTopologyType.Triangle;
 
                 default:
-                    return D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_UNDEFINED;
+                    return Vortice.Direct3D12.PrimitiveTopologyType.Undefined;
             }
         }
 
-        internal static unsafe D3D12_BLEND_DESC CreateDx12BlendState(in RHIBlendStateDescriptor blendStateDescriptor)
+        internal static unsafe Vortice.Direct3D12.BlendDescription CreateDx12BlendState(in RHIBlendStateDescriptor blendStateDescriptor)
         {
-            D3D12_BLEND_DESC blendDescription = new D3D12_BLEND_DESC();
+            Vortice.Direct3D12.BlendDescription blendDescription = new Vortice.Direct3D12.BlendDescription();
             blendDescription.AlphaToCoverageEnable = blendStateDescriptor.AlphaToCoverage;
             blendDescription.IndependentBlendEnable = blendStateDescriptor.IndependentBlend;
             fixed (RHIBlendDescriptor* blendDescriptorPtr = &blendStateDescriptor.BlendDescriptor0)
@@ -857,21 +857,21 @@ namespace Infinity.Graphics
                 for (int i = 0; i < 8; i++)
                 {
                     blendDescription.RenderTarget[i].BlendEnable = blendDescriptorPtr[i].BlendEnable;
-                    blendDescription.RenderTarget[i].BlendOp = ConvertToDx12BlendOp(blendDescriptorPtr[i].BlendOpColor);
-                    blendDescription.RenderTarget[i].SrcBlend = ConvertToDx12BlendMode(blendDescriptorPtr[i].SrcBlendColor);
-                    blendDescription.RenderTarget[i].DestBlend = ConvertToDx12BlendMode(blendDescriptorPtr[i].DstBlendColor);
-                    blendDescription.RenderTarget[i].BlendOpAlpha = ConvertToDx12BlendOp(blendDescriptorPtr[i].BlendOpAlpha);
-                    blendDescription.RenderTarget[i].SrcBlendAlpha = ConvertToDx12BlendMode(blendDescriptorPtr[i].SrcBlendAlpha);
-                    blendDescription.RenderTarget[i].DestBlendAlpha = ConvertToDx12BlendMode(blendDescriptorPtr[i].DstBlendAlpha);
-                    blendDescription.RenderTarget[i].RenderTargetWriteMask = ConvertToDx12WriteChannel(blendDescriptorPtr[i].ColorWriteChannel);
+                    blendDescription.RenderTarget[i].BlendOperation = ConvertToDx12BlendOp(blendDescriptorPtr[i].BlendOpColor);
+                    blendDescription.RenderTarget[i].SourceBlend = ConvertToDx12BlendMode(blendDescriptorPtr[i].SrcBlendColor);
+                    blendDescription.RenderTarget[i].DestinationBlend = ConvertToDx12BlendMode(blendDescriptorPtr[i].DstBlendColor);
+                    blendDescription.RenderTarget[i].BlendOperationAlpha = ConvertToDx12BlendOp(blendDescriptorPtr[i].BlendOpAlpha);
+                    blendDescription.RenderTarget[i].SourceBlendAlpha = ConvertToDx12BlendMode(blendDescriptorPtr[i].SrcBlendAlpha);
+                    blendDescription.RenderTarget[i].DestinationBlendAlpha = ConvertToDx12BlendMode(blendDescriptorPtr[i].DstBlendAlpha);
+                    blendDescription.RenderTarget[i].RenderTargetWriteMask = (Vortice.Direct3D12.ColorWriteEnable)ConvertToDx12WriteChannel(blendDescriptorPtr[i].ColorWriteChannel);
                 }
             }
             return blendDescription;
         }
 
-        internal static D3D12_RASTERIZER_DESC CreateDx12RasterizerState(in RHIRasterizerStateDescriptor description, bool bMultisample)
+        internal static Vortice.Direct3D12.RasterizerDescription CreateDx12RasterizerState(in RHIRasterizerStateDescriptor description, bool bMultisample)
         {
-            D3D12_RASTERIZER_DESC rasterDescription;
+            Vortice.Direct3D12.RasterizerDescription rasterDescription;
             rasterDescription.FillMode = ConvertToDx12FillMode(description.FillMode);
             rasterDescription.CullMode = ConvertToDx12CullMode(description.CullMode);
             rasterDescription.ForcedSampleCount = 0;
@@ -882,84 +882,84 @@ namespace Infinity.Graphics
             rasterDescription.SlopeScaledDepthBias = description.SlopeScaledDepthBias;
             rasterDescription.AntialiasedLineEnable = description.AntialiasedLineEnable;
             rasterDescription.FrontCounterClockwise = description.FrontCounterClockwise;
-            rasterDescription.ConservativeRaster = description.ConservativeRaster ? D3D12_CONSERVATIVE_RASTERIZATION_MODE.D3D12_CONSERVATIVE_RASTERIZATION_MODE_ON : D3D12_CONSERVATIVE_RASTERIZATION_MODE.D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+            rasterDescription.ConservativeRaster = description.ConservativeRaster ? Vortice.Direct3D12.ConservativeRasterizationMode.On : Vortice.Direct3D12.ConservativeRasterizationMode.Off;
             return rasterDescription;
         }
 
-        internal static D3D12_STENCIL_OP ConvertToDx12StencilOp(in ERHIStencilOp stencilOp)
+        internal static Vortice.Direct3D12.StencilOperation ConvertToDx12StencilOp(in ERHIStencilOp stencilOp)
         {
             switch (stencilOp)
             {
                 case ERHIStencilOp.Keep:
-                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_KEEP;
+                    return Vortice.Direct3D12.StencilOperation.Keep;
 
                 case ERHIStencilOp.Zero:
-                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_ZERO;
+                    return Vortice.Direct3D12.StencilOperation.Zero;
 
                 case ERHIStencilOp.Replace:
-                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_REPLACE;
+                    return Vortice.Direct3D12.StencilOperation.Replace;
 
                 case ERHIStencilOp.IncrementSaturation:
-                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_INCR_SAT;
+                    return Vortice.Direct3D12.StencilOperation.IncrementSaturate;
 
                 case ERHIStencilOp.DecrementSaturation:
-                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_DECR_SAT;
+                    return Vortice.Direct3D12.StencilOperation.DecrementSaturate;
 
                 case ERHIStencilOp.Invert:
-                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_INVERT;
+                    return Vortice.Direct3D12.StencilOperation.Invert;
 
                 case ERHIStencilOp.Increment:
-                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_INCR;
+                    return Vortice.Direct3D12.StencilOperation.Increment;
 
                 case ERHIStencilOp.Decrement:
-                    return D3D12_STENCIL_OP.D3D12_STENCIL_OP_DECR;
+                    return Vortice.Direct3D12.StencilOperation.Decrement;
             }
             return 0;
         }
 
-        internal static D3D12_COMPARISON_FUNC ConvertToDx12Comparison(in ERHIComparisonMode comparisonMode)
+        internal static Vortice.Direct3D12.ComparisonFunction ConvertToDx12Comparison(in ERHIComparisonMode comparisonMode)
         {
             switch (comparisonMode)
             {
                 case ERHIComparisonMode.Never:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER;
+                    return Vortice.Direct3D12.ComparisonFunction.Never;
 
                 case ERHIComparisonMode.Less:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_LESS;
+                    return Vortice.Direct3D12.ComparisonFunction.Less;
 
                 case ERHIComparisonMode.Equal:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_EQUAL;
+                    return Vortice.Direct3D12.ComparisonFunction.Equal;
 
                 case ERHIComparisonMode.LessEqual:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_LESS_EQUAL;
+                    return Vortice.Direct3D12.ComparisonFunction.LessEqual;
 
                 case ERHIComparisonMode.Greater:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_GREATER;
+                    return Vortice.Direct3D12.ComparisonFunction.Greater;
 
                 case ERHIComparisonMode.NotEqual:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NOT_EQUAL;
+                    return Vortice.Direct3D12.ComparisonFunction.NotEqual;
 
                 case ERHIComparisonMode.GreaterEqual:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+                    return Vortice.Direct3D12.ComparisonFunction.GreaterEqual;
 
                 case ERHIComparisonMode.Always:
-                    return D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_ALWAYS;
+                    return Vortice.Direct3D12.ComparisonFunction.Always;
             }
             return 0;
         }
 
-        internal static D3D12_DEPTH_STENCIL_DESC CreateDx12DepthStencilState(in RHIDepthStencilStateDescriptor depthStencilStateDescriptor)
+        internal static Vortice.Direct3D12.DepthStencilDescription CreateDx12DepthStencilState(in RHIDepthStencilStateDescriptor depthStencilStateDescriptor)
         {
-            D3D12_DEPTH_STENCIL_DESC depthStencilDescription = new D3D12_DEPTH_STENCIL_DESC
+            Vortice.Direct3D12.DepthStencilDescription depthStencilDescription = new Vortice.Direct3D12.DepthStencilDescription
             {
                 DepthEnable = depthStencilStateDescriptor.DepthEnable,
                 DepthFunc = ConvertToDx12Comparison(depthStencilStateDescriptor.ComparisonMode),
-                DepthWriteMask = depthStencilStateDescriptor.DepthWriteMask ? D3D12_DEPTH_WRITE_MASK.D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK.D3D12_DEPTH_WRITE_MASK_ZERO,
+                DepthWriteMask = depthStencilStateDescriptor.DepthWriteMask ? Vortice.Direct3D12.DepthWriteMask.All : Vortice.Direct3D12.DepthWriteMask.Zero,
                 StencilEnable = depthStencilStateDescriptor.StencilEnable,
                 StencilReadMask = depthStencilStateDescriptor.StencilReadMask,
                 StencilWriteMask = depthStencilStateDescriptor.StencilWriteMask
             };
-            D3D12_DEPTH_STENCILOP_DESC frontFaceDescription = new D3D12_DEPTH_STENCILOP_DESC
+            Vortice.Direct3D12.DepthStencilOperationDescription frontFaceDescription = new Vortice.Direct3D12.DepthStencilOperationDescription
             {
                 StencilFunc = ConvertToDx12Comparison(depthStencilStateDescriptor.FrontFace.ComparisonMode),
                 StencilFailOp = ConvertToDx12StencilOp(depthStencilStateDescriptor.FrontFace.StencilFailOp),
@@ -968,7 +968,7 @@ namespace Infinity.Graphics
             };
             depthStencilDescription.FrontFace = frontFaceDescription;
 
-            D3D12_DEPTH_STENCILOP_DESC backFaceDescription = new D3D12_DEPTH_STENCILOP_DESC
+            Vortice.Direct3D12.DepthStencilOperationDescription backFaceDescription = new Vortice.Direct3D12.DepthStencilOperationDescription
             {
                 StencilFunc = ConvertToDx12Comparison(depthStencilStateDescriptor.BackFace.ComparisonMode),
                 StencilFailOp = ConvertToDx12StencilOp(depthStencilStateDescriptor.BackFace.StencilFailOp),
@@ -979,132 +979,132 @@ namespace Infinity.Graphics
             return depthStencilDescription;
         }
 
-        internal static DXGI_FORMAT ConvertToDx12SemanticFormat(in ERHISemanticFormat format)
+        internal static Vortice.DXGI.Format ConvertToDx12SemanticFormat(in ERHISemanticFormat format)
         {
             switch (format)
             {
                 case ERHISemanticFormat.Byte:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8_SINT;
+                    return Vortice.DXGI.Format.R8_SInt;
 
                 case ERHISemanticFormat.Byte2:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_SINT;
+                    return Vortice.DXGI.Format.R8G8_SInt;
 
                 case ERHISemanticFormat.Byte4:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_SINT;
+                    return Vortice.DXGI.Format.R8G8B8A8_SInt;
 
                 case ERHISemanticFormat.UByte:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8_UINT;
+                    return Vortice.DXGI.Format.R8_UInt;
 
                 case ERHISemanticFormat.UByte2:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_UINT;
+                    return Vortice.DXGI.Format.R8G8_UInt;
 
                 case ERHISemanticFormat.UByte4:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UINT;
+                    return Vortice.DXGI.Format.R8G8B8A8_UInt;
 
                 case ERHISemanticFormat.ByteNormalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8_SNORM;
+                    return Vortice.DXGI.Format.R8_SNorm;
 
                 case ERHISemanticFormat.Byte2Normalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_SNORM;
+                    return Vortice.DXGI.Format.R8G8_SNorm;
 
                 case ERHISemanticFormat.Byte4Normalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_SNORM;
+                    return Vortice.DXGI.Format.R8G8B8A8_SNorm;
 
                 case ERHISemanticFormat.UByteNormalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8_UNORM;
+                    return Vortice.DXGI.Format.R8_UNorm;
 
                 case ERHISemanticFormat.UByte2Normalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_UNORM;
+                    return Vortice.DXGI.Format.R8G8_UNorm;
 
                 case ERHISemanticFormat.UByte4Normalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
+                    return Vortice.DXGI.Format.R8G8B8A8_UNorm;
 
                 case ERHISemanticFormat.Short:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16_SINT;
+                    return Vortice.DXGI.Format.R16_SInt;
 
                 case ERHISemanticFormat.Short2:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_SINT;
+                    return Vortice.DXGI.Format.R16G16_SInt;
 
                 case ERHISemanticFormat.Short4:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_SINT;
+                    return Vortice.DXGI.Format.R16G16B16A16_SInt;
 
                 case ERHISemanticFormat.UShort:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16_UINT;
+                    return Vortice.DXGI.Format.R16_UInt;
 
                 case ERHISemanticFormat.UShort2:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_UINT;
+                    return Vortice.DXGI.Format.R16G16_UInt;
 
                 case ERHISemanticFormat.UShort4:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_UINT;
+                    return Vortice.DXGI.Format.R16G16B16A16_UInt;
 
                 case ERHISemanticFormat.ShortNormalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16_SNORM;
+                    return Vortice.DXGI.Format.R16_SNorm;
 
                 case ERHISemanticFormat.Short2Normalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_SNORM;
+                    return Vortice.DXGI.Format.R16G16_SNorm;
 
                 case ERHISemanticFormat.Short4Normalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_SNORM;
+                    return Vortice.DXGI.Format.R16G16B16A16_SNorm;
 
                 case ERHISemanticFormat.UShortNormalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16_UNORM;
+                    return Vortice.DXGI.Format.R16_UNorm;
 
                 case ERHISemanticFormat.UShort2Normalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_UNORM;
+                    return Vortice.DXGI.Format.R16G16_UNorm;
 
                 case ERHISemanticFormat.UShort4Normalized:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_UNORM;
+                    return Vortice.DXGI.Format.R16G16B16A16_UNorm;
 
                 case ERHISemanticFormat.Int:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32_SINT;
+                    return Vortice.DXGI.Format.R32_SInt;
 
                 case ERHISemanticFormat.Int2:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_SINT;
+                    return Vortice.DXGI.Format.R32G32_SInt;
 
                 case ERHISemanticFormat.Int3:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32_SINT;
+                    return Vortice.DXGI.Format.R32G32B32_SInt;
 
                 case ERHISemanticFormat.Int4:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_SINT;
+                    return Vortice.DXGI.Format.R32G32B32A32_SInt;
 
                 case ERHISemanticFormat.UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32_UINT;
+                    return Vortice.DXGI.Format.R32_UInt;
 
                 case ERHISemanticFormat.UInt2:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_UINT;
+                    return Vortice.DXGI.Format.R32G32_UInt;
 
                 case ERHISemanticFormat.UInt3:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32_UINT;
+                    return Vortice.DXGI.Format.R32G32B32_UInt;
 
                 case ERHISemanticFormat.UInt4:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_UINT;
+                    return Vortice.DXGI.Format.R32G32B32A32_UInt;
 
                 case ERHISemanticFormat.Half:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16_FLOAT;
+                    return Vortice.DXGI.Format.R16_Float;
 
                 case ERHISemanticFormat.Half2:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_FLOAT;
+                    return Vortice.DXGI.Format.R16G16_Float;
 
                 case ERHISemanticFormat.Half4:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT;
+                    return Vortice.DXGI.Format.R16G16B16A16_Float;
 
                 case ERHISemanticFormat.Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32_FLOAT;
+                    return Vortice.DXGI.Format.R32_Float;
 
                 case ERHISemanticFormat.Float2:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT;
+                    return Vortice.DXGI.Format.R32G32_Float;
 
                 case ERHISemanticFormat.Float3:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32_FLOAT;
+                    return Vortice.DXGI.Format.R32G32B32_Float;
 
                 case ERHISemanticFormat.Float4:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT;
+                    return Vortice.DXGI.Format.R32G32B32A32_Float;
             }
-            return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
+            return Vortice.DXGI.Format.Unknown;
         }
 
         //convert dxgi format to pixel format
-        internal static DXGI_FORMAT ConvertToDx12Format(in ERHIPixelFormat pixelFormat)
+        internal static Vortice.DXGI.Format ConvertToDx12Format(in ERHIPixelFormat pixelFormat)
         {
             switch (pixelFormat)
             {
@@ -1112,121 +1112,121 @@ namespace Infinity.Graphics
                 case ERHIPixelFormat.R8_SNorm:
                 case ERHIPixelFormat.R8_UInt:
                 case ERHIPixelFormat.R8_SInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8_TYPELESS;
+                    return Vortice.DXGI.Format.R8_Typeless;
 
                 case ERHIPixelFormat.R16_UInt:
                 case ERHIPixelFormat.R16_SInt:
                 case ERHIPixelFormat.R16_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16_TYPELESS;
+                    return Vortice.DXGI.Format.R16_Typeless;
 
                 case ERHIPixelFormat.R8G8_UInt:
                 case ERHIPixelFormat.R8G8_SInt:
                 case ERHIPixelFormat.R8G8_UNorm:
                 case ERHIPixelFormat.R8G8_SNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_TYPELESS;
+                    return Vortice.DXGI.Format.R8G8_Typeless;
 
                 case ERHIPixelFormat.R32_UInt:
                 case ERHIPixelFormat.R32_SInt:
                 case ERHIPixelFormat.R32_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS;
+                    return Vortice.DXGI.Format.R32_Typeless;
 
                 case ERHIPixelFormat.R16G16_UInt:
                 case ERHIPixelFormat.R16G16_SInt:
                 case ERHIPixelFormat.R16G16_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_TYPELESS;
+                    return Vortice.DXGI.Format.R16G16_Typeless;
 
                 case ERHIPixelFormat.R8G8B8A8_UInt:
                 case ERHIPixelFormat.R8G8B8A8_SInt:
                 case ERHIPixelFormat.R8G8B8A8_UNorm:
                 case ERHIPixelFormat.R8G8B8A8_UNorm_Srgb:
                 case ERHIPixelFormat.R8G8B8A8_SNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_TYPELESS;
+                    return Vortice.DXGI.Format.R8G8B8A8_Typeless;
 
                 case ERHIPixelFormat.B8G8R8A8_UNorm:
                 case ERHIPixelFormat.B8G8R8A8_UNorm_Srgb:
-                    return DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_TYPELESS;
+                    return Vortice.DXGI.Format.B8G8R8A8_Typeless;
 
                 case ERHIPixelFormat.R99GB99_E5_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
+                    return Vortice.DXGI.Format.R9G9B9E5_SharedExp;
 
                 case ERHIPixelFormat.R10G10B10A2_UInt:
                 case ERHIPixelFormat.R10G10B10A2_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_R10G10B10A2_TYPELESS;
+                    return Vortice.DXGI.Format.R10G10B10A2_Typeless;
 
                 case ERHIPixelFormat.R11G11B10_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R11G11B10_FLOAT;
+                    return Vortice.DXGI.Format.R11G11B10_Float;
 
                 case ERHIPixelFormat.RG32_UInt:
                 case ERHIPixelFormat.RG32_SInt:
                 case ERHIPixelFormat.RG32_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_TYPELESS;
+                    return Vortice.DXGI.Format.R32G32_Typeless;
 
                 case ERHIPixelFormat.R16G16B16A16_UInt:
                 case ERHIPixelFormat.R16G16B16A16_SInt:
                 case ERHIPixelFormat.R16G16B16A16_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_TYPELESS;
+                    return Vortice.DXGI.Format.R16G16B16A16_Typeless;
 
                 case ERHIPixelFormat.R32G32B32A32_UInt:
                 case ERHIPixelFormat.R32G32B32A32_SInt:
                 case ERHIPixelFormat.R32G32B32A32_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_TYPELESS;
+                    return Vortice.DXGI.Format.R32G32B32A32_Typeless;
 
                 case ERHIPixelFormat.D16_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_D16_UNORM;
+                    return Vortice.DXGI.Format.D16_UNorm;
 
                 case ERHIPixelFormat.D24_UNorm_S8_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_D24_UNORM_S8_UINT;
+                    return Vortice.DXGI.Format.D24_UNorm_S8_UInt;
 
                 case ERHIPixelFormat.D32_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT;
+                    return Vortice.DXGI.Format.D32_Float;
 
                 case ERHIPixelFormat.D32_Float_S8_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+                    return Vortice.DXGI.Format.D32_Float_S8X24_UInt;
 
                 case ERHIPixelFormat.RGBA_DXT1_SRGB:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM_SRGB;
+                    return Vortice.DXGI.Format.BC1_UNorm_SRgb;
 
                 case ERHIPixelFormat.RGB_DXT1_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM;
+                    return Vortice.DXGI.Format.BC1_UNorm;
 
                 case ERHIPixelFormat.RGBA_DXT1_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM;
+                    return Vortice.DXGI.Format.BC1_UNorm;
 
                 case ERHIPixelFormat.RGBA_DXT3_SRGB:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC2_UNORM_SRGB;
+                    return Vortice.DXGI.Format.BC2_UNorm_SRgb;
 
                 case ERHIPixelFormat.RGBA_DXT3_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC2_UNORM;
+                    return Vortice.DXGI.Format.BC2_UNorm;
 
                 case ERHIPixelFormat.RGBA_DXT5_SRGB:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM_SRGB;
+                    return Vortice.DXGI.Format.BC3_UNorm_SRgb;
 
                 case ERHIPixelFormat.RGBA_DXT5_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM;
+                    return Vortice.DXGI.Format.BC3_UNorm;
 
                 case ERHIPixelFormat.R_BC4_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC4_UNORM;
+                    return Vortice.DXGI.Format.BC4_UNorm;
 
                 case ERHIPixelFormat.R_BC4_SNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC4_SNORM;
+                    return Vortice.DXGI.Format.BC4_SNorm;
 
                 case ERHIPixelFormat.RG_BC5_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC5_UNORM;
+                    return Vortice.DXGI.Format.BC5_UNorm;
 
                 case ERHIPixelFormat.RG_BC5_SNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC5_SNORM;
+                    return Vortice.DXGI.Format.BC5_SNorm;
 
                 case ERHIPixelFormat.RGB_BC6H_UFloat:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC6H_UF16;
+                    return Vortice.DXGI.Format.BC6H_Uf16;
 
                 case ERHIPixelFormat.RGB_BC6H_SFloat:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC6H_SF16;
+                    return Vortice.DXGI.Format.BC6H_Sf16;
 
                 case ERHIPixelFormat.RGBA_BC7_SRGB:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM_SRGB;
+                    return Vortice.DXGI.Format.BC7_UNorm_SRgb;
 
                 case ERHIPixelFormat.RGBA_BC7_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM;
+                    return Vortice.DXGI.Format.BC7_UNorm;
 
                 case ERHIPixelFormat.RGBA_ASTC4X4_SRGB:
                 case ERHIPixelFormat.RGBA_ASTC4X4_UNorm:
@@ -1246,185 +1246,185 @@ namespace Infinity.Graphics
                 case ERHIPixelFormat.RGBA_ASTC12X12_SRGB:
                 case ERHIPixelFormat.RGBA_ASTC12X12_UNorm:
                 case ERHIPixelFormat.RGBA_ASTC12X12_UFloat:
-                    return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
+                    return Vortice.DXGI.Format.Unknown;
 
                 case ERHIPixelFormat.YUV2:
-                    return DXGI_FORMAT.DXGI_FORMAT_YUY2;
+                    return Vortice.DXGI.Format.YUY2;
             }
-            return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
+            return Vortice.DXGI.Format.Unknown;
         }
 
-        internal static DXGI_FORMAT ConvertToDx12ViewFormat(in ERHIPixelFormat pixelFormat)
+        internal static Vortice.DXGI.Format ConvertToDx12ViewFormat(in ERHIPixelFormat pixelFormat)
         {
             switch (pixelFormat)
             {
                 case ERHIPixelFormat.R8_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8_UNORM;
+                    return Vortice.DXGI.Format.R8_UNorm;
 
                 case ERHIPixelFormat.R8_SNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8_SNORM;
+                    return Vortice.DXGI.Format.R8_SNorm;
 
                 case ERHIPixelFormat.R8_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8_UINT;
+                    return Vortice.DXGI.Format.R8_UInt;
 
                 case ERHIPixelFormat.R8_SInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8_SINT;
+                    return Vortice.DXGI.Format.R8_SInt;
 
                 case ERHIPixelFormat.R16_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16_UINT;
+                    return Vortice.DXGI.Format.R16_UInt;
 
                 case ERHIPixelFormat.R16_SInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16_SINT;
+                    return Vortice.DXGI.Format.R16_SInt;
 
                 case ERHIPixelFormat.R16_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16_FLOAT;
+                    return Vortice.DXGI.Format.R16_Float;
 
                 case ERHIPixelFormat.R8G8_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_UNORM;
+                    return Vortice.DXGI.Format.R8G8_UNorm;
 
                 case ERHIPixelFormat.R8G8_SNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_SNORM;
+                    return Vortice.DXGI.Format.R8G8_SNorm;
 
                 case ERHIPixelFormat.R8G8_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_UINT;
+                    return Vortice.DXGI.Format.R8G8_UInt;
 
                 case ERHIPixelFormat.R8G8_SInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8_SINT;
+                    return Vortice.DXGI.Format.R8G8_SInt;
 
                 case ERHIPixelFormat.R32_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32_UINT;
+                    return Vortice.DXGI.Format.R32_UInt;
 
                 case ERHIPixelFormat.R32_SInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32_SINT;
+                    return Vortice.DXGI.Format.R32_SInt;
 
                 case ERHIPixelFormat.R32_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32_FLOAT;
+                    return Vortice.DXGI.Format.R32_Float;
 
                 case ERHIPixelFormat.R16G16_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_UINT;
+                    return Vortice.DXGI.Format.R16G16_UInt;
 
                 case ERHIPixelFormat.R16G16_SInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_SINT;
+                    return Vortice.DXGI.Format.R16G16_SInt;
 
                 case ERHIPixelFormat.R16G16_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16_FLOAT;
+                    return Vortice.DXGI.Format.R16G16_Float;
 
                 case ERHIPixelFormat.R8G8B8A8_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
+                    return Vortice.DXGI.Format.R8G8B8A8_UNorm;
 
                 case ERHIPixelFormat.R8G8B8A8_UNorm_Srgb:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+                    return Vortice.DXGI.Format.R8G8B8A8_UNorm_SRgb;
 
                 case ERHIPixelFormat.R8G8B8A8_SNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_SNORM;
+                    return Vortice.DXGI.Format.R8G8B8A8_SNorm;
 
                 case ERHIPixelFormat.R8G8B8A8_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UINT;
+                    return Vortice.DXGI.Format.R8G8B8A8_UInt;
 
                 case ERHIPixelFormat.R8G8B8A8_SInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_SINT;
+                    return Vortice.DXGI.Format.R8G8B8A8_SInt;
 
                 case ERHIPixelFormat.B8G8R8A8_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM;
+                    return Vortice.DXGI.Format.B8G8R8A8_UNorm;
 
                 case ERHIPixelFormat.B8G8R8A8_UNorm_Srgb:
-                    return DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+                    return Vortice.DXGI.Format.B8G8R8A8_UNorm_SRgb;
 
                 case ERHIPixelFormat.R99GB99_E5_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
+                    return Vortice.DXGI.Format.R9G9B9E5_SharedExp;
 
                 case ERHIPixelFormat.R10G10B10A2_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R10G10B10A2_UINT;
+                    return Vortice.DXGI.Format.R10G10B10A2_UInt;
 
                 case ERHIPixelFormat.R10G10B10A2_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_R10G10B10A2_UNORM;
+                    return Vortice.DXGI.Format.R10G10B10A2_UNorm;
 
                 case ERHIPixelFormat.R11G11B10_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R11G11B10_FLOAT;
+                    return Vortice.DXGI.Format.R11G11B10_Float;
 
                 case ERHIPixelFormat.RG32_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_UINT;
+                    return Vortice.DXGI.Format.R32G32_UInt;
 
                 case ERHIPixelFormat.RG32_SInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_SINT;
+                    return Vortice.DXGI.Format.R32G32_SInt;
 
                 case ERHIPixelFormat.RG32_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT;
+                    return Vortice.DXGI.Format.R32G32_Float;
 
                 case ERHIPixelFormat.R16G16B16A16_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_UINT;
+                    return Vortice.DXGI.Format.R16G16B16A16_UInt;
 
                 case ERHIPixelFormat.R16G16B16A16_SInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_SINT;
+                    return Vortice.DXGI.Format.R16G16B16A16_SInt;
 
                 case ERHIPixelFormat.R16G16B16A16_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT;
+                    return Vortice.DXGI.Format.R16G16B16A16_Float;
 
                 case ERHIPixelFormat.R32G32B32A32_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_UINT;
+                    return Vortice.DXGI.Format.R32G32B32A32_UInt;
 
                 case ERHIPixelFormat.R32G32B32A32_SInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_SINT;
+                    return Vortice.DXGI.Format.R32G32B32A32_SInt;
 
                 case ERHIPixelFormat.R32G32B32A32_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT;
+                    return Vortice.DXGI.Format.R32G32B32A32_Float;
 
                 case ERHIPixelFormat.D16_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_D16_UNORM;
+                    return Vortice.DXGI.Format.D16_UNorm;
 
                 case ERHIPixelFormat.D24_UNorm_S8_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_D24_UNORM_S8_UINT;
+                    return Vortice.DXGI.Format.D24_UNorm_S8_UInt;
 
                 case ERHIPixelFormat.D32_Float:
-                    return DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT;
+                    return Vortice.DXGI.Format.D32_Float;
 
                 case ERHIPixelFormat.D32_Float_S8_UInt:
-                    return DXGI_FORMAT.DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+                    return Vortice.DXGI.Format.D32_Float_S8X24_UInt;
 
                 case ERHIPixelFormat.RGBA_DXT1_SRGB:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM_SRGB;
+                    return Vortice.DXGI.Format.BC1_UNorm_SRgb;
 
                 case ERHIPixelFormat.RGB_DXT1_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM;
+                    return Vortice.DXGI.Format.BC1_UNorm;
 
                 case ERHIPixelFormat.RGBA_DXT1_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC1_UNORM;
+                    return Vortice.DXGI.Format.BC1_UNorm;
 
                 case ERHIPixelFormat.RGBA_DXT3_SRGB:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC2_UNORM_SRGB;
+                    return Vortice.DXGI.Format.BC2_UNorm_SRgb;
 
                 case ERHIPixelFormat.RGBA_DXT3_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC2_UNORM;
+                    return Vortice.DXGI.Format.BC2_UNorm;
 
                 case ERHIPixelFormat.RGBA_DXT5_SRGB:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM_SRGB;
+                    return Vortice.DXGI.Format.BC3_UNorm_SRgb;
 
                 case ERHIPixelFormat.RGBA_DXT5_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC3_UNORM;
+                    return Vortice.DXGI.Format.BC3_UNorm;
 
                 case ERHIPixelFormat.R_BC4_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC4_UNORM;
+                    return Vortice.DXGI.Format.BC4_UNorm;
 
                 case ERHIPixelFormat.R_BC4_SNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC4_SNORM;
+                    return Vortice.DXGI.Format.BC4_SNorm;
 
                 case ERHIPixelFormat.RG_BC5_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC5_UNORM;
+                    return Vortice.DXGI.Format.BC5_UNorm;
 
                 case ERHIPixelFormat.RG_BC5_SNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC5_SNORM;
+                    return Vortice.DXGI.Format.BC5_SNorm;
 
                 case ERHIPixelFormat.RGB_BC6H_UFloat:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC6H_UF16;
+                    return Vortice.DXGI.Format.BC6H_Uf16;
 
                 case ERHIPixelFormat.RGB_BC6H_SFloat:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC6H_SF16;
+                    return Vortice.DXGI.Format.BC6H_Sf16;
 
                 case ERHIPixelFormat.RGBA_BC7_SRGB:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM_SRGB;
+                    return Vortice.DXGI.Format.BC7_UNorm_SRgb;
 
                 case ERHIPixelFormat.RGBA_BC7_UNorm:
-                    return DXGI_FORMAT.DXGI_FORMAT_BC7_UNORM;
+                    return Vortice.DXGI.Format.BC7_UNorm;
 
                 case ERHIPixelFormat.RGBA_ASTC4X4_SRGB:
                 case ERHIPixelFormat.RGBA_ASTC4X4_UNorm:
@@ -1444,138 +1444,138 @@ namespace Infinity.Graphics
                 case ERHIPixelFormat.RGBA_ASTC12X12_SRGB:
                 case ERHIPixelFormat.RGBA_ASTC12X12_UNorm:
                 case ERHIPixelFormat.RGBA_ASTC12X12_UFloat:
-                    return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
+                    return Vortice.DXGI.Format.Unknown;
 
                 case ERHIPixelFormat.YUV2:
-                    return DXGI_FORMAT.DXGI_FORMAT_YUY2;
+                    return Vortice.DXGI.Format.YUY2;
             }
-            return DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
+            return Vortice.DXGI.Format.Unknown;
         }
 
-        internal static DXGI_FORMAT ConvertToDx12IndexFormat(in ERHIBufferFormat format)
+        internal static Vortice.DXGI.Format ConvertToDx12IndexFormat(in ERHIBufferFormat format)
         {
-            return (format == ERHIBufferFormat.UInt16) ? DXGI_FORMAT.DXGI_FORMAT_R16_UINT : ((format != ERHIBufferFormat.UInt32) ? DXGI_FORMAT.DXGI_FORMAT_UNKNOWN : DXGI_FORMAT.DXGI_FORMAT_R32_UINT);
+            return (format == ERHIBufferFormat.UInt16) ? Vortice.DXGI.Format.R16_UInt : ((format != ERHIBufferFormat.UInt32) ? Vortice.DXGI.Format.Unknown : Vortice.DXGI.Format.R32_UInt);
         }
 
-        internal static DXGI_SAMPLE_DESC ConvertToDx12SampleCount(in ERHISampleCount sampleCount)
+        internal static Vortice.DXGI.SampleDescription ConvertToDx12SampleCount(in ERHISampleCount sampleCount)
         {
             switch (sampleCount)
             {
                 case ERHISampleCount.None:
-                    return new DXGI_SAMPLE_DESC(1, 0);
+                    return new Vortice.DXGI.SampleDescription(1, 0);
 
                 case ERHISampleCount.Count2:
-                    return new DXGI_SAMPLE_DESC(2, 0);
+                    return new Vortice.DXGI.SampleDescription(2, 0);
 
                 case ERHISampleCount.Count4:
-                    return new DXGI_SAMPLE_DESC(4, 0);
+                    return new Vortice.DXGI.SampleDescription(4, 0);
 
                 case ERHISampleCount.Count8:
-                    return new DXGI_SAMPLE_DESC(8, 0);
+                    return new Vortice.DXGI.SampleDescription(8, 0);
             }
-            return new DXGI_SAMPLE_DESC(0, 0);
+            return new Vortice.DXGI.SampleDescription(0, 0);
         }
         
-        internal static D3D12_DSV_FLAGS GetDx12DSVFlag(in bool bDepthReadOnly, in bool bStencilReadOnly)
+        internal static Vortice.Direct3D12.DepthStencilViewFlags GetDx12DSVFlag(in bool bDepthReadOnly, in bool bStencilReadOnly)
         {
-            D3D12_DSV_FLAGS outFlag = D3D12_DSV_FLAGS.D3D12_DSV_FLAG_NONE;
+            Vortice.Direct3D12.DepthStencilViewFlags outFlag = Vortice.Direct3D12.DepthStencilViewFlags.None;
 
             if (bDepthReadOnly)
             {
-                outFlag |= D3D12_DSV_FLAGS.D3D12_DSV_FLAG_READ_ONLY_DEPTH;
+                outFlag |= Vortice.Direct3D12.DepthStencilViewFlags.ReadOnlyDepth;
             }
 
             if (bStencilReadOnly)
             {
-                outFlag |= D3D12_DSV_FLAGS.D3D12_DSV_FLAG_READ_ONLY_STENCIL;
+                outFlag |= Vortice.Direct3D12.DepthStencilViewFlags.ReadOnlyStencil;
             }
 
             return outFlag;
         }
 
-        internal static D3D12_DSV_DIMENSION ConvertToDx12TextureDSVDimension(in ERHITextureDimension dimension)
+        internal static Vortice.Direct3D12.DepthStencilViewDimension ConvertToDx12TextureDSVDimension(in ERHITextureDimension dimension)
         {
             switch (dimension)
             {
                 case ERHITextureDimension.Texture2DMS:
-                    return D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2DMS;
+                    return Vortice.Direct3D12.DepthStencilViewDimension.Texture2DMultisampled;
 
                 case ERHITextureDimension.Texture2DArray:
-                    return D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+                    return Vortice.Direct3D12.DepthStencilViewDimension.Texture2DArray;
 
                 case ERHITextureDimension.Texture2DArrayMS:
-                    return D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
+                    return Vortice.Direct3D12.DepthStencilViewDimension.Texture2DMultisampledArray;
             }
-            return D3D12_DSV_DIMENSION.D3D12_DSV_DIMENSION_TEXTURE2D;
+            return Vortice.Direct3D12.DepthStencilViewDimension.Texture2D;
         }
 
-        internal static D3D12_RTV_DIMENSION ConvertToDx12TextureRTVDimension(in ERHITextureDimension dimension)
+        internal static Vortice.Direct3D12.RenderTargetViewDimension ConvertToDx12TextureRTVDimension(in ERHITextureDimension dimension)
         {
             switch (dimension)
             {
                 case ERHITextureDimension.Texture2DMS:
-                    return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2DMS;
+                    return Vortice.Direct3D12.RenderTargetViewDimension.Texture2DMultisampled;
 
                 case ERHITextureDimension.Texture2DArray:
-                    return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+                    return Vortice.Direct3D12.RenderTargetViewDimension.Texture2DArray;
 
                 case ERHITextureDimension.Texture2DArrayMS:
-                    return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
+                    return Vortice.Direct3D12.RenderTargetViewDimension.Texture2DMultisampledArray;
 
                 case ERHITextureDimension.Texture3D:
-                    return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE3D;
+                    return Vortice.Direct3D12.RenderTargetViewDimension.Texture3D;
             }
-            return D3D12_RTV_DIMENSION.D3D12_RTV_DIMENSION_TEXTURE2D;
+            return Vortice.Direct3D12.RenderTargetViewDimension.Texture2D;
         }
 
-        internal static D3D12_SRV_DIMENSION ConvertToDx12TextureSRVDimension(in ERHITextureDimension dimension)
+        internal static Vortice.Direct3D12.ShaderResourceViewDimension ConvertToDx12TextureSRVDimension(in ERHITextureDimension dimension)
         {
             switch (dimension)
             {
                 case ERHITextureDimension.Texture2DMS:
-                    return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2DMS;
+                    return Vortice.Direct3D12.ShaderResourceViewDimension.Texture2DMultisampled;
 
                 case ERHITextureDimension.Texture2DArray:
-                    return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+                    return Vortice.Direct3D12.ShaderResourceViewDimension.Texture2DArray;
 
                 case ERHITextureDimension.Texture2DArrayMS:
-                    return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2DMSARRAY;
+                    return Vortice.Direct3D12.ShaderResourceViewDimension.Texture2DMultisampledArray;
 
                 case ERHITextureDimension.TextureCube:
-                    return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURECUBE;
+                    return Vortice.Direct3D12.ShaderResourceViewDimension.TextureCube;
 
                 case ERHITextureDimension.TextureCubeArray:
-                    return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURECUBEARRAY;
+                    return Vortice.Direct3D12.ShaderResourceViewDimension.TextureCubeArray;
 
                 case ERHITextureDimension.Texture3D:
-                    return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE3D;
+                    return Vortice.Direct3D12.ShaderResourceViewDimension.Texture3D;
             }
-            return D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2D;
+            return Vortice.Direct3D12.ShaderResourceViewDimension.Texture2D;
         }
 
-        internal static D3D12_UAV_DIMENSION ConvertToDx12TextureUAVDimension(in ERHITextureDimension dimension)
+        internal static Vortice.Direct3D12.UnorderedAccessViewDimension ConvertToDx12TextureUAVDimension(in ERHITextureDimension dimension)
         {
             switch (dimension)
             {
                 case ERHITextureDimension.Texture2DMS:
-                    return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DMS;
+                    return Vortice.Direct3D12.UnorderedAccessViewDimension.Texture2DMultisampled;
 
                 case ERHITextureDimension.Texture2DArray:
-                    return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+                    return Vortice.Direct3D12.UnorderedAccessViewDimension.Texture2DArray;
 
                 case ERHITextureDimension.Texture2DArrayMS:
-                    return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DMSARRAY;
+                    return Vortice.Direct3D12.UnorderedAccessViewDimension.Texture2DMultisampledArray;
 
                 case ERHITextureDimension.TextureCube:
-                    return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+                    return Vortice.Direct3D12.UnorderedAccessViewDimension.Texture2DArray;
 
                 case ERHITextureDimension.TextureCubeArray:
-                    return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2DARRAY;
+                    return Vortice.Direct3D12.UnorderedAccessViewDimension.Texture2DArray;
 
                 case ERHITextureDimension.Texture3D:
-                    return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE3D;
+                    return Vortice.Direct3D12.UnorderedAccessViewDimension.Texture3D;
             }
-            return D3D12_UAV_DIMENSION.D3D12_UAV_DIMENSION_TEXTURE2D;
+            return Vortice.Direct3D12.UnorderedAccessViewDimension.Texture2D;
         }
 
         internal static byte[] ConvertToDx12SemanticNameByte(this ERHISemanticType type)
@@ -1620,9 +1620,9 @@ namespace Infinity.Graphics
             return Encoding.ASCII.GetBytes(semanticName);
         }
 
-        internal static D3D12_INPUT_CLASSIFICATION ConvertToDx12InputSlotClass(this ERHIVertexStepMode stepMode)
+        internal static Vortice.Direct3D12.InputClassification ConvertToDx12InputSlotClass(this ERHIVertexStepMode stepMode)
         {
-            return ((stepMode == ERHIVertexStepMode.PerVertex) || (stepMode != ERHIVertexStepMode.PerInstance)) ? D3D12_INPUT_CLASSIFICATION.D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA : D3D12_INPUT_CLASSIFICATION.D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA;
+            return ((stepMode == ERHIVertexStepMode.PerVertex) || (stepMode != ERHIVertexStepMode.PerInstance)) ? Vortice.Direct3D12.InputClassification.PerVertexData : Vortice.Direct3D12.InputClassification.PerInstanceData;
         }
 
         internal static int GetDx12VertexLayoutCount(in Span<RHIVertexLayoutDescriptor> vertexLayouts)
@@ -1636,7 +1636,7 @@ namespace Infinity.Graphics
             return num;
         }
 
-        internal static void ConvertToDx12VertexLayout(in Span<RHIVertexLayoutDescriptor> vertexLayouts, in Span<D3D12_INPUT_ELEMENT_DESC> inputElementsView)
+        internal static void ConvertToDx12VertexLayout(in Span<RHIVertexLayoutDescriptor> vertexLayouts, in Span<Vortice.Direct3D12.InputElementDescription> inputElementsView)
         {
             int slot = 0;
             int index = 0;
@@ -1657,12 +1657,12 @@ namespace Infinity.Graphics
                     }
                     ref RHIVertexElementDescriptor vertexElement = ref vertexElements[num6];
                     byte[] semanticByte = ConvertToDx12SemanticNameByte(vertexElement.Type);
-                    ref D3D12_INPUT_ELEMENT_DESC element = ref inputElementsView[index];
+                    ref Vortice.Direct3D12.InputElementDescription element = ref inputElementsView[index];
                     element.Format = ConvertToDx12SemanticFormat(vertexElement.Format);
-                    element.InputSlot = (uint)slot;
-                    element.SemanticName = (sbyte*)Unsafe.AsPointer(ref MemoryMarshal.GetReference(new ReadOnlySpan<byte>(semanticByte)));
+                    element.Slot = (uint)slot;
+                    element.SemanticName = Encoding.ASCII.GetString(semanticByte);
                     element.SemanticIndex = vertexElement.Slot;
-                    element.InputSlotClass = ConvertToDx12InputSlotClass(vertexLayout.StepMode);
+                    element.Classification = ConvertToDx12InputSlotClass(vertexLayout.StepMode);
                     element.AlignedByteOffset = vertexElement.Offset;
                     element.InstanceDataStepRate = vertexLayout.StepRate;
 
@@ -1672,7 +1672,7 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_DESCRIPTOR_RANGE_TYPE ConvertToDx12BindType(in ERHIBindType bindType)
+        internal static Vortice.Direct3D12.DescriptorRangeType ConvertToDx12BindType(in ERHIBindType bindType)
         {
             switch (bindType)
             {
@@ -1685,13 +1685,13 @@ namespace Infinity.Graphics
                 case ERHIBindType.TextureCube:
                 case ERHIBindType.TextureCubeArray:
                 case ERHIBindType.Texture3D:
-                    return D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                    return Vortice.Direct3D12.DescriptorRangeType.ShaderResourceView;
 
                 case ERHIBindType.Sampler:
-                    return D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+                    return Vortice.Direct3D12.DescriptorRangeType.Sampler;
 
                 case ERHIBindType.UniformBuffer:
-                    return D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+                    return Vortice.Direct3D12.DescriptorRangeType.ConstantBufferView;
 
                 case ERHIBindType.StorageBuffer:
                 case ERHIBindType.StorageTexture2D:
@@ -1700,10 +1700,10 @@ namespace Infinity.Graphics
                 case ERHIBindType.StorageTextureCube:
                 case ERHIBindType.StorageTextureCubeArray:
                 case ERHIBindType.StorageTexture3D:
-                    return D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+                    return Vortice.Direct3D12.DescriptorRangeType.UnorderedAccessView;
 
                 default:
-                    return D3D12_DESCRIPTOR_RANGE_TYPE.D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+                    return Vortice.Direct3D12.DescriptorRangeType.ShaderResourceView;
             }
         }
 
@@ -1741,7 +1741,7 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static D3D12_DESCRIPTOR_RANGE_FLAGS GetDx12DescriptorRangeFalag(in ERHIBindType bindType)
+        internal static Vortice.Direct3D12.DescriptorRangeFlags GetDx12DescriptorRangeFalag(in ERHIBindType bindType)
         {
             switch (bindType)
             {
@@ -1753,13 +1753,13 @@ namespace Infinity.Graphics
                 case ERHIBindType.TextureCube:
                 case ERHIBindType.TextureCubeArray:
                 case ERHIBindType.Texture3D:
-                    return D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+                    return Vortice.Direct3D12.DescriptorRangeFlags.DescriptorsVolatile | Vortice.Direct3D12.DescriptorRangeFlags.DataStaticWhileSetAtExecute;
 
                 case ERHIBindType.Sampler:
-                    return D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
+                    return Vortice.Direct3D12.DescriptorRangeFlags.DescriptorsVolatile;
 
                 case ERHIBindType.UniformBuffer:
-                    return D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
+                    return Vortice.Direct3D12.DescriptorRangeFlags.DescriptorsVolatile | Vortice.Direct3D12.DescriptorRangeFlags.DataVolatile;
 
                 case ERHIBindType.StorageBuffer:
                 case ERHIBindType.StorageTexture2D:
@@ -1768,59 +1768,59 @@ namespace Infinity.Graphics
                 case ERHIBindType.StorageTextureCube:
                 case ERHIBindType.StorageTextureCubeArray:
                 case ERHIBindType.StorageTexture3D:
-                    return D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
+                    return Vortice.Direct3D12.DescriptorRangeFlags.DescriptorsVolatile | Vortice.Direct3D12.DescriptorRangeFlags.DataVolatile;
 
                 default:
-                    return D3D12_DESCRIPTOR_RANGE_FLAGS.D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
+                    return Vortice.Direct3D12.DescriptorRangeFlags.DescriptorsVolatile;
             }
         }
 
-        internal static D3D12_SHADER_VISIBILITY ConvertToDx12ShaderType(in ERHIShaderStage shaderStage)
+        internal static Vortice.Direct3D12.ShaderVisibility ConvertToDx12ShaderType(in ERHIShaderStage shaderStage)
         {
             switch (shaderStage)
             {
                 case ERHIShaderStage.Task:
-                    return D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_AMPLIFICATION;
+                    return Vortice.Direct3D12.ShaderVisibility.Amplification;
 
                 case ERHIShaderStage.Mesh:
-                    return D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_MESH;
+                    return Vortice.Direct3D12.ShaderVisibility.Mesh;
 
                 case ERHIShaderStage.Vertex:
-                    return D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_VERTEX;
+                    return Vortice.Direct3D12.ShaderVisibility.Vertex;
 
                 case ERHIShaderStage.Fragment:
-                    return D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL;
+                    return Vortice.Direct3D12.ShaderVisibility.Pixel;
 
                 default:
-                    return D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_ALL;
+                    return Vortice.Direct3D12.ShaderVisibility.All;
             }
         }
 
-        internal static D3D12_CLEAR_FLAGS GetDx12ClearFlagByDSA(in RHIDepthStencilAttachmentDescriptor depthStencilAttachment)
+        internal static Vortice.Direct3D12.ClearFlags GetDx12ClearFlagByDSA(in RHIDepthStencilAttachmentDescriptor depthStencilAttachment)
         {
-            D3D12_CLEAR_FLAGS result = new D3D12_CLEAR_FLAGS();
+            Vortice.Direct3D12.ClearFlags result = new Vortice.Direct3D12.ClearFlags();
 
             if (depthStencilAttachment.DepthLoadOp == ERHILoadAction.Clear)
             {
-                result |= D3D12_CLEAR_FLAGS.D3D12_CLEAR_FLAG_DEPTH;
+                result |= Vortice.Direct3D12.ClearFlags.Depth;
             }
 
             if (depthStencilAttachment.StencilLoadOp == ERHILoadAction.Clear)
             {
-                result |= D3D12_CLEAR_FLAGS.D3D12_CLEAR_FLAG_STENCIL;
+                result |= Vortice.Direct3D12.ClearFlags.Stencil;
             }
             return result;
         }
 
-        internal static D3D12_HIT_GROUP_TYPE ConverteToDx12HitGroupType(in ERHIHitGroupType type)
+        internal static Vortice.Direct3D12.HitGroupType ConverteToDx12HitGroupType(in ERHIHitGroupType type)
         {
             switch (type)
             {
                 case ERHIHitGroupType.Procedural:
-                    return D3D12_HIT_GROUP_TYPE.D3D12_HIT_GROUP_TYPE_PROCEDURAL_PRIMITIVE;
+                    return Vortice.Direct3D12.HitGroupType.ProceduralPrimitive;
 
                 default:
-                    return D3D12_HIT_GROUP_TYPE.D3D12_HIT_GROUP_TYPE_TRIANGLES;
+                    return Vortice.Direct3D12.HitGroupType.Triangles;
             }
         }
 
@@ -1874,7 +1874,7 @@ namespace Infinity.Graphics
             return (textureFlag & ERHITextureUsage.UnorderedAccess) == ERHITextureUsage.UnorderedAccess;
         }
 
-        internal static void FillTexture2DSRV(ref D3D12_TEX2D_SRV srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        internal static void FillTexture2DSRV(ref Vortice.Direct3D12.Texture2DShaderResourceView srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
             if (!((dimension & ERHITextureDimension.Texture2D) == ERHITextureDimension.Texture2D))
             {
@@ -1886,7 +1886,7 @@ namespace Infinity.Graphics
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTexture2DArraySRV(ref D3D12_TEX2D_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        internal static void FillTexture2DArraySRV(ref Vortice.Direct3D12.Texture2DArrayShaderResourceView srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
             if (!((dimension & ERHITextureDimension.Texture2DArray) == ERHITextureDimension.Texture2DArray))
             {
@@ -1900,7 +1900,7 @@ namespace Infinity.Graphics
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTextureCubeSRV(ref D3D12_TEXCUBE_SRV srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        internal static void FillTextureCubeSRV(ref Vortice.Direct3D12.TextureCubeShaderResourceView srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
             if (!((dimension & ERHITextureDimension.TextureCube) == ERHITextureDimension.TextureCube))
             {
@@ -1911,7 +1911,7 @@ namespace Infinity.Graphics
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTextureCubeArraySRV(ref D3D12_TEXCUBE_ARRAY_SRV srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        internal static void FillTextureCubeArraySRV(ref Vortice.Direct3D12.TextureCubeArrayShaderResourceView srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
             if (!((dimension & ERHITextureDimension.TextureCubeArray) == ERHITextureDimension.TextureCubeArray))
             {
@@ -1924,7 +1924,7 @@ namespace Infinity.Graphics
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTexture3DSRV(ref D3D12_TEX3D_SRV srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        internal static void FillTexture3DSRV(ref Vortice.Direct3D12.Texture3DShaderResourceView srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
             if (!((dimension & ERHITextureDimension.Texture3D) == ERHITextureDimension.Texture3D))
             {
@@ -1935,7 +1935,7 @@ namespace Infinity.Graphics
             srv.ResourceMinLODClamp = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTexture2DUAV(ref D3D12_TEX2D_UAV uav, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        internal static void FillTexture2DUAV(ref Vortice.Direct3D12.Texture2DUnorderedAccessView uav, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
             if (!((dimension & ERHITextureDimension.Texture2D) == ERHITextureDimension.Texture2D))
             {
@@ -1945,7 +1945,7 @@ namespace Infinity.Graphics
             uav.PlaneSlice = 0;
         }
 
-        internal static void FillTexture2DArrayUAV(ref D3D12_TEX2D_ARRAY_UAV uav, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        internal static void FillTexture2DArrayUAV(ref Vortice.Direct3D12.Texture2DArrayUnorderedAccessView uav, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
             if (!((dimension & ERHITextureDimension.Texture2DArray) == ERHITextureDimension.Texture2DArray))
             {
@@ -1957,7 +1957,7 @@ namespace Infinity.Graphics
             uav.PlaneSlice = 0;
         }
 
-        internal static void FillTexture3DUAV(ref D3D12_TEX3D_UAV uav, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        internal static void FillTexture3DUAV(ref Vortice.Direct3D12.Texture3DUnorderedAccessView uav, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
             if (!((dimension & ERHITextureDimension.Texture3D) == ERHITextureDimension.Texture3D))
             {
@@ -1968,7 +1968,7 @@ namespace Infinity.Graphics
             uav.FirstWSlice = descriptor.BaseArraySlice;
         }
 
-        internal static void FillTexture2DRTV(ref D3D12_TEX2D_RTV rtv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        internal static void FillTexture2DRTV(ref Vortice.Direct3D12.Texture2DRenderTargetView rtv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
             if (!((dimension & ERHITextureDimension.Texture2D) == ERHITextureDimension.Texture2D))
             {
@@ -1978,7 +1978,7 @@ namespace Infinity.Graphics
             rtv.PlaneSlice = 0;
         }
 
-        internal static void FillTexture2DArrayRTV(ref D3D12_TEX2D_ARRAY_RTV rtv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        internal static void FillTexture2DArrayRTV(ref Vortice.Direct3D12.Texture2DArrayRenderTargetView rtv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
             if (!((dimension & ERHITextureDimension.Texture2DArray) == ERHITextureDimension.Texture2DArray))
             {
@@ -1990,7 +1990,7 @@ namespace Infinity.Graphics
             rtv.PlaneSlice = 0;
         }
 
-        internal static void FillTexture3DRTV(ref D3D12_TEX3D_RTV rtv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        internal static void FillTexture3DRTV(ref Vortice.Direct3D12.Texture3DRenderTargetView rtv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
             if (!((dimension & ERHITextureDimension.Texture3D) == ERHITextureDimension.Texture3D))
             {
@@ -2001,7 +2001,7 @@ namespace Infinity.Graphics
             rtv.FirstWSlice = descriptor.BaseArraySlice;
         }
 
-        internal static void FillTexture2DDSV(ref D3D12_TEX2D_DSV dsv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        internal static void FillTexture2DDSV(ref Vortice.Direct3D12.Texture2DDepthStencilView dsv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
             if (!((dimension & ERHITextureDimension.Texture2D) == ERHITextureDimension.Texture2D))
             {
@@ -2010,7 +2010,7 @@ namespace Infinity.Graphics
             dsv.MipSlice = descriptor.BaseMipLevel;
         }
 
-        internal static void FillTexture2DArrayDSV(ref D3D12_TEX2D_ARRAY_DSV dsv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
+        internal static void FillTexture2DArrayDSV(ref Vortice.Direct3D12.Texture2DArrayDepthStencilView dsv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
             if (!((dimension & ERHITextureDimension.Texture2DArray) == ERHITextureDimension.Texture2DArray))
             {

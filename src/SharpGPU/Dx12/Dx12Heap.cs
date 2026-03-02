@@ -1,14 +1,11 @@
 ﻿using System.Diagnostics;
-using TerraFX.Interop.DirectX;
-using TerraFX.Interop.Windows;
-using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602
     internal unsafe class Dx12Heap : RHIHeap
     {
-        public ID3D12Heap* NativeHeap
+        public Vortice.Direct3D12.ID3D12Heap NativeHeap
         {
             get
             {
@@ -17,20 +14,20 @@ namespace Infinity.Graphics
         }
 
         private Dx12Device m_Dx12Device;
-        private ID3D12Heap* m_NativeHeap;
+        private Vortice.Direct3D12.ID3D12Heap m_NativeHeap;
 
         public Dx12Heap(Dx12Device device, in RHIHeapDescription descriptor)
         {
             m_Dx12Device = device;
 
-            D3D12_HEAP_DESC heapDesc = new D3D12_HEAP_DESC();
+            Vortice.Direct3D12.HeapDescription heapDesc = new Vortice.Direct3D12.HeapDescription();
             heapDesc.SizeInBytes = descriptor.Size;
             heapDesc.Alignment = 65536; // D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT (64KB)
             heapDesc.Properties.Type = Dx12Utility.ConvertToDx12HeapTypeByStorage(descriptor.StorageMode);
-            heapDesc.Flags = D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE;
+            heapDesc.Flags = Vortice.Direct3D12.HeapFlags.None;
 
-            ID3D12Heap* nativeHeap;
-            HRESULT hResult = m_Dx12Device.NativeDevice->CreateHeap(&heapDesc, __uuidof<ID3D12Heap>(), (void**)&nativeHeap);
+            Vortice.Direct3D12.ID3D12Heap nativeHeap;
+            SharpGen.Runtime.Result hResult = m_Dx12Device.NativeDevice.CreateHeap(heapDesc, out nativeHeap);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -39,7 +36,7 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            m_NativeHeap->Release();
+            m_NativeHeap.Release();
         }
     }
 #pragma warning restore CS8600, CS8602

@@ -1,23 +1,20 @@
 ﻿using System;
 using System.Diagnostics;
-using TerraFX.Interop.Windows;
-using TerraFX.Interop.DirectX;
 using System.Runtime.CompilerServices;
-using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal unsafe class Dx12CommandBuffer : RHICommandBuffer
     {
-        public ID3D12CommandAllocator* NativeCommandAllocator
+        public Vortice.Direct3D12.ID3D12CommandAllocator NativeCommandAllocator
         {
             get
             {
                 return m_NativeCommandAllocator;
             }
         }
-        public ID3D12GraphicsCommandList7* NativeCommandList
+        public Vortice.Direct3D12.ID3D12GraphicsCommandList7 NativeCommandList
         {
             get
             {
@@ -31,22 +28,29 @@ namespace Infinity.Graphics
         private Dx12RaytracingEncoder m_RaytracingEncoder;
         private Dx12MLEncoder m_MLEncoder;
         private Dx12WorkGraphEncoder m_WorkGraphEncoder;
-        private ID3D12CommandAllocator* m_NativeCommandAllocator;
-        private ID3D12GraphicsCommandList7* m_NativeCommandList;
+        private Vortice.Direct3D12.ID3D12CommandAllocator m_NativeCommandAllocator;
+        private Vortice.Direct3D12.ID3D12GraphicsCommandList7 m_NativeCommandList;
 
         public Dx12CommandBuffer(Dx12CommandQueue commandQueue)
         {
             m_CommandQueue = commandQueue;
 
-            ID3D12CommandAllocator* commandAllocator;
-            HRESULT hResult = commandQueue.Dx12Device.NativeDevice->CreateCommandAllocator(Dx12Utility.ConvertToDx12QueueType(commandQueue.PipelineType), __uuidof<ID3D12CommandAllocator>(), (void**)&commandAllocator);
+            Vortice.Direct3D12.ID3D12CommandAllocator commandAllocator;
+            SharpGen.Runtime.Result hResult = commandQueue.Dx12Device.NativeDevice.CreateCommandAllocator(
+                Dx12Utility.ConvertToDx12QueueType(commandQueue.PipelineType),
+                out commandAllocator);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
             m_NativeCommandAllocator = commandAllocator;
 
-            ID3D12GraphicsCommandList7* commandList;
-            hResult = commandQueue.Dx12Device.NativeDevice->CreateCommandList(0, Dx12Utility.ConvertToDx12QueueType(commandQueue.PipelineType), m_NativeCommandAllocator, null, __uuidof<ID3D12GraphicsCommandList7>(), (void**)&commandList);
+            Vortice.Direct3D12.ID3D12GraphicsCommandList7 commandList;
+            hResult = commandQueue.Dx12Device.NativeDevice.CreateCommandList(
+                0,
+                Dx12Utility.ConvertToDx12QueueType(commandQueue.PipelineType),
+                m_NativeCommandAllocator,
+                null,
+                out commandList);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -63,20 +67,20 @@ namespace Infinity.Graphics
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void Begin(string name)
         {
-            m_NativeCommandAllocator->Reset();
-            m_NativeCommandList->Reset(m_NativeCommandAllocator, null);
+            m_NativeCommandAllocator.Reset();
+            m_NativeCommandList.Reset(m_NativeCommandAllocator, null);
 
 #if DEBUG
             Dx12PixEventMarker.BeginEvent((nint)m_NativeCommandList, name);
 #endif
 
             Dx12CommandQueue commandQueue = m_CommandQueue as Dx12CommandQueue;
-            ID3D12DescriptorHeap** resourceBarriers = stackalloc ID3D12DescriptorHeap*[2];
+            Vortice.Direct3D12.ID3D12DescriptorHeap[] descriptorHeaps =
             {
-                resourceBarriers[0] = commandQueue.Dx12Device.DescriptorHeapSampler.NativeDescriptorHeap;
-                resourceBarriers[1] = commandQueue.Dx12Device.DescriptorHeapCbvSrvUav.NativeDescriptorHeap;
-            }
-            m_NativeCommandList->SetDescriptorHeaps(2, &*resourceBarriers);
+                commandQueue.Dx12Device.DescriptorHeapSampler.NativeDescriptorHeap,
+                commandQueue.Dx12Device.DescriptorHeapCbvSrvUav.NativeDescriptorHeap,
+            };
+            m_NativeCommandList.SetDescriptorHeaps(descriptorHeaps);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -150,7 +154,7 @@ namespace Infinity.Graphics
 #if DEBUG
             Dx12PixEventMarker.EndEvent((nint)m_NativeCommandList);
 #endif
-            m_NativeCommandList->Close();
+            m_NativeCommandList.Close();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -206,34 +210,34 @@ namespace Infinity.Graphics
             Dx12CommandAllocator dx12CommandPool = m_CommandPool as Dx12CommandAllocator;
             Dx12CommandQueue commandQueue = m_CommandPool.CommandQueue as Dx12CommandQueue;
 
-            ID3D12CommandList** ppCommandLists = stackalloc ID3D12CommandList*[1] { (ID3D12CommandList*)m_NativeCommandList };
-            commandQueue.NativeCommandQueue->ExecuteCommandLists(1, ppCommandLists);
+            Vortice.Direct3D12.ID3D12CommandList* ppCommandLists = stackalloc Vortice.Direct3D12.ID3D12CommandList[1] { (Vortice.Direct3D12.ID3D12CommandList)m_NativeCommandList };
+            commandQueue.NativeCommandQueue.ExecuteCommandLists(1, ppCommandLists);
 
             if (fence != null)
             {
                 Dx12Fence dx12Fence = fence as Dx12Fence;
                 dx12Fence.Reset();
-                commandQueue.NativeCommandQueue->Signal(dx12Fence.NativeFence, 1);
+                commandQueue.NativeCommandQueue.Signal(dx12Fence.NativeFence, 1);
             }
         }*/
 
         protected override void Release()
         {
-            m_NativeCommandList->Release();
-            m_NativeCommandAllocator->Release();
+            m_NativeCommandList.Release();
+            m_NativeCommandAllocator.Release();
         }
     }
 
     internal unsafe class Dx12ComputeIndirectCommandBuffer : RHIComputeIndirectCommandBuffer
     {
-        public ID3D12CommandSignature* NativeCommandSignature
+        public Vortice.Direct3D12.ID3D12CommandSignature NativeCommandSignature
         {
             get
             {
                 return m_NativeCommandSignature;
             }
         }
-        public ID3D12Resource* NativeArgumentBuffer
+        public Vortice.Direct3D12.ID3D12Resource NativeArgumentBuffer
         {
             get
             {
@@ -250,8 +254,8 @@ namespace Infinity.Graphics
 
         private uint m_MaxCommandCount;
         private Dx12Device m_Dx12Device;
-        private ID3D12Resource* m_NativeArgumentBuffer;
-        private ID3D12CommandSignature* m_NativeCommandSignature;
+        private Vortice.Direct3D12.ID3D12Resource m_NativeArgumentBuffer;
+        private Vortice.Direct3D12.ID3D12CommandSignature m_NativeCommandSignature;
 
         public Dx12ComputeIndirectCommandBuffer(Dx12Device device, in RHIComputeIndirectCommandBufferDescription descriptor)
         {
@@ -259,11 +263,17 @@ namespace Infinity.Graphics
             m_NativeCommandSignature = device.DispatchComputeIndirectSignature;
             m_MaxCommandCount = descriptor.MaxCommandCount;
 
-            D3D12_RESOURCE_DESC bufferDesc = D3D12_RESOURCE_DESC.Buffer(m_MaxCommandCount * (uint)sizeof(D3D12_DISPATCH_ARGUMENTS));
-            D3D12_HEAP_PROPERTIES heapProps = new D3D12_HEAP_PROPERTIES(D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT);
+            Vortice.Direct3D12.ResourceDescription bufferDesc = Vortice.Direct3D12.ResourceDescription.Buffer(m_MaxCommandCount * (uint)sizeof(Vortice.Direct3D12.DispatchArguments));
+            Vortice.Direct3D12.HeapProperties heapProps = new Vortice.Direct3D12.HeapProperties(Vortice.Direct3D12.HeapType.Default);
 
-            ID3D12Resource* resource;
-            HRESULT hResult = device.NativeDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON, null, __uuidof<ID3D12Resource>(), (void**)&resource);
+            Vortice.Direct3D12.ID3D12Resource resource;
+            SharpGen.Runtime.Result hResult = device.NativeDevice.CreateCommittedResource(
+                heapProps,
+                Vortice.Direct3D12.HeapFlags.None,
+                bufferDesc,
+                Vortice.Direct3D12.ResourceStates.Common,
+                null,
+                out resource);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -272,20 +282,20 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            m_NativeArgumentBuffer->Release();
+            m_NativeArgumentBuffer.Release();
         }
     }
 
     internal unsafe class Dx12RayTracingIndirectCommandBuffer : RHIRayTracingIndirectCommandBuffer
     {
-        public ID3D12CommandSignature* NativeCommandSignature
+        public Vortice.Direct3D12.ID3D12CommandSignature NativeCommandSignature
         {
             get
             {
                 return m_NativeCommandSignature;
             }
         }
-        public ID3D12Resource* NativeArgumentBuffer
+        public Vortice.Direct3D12.ID3D12Resource NativeArgumentBuffer
         {
             get
             {
@@ -302,8 +312,8 @@ namespace Infinity.Graphics
 
         private uint m_MaxCommandCount;
         private Dx12Device m_Dx12Device;
-        private ID3D12Resource* m_NativeArgumentBuffer;
-        private ID3D12CommandSignature* m_NativeCommandSignature;
+        private Vortice.Direct3D12.ID3D12Resource m_NativeArgumentBuffer;
+        private Vortice.Direct3D12.ID3D12CommandSignature m_NativeCommandSignature;
 
         public Dx12RayTracingIndirectCommandBuffer(Dx12Device device, in RHIRayTracingIndirectCommandBufferDescription descriptor)
         {
@@ -311,11 +321,17 @@ namespace Infinity.Graphics
             m_NativeCommandSignature = device.DispatchRayIndirectSignature;
             m_MaxCommandCount = descriptor.MaxCommandCount;
 
-            D3D12_RESOURCE_DESC bufferDesc = D3D12_RESOURCE_DESC.Buffer(m_MaxCommandCount * (uint)sizeof(D3D12_DISPATCH_RAYS_DESC));
-            D3D12_HEAP_PROPERTIES heapProps = new D3D12_HEAP_PROPERTIES(D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT);
+            Vortice.Direct3D12.ResourceDescription bufferDesc = Vortice.Direct3D12.ResourceDescription.Buffer(m_MaxCommandCount * (uint)sizeof(Vortice.Direct3D12.DispatchRaysDescription));
+            Vortice.Direct3D12.HeapProperties heapProps = new Vortice.Direct3D12.HeapProperties(Vortice.Direct3D12.HeapType.Default);
 
-            ID3D12Resource* resource;
-            HRESULT hResult = device.NativeDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON, null, __uuidof<ID3D12Resource>(), (void**)&resource);
+            Vortice.Direct3D12.ID3D12Resource resource;
+            SharpGen.Runtime.Result hResult = device.NativeDevice.CreateCommittedResource(
+                heapProps,
+                Vortice.Direct3D12.HeapFlags.None,
+                bufferDesc,
+                Vortice.Direct3D12.ResourceStates.Common,
+                null,
+                out resource);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -324,20 +340,20 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            m_NativeArgumentBuffer->Release();
+            m_NativeArgumentBuffer.Release();
         }
     }
 
     internal unsafe class Dx12RasterIndirectCommandBuffer : RHIRasterIndirectCommandBuffer
     {
-        public ID3D12CommandSignature* NativeCommandSignature
+        public Vortice.Direct3D12.ID3D12CommandSignature NativeCommandSignature
         {
             get
             {
                 return m_NativeCommandSignature;
             }
         }
-        public ID3D12Resource* NativeArgumentBuffer
+        public Vortice.Direct3D12.ID3D12Resource NativeArgumentBuffer
         {
             get
             {
@@ -354,8 +370,8 @@ namespace Infinity.Graphics
 
         private uint m_MaxCommandCount;
         private Dx12Device m_Dx12Device;
-        private ID3D12Resource* m_NativeArgumentBuffer;
-        private ID3D12CommandSignature* m_NativeCommandSignature;
+        private Vortice.Direct3D12.ID3D12Resource m_NativeArgumentBuffer;
+        private Vortice.Direct3D12.ID3D12CommandSignature m_NativeCommandSignature;
 
         public Dx12RasterIndirectCommandBuffer(Dx12Device device, in RHIRasterIndirectCommandBufferDescription descriptor)
         {
@@ -363,11 +379,17 @@ namespace Infinity.Graphics
             m_NativeCommandSignature = device.DrawIndexedIndirectSignature;
             m_MaxCommandCount = descriptor.MaxCommandCount;
 
-            D3D12_RESOURCE_DESC bufferDesc = D3D12_RESOURCE_DESC.Buffer(m_MaxCommandCount * (uint)sizeof(D3D12_DRAW_INDEXED_ARGUMENTS));
-            D3D12_HEAP_PROPERTIES heapProps = new D3D12_HEAP_PROPERTIES(D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT);
+            Vortice.Direct3D12.ResourceDescription bufferDesc = Vortice.Direct3D12.ResourceDescription.Buffer(m_MaxCommandCount * (uint)sizeof(Vortice.Direct3D12.DrawIndexedArguments));
+            Vortice.Direct3D12.HeapProperties heapProps = new Vortice.Direct3D12.HeapProperties(Vortice.Direct3D12.HeapType.Default);
 
-            ID3D12Resource* resource;
-            HRESULT hResult = device.NativeDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &bufferDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COMMON, null, __uuidof<ID3D12Resource>(), (void**)&resource);
+            Vortice.Direct3D12.ID3D12Resource resource;
+            SharpGen.Runtime.Result hResult = device.NativeDevice.CreateCommittedResource(
+                heapProps,
+                Vortice.Direct3D12.HeapFlags.None,
+                bufferDesc,
+                Vortice.Direct3D12.ResourceStates.Common,
+                null,
+                out resource);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -376,7 +398,7 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            m_NativeArgumentBuffer->Release();
+            m_NativeArgumentBuffer.Release();
         }
     }
 #pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416

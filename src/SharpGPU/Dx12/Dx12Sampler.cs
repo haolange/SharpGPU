@@ -1,25 +1,23 @@
-﻿using TerraFX.Interop.DirectX;
-
-namespace Infinity.Graphics
+﻿namespace Infinity.Graphics
 {
 #pragma warning disable CA1416 
     internal unsafe class Dx12Sampler : RHISampler
     {
-        public ID3D12DescriptorHeap* NativeDescriptorHeap
+        public Vortice.Direct3D12.ID3D12DescriptorHeap NativeDescriptorHeap
         {
             get
             {
                 return m_NativeDescriptorHeap;
             }
         }
-        public D3D12_CPU_DESCRIPTOR_HANDLE NativeCpuDescriptorHandle
+        public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuDescriptorHandle
         {
             get
             {
                 return m_NativeCpuDescriptorHandle;
             }
         }
-        public D3D12_GPU_DESCRIPTOR_HANDLE NativeGpuDescriptorHandle
+        public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuDescriptorHandle
         {
             get
             {
@@ -29,15 +27,15 @@ namespace Infinity.Graphics
 
         private int m_HeapIndex;
         private Dx12Device m_Dx12Device;
-        private ID3D12DescriptorHeap* m_NativeDescriptorHeap;
-        private D3D12_CPU_DESCRIPTOR_HANDLE m_NativeCpuDescriptorHandle;
-        private D3D12_GPU_DESCRIPTOR_HANDLE m_NativeGpuDescriptorHandle;
+        private Vortice.Direct3D12.ID3D12DescriptorHeap m_NativeDescriptorHeap;
+        private Vortice.Direct3D12.CpuDescriptorHandle m_NativeCpuDescriptorHandle;
+        private Vortice.Direct3D12.GpuDescriptorHandle m_NativeGpuDescriptorHandle;
 
         public Dx12Sampler(Dx12Device device, in RHISamplerDescriptor descriptor)
         {
             m_Dx12Device = device;
 
-            D3D12_SAMPLER_DESC desc = new D3D12_SAMPLER_DESC();
+            Vortice.Direct3D12.SamplerDescription desc = new Vortice.Direct3D12.SamplerDescription();
             desc.MinLOD = descriptor.LodMin;
             desc.MaxLOD = descriptor.LodMax;
             desc.MipLODBias = descriptor.MipLODBias;
@@ -46,14 +44,14 @@ namespace Infinity.Graphics
             desc.AddressU = Dx12Utility.ConvertToDx12AddressMode(descriptor.AddressModeU);
             desc.AddressV = Dx12Utility.ConvertToDx12AddressMode(descriptor.AddressModeV);
             desc.AddressW = Dx12Utility.ConvertToDx12AddressMode(descriptor.AddressModeW);
-            desc.ComparisonFunc = Dx12Utility.ConvertToDx12ComparisonMode(descriptor.ComparisonMode);
+            desc.ComparisonFunction = Dx12Utility.ConvertToDx12ComparisonMode(descriptor.ComparisonMode);
 
             Dx12DescriptorInfo allocation = device.AllocateSamplerDescriptor(1);
             m_HeapIndex = allocation.Index;
             m_NativeDescriptorHeap = allocation.DescriptorHeap;
             m_NativeCpuDescriptorHandle = allocation.CpuHandle;
             m_NativeGpuDescriptorHandle = allocation.GpuHandle;
-            device.NativeDevice->CreateSampler(&desc, m_NativeCpuDescriptorHandle);
+            device.NativeDevice.CreateSampler(ref desc, m_NativeCpuDescriptorHandle);
         }
 
         protected override void Release()

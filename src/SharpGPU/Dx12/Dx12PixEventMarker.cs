@@ -1,4 +1,7 @@
 using System;
+using Vortice.Direct3D12;
+using Vortice.DXGI;
+using Vortice.Direct3D;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;

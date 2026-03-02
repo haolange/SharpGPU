@@ -1,19 +1,15 @@
 ﻿using Infinity.Mathmatics;
-using TerraFX.Interop.Windows;
-using TerraFX.Interop.DirectX;
-using static TerraFX.Interop.Windows.Windows;
-using IUnknown = TerraFX.Interop.Windows.IUnknown;
 
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CA1416, CS8602, CS8604
     internal unsafe class Dx12SwapChain : RHISwapChain
     {
-        public override int BackTextureIndex => (int)m_NativeSwapChain->GetCurrentBackBufferIndex();
+        public override int BackTextureIndex => (int)m_NativeSwapChain.CurrentBackBufferIndex;
 
         private Dx12Device m_Dx12Device;
         private Dx12Texture[] m_Textures;
-        private IDXGISwapChain4* m_NativeSwapChain;
+        private Vortice.DXGI.IDXGISwapChain4 m_NativeSwapChain;
         private RHISwapChainDescriptor m_Descriptor;
 
         public Dx12SwapChain(Dx12Device device, in RHISwapChainDescriptor descriptor)
@@ -36,12 +32,11 @@ namespace Infinity.Graphics
             {
                 if (m_Textures[i] != null)
                 {
-                    m_Textures[i].NativeResource->Release();
+                    m_Textures[i].NativeResource.Release();
                 }
             }
-            DXGI_SWAP_CHAIN_DESC desc;
-            m_NativeSwapChain->GetDesc(&desc);
-            HRESULT hResult = m_NativeSwapChain->ResizeBuffers(m_Descriptor.Count, extent.x, extent.y, desc.BufferDesc.Format/*Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(m_Descriptor.Format))*/, desc.Flags/*DXGI_SWAP_CHAIN_FLAG.DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH*/);
+            Vortice.DXGI.SwapChainDescription desc = m_NativeSwapChain.Description;
+            SharpGen.Runtime.Result hResult = m_NativeSwapChain.ResizeBuffers(m_Descriptor.Count, extent.x, extent.y, desc.BufferDescription.Format/*Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(m_Descriptor.Format))*/, desc.Flags/*Vortice.DXGI.SwapChainFlags.AllowModeSwitch*/);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -51,7 +46,7 @@ namespace Infinity.Graphics
 
         public override void Present()
         {
-            m_NativeSwapChain->Present(Dx12Utility.ConvertToDx12SyncInterval(m_Descriptor.PresentMode), 0);
+            m_NativeSwapChain.Present(Dx12Utility.ConvertToDx12SyncInterval(m_Descriptor.PresentMode), 0);
         }
 
         private void CreateDX12SwapChain(in RHISwapChainDescriptor descriptor) 
@@ -60,46 +55,47 @@ namespace Infinity.Graphics
             Dx12Instance dx12Instance = m_Dx12Device.Dx12Instance;
 
 #if true
-            DXGI_SWAP_CHAIN_DESC1 desc = new DXGI_SWAP_CHAIN_DESC1();
+            Vortice.DXGI.SwapChainDescription1 desc = new Vortice.DXGI.SwapChainDescription1();
             desc.BufferCount = descriptor.Count;
             desc.Width = descriptor.Extent.x;
             desc.Height = descriptor.Extent.y;
-            //desc.Flags = (uint)DXGI_SWAP_CHAIN_FLAG.DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+            //desc.Flags = (uint)Vortice.DXGI.SwapChainFlags.AllowModeSwitch;
             desc.Format = Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(descriptor.Format));
-            //desc.Scaling = DXGI_SCALING.DXGI_SCALING_NONE;
-            desc.SampleDesc = new DXGI_SAMPLE_DESC(1, 0);
+            //desc.Scaling = Vortice.DXGI.Scaling.None;
+            desc.SampleDescription = new Vortice.DXGI.SampleDescription(1, 0);
             desc.SwapEffect = Dx12Utility.ConvertToDx12SwapEffect(m_Descriptor.PresentMode);
-            desc.BufferUsage = descriptor.FrameBufferOnly ? DXGI.DXGI_USAGE_RENDER_TARGET_OUTPUT : (DXGI.DXGI_USAGE_SHADER_INPUT | DXGI.DXGI_USAGE_RENDER_TARGET_OUTPUT);
+            desc.BufferUsage = descriptor.FrameBufferOnly ? Vortice.DXGI.Usage.RenderTargetOutput : (Vortice.DXGI.Usage.ShaderInput | Vortice.DXGI.Usage.RenderTargetOutput);
 
-            IDXGISwapChain1* dx12SwapChain1;
-            HRESULT hResult = dx12Instance.DXGIFactory->CreateSwapChainForHwnd((IUnknown*)dx12Queue.NativeCommandQueue, new HWND(descriptor.Surface.ToPointer()), &desc, null, null, &dx12SwapChain1);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            m_NativeSwapChain = (IDXGISwapChain4*)dx12SwapChain1;
+            Vortice.DXGI.IDXGISwapChain1 dx12SwapChain1 = dx12Instance.DXGIFactory.CreateSwapChainForHwnd(
+                dx12Queue.NativeCommandQueue,
+                new System.IntPtr(descriptor.Surface.ToPointer()),
+                desc,
+                null,
+                null);
+            m_NativeSwapChain = (Vortice.DXGI.IDXGISwapChain4)dx12SwapChain1;
 #else
-            DXGI_SWAP_CHAIN_DESC desc = new DXGI_SWAP_CHAIN_DESC();
-            //desc.Flags = (uint)DXGI_SWAP_CHAIN_FLAG.DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
+            Vortice.DXGI.SwapChainDescription desc = new Vortice.DXGI.SwapChainDescription();
+            //desc.Flags = (uint)Vortice.DXGI.SwapChainFlags.AllowModeSwitch;
             desc.Windowed = true;
             desc.BufferCount = descriptor.Count;
-            desc.SampleDesc = new DXGI_SAMPLE_DESC(1, 0);
+            desc.SampleDescription = new Vortice.DXGI.SampleDescription(1, 0);
             desc.SwapEffect = Dx12Utility.ConvertToDx12SwapEffect(m_Descriptor.PresentMode);
-            desc.OutputWindow = new HWND(descriptor.Surface.ToPointer());
-            desc.BufferDesc.Width = descriptor.Extent.x;
-            desc.BufferDesc.Height = descriptor.Extent.y;
-            desc.BufferDesc.Format = Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(descriptor.Format));
-            //desc.BufferDesc.Scaling = DXGI_MODE_SCALING.DXGI_MODE_SCALING_UNSPECIFIED;
-            desc.BufferDesc.RefreshRate.Numerator = descriptor.FPS;
-            desc.BufferDesc.RefreshRate.Denominator = 1;
-            //desc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER.DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-            desc.BufferUsage = descriptor.FrameBufferOnly ? DXGI.DXGI_USAGE_RENDER_TARGET_OUTPUT : (DXGI.DXGI_USAGE_SHADER_INPUT | DXGI.DXGI_USAGE_RENDER_TARGET_OUTPUT);
+            desc.OutputWindow = new System.IntPtr(descriptor.Surface.ToPointer());
+            desc.BufferDescription.Width = descriptor.Extent.x;
+            desc.BufferDescription.Height = descriptor.Extent.y;
+            desc.BufferDescription.Format = Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(descriptor.Format));
+            //desc.BufferDescription.Scaling = Vortice.DXGI.ModeScaling.Unspecified;
+            desc.BufferDescription.RefreshRate.Numerator = descriptor.FPS;
+            desc.BufferDescription.RefreshRate.Denominator = 1;
+            //desc.BufferDescription.ScanlineOrdering = Vortice.DXGI.ModeScanlineOrder.Unspecified;
+            desc.BufferUsage = descriptor.FrameBufferOnly ? Vortice.DXGI.DXGI.RenderTargetOutput : (Vortice.DXGI.DXGI.ShaderInput | Vortice.DXGI.DXGI.RenderTargetOutput);
 
-            IDXGISwapChain* dx12SwapChain1;
-            HRESULT hResult = dx12Instance.DXGIFactory->CreateSwapChain((IUnknown*)dx12Queue.NativeCommandQueue, &desc, &dx12SwapChain1);
+            Vortice.DXGI.IDXGISwapChain dx12SwapChain1;
+            SharpGen.Runtime.Result hResult = dx12Instance.DXGIFactory.CreateSwapChain(dx12Queue.NativeCommandQueue, &desc, &dx12SwapChain1);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
-            m_NativeSwapChain = (IDXGISwapChain4*)dx12SwapChain1;
+            m_NativeSwapChain = (Vortice.DXGI.IDXGISwapChain4)dx12SwapChain1;
 #endif
         }
 
@@ -118,8 +114,8 @@ namespace Infinity.Graphics
 
             for (int i = 0; i < descriptor.Count; ++i)
             {
-                ID3D12Resource* dx12Resource = null;
-                HRESULT hResult = m_NativeSwapChain->GetBuffer((uint)i, __uuidof<ID3D12Resource>(), (void**)&dx12Resource);
+                Vortice.Direct3D12.ID3D12Resource dx12Resource;
+                SharpGen.Runtime.Result hResult = m_NativeSwapChain.GetBuffer((uint)i, out dx12Resource);
 #if DEBUG
                 Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -129,7 +125,7 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            m_NativeSwapChain->Release();
+            m_NativeSwapChain.Release();
         }
     }
 #pragma warning restore CS8600, CS8602, CA1416, CS8602, CS8604

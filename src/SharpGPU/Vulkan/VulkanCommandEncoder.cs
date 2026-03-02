@@ -1457,14 +1457,14 @@ namespace Infinity.Graphics
     internal unsafe class VulkanMLEncoder : RHIMLEncoder
     {
         private RHIMLPassDescriptor m_PassDescriptor;
-        private RHITensor[] m_InputTensors;
-        private RHITensor[] m_OutputTensors;
+        private VulkanTensor?[] m_InputTensors;
+        private VulkanTensor?[] m_OutputTensors;
 
         public VulkanMLEncoder(VulkanCommandBuffer cmdBuffer)
         {
             m_CommandBuffer = cmdBuffer;
-            m_InputTensors = new RHITensor[8];
-            m_OutputTensors = new RHITensor[8];
+            m_InputTensors = new VulkanTensor?[8];
+            m_OutputTensors = new VulkanTensor?[8];
         }
 
         internal override void BeginPass(in RHIMLPassDescriptor descriptor)
@@ -1558,14 +1558,28 @@ namespace Infinity.Graphics
 
         public override void SetInputTensor(RHITensor tensor, in uint index)
         {
+            if (tensor is not VulkanTensor vkTensor)
+            {
+                throw new InvalidOperationException($"VulkanMLEncoder expects {nameof(VulkanTensor)} but got {tensor?.GetType().Name ?? "<null>"}.");
+            }
+
             if (index < m_InputTensors.Length)
-                m_InputTensors[index] = tensor;
+            {
+                m_InputTensors[index] = vkTensor;
+            }
         }
 
         public override void SetOutputTensor(RHITensor tensor, in uint index)
         {
+            if (tensor is not VulkanTensor vkTensor)
+            {
+                throw new InvalidOperationException($"VulkanMLEncoder expects {nameof(VulkanTensor)} but got {tensor?.GetType().Name ?? "<null>"}.");
+            }
+
             if (index < m_OutputTensors.Length)
-                m_OutputTensors[index] = tensor;
+            {
+                m_OutputTensors[index] = vkTensor;
+            }
         }
 
         public override void Dispatch(RHIHeap intermediatesHeap)
@@ -1656,5 +1670,4 @@ namespace Infinity.Graphics
         }
     }
 }
-
 

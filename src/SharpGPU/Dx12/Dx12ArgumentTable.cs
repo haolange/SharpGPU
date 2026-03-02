@@ -1,6 +1,8 @@
 using System;
+using Vortice.Direct3D12;
+using Vortice.DXGI;
+using Vortice.Direct3D;
 using System.Diagnostics;
-using TerraFX.Interop.DirectX;
 
 namespace Infinity.Graphics
 {
@@ -76,7 +78,7 @@ namespace Infinity.Graphics
                 return m_ArgumentTableLayout;
             }
         }
-        public D3D12_GPU_DESCRIPTOR_HANDLE[] NativeGpuDescriptorHandles
+        public Vortice.Direct3D12.GpuDescriptorHandle[] NativeGpuDescriptorHandles
         {
             get
             {
@@ -86,7 +88,7 @@ namespace Infinity.Graphics
 
         private Dx12Device m_Dx12Device;
         private Dx12ArgumentTableLayout m_ArgumentTableLayout;
-        private D3D12_GPU_DESCRIPTOR_HANDLE[] m_NativeGpuDescriptorHandles;
+        private Vortice.Direct3D12.GpuDescriptorHandle[] m_NativeGpuDescriptorHandles;
         private Dx12BindlessSlotAllocation[] m_BindlessAllocations;
 
         public Dx12ArgumentTable(Dx12Device device, in RHIArgumentTableDescriptor descriptor)
@@ -97,7 +99,7 @@ namespace Infinity.Graphics
 #endif
             m_Dx12Device = device;
             m_ArgumentTableLayout = resourceTableLayout;
-            m_NativeGpuDescriptorHandles = new D3D12_GPU_DESCRIPTOR_HANDLE[resourceTableLayout.BindInfos.Length];
+            m_NativeGpuDescriptorHandles = new Vortice.Direct3D12.GpuDescriptorHandle[resourceTableLayout.BindInfos.Length];
             m_BindlessAllocations = new Dx12BindlessSlotAllocation[resourceTableLayout.BindInfos.Length];
 
             for (int i = 0; i < resourceTableLayout.BindInfos.Length; ++i)
@@ -147,7 +149,7 @@ namespace Infinity.Graphics
                     if (i < descriptor.Elements.Length)
                     {
                         ref RHIArgumentTableElement element = ref descriptor.Elements.Span[i];
-                        ref D3D12_GPU_DESCRIPTOR_HANDLE nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[i];
+                        ref Vortice.Direct3D12.GpuDescriptorHandle nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[i];
                         SetGpuHandleFromElement(ref nativeGpuDescriptorHandle, element, bindInfo.Type);
                     }
                 }
@@ -168,7 +170,7 @@ namespace Infinity.Graphics
             }
             else
             {
-                ref D3D12_GPU_DESCRIPTOR_HANDLE nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[bindIndex];
+                ref Vortice.Direct3D12.GpuDescriptorHandle nativeGpuDescriptorHandle = ref m_NativeGpuDescriptorHandles[bindIndex];
                 SetGpuHandleFromElement(ref nativeGpuDescriptorHandle, element, bindType);
             }
         }
@@ -235,7 +237,7 @@ namespace Infinity.Graphics
             return -1;
         }
 
-        private static void SetGpuHandleFromElement(ref D3D12_GPU_DESCRIPTOR_HANDLE handle, in RHIArgumentTableElement element, in ERHIBindType bindType)
+        private static void SetGpuHandleFromElement(ref Vortice.Direct3D12.GpuDescriptorHandle handle, in RHIArgumentTableElement element, in ERHIBindType bindType)
         {
             switch (bindType)
             {
@@ -281,7 +283,7 @@ namespace Infinity.Graphics
             ref Dx12BindlessSlotAllocation alloc = ref m_BindlessAllocations[bindIndex];
             if (alloc.HeapIndex < 0) return;
 
-            D3D12_CPU_DESCRIPTOR_HANDLE srcHandle = default;
+            Vortice.Direct3D12.CpuDescriptorHandle srcHandle = default;
             bool hasSource = false;
 
             switch (bindType)
@@ -327,8 +329,8 @@ namespace Infinity.Graphics
                 // Copy the single descriptor from the view's CPU handle into the contiguous GPU-visible range at the given array index
                 Dx12DescriptorHeap dstHeap = alloc.IsSampler ? m_Dx12Device.DescriptorHeapSampler : m_Dx12Device.DescriptorHeapCbvSrvUav;
                 int dstIndex = alloc.HeapIndex + arrayIndex;
-                D3D12_CPU_DESCRIPTOR_HANDLE dstHandle = dstHeap.NativeCpuStartHandle.Offset(dstIndex, dstHeap.DescriptorSize);
-                m_Dx12Device.NativeDevice->CopyDescriptorsSimple(1, dstHandle, srcHandle, dstHeap.NativeType);
+                Vortice.Direct3D12.CpuDescriptorHandle dstHandle = dstHeap.NativeCpuStartHandle.Offset(dstIndex, dstHeap.DescriptorSize);
+                m_Dx12Device.NativeDevice.CopyDescriptorsSimple(1, dstHandle, srcHandle, dstHeap.NativeType);
             }
         }
     }

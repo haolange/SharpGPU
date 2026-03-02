@@ -2,17 +2,13 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Infinity.Collections;
-using TerraFX.Interop.DirectX;
-using TerraFX.Interop.Windows;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CA1416
     internal unsafe class Dx12Function : RHIFunction
     {
-        public D3D12_SHADER_BYTECODE NativeShaderBytecode
+        public Vortice.Direct3D12.ShaderBytecode NativeShaderBytecode
         {
             get
             {
@@ -20,7 +16,7 @@ namespace Infinity.Graphics
             }
         }
 
-        private D3D12_SHADER_BYTECODE m_NativeShaderBytecode;
+        private Vortice.Direct3D12.ShaderBytecode m_NativeShaderBytecode;
         private IntPtr m_OwnedByteCode;
 
         public Dx12Function(in RHIFunctionDescriptor descriptor)
@@ -28,7 +24,7 @@ namespace Infinity.Graphics
             m_OwnedByteCode = CloneShaderByteCode(descriptor.ByteCode, descriptor.ByteSize, nameof(Dx12Function));
             m_Descriptor = descriptor;
             m_Descriptor.ByteCode = m_OwnedByteCode;
-            m_NativeShaderBytecode = new D3D12_SHADER_BYTECODE(m_OwnedByteCode.ToPointer(), new UIntPtr(descriptor.ByteSize));
+            m_NativeShaderBytecode = new Vortice.Direct3D12.ShaderBytecode(m_OwnedByteCode, checked((int)descriptor.ByteSize));
         }
 
         private static IntPtr CloneShaderByteCode(in IntPtr source, in uint byteSize, string context)
@@ -67,7 +63,7 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12FunctionLibrary : RHIFunctionLibrary
     {
-        public D3D12_SHADER_BYTECODE NativeShaderBytecode
+        public Vortice.Direct3D12.ShaderBytecode NativeShaderBytecode
         {
             get
             {
@@ -75,7 +71,7 @@ namespace Infinity.Graphics
             }
         }
 
-        private D3D12_SHADER_BYTECODE m_NativeShaderBytecode;
+        private Vortice.Direct3D12.ShaderBytecode m_NativeShaderBytecode;
         private IntPtr m_OwnedByteCode;
 
         public Dx12FunctionLibrary(in RHIFunctionLibraryDescriptor descriptor)
@@ -83,7 +79,7 @@ namespace Infinity.Graphics
             m_OwnedByteCode = CloneShaderByteCode(descriptor.ByteCode, descriptor.ByteSize, nameof(Dx12FunctionLibrary));
             m_Descriptor = descriptor;
             m_Descriptor.ByteCode = m_OwnedByteCode;
-            m_NativeShaderBytecode = new D3D12_SHADER_BYTECODE(m_OwnedByteCode.ToPointer(), new UIntPtr(descriptor.ByteSize));
+            m_NativeShaderBytecode = new Vortice.Direct3D12.ShaderBytecode(m_OwnedByteCode, checked((int)descriptor.ByteSize));
         }
 
         protected override void Release()
@@ -137,22 +133,22 @@ namespace Infinity.Graphics
         internal bool IsGenerated => m_NativeResource != null;
         public ulong RayGenSize => m_EntryStride;
         public ulong RayGeStride => m_EntryStride;
-        public ulong RayGenAddress => m_NativeResource != null ? m_NativeResource->GetGPUVirtualAddress() : 0;
+        public ulong RayGenAddress => m_NativeResource != null ? m_NativeResource.GPUVirtualAddress : 0;
         public ulong MissSize => (ulong)(m_EntryStride * m_MissPrograms.length);
         public ulong MissStride => m_EntryStride;
-        public ulong MissAddress => m_NativeResource != null ? m_NativeResource->GetGPUVirtualAddress() + m_EntryStride : 0;
+        public ulong MissAddress => m_NativeResource != null ? m_NativeResource.GPUVirtualAddress + m_EntryStride : 0;
         public ulong HitGroupSize => (ulong)(m_EntryStride * m_HitGroupPrograms.length);
         public ulong HitGroupStride => m_EntryStride;
-        public ulong HitGroupAddress => m_NativeResource != null ? m_NativeResource->GetGPUVirtualAddress() + (ulong)(m_EntryStride * (1 + m_MissPrograms.length)) : 0;
+        public ulong HitGroupAddress => m_NativeResource != null ? m_NativeResource.GPUVirtualAddress + (ulong)(m_EntryStride * (1 + m_MissPrograms.length)) : 0;
         public ulong CallableSize => (ulong)(m_EntryStride * m_CallablePrograms.length);
         public ulong CallableStride => m_EntryStride;
-        public ulong CallableAddress => m_NativeResource != null ? m_NativeResource->GetGPUVirtualAddress() + (ulong)(m_EntryStride * (1 + m_MissPrograms.length + m_HitGroupPrograms.length)) : 0;
+        public ulong CallableAddress => m_NativeResource != null ? m_NativeResource.GPUVirtualAddress + (ulong)(m_EntryStride * (1 + m_MissPrograms.length + m_HitGroupPrograms.length)) : 0;
 
         private uint m_EntryCount;
         private uint m_EntryStride;
         private uint m_LocalDataStrideInBytes;
         private Dx12Device m_Dx12Device;
-        private ID3D12Resource* m_NativeResource;
+        private Vortice.Direct3D12.ID3D12Resource m_NativeResource;
         private Dx12RaytracingPipeline m_CachedPipeline;
         private Dx12FunctionTableEntry m_RayGenerationProgram;
         private bool m_HasRayGenerationRecord;
@@ -287,21 +283,27 @@ namespace Infinity.Graphics
             ValidateAllRecords(dx12RaytracingPipeline);
 
             m_EntryCount = (uint)(1 + m_MissPrograms.length + m_HitGroupPrograms.length + m_CallablePrograms.length);
-            m_EntryStride = RHIUtility.AlignTo(0x20, D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + m_LocalDataStrideInBytes);
+            m_EntryStride = RHIUtility.AlignTo(0x20, (uint)Vortice.Direct3D12.D3D12.ShaderIdentifierSizeInBytes + m_LocalDataStrideInBytes);
 
             ReleaseNativeResource();
 
-            ID3D12Resource* dx12Resource;
-            D3D12_RESOURCE_DESC resourceDesc = D3D12_RESOURCE_DESC.Buffer(m_EntryCount * m_EntryStride, D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE);
-            D3D12_HEAP_PROPERTIES heapProperties = new D3D12_HEAP_PROPERTIES(D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD, 0, 0);
-            HRESULT hResult = m_Dx12Device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &resourceDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ, null, __uuidof<ID3D12Resource>(), (void**)&dx12Resource);
+            Vortice.Direct3D12.ID3D12Resource dx12Resource;
+            Vortice.Direct3D12.ResourceDescription resourceDesc = Vortice.Direct3D12.ResourceDescription.Buffer(m_EntryCount * m_EntryStride, Vortice.Direct3D12.ResourceFlags.None);
+            Vortice.Direct3D12.HeapProperties heapProperties = new Vortice.Direct3D12.HeapProperties(Vortice.Direct3D12.HeapType.Upload, 0, 0);
+            SharpGen.Runtime.Result hResult = m_Dx12Device.NativeDevice.CreateCommittedResource(
+                heapProperties,
+                Vortice.Direct3D12.HeapFlags.None,
+                resourceDesc,
+                Vortice.Direct3D12.ResourceStates.GenericRead,
+                null,
+                out dx12Resource);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
             m_NativeResource = dx12Resource;
 
             void* pTableData;
-            hResult = m_NativeResource->Map(0, null, &pTableData);
+            hResult = m_NativeResource.Map(0, null, &pTableData);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -323,7 +325,7 @@ namespace Infinity.Graphics
                 WriteRecord(dx12RaytracingPipeline, tableData + (1 + m_MissPrograms.length + m_HitGroupPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Callable, m_CallablePrograms[i]);
             }
 
-            m_NativeResource->Unmap(0, null);
+            m_NativeResource.Unmap(0, null);
         }
 
         public override void Update()
@@ -337,7 +339,7 @@ namespace Infinity.Graphics
             }
 
             void* pTableData;
-            HRESULT hResult = m_NativeResource->Map(0, null, &pTableData);
+            SharpGen.Runtime.Result hResult = m_NativeResource.Map(0, null, &pTableData);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -358,7 +360,7 @@ namespace Infinity.Graphics
                 WriteRecord(m_CachedPipeline, tableData + (1 + m_MissPrograms.length + m_HitGroupPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Callable, m_CallablePrograms[i]);
             }
 
-            m_NativeResource->Unmap(0, null);
+            m_NativeResource.Unmap(0, null);
         }
 
         protected override void Release()
@@ -421,14 +423,14 @@ namespace Infinity.Graphics
         private void WriteSingleRecord(Dx12RaytracingPipeline pipeline, ERHIRayShaderTableSection section, in int index, in Dx12FunctionTableEntry entry)
         {
             void* pTableData;
-            HRESULT hResult = m_NativeResource->Map(0, null, &pTableData);
+            SharpGen.Runtime.Result hResult = m_NativeResource.Map(0, null, &pTableData);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
             int absoluteIndex = GetAbsoluteEntryIndex(section, index);
             byte* destination = (byte*)pTableData + absoluteIndex * m_EntryStride;
             WriteRecord(pipeline, destination, section, entry);
-            m_NativeResource->Unmap(0, null);
+            m_NativeResource.Unmap(0, null);
         }
 
         private int GetAbsoluteEntryIndex(ERHIRayShaderTableSection section, in int sectionIndex)
@@ -449,27 +451,19 @@ namespace Infinity.Graphics
             Unsafe.InitBlock(destination, 0, m_EntryStride);
 
             string exportName = pipeline.GetExportName(section, entry.GroupIndex);
-            IntPtr exportPtr = Marshal.StringToHGlobalUni(exportName);
-            try
+            void* shaderIdentifier = pipeline.NativeStateObjectProperties.GetShaderIdentifier(exportName).ToPointer();
+            if (shaderIdentifier == null)
             {
-                void* shaderIdentifier = pipeline.NativeStateObjectProperties->GetShaderIdentifier((char*)exportPtr.ToPointer());
-                if (shaderIdentifier == null)
-                {
-                    throw new InvalidOperationException($"Failed to resolve shader identifier for export '{exportName}'.");
-                }
+                throw new InvalidOperationException($"Failed to resolve shader identifier for export '{exportName}'.");
+            }
 
-                Unsafe.CopyBlock(destination, shaderIdentifier, D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(exportPtr);
-            }
+            Unsafe.CopyBlock(destination, shaderIdentifier, (uint)Vortice.Direct3D12.D3D12.ShaderIdentifierSizeInBytes);
 
             if (entry.LocalData.Length > 0)
             {
                 fixed (byte* localDataPtr = entry.LocalData)
                 {
-                    Unsafe.CopyBlock(destination + D3D12.D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, localDataPtr, (uint)entry.LocalData.Length);
+                    Unsafe.CopyBlock(destination + Vortice.Direct3D12.D3D12.ShaderIdentifierSizeInBytes, localDataPtr, (uint)entry.LocalData.Length);
                 }
             }
         }
@@ -506,7 +500,7 @@ namespace Infinity.Graphics
         {
             if (m_NativeResource != null)
             {
-                m_NativeResource->Release();
+                m_NativeResource.Release();
                 m_NativeResource = null;
             }
         }

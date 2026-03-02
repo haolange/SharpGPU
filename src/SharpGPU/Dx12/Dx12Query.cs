@@ -1,6 +1,4 @@
 ﻿using System;
-using TerraFX.Interop.DirectX;
-using TerraFX.Interop.Windows;
 using Infinity.Collections.LowLevel;
 
 namespace Infinity.Graphics
@@ -9,11 +7,11 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12Query : RHIQuery
     {
-        public ID3D12Resource* QueryResult  => m_QueryResult;
-        public ID3D12QueryHeap* QueryHeap => m_QueryHeap;
+        public Vortice.Direct3D12.ID3D12Resource QueryResult  => m_QueryResult;
+        public Vortice.Direct3D12.ID3D12QueryHeap QueryHeap => m_QueryHeap;
 
-        private ID3D12Resource* m_QueryResult;
-        private ID3D12QueryHeap* m_QueryHeap;
+        private Vortice.Direct3D12.ID3D12Resource m_QueryResult;
+        private Vortice.Direct3D12.ID3D12QueryHeap m_QueryHeap;
 
         public Dx12Query(Dx12Device device, in RHIQueryDescriptor descriptor)
         {
@@ -22,51 +20,57 @@ namespace Infinity.Graphics
             m_Results = new ulong[descriptor.Count];
             Results = new ReadOnlyMemory<ulong>(m_Results);
 
-            D3D12_QUERY_HEAP_DESC queryHeapDesc;
+            Vortice.Direct3D12.QueryHeapDescription queryHeapDesc;
             queryHeapDesc.Type = Dx12Utility.ConvertToDx12QueryHeapType(descriptor.Type);
             queryHeapDesc.Count = descriptor.Count;
             queryHeapDesc.NodeMask = 0;
 
-            ID3D12QueryHeap* queryHeap;
-            device.NativeDevice->CreateQueryHeap(&queryHeapDesc, Windows.__uuidof<ID3D12QueryHeap>(), (void**)&queryHeap);
+            Vortice.Direct3D12.ID3D12QueryHeap queryHeap;
+            device.NativeDevice.CreateQueryHeap(queryHeapDesc, out queryHeap);
             m_QueryHeap = queryHeap;
 
-            D3D12_HEAP_PROPERTIES heapProperties;
+            Vortice.Direct3D12.HeapProperties heapProperties;
             {
-                heapProperties.Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_READBACK;
-                heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY.D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-                heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL.D3D12_MEMORY_POOL_UNKNOWN;
+                heapProperties.Type = Vortice.Direct3D12.HeapType.Readback;
+                heapProperties.CPUPageProperty = Vortice.Direct3D12.CpuPageProperty.Unknown;
+                heapProperties.MemoryPoolPreference = Vortice.Direct3D12.MemoryPool.Unknown;
                 heapProperties.VisibleNodeMask = 0;
                 heapProperties.CreationNodeMask = 0;
             }
-            D3D12_RESOURCE_DESC resourceDesc;
+            Vortice.Direct3D12.ResourceDescription resourceDesc;
             {
                 resourceDesc.Alignment = 0;
-                resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_BUFFER;
+                resourceDesc.Dimension = Vortice.Direct3D12.ResourceDimension.Buffer;
                 resourceDesc.Width = sizeof(ulong) * descriptor.Count;
                 resourceDesc.Height = 1;
                 resourceDesc.DepthOrArraySize = 1;
                 resourceDesc.MipLevels = 1;
-                resourceDesc.SampleDesc.Count = 1;
-                resourceDesc.SampleDesc.Quality = 0;
-                resourceDesc.Format = DXGI_FORMAT.DXGI_FORMAT_UNKNOWN;
-                resourceDesc.Flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE;
-                resourceDesc.Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+                resourceDesc.SampleDescription.Count = 1;
+                resourceDesc.SampleDescription.Quality = 0;
+                resourceDesc.Format = Vortice.DXGI.Format.Unknown;
+                resourceDesc.Flags = Vortice.Direct3D12.ResourceFlags.None;
+                resourceDesc.Layout = Vortice.Direct3D12.TextureLayout.RowMajor;
             }
-            ID3D12Resource* queryResult;
-            device.NativeDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, &resourceDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST, null, Windows.__uuidof<ID3D12Resource>(), (void**)&queryResult);
+            Vortice.Direct3D12.ID3D12Resource queryResult;
+            device.NativeDevice.CreateCommittedResource(
+                heapProperties,
+                Vortice.Direct3D12.HeapFlags.None,
+                resourceDesc,
+                Vortice.Direct3D12.ResourceStates.CopyDest,
+                null,
+                out queryResult);
             m_QueryResult = queryResult;
         }
 
         public override bool ResolveData()
         {
             void* queryResult;
-            D3D12_RANGE range = new D3D12_RANGE(0, 0);
+            Vortice.Direct3D12.Range range = new Vortice.Direct3D12.Range(0, 0);
             Span<ulong> resultsSpan = new Span<ulong>(m_Results);
 
-            m_QueryResult->Map(0, &range, &queryResult);
+            m_QueryResult.Map(0, range, &queryResult);
             new IntPtr(queryResult).CopyTo(resultsSpan);
-            m_QueryResult->Unmap(0, null);
+            m_QueryResult.Unmap(0, null);
 
             if (queryResult == null)
             {
@@ -77,8 +81,8 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            m_QueryHeap->Release();
-            m_QueryResult->Release();
+            m_QueryHeap.Release();
+            m_QueryResult.Release();
         }
     }
 #pragma warning restore CA1416, CS8600, CS8602

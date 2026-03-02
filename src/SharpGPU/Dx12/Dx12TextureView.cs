@@ -1,26 +1,24 @@
 ﻿using Infinity.Mathmatics;
-using TerraFX.Interop.DirectX;
-using static TerraFX.Interop.DirectX.D3D12;
 
 namespace Infinity.Graphics
 {
     internal unsafe class Dx12TextureView : RHITextureView
     {
-        public ID3D12DescriptorHeap* NativeDescriptorHeap
+        public Vortice.Direct3D12.ID3D12DescriptorHeap NativeDescriptorHeap
         {
             get
             {
                 return m_NativeDescriptorHeap;
             }
         }
-        public D3D12_CPU_DESCRIPTOR_HANDLE NativeCpuDescriptorHandle
+        public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuDescriptorHandle
         {
             get
             {
                 return m_NativeCpuDescriptorHandle;
             }
         }
-        public D3D12_GPU_DESCRIPTOR_HANDLE NativeGpuDescriptorHandle
+        public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuDescriptorHandle
         {
             get
             {
@@ -30,9 +28,9 @@ namespace Infinity.Graphics
 
         private int m_HeapIndex;
         private Dx12Texture m_Dx12Texture;
-        private ID3D12DescriptorHeap* m_NativeDescriptorHeap;
-        private D3D12_CPU_DESCRIPTOR_HANDLE m_NativeCpuDescriptorHandle;
-        private D3D12_GPU_DESCRIPTOR_HANDLE m_NativeGpuDescriptorHandle;
+        private Vortice.Direct3D12.ID3D12DescriptorHeap m_NativeDescriptorHeap;
+        private Vortice.Direct3D12.CpuDescriptorHandle m_NativeCpuDescriptorHandle;
+        private Vortice.Direct3D12.GpuDescriptorHandle m_NativeGpuDescriptorHandle;
 
         public Dx12TextureView(Dx12Texture texture, in RHITextureViewDescriptor descriptor)
         {
@@ -42,10 +40,10 @@ namespace Infinity.Graphics
             {
                 if(Dx12Utility.IsShaderResourceTexture(texture.Descriptor.UsageFlag))
                 {
-                    D3D12_SHADER_RESOURCE_VIEW_DESC desc = new D3D12_SHADER_RESOURCE_VIEW_DESC();
+                    Vortice.Direct3D12.ShaderResourceViewDescription desc = new Vortice.Direct3D12.ShaderResourceViewDescription();
                     desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
                     desc.ViewDimension = Dx12Utility.ConvertToDx12TextureSRVDimension(texture.Descriptor.Dimension);
-                    desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+                    desc.Shader4ComponentMapping = 5768;
                     Dx12Utility.FillTexture2DSRV(ref desc.Texture2D, descriptor, texture.Descriptor.Dimension);
                     Dx12Utility.FillTexture2DArraySRV(ref desc.Texture2DArray, descriptor, texture.Descriptor.Dimension);
                     Dx12Utility.FillTextureCubeSRV(ref desc.TextureCube, descriptor, texture.Descriptor.Dimension);
@@ -57,14 +55,14 @@ namespace Infinity.Graphics
                     m_NativeDescriptorHeap = allocation.DescriptorHeap;
                     m_NativeCpuDescriptorHandle = allocation.CpuHandle;
                     m_NativeGpuDescriptorHandle = allocation.GpuHandle;
-                    m_Dx12Texture.Dx12Device.NativeDevice->CreateShaderResourceView(m_Dx12Texture.NativeResource, &desc, m_NativeCpuDescriptorHandle);
+                    m_Dx12Texture.Dx12Device.NativeDevice.CreateShaderResourceView(m_Dx12Texture.NativeResource, desc, m_NativeCpuDescriptorHandle);
                 }
             }
             else if (descriptor.ViewType == ERHITextureViewType.UnorderedAccess)
             {
                 if(Dx12Utility.IsUnorderedAccessTexture(texture.Descriptor.UsageFlag))
                 {
-                    D3D12_UNORDERED_ACCESS_VIEW_DESC desc = new D3D12_UNORDERED_ACCESS_VIEW_DESC();
+                    Vortice.Direct3D12.UnorderedAccessViewDescription desc = new Vortice.Direct3D12.UnorderedAccessViewDescription();
                     desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
                     desc.ViewDimension = Dx12Utility.ConvertToDx12TextureUAVDimension(texture.Descriptor.Dimension);
                     Dx12Utility.FillTexture2DUAV(ref desc.Texture2D, descriptor, texture.Descriptor.Dimension);
@@ -76,7 +74,7 @@ namespace Infinity.Graphics
                     m_NativeDescriptorHeap = allocation.DescriptorHeap;
                     m_NativeCpuDescriptorHandle = allocation.CpuHandle;
                     m_NativeGpuDescriptorHandle = allocation.GpuHandle;
-                    m_Dx12Texture.Dx12Device.NativeDevice->CreateUnorderedAccessView(m_Dx12Texture.NativeResource, null, &desc, m_NativeCpuDescriptorHandle);
+                    m_Dx12Texture.Dx12Device.NativeDevice.CreateUnorderedAccessView(m_Dx12Texture.NativeResource, null, desc, m_NativeCpuDescriptorHandle);
                 }
             }
         }

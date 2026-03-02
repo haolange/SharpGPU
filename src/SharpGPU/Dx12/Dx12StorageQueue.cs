@@ -1,12 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
-using TerraFX.Interop.DirectX;
-using TerraFX.Interop.Windows;
+using System.Threading;
 using Vortice.DirectStorage;
 using Vortice.Mathematics;
-using static TerraFX.Interop.Windows.Windows;
 
 namespace Infinity.Graphics
 {
@@ -34,6 +33,7 @@ namespace Infinity.Graphics
         private readonly Dictionary<nint, Vortice.Direct3D12.ID3D12Fence> m_DStorageFences = new();
         private readonly Dictionary<nint, IDStorageFile> m_DStorageFilesByHandle = new();
         private readonly Dictionary<nint, string> m_FilePathByHandle = new();
+        private long m_NextFileHandle = 1;
 
         // Win32 file constants
         private const uint GENERIC_READ_ACCESS = 0x80000000;
@@ -59,27 +59,10 @@ namespace Infinity.Graphics
 
         public override RHIStorageFileHandle OpenFile(string absPath)
         {
-            fixed (char* pPath = absPath)
-            {
-                HANDLE fileHandle = CreateFileW(
-                    pPath,
-                    GENERIC_READ_ACCESS,
-                    FILE_SHARE_READ_FLAG,
-                    null,
-                    OPEN_EXISTING_DISP,
-                    FILE_ATTRIBUTE_NORMAL_FLAG | FILE_FLAG_OVERLAPPED_FLAG | FILE_FLAG_NO_BUFFERING_FLAG,
-                    HANDLE.NULL);
-
-                RHIStorageFileHandle result;
-                result.NativeHandle = (IntPtr)fileHandle.Value;
-
-                if (result.NativeHandle != IntPtr.Zero && result.NativeHandle.ToInt64() != -1)
-                {
-                    m_FilePathByHandle[(nint)result.NativeHandle] = absPath;
-                }
-
-                return result;
-            }
+            RHIStorageFileHandle result;
+            result.NativeHandle = (IntPtr)Interlocked.Increment(ref m_NextFileHandle);
+            m_FilePathByHandle[(nint)result.NativeHandle] = absPath;
+            return result;
         }
 
         public override void CloseFile(in RHIStorageFileHandle fileHandle)
@@ -91,17 +74,17 @@ namespace Infinity.Graphics
                 m_DStorageFilesByHandle.Remove(handleKey);
             }
             m_FilePathByHandle.Remove(handleKey);
-
-            HANDLE handle = new HANDLE((void*)fileHandle.NativeHandle);
-            CloseHandle(handle);
         }
 
         public override ulong QueryFileSize(in RHIStorageFileHandle fileHandle)
         {
-            HANDLE handle = new HANDLE((void*)fileHandle.NativeHandle);
-            LARGE_INTEGER fileSize;
-            GetFileSizeEx(handle, &fileSize);
-            return (ulong)fileSize.QuadPart;
+            if (!m_FilePathByHandle.TryGetValue((nint)fileHandle.NativeHandle, out string? absPath))
+            {
+                return 0;
+            }
+
+            FileInfo fileInfo = new FileInfo(absPath);
+            return fileInfo.Exists ? (ulong)fileInfo.Length : 0;
         }
 
         public override void RequestBuffer(in RHIStorageBufferRequest request)
@@ -115,18 +98,15 @@ namespace Infinity.Graphics
             // CPU fallback path (behavior kept consistent with existing implementation).
             m_PendingRequests.Add(() =>
             {
-                HANDLE handle = new HANDLE((void*)capturedRequest.FileHandle.NativeHandle);
-                byte[] tempBuffer = new byte[capturedRequest.FileSize];
-
-                uint bytesRead;
-                OVERLAPPED overlapped = new OVERLAPPED();
-                overlapped.Anonymous.Anonymous.Offset = (uint)(capturedRequest.FileOffset & 0xFFFFFFFF);
-                overlapped.Anonymous.Anonymous.OffsetHigh = (uint)(capturedRequest.FileOffset >> 32);
-
-                fixed (byte* pBuffer = tempBuffer)
+                if (!m_FilePathByHandle.TryGetValue((nint)capturedRequest.FileHandle.NativeHandle, out string? absPath))
                 {
-                    ReadFile(handle, pBuffer, (uint)capturedRequest.FileSize, &bytesRead, &overlapped);
+                    return;
                 }
+
+                byte[] tempBuffer = new byte[capturedRequest.FileSize];
+                using FileStream fileStream = File.OpenRead(absPath);
+                fileStream.Seek((long)capturedRequest.FileOffset, SeekOrigin.Begin);
+                _ = fileStream.Read(tempBuffer, 0, tempBuffer.Length);
 
                 // TODO(UNVERIFIED): Upload fallback data to destination buffer through a copy queue path.
             });
@@ -143,18 +123,15 @@ namespace Infinity.Graphics
             // CPU fallback path (behavior kept consistent with existing implementation).
             m_PendingRequests.Add(() =>
             {
-                HANDLE handle = new HANDLE((void*)capturedRequest.FileHandle.NativeHandle);
-                byte[] tempBuffer = new byte[capturedRequest.FileSize];
-
-                uint bytesRead;
-                OVERLAPPED overlapped = new OVERLAPPED();
-                overlapped.Anonymous.Anonymous.Offset = (uint)(capturedRequest.FileOffset & 0xFFFFFFFF);
-                overlapped.Anonymous.Anonymous.OffsetHigh = (uint)(capturedRequest.FileOffset >> 32);
-
-                fixed (byte* pBuffer = tempBuffer)
+                if (!m_FilePathByHandle.TryGetValue((nint)capturedRequest.FileHandle.NativeHandle, out string? absPath))
                 {
-                    ReadFile(handle, pBuffer, (uint)capturedRequest.FileSize, &bytesRead, &overlapped);
+                    return;
                 }
+
+                byte[] tempBuffer = new byte[capturedRequest.FileSize];
+                using FileStream fileStream = File.OpenRead(absPath);
+                fileStream.Seek((long)capturedRequest.FileOffset, SeekOrigin.Begin);
+                _ = fileStream.Read(tempBuffer, 0, tempBuffer.Length);
 
                 // TODO(UNVERIFIED): Upload fallback data to destination texture through a copy queue path.
             });
@@ -187,7 +164,7 @@ namespace Infinity.Graphics
             if (signalFence != null)
             {
                 Dx12Fence dx12Fence = signalFence as Dx12Fence;
-                dx12Fence.NativeFence->Signal(1);
+                dx12Fence.NativeFence.Signal(1);
             }
         }
 
@@ -247,7 +224,7 @@ namespace Infinity.Graphics
             {
                 m_DStorageFactory = DirectStorage.DStorageGetFactory<IDStorageFactory>();
 
-                m_Dx12Device.NativeDevice->AddRef();
+                m_Dx12Device.NativeDevice.AddRef();
                 m_DStorageDevice = new Vortice.Direct3D12.ID3D12Device((nint)m_Dx12Device.NativeDevice);
 
                 ushort queueCapacity = (ushort)Math.Clamp(256, DirectStorage.MinQueueCapacity, DirectStorage.MaxQueueCapacity);
@@ -436,7 +413,7 @@ namespace Infinity.Graphics
             }
         }
 
-        private Vortice.Direct3D12.ID3D12Resource GetOrCreateResourceWrapper(ID3D12Resource* nativeResource)
+        private Vortice.Direct3D12.ID3D12Resource GetOrCreateResourceWrapper(Vortice.Direct3D12.ID3D12Resource nativeResource)
         {
             nint key = (nint)nativeResource;
             if (m_DStorageResources.TryGetValue(key, out Vortice.Direct3D12.ID3D12Resource existingResource))
@@ -444,13 +421,13 @@ namespace Infinity.Graphics
                 return existingResource;
             }
 
-            nativeResource->AddRef();
+            nativeResource.AddRef();
             Vortice.Direct3D12.ID3D12Resource wrappedResource = new Vortice.Direct3D12.ID3D12Resource(key);
             m_DStorageResources[key] = wrappedResource;
             return wrappedResource;
         }
 
-        private Vortice.Direct3D12.ID3D12Fence GetOrCreateFenceWrapper(ID3D12Fence* nativeFence)
+        private Vortice.Direct3D12.ID3D12Fence GetOrCreateFenceWrapper(Vortice.Direct3D12.ID3D12Fence nativeFence)
         {
             nint key = (nint)nativeFence;
             if (m_DStorageFences.TryGetValue(key, out Vortice.Direct3D12.ID3D12Fence existingFence))
@@ -458,7 +435,7 @@ namespace Infinity.Graphics
                 return existingFence;
             }
 
-            nativeFence->AddRef();
+            nativeFence.AddRef();
             Vortice.Direct3D12.ID3D12Fence wrappedFence = new Vortice.Direct3D12.ID3D12Fence(key);
             m_DStorageFences[key] = wrappedFence;
             return wrappedFence;

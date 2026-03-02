@@ -1,17 +1,13 @@
 ﻿using System;
 using Infinity.Collections;
-using TerraFX.Interop.Windows;
-using TerraFX.Interop.DirectX;
 using System.Collections.Generic;
-using static TerraFX.Interop.Windows.Windows;
-using IUnknown = TerraFX.Interop.Windows.IUnknown;
 
 namespace Infinity.Graphics
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal unsafe class Dx12DeviceLimit : RHIDeviceLimit
     {
-        public readonly D3D_FEATURE_LEVEL NativeMaxFeatureLevel;
+        public readonly Vortice.Direct3D.FeatureLevel NativeMaxFeatureLevel;
 
         internal Dx12DeviceLimit(in int uniformBufferAlignment,
                                 in int uploadBufferAlignment,
@@ -27,7 +23,7 @@ namespace Infinity.Graphics
                                 in int maxColorAttachments,
                                 in int maxTexture2DSize,
                                 in int maxTextureCubeSize,
-                                in D3D_FEATURE_LEVEL nativeMaxFeatureLevel) : base(uniformBufferAlignment,
+                                in Vortice.Direct3D.FeatureLevel nativeMaxFeatureLevel) : base(uniformBufferAlignment,
                                                                                    uploadBufferAlignment,
                                                                                    uploadBufferTextureAlignment,
                                                                                    uploadBufferTextureRowAlignment,
@@ -122,14 +118,14 @@ namespace Infinity.Graphics
                 return m_Dx12Instance;
             }
         }
-        public IDXGIAdapter1* DXGIAdapter
+        public Vortice.DXGI.IDXGIAdapter1 DXGIAdapter
         {
             get
             {
                 return m_DXGIAdapter;
             }
         }
-        public ID3D12Device10* NativeDevice
+        public Vortice.Direct3D12.ID3D12Device10 NativeDevice
         {
             get
             {
@@ -178,35 +174,35 @@ namespace Infinity.Graphics
                 return m_StagingHeapSampler;
             }
         }
-        public ID3D12CommandSignature* DrawIndirectSignature
+        public Vortice.Direct3D12.ID3D12CommandSignature DrawIndirectSignature
         {
             get
             {
                 return m_DrawIndirectSignature;
             }
         }
-        public ID3D12CommandSignature* DrawIndexedIndirectSignature
+        public Vortice.Direct3D12.ID3D12CommandSignature DrawIndexedIndirectSignature
         {
             get
             {
                 return m_DrawIndexedIndirectSignature;
             }
         }
-        public ID3D12CommandSignature* DispatchRayIndirectSignature
+        public Vortice.Direct3D12.ID3D12CommandSignature DispatchRayIndirectSignature
         {
             get
             {
                 return m_DispatchRayIndirectSignature;
             }
         }
-        public ID3D12CommandSignature* DispatchMeshIndirectSignature
+        public Vortice.Direct3D12.ID3D12CommandSignature DispatchMeshIndirectSignature
         {
             get
             {
                 return m_DispatchMeshIndirectSignature;
             }
         }
-        public ID3D12CommandSignature* DispatchComputeIndirectSignature
+        public Vortice.Direct3D12.ID3D12CommandSignature DispatchComputeIndirectSignature
         {
             get
             {
@@ -215,30 +211,29 @@ namespace Infinity.Graphics
         }
 
         private Dx12Instance m_Dx12Instance;
-        private IDXGIAdapter1* m_DXGIAdapter;
-        private ID3D12Device10* m_NativeDevice;
+        private Vortice.DXGI.IDXGIAdapter1 m_DXGIAdapter;
+        private Vortice.Direct3D12.ID3D12Device10 m_NativeDevice;
         private Dx12DescriptorHeap m_DescriptorHeapDSV;
         private Dx12DescriptorHeap m_DescriptorHeapHeapRTV;
         private Dx12DescriptorHeap m_DescriptorHeapSampler;
         private Dx12DescriptorHeap m_DescriptorHeapCbvSrvUav;
         private Dx12DescriptorHeap m_StagingHeapCbvSrvUav;
         private Dx12DescriptorHeap m_StagingHeapSampler;
-        private ID3D12CommandSignature* m_DrawIndirectSignature;
-        private ID3D12CommandSignature* m_DrawIndexedIndirectSignature;
-        private ID3D12CommandSignature* m_DispatchRayIndirectSignature;
-        private ID3D12CommandSignature* m_DispatchMeshIndirectSignature;
-        private ID3D12CommandSignature* m_DispatchComputeIndirectSignature;
+        private Vortice.Direct3D12.ID3D12CommandSignature m_DrawIndirectSignature;
+        private Vortice.Direct3D12.ID3D12CommandSignature m_DrawIndexedIndirectSignature;
+        private Vortice.Direct3D12.ID3D12CommandSignature m_DispatchRayIndirectSignature;
+        private Vortice.Direct3D12.ID3D12CommandSignature m_DispatchMeshIndirectSignature;
+        private Vortice.Direct3D12.ID3D12CommandSignature m_DispatchComputeIndirectSignature;
 
-        public Dx12Device(Dx12Instance instance, in IDXGIAdapter1* adapter, in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
+        public Dx12Device(Dx12Instance instance, in Vortice.DXGI.IDXGIAdapter1 adapter, in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
         {
             m_DXGIAdapter = adapter;
             m_Dx12Instance = instance;
 
-            DXGI_ADAPTER_DESC1 adapterDesc;
-            m_DXGIAdapter->GetDesc1(&adapterDesc);
+            Vortice.DXGI.AdapterDescription1 adapterDesc = m_DXGIAdapter.Description1;
 
-            m_Name = SharpGen.Runtime.StringHelpers.PtrToStringUni(new IntPtr(&adapterDesc.Description.e0), 128);
-            m_Type = (adapterDesc.Flags & (uint)DXGI_ADAPTER_FLAG.DXGI_ADAPTER_FLAG_SOFTWARE) == 1 ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
+            m_Name = adapterDesc.Description;
+            m_Type = (adapterDesc.Flags & Vortice.DXGI.AdapterFlags.Software) != 0 ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
             m_VendorId.IntValue = adapterDesc.VendorId;
             m_DeviceId.IntValue = adapterDesc.DeviceId;
 
@@ -464,9 +459,9 @@ namespace Infinity.Graphics
 
         public void CopyDescriptors(Dx12DescriptorHeap srcHeap, in int srcIndex, Dx12DescriptorHeap dstHeap, in int dstIndex, in int count)
         {
-            D3D12_CPU_DESCRIPTOR_HANDLE srcHandle = srcHeap.NativeCpuStartHandle.Offset(srcIndex, srcHeap.DescriptorSize);
-            D3D12_CPU_DESCRIPTOR_HANDLE dstHandle = dstHeap.NativeCpuStartHandle.Offset(dstIndex, dstHeap.DescriptorSize);
-            m_NativeDevice->CopyDescriptorsSimple((uint)count, dstHandle, srcHandle, dstHeap.NativeType);
+            Vortice.Direct3D12.CpuDescriptorHandle srcHandle = srcHeap.NativeCpuStartHandle.Offset(srcIndex, srcHeap.DescriptorSize);
+            Vortice.Direct3D12.CpuDescriptorHandle dstHandle = dstHeap.NativeCpuStartHandle.Offset(dstIndex, dstHeap.DescriptorSize);
+            m_NativeDevice.CopyDescriptorsSimple((uint)count, dstHandle, srcHandle, dstHeap.NativeType);
         }
 
         public void FreeDsvDescriptor(in int index)
@@ -531,15 +526,15 @@ namespace Infinity.Graphics
 
         private void CreateDevice()
         {
-            ID3D12Device10* device;
-            HRESULT hResult = DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_2, __uuidof<ID3D12Device10>(), (void**)&device);
-            if (FAILED(hResult))
+            Vortice.Direct3D12.ID3D12Device10 device;
+            SharpGen.Runtime.Result hResult = Vortice.Direct3D12.D3D12.D3D12CreateDevice(m_DXGIAdapter, Vortice.Direct3D.FeatureLevel.Level_12_2, out device);
+            if (hResult.Failure)
             {
-                hResult = DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1, __uuidof<ID3D12Device10>(), (void**)&device);
+                hResult = Vortice.Direct3D12.D3D12.D3D12CreateDevice(m_DXGIAdapter, Vortice.Direct3D.FeatureLevel.Level_12_1, out device);
 
-                if (FAILED(hResult))
+                if (hResult.Failure)
                 {
-                    hResult = DirectX.D3D12CreateDevice((IUnknown*)m_DXGIAdapter, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_0, __uuidof<ID3D12Device10>(), (void**)&device);
+                    hResult = Vortice.Direct3D12.D3D12.D3D12CreateDevice(m_DXGIAdapter, Vortice.Direct3D.FeatureLevel.Level_12_0, out device);
                 }
             }
 #if DEBUG
@@ -564,7 +559,7 @@ namespace Infinity.Graphics
             int maxColorAttachments = 8;
             int maxTexture2DSize = 16384;
             int maxTextureCubeSize = 8192;
-            D3D_FEATURE_LEVEL nativeMaxFeatureLevel;
+            Vortice.Direct3D.FeatureLevel nativeMaxFeatureLevel;
 
             bool isFlipProjection = false;
             bool isHDRPresentSupported = false;
@@ -598,75 +593,75 @@ namespace Infinity.Graphics
             bool isNativeRenderPassSupported = false;
 
             // check feature level
-            D3D_FEATURE_LEVEL* aLevels = stackalloc D3D_FEATURE_LEVEL[3];
+            Vortice.Direct3D.FeatureLevel* aLevels = stackalloc Vortice.Direct3D.FeatureLevel[3];
             {
-                aLevels[0] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_0;
-                aLevels[1] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_1;
-                aLevels[2] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_12_2;
+                aLevels[0] = Vortice.Direct3D.FeatureLevel.Level_12_0;
+                aLevels[1] = Vortice.Direct3D.FeatureLevel.Level_12_1;
+                aLevels[2] = Vortice.Direct3D.FeatureLevel.Level_12_2;
             }
-            D3D12_FEATURE_DATA_FEATURE_LEVELS dLevels;
+            Vortice.Direct3D12.FeatureDataFeatureLevels dLevels = default;
             dLevels.NumFeatureLevels = 3;
-            dLevels.pFeatureLevelsRequested = aLevels;
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_FEATURE_LEVELS, &dLevels, (uint)sizeof(D3D12_FEATURE_DATA_FEATURE_LEVELS));
+            dLevels.FeatureLevelsRequested = (IntPtr)aLevels;
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.FeatureLevels, ref dLevels);
             nativeMaxFeatureLevel = dLevels.MaxSupportedFeatureLevel;
 
             // check feature options
-            D3D12_FEATURE_DATA_D3D12_OPTIONS featureOptions0;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS1 featureOptions1;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS2 featureOptions2;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS3 featureOptions3;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS4 featureOptions4;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS5 featureOptions5;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS6 featureOptions6;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS7 featureOptions7;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS8 featureOptions8;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS9 featureOptions9;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS10 featureOptions10;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS11 featureOptions11;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS12 featureOptions12;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS13 featureOptions13;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS14 featureOptions14;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS15 featureOptions15;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS16 featureOptions16;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS17 featureOptions17;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS18 featureOptions18;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS19 featureOptions19;
-            D3D12_FEATURE_DATA_D3D12_OPTIONS20 featureOptions20;
+            Vortice.Direct3D12.FeatureDataD3D12Options featureOptions0 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options1 featureOptions1 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options2 featureOptions2 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options3 featureOptions3 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options4 featureOptions4 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options5 featureOptions5 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options6 featureOptions6 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options7 featureOptions7 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options8 featureOptions8 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options9 featureOptions9 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options10 featureOptions10 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options11 featureOptions11 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options12 featureOptions12 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options13 featureOptions13 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options14 featureOptions14 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options15 featureOptions15 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options16 featureOptions16 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options17 featureOptions17 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options18 featureOptions18 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options19 featureOptions19 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options20 featureOptions20 = default;
 
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS, &featureOptions0, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS1, &featureOptions1, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS1));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS2, &featureOptions2, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS2));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS3, &featureOptions3, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS3));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS4, &featureOptions4, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS4));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS5, &featureOptions5, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS5));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS6, &featureOptions6, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS6));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS7, &featureOptions7, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS7));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS8, &featureOptions8, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS8));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS9, &featureOptions9, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS9));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS10, &featureOptions10, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS10));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS11, &featureOptions11, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS11));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS12, &featureOptions12, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS12));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS13, &featureOptions13, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS13));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS14, &featureOptions14, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS14));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS15, &featureOptions15, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS15));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS16, &featureOptions16, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS16));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS17, &featureOptions17, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS17));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS18, &featureOptions18, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS18));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS19, &featureOptions19, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS19));
-            m_NativeDevice->CheckFeatureSupport(D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS20, &featureOptions20, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS20));
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options, ref featureOptions0);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options1, ref featureOptions1);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options2, ref featureOptions2);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options3, ref featureOptions3);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options4, ref featureOptions4);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options5, ref featureOptions5);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options6, ref featureOptions6);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options7, ref featureOptions7);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options8, ref featureOptions8);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options9, ref featureOptions9);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options10, ref featureOptions10);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options11, ref featureOptions11);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options12, ref featureOptions12);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options13, ref featureOptions13);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options14, ref featureOptions14);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options15, ref featureOptions15);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options16, ref featureOptions16);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options17, ref featureOptions17);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options18, ref featureOptions18);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options19, ref featureOptions19);
+            _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options20, ref featureOptions20);
 
             // check programmable msaa supported
             switch (featureOptions2.ProgrammableSamplePositionsTier)
             {
-                case D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER.D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_1:
+                case Vortice.Direct3D12.ProgrammableSamplePositionsTier.Tier1:
                     isProgrammableSamplePositionSupported = false;
                     break;
 
-                case D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER.D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_2:
+                case Vortice.Direct3D12.ProgrammableSamplePositionsTier.Tier2:
                     isProgrammableSamplePositionSupported = true;
                     break;
 
-                case D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER.D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_NOT_SUPPORTED:
+                case Vortice.Direct3D12.ProgrammableSamplePositionsTier.TierNOTSupported:
                     isProgrammableSamplePositionSupported = false;
                     break;
             }
@@ -684,19 +679,19 @@ namespace Infinity.Graphics
             // check multi view instancing supported
             switch (featureOptions3.ViewInstancingTier)
             {
-                case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_1:
+                case Vortice.Direct3D12.ViewInstancingTier.Tier1:
                     multiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
                     break;
 
-                case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_2:
+                case Vortice.Direct3D12.ViewInstancingTier.Tier2:
                     multiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
                     break;
 
-                case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_3:
+                case Vortice.Direct3D12.ViewInstancingTier.Tier3:
                     multiviewStrategy = ERHIMultiviewStrategy.ViewIndex;
                     break;
 
-                case D3D12_VIEW_INSTANCING_TIER.D3D12_VIEW_INSTANCING_TIER_NOT_SUPPORTED:
+                case Vortice.Direct3D12.ViewInstancingTier.TierNotSupported:
                     multiviewStrategy = ERHIMultiviewStrategy.Unsupported;
                     break;
             }
@@ -704,17 +699,17 @@ namespace Infinity.Graphics
             // check raytracing level
             switch (featureOptions5.RaytracingTier)
             {
-                case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_0:
+                case Vortice.Direct3D12.RaytracingTier.Tier1_0:
                     isRaytracingSupported = true;
                     isRaytracingInlineSupported = false;
                     break;
 
-                case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_1_1:
+                case Vortice.Direct3D12.RaytracingTier.Tier1_1:
                     isRaytracingSupported = true;
                     isRaytracingInlineSupported = true;
                     break;
 
-                case D3D12_RAYTRACING_TIER.D3D12_RAYTRACING_TIER_NOT_SUPPORTED:
+                case Vortice.Direct3D12.RaytracingTier.NotSupported:
                     isRaytracingSupported = false;
                     isRaytracingInlineSupported = false;
                     break;
@@ -723,15 +718,15 @@ namespace Infinity.Graphics
             // check render pass level
             switch (featureOptions5.RenderPassesTier)
             {
-                case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_0:
+                case Vortice.Direct3D12.RenderPassTier.Tier0:
                     isNativeRenderPassSupported = false;
                     break;
 
-                case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_1:
+                case Vortice.Direct3D12.RenderPassTier.Tier1:
                     isNativeRenderPassSupported = true;
                     break;
 
-                case D3D12_RENDER_PASS_TIER.D3D12_RENDER_PASS_TIER_2:
+                case Vortice.Direct3D12.RenderPassTier.Tier2:
                     isNativeRenderPassSupported = true;
                     break;
             }
@@ -739,16 +734,16 @@ namespace Infinity.Graphics
             // check mesh shading level
             switch (featureOptions7.MeshShaderTier)
             {
-                case D3D12_MESH_SHADER_TIER.D3D12_MESH_SHADER_TIER_1:
+                case Vortice.Direct3D12.MeshShaderTier.Tier1:
                     isMeshShadingSupported = true;
                     break;
 
-                case D3D12_MESH_SHADER_TIER.D3D12_MESH_SHADER_TIER_NOT_SUPPORTED:
+                case Vortice.Direct3D12.MeshShaderTier.NotSupported:
                     isMeshShadingSupported = false;
                     break;
             }
 
-            // WorkGraph support requires D3D12_FEATURE_DATA_D3D12_OPTIONS21.
+            // WorkGraph support requires Vortice.Direct3D12.FeatureDataD3D12Options21.
             // This backend currently keeps WorkGraph disabled until an explicit implementation phase.
             isWorkgraphSupported = false;
 
@@ -802,15 +797,14 @@ namespace Infinity.Graphics
 
         private bool ProbeDirectMLSupport()
         {
-            IDMLDevice* directMLDevice = null;
-            HRESULT hResult = DirectX.DMLCreateDevice((ID3D12Device*)m_NativeDevice,
-                                                      DML_CREATE_DEVICE_FLAGS.DML_CREATE_DEVICE_FLAG_NONE,
-                                                      __uuidof<IDMLDevice>(),
-                                                      (void**)&directMLDevice);
+            Vortice.DirectML.IDMLDevice directMLDevice = null;
+            SharpGen.Runtime.Result hResult = Vortice.DirectML.DML.DMLCreateDevice((Vortice.Direct3D12.ID3D12Device)m_NativeDevice,
+                                                                   Vortice.DirectML.CreateDeviceFlags.None,
+                                                                   out directMLDevice);
 
-            if (SUCCEEDED(hResult) && directMLDevice != null)
+            if (hResult.Success && directMLDevice != null)
             {
-                directMLDevice->Release();
+                directMLDevice.Release();
                 return true;
             }
 
@@ -820,31 +814,33 @@ namespace Infinity.Graphics
         private void CreateDescriptorHeaps()
         {
             // Non-shader-visible heaps for RTV/DSV (these cannot be shader-visible on DX12)
-            m_DescriptorHeapDSV = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_DSV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 4096);
-            m_DescriptorHeapHeapRTV = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 4096);
+            m_DescriptorHeapDSV = new Dx12DescriptorHeap(m_NativeDevice, Vortice.Direct3D12.DescriptorHeapType.DepthStencilView, Vortice.Direct3D12.DescriptorHeapFlags.None, 4096);
+            m_DescriptorHeapHeapRTV = new Dx12DescriptorHeap(m_NativeDevice, Vortice.Direct3D12.DescriptorHeapType.RenderTargetView, Vortice.Direct3D12.DescriptorHeapFlags.None, 4096);
 
             // Shader-visible heaps for GPU access - large enough for bindless resource arrays
-            m_DescriptorHeapSampler = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 2048);
-            m_DescriptorHeapCbvSrvUav = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 1000000);
+            m_DescriptorHeapSampler = new Dx12DescriptorHeap(m_NativeDevice, Vortice.Direct3D12.DescriptorHeapType.Sampler, Vortice.Direct3D12.DescriptorHeapFlags.ShaderVisible, 2048);
+            m_DescriptorHeapCbvSrvUav = new Dx12DescriptorHeap(m_NativeDevice, Vortice.Direct3D12.DescriptorHeapType.ConstantBufferViewShaderResourceViewUnorderedAccessView, Vortice.Direct3D12.DescriptorHeapFlags.ShaderVisible, 1000000);
 
             // CPU-only staging heaps for building descriptors before copying to GPU-visible heaps
-            m_StagingHeapCbvSrvUav = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 65536);
-            m_StagingHeapSampler = new Dx12DescriptorHeap(m_NativeDevice, D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 2048);
+            m_StagingHeapCbvSrvUav = new Dx12DescriptorHeap(m_NativeDevice, Vortice.Direct3D12.DescriptorHeapType.ConstantBufferViewShaderResourceViewUnorderedAccessView, Vortice.Direct3D12.DescriptorHeapFlags.None, 65536);
+            m_StagingHeapSampler = new Dx12DescriptorHeap(m_NativeDevice, Vortice.Direct3D12.DescriptorHeapType.Sampler, Vortice.Direct3D12.DescriptorHeapFlags.None, 2048);
         }
 
         private void CreateCommandSignatures()
         {
-            ID3D12CommandSignature* commandSignature;
-            D3D12_INDIRECT_ARGUMENT_DESC indirectArgDesc;
-            D3D12_COMMAND_SIGNATURE_DESC commandSignatureDesc;
+            Vortice.Direct3D12.CommandSignatureDescription commandSignatureDesc = new Vortice.Direct3D12.CommandSignatureDescription
+            {
+                NodeMask = 0,
+            };
 
             #region Create_DrawIndirect_Argument
-            indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
-            //commandSignatureDesc.NodeMask = nodeMask;
-            commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
-            commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DRAW_ARGUMENTS);
-            commandSignatureDesc.NumArgumentDescs = 1;
-            HRESULT hResult = m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature);
+            Vortice.Direct3D12.IndirectArgumentDescription indirectArgDesc = new Vortice.Direct3D12.IndirectArgumentDescription
+            {
+                Type = Vortice.Direct3D12.IndirectArgumentType.Draw,
+            };
+            commandSignatureDesc.IndirectArguments = new[] { indirectArgDesc };
+            commandSignatureDesc.ByteStride = sizeof(Vortice.Direct3D12.DrawArguments);
+            SharpGen.Runtime.Result hResult = m_NativeDevice.CreateCommandSignature(commandSignatureDesc, null, out Vortice.Direct3D12.ID3D12CommandSignature commandSignature);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -852,12 +848,13 @@ namespace Infinity.Graphics
             #endregion
 
             #region Create_DrawIndexedIndirect_Argument
-            indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
-            //commandSignatureDesc.NodeMask = nodeMask;
-            commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
-            commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DRAW_INDEXED_ARGUMENTS);
-            commandSignatureDesc.NumArgumentDescs = 1;
-            hResult = m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature);
+            indirectArgDesc = new Vortice.Direct3D12.IndirectArgumentDescription
+            {
+                Type = Vortice.Direct3D12.IndirectArgumentType.DrawIndexed,
+            };
+            commandSignatureDesc.IndirectArguments = new[] { indirectArgDesc };
+            commandSignatureDesc.ByteStride = sizeof(Vortice.Direct3D12.DrawIndexedArguments);
+            hResult = m_NativeDevice.CreateCommandSignature(commandSignatureDesc, null, out commandSignature);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -865,12 +862,13 @@ namespace Infinity.Graphics
             #endregion
 
             #region Create_DispatchComputeIndirect_Argument
-            indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
-            //commandSignatureDesc.NodeMask = nodeMask;
-            commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
-            commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DISPATCH_ARGUMENTS);
-            commandSignatureDesc.NumArgumentDescs = 1;
-            hResult = m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature);
+            indirectArgDesc = new Vortice.Direct3D12.IndirectArgumentDescription
+            {
+                Type = Vortice.Direct3D12.IndirectArgumentType.Dispatch,
+            };
+            commandSignatureDesc.IndirectArguments = new[] { indirectArgDesc };
+            commandSignatureDesc.ByteStride = sizeof(Vortice.Direct3D12.DispatchArguments);
+            hResult = m_NativeDevice.CreateCommandSignature(commandSignatureDesc, null, out commandSignature);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -880,12 +878,13 @@ namespace Infinity.Graphics
             #region Create_DispatchMeshIndirect_Argument
             if (m_Feature.IsMeshShadingSupported)
             {
-                indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_MESH;
-                //commandSignatureDesc.NodeMask = nodeMask;
-                commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
-                commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DISPATCH_MESH_ARGUMENTS);
-                commandSignatureDesc.NumArgumentDescs = 1;
-                hResult = m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature);
+                indirectArgDesc = new Vortice.Direct3D12.IndirectArgumentDescription
+                {
+                    Type = Vortice.Direct3D12.IndirectArgumentType.DispatchMesh,
+                };
+                commandSignatureDesc.IndirectArguments = new[] { indirectArgDesc };
+                commandSignatureDesc.ByteStride = sizeof(Vortice.Direct3D12.DispatchMeshArguments);
+                hResult = m_NativeDevice.CreateCommandSignature(commandSignatureDesc, null, out commandSignature);
 #if DEBUG
                 Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -896,12 +895,13 @@ namespace Infinity.Graphics
             #region Create_DispatchRayIndirect_Argument
             if (m_Feature.IsRaytracingSupported)
             {
-                indirectArgDesc.Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH_RAYS;
-                //commandSignatureDesc.NodeMask = nodeMask;
-                commandSignatureDesc.pArgumentDescs = &indirectArgDesc;
-                commandSignatureDesc.ByteStride = (uint)sizeof(D3D12_DISPATCH_RAYS_DESC);
-                commandSignatureDesc.NumArgumentDescs = 1;
-                hResult = m_NativeDevice->CreateCommandSignature(&commandSignatureDesc, null, __uuidof<ID3D12CommandSignature>(), (void**)&commandSignature);
+                indirectArgDesc = new Vortice.Direct3D12.IndirectArgumentDescription
+                {
+                    Type = Vortice.Direct3D12.IndirectArgumentType.DispatchRays,
+                };
+                commandSignatureDesc.IndirectArguments = new[] { indirectArgDesc };
+                commandSignatureDesc.ByteStride = sizeof(Vortice.Direct3D12.DispatchRaysDescription);
+                hResult = m_NativeDevice.CreateCommandSignature(commandSignatureDesc, null, out commandSignature);
 #if DEBUG
                 Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -957,20 +957,20 @@ namespace Infinity.Graphics
             m_StagingHeapCbvSrvUav.Dispose();
             m_StagingHeapSampler.Dispose();
 
-            m_DrawIndirectSignature->Release();
-            m_DrawIndexedIndirectSignature->Release();
+            m_DrawIndirectSignature.Release();
+            m_DrawIndexedIndirectSignature.Release();
             if (m_Feature.IsMeshShadingSupported)
             {
-                DispatchMeshIndirectSignature->Release();
+                DispatchMeshIndirectSignature.Release();
             }
             if (m_Feature.IsRaytracingSupported)
             {
-                m_DispatchRayIndirectSignature->Release();
+                m_DispatchRayIndirectSignature.Release();
             }
-            m_DispatchComputeIndirectSignature->Release();
+            m_DispatchComputeIndirectSignature.Release();
 
-            m_NativeDevice->Release();
-            m_DXGIAdapter->Release();
+            m_NativeDevice.Release();
+            m_DXGIAdapter.Release();
         }
     }
 #pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416

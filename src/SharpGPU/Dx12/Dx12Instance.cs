@@ -1,14 +1,11 @@
-﻿using TerraFX.Interop.Windows;
-using TerraFX.Interop.DirectX;
-using System.Collections.Generic;
-using static TerraFX.Interop.Windows.Windows;
+﻿using System.Collections.Generic;
 
 namespace Infinity.Graphics
 {
 #pragma warning disable CA1416, CS8602, CS8618
     internal unsafe class Dx12Instance : RHIInstance
     {
-        public IDXGIFactory7* DXGIFactory
+        public Vortice.DXGI.IDXGIFactory7 DXGIFactory
         {
             get
             {
@@ -19,7 +16,7 @@ namespace Infinity.Graphics
         public override ERHIBackend BackendType => ERHIBackend.DirectX12;
 
         private List<Dx12Device> m_Devices;
-        private IDXGIFactory7* m_DXGIFactory;
+        private Vortice.DXGI.IDXGIFactory7 m_DXGIFactory;
 
         public Dx12Instance(in RHIInstanceDescriptor descriptor)
         {
@@ -33,28 +30,27 @@ namespace Infinity.Graphics
 
             if(descriptor.EnableDebugLayer)
             {
-                ID3D12Debug* debug;
-                if (SUCCEEDED(DirectX.D3D12GetDebugInterface(__uuidof<ID3D12Debug>(), (void**)&debug)))
+                if (Vortice.Direct3D12.D3D12.D3D12GetDebugInterface(out Vortice.Direct3D12.Debug.ID3D12Debug debug).Success)
                 {
-                    debug->EnableDebugLayer();
-                    factoryFlags |= DXGI.DXGI_CREATE_FACTORY_DEBUG;
+                    debug.EnableDebugLayer();
+                    factoryFlags |= Vortice.DXGI.DXGI.CreateFactoryDebug;
 
                     if (descriptor.EnableValidatior)
                     {
-                        ID3D12Debug1* debug1;
-                        if (SUCCEEDED(debug->QueryInterface(__uuidof<ID3D12Debug1>(), (void**)&debug1)))
+                        Vortice.Direct3D12.Debug.ID3D12Debug1 debug1 = debug.QueryInterfaceOrNull<Vortice.Direct3D12.Debug.ID3D12Debug1>();
+                        if (debug1 != null)
                         {
-                            debug1->SetEnableGPUBasedValidation(true);
-                            debug1->Release();
+                            debug1.SetEnableGPUBasedValidation(true);
+                            debug1.Release();
                         }
                     }
 
-                    debug->Release();
+                    debug.Release();
                 }
             }
 
-            IDXGIFactory7* factory;
-            HRESULT hResult = DirectX.CreateDXGIFactory2(factoryFlags, __uuidof<IDXGIFactory7>(), (void**)&factory);
+            Vortice.DXGI.IDXGIFactory7 factory;
+            SharpGen.Runtime.Result hResult = Vortice.DXGI.DXGI.CreateDXGIFactory2((factoryFlags & Vortice.DXGI.DXGI.CreateFactoryDebug) != 0, out factory);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
@@ -63,13 +59,16 @@ namespace Infinity.Graphics
 
         private void EnumerateAdapters(in RHIInstanceDescriptor descriptor)
         {
-            IDXGIAdapter1* adapter = null;
             m_Devices = new List<Dx12Device>(2);
 
-            for (uint i = 0; SUCCEEDED(m_DXGIFactory->EnumAdapters1(i, &adapter)); ++i)
+            for (uint i = 0; ; ++i)
             {
+                SharpGen.Runtime.Result hResult = m_DXGIFactory.EnumAdapters1(i, out Vortice.DXGI.IDXGIAdapter1 adapter);
+                if (hResult.Failure)
+                {
+                    break;
+                }
                 m_Devices.Add(new Dx12Device(this, adapter, descriptor.ComputeQueueRequestCount, descriptor.TransferQueueRequestCount, descriptor.GraphicsQueueRequestCount));
-                adapter = null;
             }
         }
 
@@ -80,7 +79,7 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            DXGIFactory->Release();
+            DXGIFactory.Release();
 
             for(int i = 0; i < m_Devices.Count; ++i)
             {
