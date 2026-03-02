@@ -1,7 +1,7 @@
-using System;
+﻿using System;
 using System.Linq;
 using Infinity.Collections;
-using Evergine.Bindings.Vulkan;
+using Vortice.Vulkan;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
@@ -87,9 +87,9 @@ namespace Infinity.Graphics
 
             switch (properties.deviceType)
             {
-                case VkPhysicalDeviceType.VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
-                case VkPhysicalDeviceType.VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
-                case VkPhysicalDeviceType.VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+                case VkPhysicalDeviceType.DiscreteGpu:
+                case VkPhysicalDeviceType.IntegratedGpu:
+                case VkPhysicalDeviceType.VirtualGpu:
                     m_Type = ERHIDeviceType.Hardware;
                     break;
                 default:
@@ -169,15 +169,15 @@ namespace Infinity.Graphics
             {
                 VkQueueFlags flags = queueFamilies[i].queueFlags;
 
-                if (m_GraphicsQueueFamilyIndex == -1 && (flags & VkQueueFlags.VK_QUEUE_GRAPHICS_BIT) != 0)
+                if (m_GraphicsQueueFamilyIndex == -1 && (flags & VkQueueFlags.Graphics) != 0)
                 {
                     m_GraphicsQueueFamilyIndex = i;
                 }
-                else if (m_ComputeQueueFamilyIndex == -1 && (flags & VkQueueFlags.VK_QUEUE_COMPUTE_BIT) != 0 && (flags & VkQueueFlags.VK_QUEUE_GRAPHICS_BIT) == 0)
+                else if (m_ComputeQueueFamilyIndex == -1 && (flags & VkQueueFlags.Compute) != 0 && (flags & VkQueueFlags.Graphics) == 0)
                 {
                     m_ComputeQueueFamilyIndex = i;
                 }
-                else if (m_TransferQueueFamilyIndex == -1 && (flags & VkQueueFlags.VK_QUEUE_TRANSFER_BIT) != 0 && (flags & VkQueueFlags.VK_QUEUE_GRAPHICS_BIT) == 0 && (flags & VkQueueFlags.VK_QUEUE_COMPUTE_BIT) == 0)
+                else if (m_TransferQueueFamilyIndex == -1 && (flags & VkQueueFlags.Transfer) != 0 && (flags & VkQueueFlags.Graphics) == 0 && (flags & VkQueueFlags.Compute) == 0)
                 {
                     m_TransferQueueFamilyIndex = i;
                 }
@@ -236,7 +236,7 @@ namespace Infinity.Graphics
 
                 queueCreateInfos[idx] = new VkDeviceQueueCreateInfo()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                    sType = VkStructureType.DeviceQueueCreateInfo,
                     queueFamilyIndex = (uint)familyIndex,
                     queueCount = count,
                     pQueuePriorities = priorities,
@@ -268,6 +268,8 @@ namespace Infinity.Graphics
             bool hasDeferredOps = availableExtNames.Contains("VK_KHR_deferred_host_operations");
             bool hasRTQuery = availableExtNames.Contains("VK_KHR_ray_query");
             bool rtSupported = hasAccelStruct && hasRTPipeline && hasDeferredOps;
+            // TODO: Re-enable Vulkan ray tracing once the Vortice RT descriptor/binding path is stabilized.
+            rtSupported = false;
             if (rtSupported)
             {
                 deviceExtensions.Add("VK_KHR_acceleration_structure");
@@ -313,12 +315,12 @@ namespace Infinity.Graphics
 
             // Vulkan 1.3 features
             VkPhysicalDeviceVulkan13Features vulkan13Features = default;
-            vulkan13Features.sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+            vulkan13Features.sType = VkStructureType.PhysicalDeviceVulkan13Features;
             vulkan13Features.dynamicRendering = true;
             vulkan13Features.synchronization2 = true;
 
             VkPhysicalDeviceVulkan12Features vulkan12Features = default;
-            vulkan12Features.sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+            vulkan12Features.sType = VkStructureType.PhysicalDeviceVulkan12Features;
             vulkan12Features.pNext = &vulkan13Features;
             vulkan12Features.descriptorIndexing = true;
             vulkan12Features.shaderSampledImageArrayNonUniformIndexing = true;
@@ -339,11 +341,11 @@ namespace Infinity.Graphics
             VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeatures = default;
             if (rtSupported)
             {
-                accelFeatures.sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+                accelFeatures.sType = VkStructureType.PhysicalDeviceAccelerationStructureFeaturesKHR;
                 accelFeatures.accelerationStructure = true;
                 accelFeatures.pNext = pNextChain;
 
-                rtPipelineFeatures.sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+                rtPipelineFeatures.sType = VkStructureType.PhysicalDeviceRayTracingPipelineFeaturesKHR;
                 rtPipelineFeatures.rayTracingPipeline = true;
                 rtPipelineFeatures.pNext = &accelFeatures;
                 pNextChain = &rtPipelineFeatures;
@@ -353,7 +355,7 @@ namespace Infinity.Graphics
             VkPhysicalDeviceMeshShaderFeaturesEXT meshFeatures = default;
             if (hasMeshShader)
             {
-                meshFeatures.sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+                meshFeatures.sType = VkStructureType.PhysicalDeviceMeshShaderFeaturesEXT;
                 meshFeatures.meshShader = true;
                 meshFeatures.taskShader = true;
                 meshFeatures.pNext = pNextChain;
@@ -364,7 +366,7 @@ namespace Infinity.Graphics
             VkPhysicalDeviceFragmentShadingRateFeaturesKHR vrsFeatures = default;
             if (hasFragmentShadingRate)
             {
-                vrsFeatures.sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+                vrsFeatures.sType = VkStructureType.PhysicalDeviceFragmentShadingRateFeaturesKHR;
                 vrsFeatures.pipelineFragmentShadingRate = true;
                 vrsFeatures.pNext = pNextChain;
                 pNextChain = &vrsFeatures;
@@ -372,7 +374,7 @@ namespace Infinity.Graphics
 
             VkDeviceCreateInfo deviceCreateInfo = new VkDeviceCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+                sType = VkStructureType.DeviceCreateInfo,
                 pNext = pNextChain,
                 queueCreateInfoCount = (uint)familyCount,
                 pQueueCreateInfos = queueCreateInfos,
@@ -409,11 +411,11 @@ namespace Infinity.Graphics
             bool hasAtomicInt64 = false;
             VkPhysicalDeviceVulkan12Features vk12Features = new VkPhysicalDeviceVulkan12Features()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+                sType = VkStructureType.PhysicalDeviceVulkan12Features,
             };
             VkPhysicalDeviceFeatures2 features2 = new VkPhysicalDeviceFeatures2()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                sType = VkStructureType.PhysicalDeviceFeatures2,
                 pNext = &vk12Features,
             };
             VulkanNative.vkGetPhysicalDeviceFeatures2(m_PhysicalDevice, &features2);
@@ -423,11 +425,11 @@ namespace Infinity.Graphics
             bool hasBarycentrics = false;
             VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR barycentricFeatures = new VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR,
+                sType = VkStructureType.PhysicalDeviceFragmentShaderBarycentricFeaturesKHR,
             };
             VkPhysicalDeviceFeatures2 features2Bary = new VkPhysicalDeviceFeatures2()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                sType = VkStructureType.PhysicalDeviceFeatures2,
                 pNext = &barycentricFeatures,
             };
             VulkanNative.vkGetPhysicalDeviceFeatures2(m_PhysicalDevice, &features2Bary);
@@ -507,20 +509,24 @@ namespace Infinity.Graphics
         private void CreateDescriptorPool()
         {
             VkDescriptorPoolSize* poolSizes = stackalloc VkDescriptorPoolSize[7];
-            poolSizes[0] = new VkDescriptorPoolSize() { type = VkDescriptorType.VK_DESCRIPTOR_TYPE_SAMPLER, descriptorCount = 2048 };
-            poolSizes[1] = new VkDescriptorPoolSize() { type = VkDescriptorType.VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, descriptorCount = 16384 };
-            poolSizes[2] = new VkDescriptorPoolSize() { type = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, descriptorCount = 4096 };
-            poolSizes[3] = new VkDescriptorPoolSize() { type = VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descriptorCount = 8192 };
-            poolSizes[4] = new VkDescriptorPoolSize() { type = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, descriptorCount = 8192 };
-            poolSizes[5] = new VkDescriptorPoolSize() { type = VkDescriptorType.VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, descriptorCount = 512 };
-            poolSizes[6] = new VkDescriptorPoolSize() { type = VkDescriptorType.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, descriptorCount = 4096 };
+            poolSizes[0] = new VkDescriptorPoolSize() { type = VkDescriptorType.Sampler, descriptorCount = 2048 };
+            poolSizes[1] = new VkDescriptorPoolSize() { type = VkDescriptorType.SampledImage, descriptorCount = 16384 };
+            poolSizes[2] = new VkDescriptorPoolSize() { type = VkDescriptorType.StorageImage, descriptorCount = 4096 };
+            poolSizes[3] = new VkDescriptorPoolSize() { type = VkDescriptorType.UniformBuffer, descriptorCount = 8192 };
+            poolSizes[4] = new VkDescriptorPoolSize() { type = VkDescriptorType.StorageBuffer, descriptorCount = 8192 };
+            int poolSizeCount = 5;
+            if (m_RaytracingSupported)
+            {
+                poolSizes[poolSizeCount++] = new VkDescriptorPoolSize() { type = VkDescriptorType.AccelerationStructureKHR, descriptorCount = 512 };
+            }
+            poolSizes[poolSizeCount++] = new VkDescriptorPoolSize() { type = VkDescriptorType.CombinedImageSampler, descriptorCount = 4096 };
 
             VkDescriptorPoolCreateInfo poolInfo = new VkDescriptorPoolCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                flags = VkDescriptorPoolCreateFlags.VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT | VkDescriptorPoolCreateFlags.VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+                sType = VkStructureType.DescriptorPoolCreateInfo,
+                flags = VkDescriptorPoolCreateFlags.FreeDescriptorSet | VkDescriptorPoolCreateFlags.UpdateAfterBind,
                 maxSets = 8192,
-                poolSizeCount = 7,
+                poolSizeCount = (uint)poolSizeCount,
                 pPoolSizes = poolSizes,
             };
 
@@ -711,3 +717,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8600, CS8602, CS8618
 }
+
+

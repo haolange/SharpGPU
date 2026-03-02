@@ -1,4 +1,4 @@
-using Evergine.Bindings.Vulkan;
+﻿using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -22,10 +22,10 @@ namespace Infinity.Graphics
 
             VkBufferCreateInfo bufferInfo = new VkBufferCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                sType = VkStructureType.BufferCreateInfo,
                 size = bufferSize,
-                usage = VkBufferUsageFlags.VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VkBufferUsageFlags.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VkBufferUsageFlags.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
+                usage = VkBufferUsageFlags.IndirectBuffer | VkBufferUsageFlags.StorageBuffer | VkBufferUsageFlags.TransferDst,
+                sharingMode = VkSharingMode.Exclusive,
             };
 
             fixed (VkBuffer* bufferPtr = &m_NativeArgumentBuffer)
@@ -36,11 +36,11 @@ namespace Infinity.Graphics
             VkMemoryRequirements memRequirements;
             VulkanNative.vkGetBufferMemoryRequirements(device.NativeDevice, m_NativeArgumentBuffer, &memRequirements);
 
-            uint memTypeIndex = VulkanUtility.FindMemoryType(device.MemoryProperties, memRequirements.memoryTypeBits, VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+            uint memTypeIndex = VulkanUtility.FindMemoryType(device.MemoryProperties, memRequirements.memoryTypeBits, VkMemoryPropertyFlags.DeviceLocal);
 
             VkMemoryAllocateInfo allocInfo = new VkMemoryAllocateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                sType = VkStructureType.MemoryAllocateInfo,
                 allocationSize = memRequirements.size,
                 memoryTypeIndex = memTypeIndex,
             };
@@ -79,10 +79,10 @@ namespace Infinity.Graphics
 
             VkBufferCreateInfo bufferInfo = new VkBufferCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                sType = VkStructureType.BufferCreateInfo,
                 size = bufferSize,
-                usage = VkBufferUsageFlags.VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VkBufferUsageFlags.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VkBufferUsageFlags.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
+                usage = VkBufferUsageFlags.IndirectBuffer | VkBufferUsageFlags.StorageBuffer | VkBufferUsageFlags.TransferDst,
+                sharingMode = VkSharingMode.Exclusive,
             };
 
             fixed (VkBuffer* bufferPtr = &m_NativeArgumentBuffer)
@@ -93,11 +93,11 @@ namespace Infinity.Graphics
             VkMemoryRequirements memRequirements;
             VulkanNative.vkGetBufferMemoryRequirements(device.NativeDevice, m_NativeArgumentBuffer, &memRequirements);
 
-            uint memTypeIndex = VulkanUtility.FindMemoryType(device.MemoryProperties, memRequirements.memoryTypeBits, VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+            uint memTypeIndex = VulkanUtility.FindMemoryType(device.MemoryProperties, memRequirements.memoryTypeBits, VkMemoryPropertyFlags.DeviceLocal);
 
             VkMemoryAllocateInfo allocInfo = new VkMemoryAllocateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                sType = VkStructureType.MemoryAllocateInfo,
                 allocationSize = memRequirements.size,
                 memoryTypeIndex = memTypeIndex,
             };
@@ -136,10 +136,10 @@ namespace Infinity.Graphics
 
             VkBufferCreateInfo bufferInfo = new VkBufferCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                sType = VkStructureType.BufferCreateInfo,
                 size = bufferSize,
-                usage = VkBufferUsageFlags.VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VkBufferUsageFlags.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VkBufferUsageFlags.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
+                usage = VkBufferUsageFlags.IndirectBuffer | VkBufferUsageFlags.StorageBuffer | VkBufferUsageFlags.TransferDst,
+                sharingMode = VkSharingMode.Exclusive,
             };
 
             fixed (VkBuffer* bufferPtr = &m_NativeArgumentBuffer)
@@ -150,11 +150,11 @@ namespace Infinity.Graphics
             VkMemoryRequirements memRequirements;
             VulkanNative.vkGetBufferMemoryRequirements(device.NativeDevice, m_NativeArgumentBuffer, &memRequirements);
 
-            uint memTypeIndex = VulkanUtility.FindMemoryType(device.MemoryProperties, memRequirements.memoryTypeBits, VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+            uint memTypeIndex = VulkanUtility.FindMemoryType(device.MemoryProperties, memRequirements.memoryTypeBits, VkMemoryPropertyFlags.DeviceLocal);
 
             VkMemoryAllocateInfo allocInfo = new VkMemoryAllocateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                sType = VkStructureType.MemoryAllocateInfo,
                 allocationSize = memRequirements.size,
                 memoryTypeIndex = memTypeIndex,
             };
@@ -175,3 +175,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
+
+

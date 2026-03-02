@@ -1,5 +1,5 @@
-using System;
-using Evergine.Bindings.Vulkan;
+﻿using System;
+using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -20,7 +20,7 @@ namespace Infinity.Graphics
 
             VkQueryPoolCreateInfo queryPoolInfo = new VkQueryPoolCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+                sType = VkStructureType.QueryPoolCreateInfo,
                 queryType = VulkanUtility.ConvertToVkQueryType(descriptor.Type),
                 queryCount = descriptor.Count,
             };
@@ -28,11 +28,11 @@ namespace Infinity.Graphics
             if (descriptor.Type == ERHIQueryType.Statistics)
             {
                 queryPoolInfo.pipelineStatistics =
-                    VkQueryPipelineStatisticFlags.VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT |
-                    VkQueryPipelineStatisticFlags.VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_PRIMITIVES_BIT |
-                    VkQueryPipelineStatisticFlags.VK_QUERY_PIPELINE_STATISTIC_VERTEX_SHADER_INVOCATIONS_BIT |
-                    VkQueryPipelineStatisticFlags.VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT |
-                    VkQueryPipelineStatisticFlags.VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT;
+                    VkQueryPipelineStatisticFlags.InputAssemblyVertices |
+                    VkQueryPipelineStatisticFlags.InputAssemblyPrimitives |
+                    VkQueryPipelineStatisticFlags.VertexShaderInvocations |
+                    VkQueryPipelineStatisticFlags.FragmentShaderInvocations |
+                    VkQueryPipelineStatisticFlags.ComputeShaderInvocations;
             }
 
             fixed (VkQueryPool* poolPtr = &m_NativeQueryPool)
@@ -53,9 +53,9 @@ namespace Infinity.Graphics
                     (nuint)(m_QueryDescriptor.Count * sizeof(ulong)),
                     resultsPtr,
                     (ulong)sizeof(ulong),
-                    VkQueryResultFlags.VK_QUERY_RESULT_64_BIT);
+                    VkQueryResultFlags.Bit64);
 
-                return result == VkResult.VK_SUCCESS;
+                return result == VkResult.Success;
             }
         }
 
@@ -66,3 +66,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
+
+

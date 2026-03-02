@@ -1,5 +1,5 @@
-using System;
-using Evergine.Bindings.Vulkan;
+﻿using System;
+using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -31,15 +31,15 @@ namespace Infinity.Graphics
             // Create instance buffer for VkAccelerationStructureInstanceKHR data
             ulong instanceBufferSize = instanceCount * 64; // sizeof(VkAccelerationStructureInstanceKHR) = 64
             VulkanAccelStructHelper.CreateDeviceAddressBuffer(device, instanceBufferSize,
-                VkBufferUsageFlags.VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR |
-                VkBufferUsageFlags.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyKHR |
+                VkBufferUsageFlags.ShaderDeviceAddress,
+                VkMemoryPropertyFlags.HostVisible | VkMemoryPropertyFlags.HostCoherent,
                 out m_NativeInstanceBuffer, out m_NativeInstanceMemory);
 
             // Get device address of instance buffer
             VkBufferDeviceAddressInfo instanceAddrInfo = new VkBufferDeviceAddressInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                sType = VkStructureType.BufferDeviceAddressInfo,
                 buffer = m_NativeInstanceBuffer,
             };
             ulong instanceBufferAddress = VulkanNative.vkGetBufferDeviceAddress(device.NativeDevice, &instanceAddrInfo);
@@ -47,47 +47,47 @@ namespace Infinity.Graphics
             // Setup geometry for TLAS (instances)
             VkAccelerationStructureGeometryKHR geometry = new VkAccelerationStructureGeometryKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-                geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_INSTANCES_KHR,
-                flags = VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR,
+                sType = VkStructureType.AccelerationStructureGeometryKHR,
+                geometryType = VkGeometryTypeKHR.Instances,
+                flags = VkGeometryFlagsKHR.Opaque,
             };
-            geometry.geometry.instances.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+            geometry.geometry.instances.sType = VkStructureType.AccelerationStructureGeometryInstancesDataKHR;
             geometry.geometry.instances.arrayOfPointers = false;
             geometry.geometry.instances.data.deviceAddress = instanceBufferAddress;
 
             // Get build sizes
             VkAccelerationStructureBuildGeometryInfoKHR buildInfo = new VkAccelerationStructureBuildGeometryInfoKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-                type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-                flags = VkBuildAccelerationStructureFlagsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
-                        VkBuildAccelerationStructureFlagsKHR.VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
+                sType = VkStructureType.AccelerationStructureBuildGeometryInfoKHR,
+                type = VkAccelerationStructureTypeKHR.TopLevel,
+                flags = VkBuildAccelerationStructureFlagsKHR.PreferFastTrace |
+                        VkBuildAccelerationStructureFlagsKHR.AllowUpdate,
                 geometryCount = 1,
                 pGeometries = &geometry,
             };
 
             VkAccelerationStructureBuildSizesInfoKHR sizeInfo = new VkAccelerationStructureBuildSizesInfoKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
+                sType = VkStructureType.AccelerationStructureBuildSizesInfoKHR,
             };
             VulkanNative.vkGetAccelerationStructureBuildSizesKHR(device.NativeDevice,
-                VkAccelerationStructureBuildTypeKHR.VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+                VkAccelerationStructureBuildTypeKHR.Device,
                 &buildInfo, &instanceCount, &sizeInfo);
 
             // Create result buffer
             VulkanAccelStructHelper.CreateDeviceAddressBuffer(device, sizeInfo.accelerationStructureSize,
-                VkBufferUsageFlags.VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
-                VkBufferUsageFlags.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                VkBufferUsageFlags.AccelerationStructureStorageKHR |
+                VkBufferUsageFlags.ShaderDeviceAddress,
+                VkMemoryPropertyFlags.DeviceLocal,
                 out m_NativeBuffer, out m_NativeMemory);
 
             // Create acceleration structure
             VkAccelerationStructureCreateInfoKHR createInfo = new VkAccelerationStructureCreateInfoKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
+                sType = VkStructureType.AccelerationStructureCreateInfoKHR,
                 buffer = m_NativeBuffer,
                 size = sizeInfo.accelerationStructureSize,
-                type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+                type = VkAccelerationStructureTypeKHR.TopLevel,
             };
 
             fixed (VkAccelerationStructureKHR* asPtr = &m_NativeAccelStruct)
@@ -97,8 +97,8 @@ namespace Infinity.Graphics
 
             // Create scratch buffer
             VulkanAccelStructHelper.CreateDeviceAddressBuffer(device, sizeInfo.buildScratchSize,
-                VkBufferUsageFlags.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VkBufferUsageFlags.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                VkBufferUsageFlags.StorageBuffer | VkBufferUsageFlags.ShaderDeviceAddress,
+                VkMemoryPropertyFlags.DeviceLocal,
                 out m_NativeScratchBuffer, out m_NativeScratchMemory);
         }
 
@@ -153,18 +153,18 @@ namespace Infinity.Graphics
                     VulkanBuffer vertexBuffer = triangleGeometry.VertexBuffer as VulkanBuffer;
                     VkBufferDeviceAddressInfo vertexAddrInfo = new VkBufferDeviceAddressInfo()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                        sType = VkStructureType.BufferDeviceAddressInfo,
                         buffer = vertexBuffer.NativeBuffer,
                     };
                     ulong vertexAddress = VulkanNative.vkGetBufferDeviceAddress(device.NativeDevice, &vertexAddrInfo);
 
                     geometries[i] = new VkAccelerationStructureGeometryKHR()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-                        geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_TRIANGLES_KHR,
-                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR : 0,
+                        sType = VkStructureType.AccelerationStructureGeometryKHR,
+                        geometryType = VkGeometryTypeKHR.Triangles,
+                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
                     };
-                    geometries[i].geometry.triangles.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+                    geometries[i].geometry.triangles.sType = VkStructureType.AccelerationStructureGeometryTrianglesDataKHR;
                     geometries[i].geometry.triangles.vertexFormat = VulkanUtility.ConvertToVkFormat(triangleGeometry.VertexFormat);
                     geometries[i].geometry.triangles.vertexData.deviceAddress = vertexAddress + triangleGeometry.VertexOffset;
                     geometries[i].geometry.triangles.vertexStride = triangleGeometry.VertexStride;
@@ -175,7 +175,7 @@ namespace Infinity.Graphics
                         VulkanBuffer indexBuffer = triangleGeometry.IndexBuffer as VulkanBuffer;
                         VkBufferDeviceAddressInfo indexAddrInfo = new VkBufferDeviceAddressInfo()
                         {
-                            sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                            sType = VkStructureType.BufferDeviceAddressInfo,
                             buffer = indexBuffer.NativeBuffer,
                         };
                         ulong indexAddress = VulkanNative.vkGetBufferDeviceAddress(device.NativeDevice, &indexAddrInfo);
@@ -185,7 +185,7 @@ namespace Infinity.Graphics
                     }
                     else
                     {
-                        geometries[i].geometry.triangles.indexType = VkIndexType.VK_INDEX_TYPE_NONE_KHR;
+                        geometries[i].geometry.triangles.indexType = VkIndexType.NoneKHR;
                         maxPrimitiveCounts[i] = triangleGeometry.VertexCount / 3;
                     }
                 }
@@ -195,18 +195,18 @@ namespace Infinity.Graphics
                     VulkanBuffer aabbBuffer = aabbGeometry.AABBBuffer as VulkanBuffer;
                     VkBufferDeviceAddressInfo aabbAddrInfo = new VkBufferDeviceAddressInfo()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                        sType = VkStructureType.BufferDeviceAddressInfo,
                         buffer = aabbBuffer.NativeBuffer,
                     };
                     ulong aabbAddress = VulkanNative.vkGetBufferDeviceAddress(device.NativeDevice, &aabbAddrInfo);
 
                     geometries[i] = new VkAccelerationStructureGeometryKHR()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-                        geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_AABBS_KHR,
-                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR : 0,
+                        sType = VkStructureType.AccelerationStructureGeometryKHR,
+                        geometryType = VkGeometryTypeKHR.Aabbs,
+                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
                     };
-                    geometries[i].geometry.aabbs.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
+                    geometries[i].geometry.aabbs.sType = VkStructureType.AccelerationStructureGeometryAabbsDataKHR;
                     geometries[i].geometry.aabbs.data.deviceAddress = aabbAddress + aabbGeometry.Offset;
                     geometries[i].geometry.aabbs.stride = aabbGeometry.Stride;
                     maxPrimitiveCounts[i] = aabbGeometry.Count;
@@ -216,35 +216,35 @@ namespace Infinity.Graphics
             // Get build sizes
             VkAccelerationStructureBuildGeometryInfoKHR buildInfo = new VkAccelerationStructureBuildGeometryInfoKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-                type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-                flags = VkBuildAccelerationStructureFlagsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+                sType = VkStructureType.AccelerationStructureBuildGeometryInfoKHR,
+                type = VkAccelerationStructureTypeKHR.BottomLevel,
+                flags = VkBuildAccelerationStructureFlagsKHR.PreferFastTrace,
                 geometryCount = (uint)geometryCount,
                 pGeometries = geometries,
             };
 
             VkAccelerationStructureBuildSizesInfoKHR sizeInfo = new VkAccelerationStructureBuildSizesInfoKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
+                sType = VkStructureType.AccelerationStructureBuildSizesInfoKHR,
             };
             VulkanNative.vkGetAccelerationStructureBuildSizesKHR(device.NativeDevice,
-                VkAccelerationStructureBuildTypeKHR.VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+                VkAccelerationStructureBuildTypeKHR.Device,
                 &buildInfo, maxPrimitiveCounts, &sizeInfo);
 
             // Create result buffer
             VulkanAccelStructHelper.CreateDeviceAddressBuffer(device, sizeInfo.accelerationStructureSize,
-                VkBufferUsageFlags.VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR |
-                VkBufferUsageFlags.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                VkBufferUsageFlags.AccelerationStructureStorageKHR |
+                VkBufferUsageFlags.ShaderDeviceAddress,
+                VkMemoryPropertyFlags.DeviceLocal,
                 out m_NativeBuffer, out m_NativeMemory);
 
             // Create acceleration structure
             VkAccelerationStructureCreateInfoKHR createInfo = new VkAccelerationStructureCreateInfoKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
+                sType = VkStructureType.AccelerationStructureCreateInfoKHR,
                 buffer = m_NativeBuffer,
                 size = sizeInfo.accelerationStructureSize,
-                type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+                type = VkAccelerationStructureTypeKHR.BottomLevel,
             };
 
             fixed (VkAccelerationStructureKHR* asPtr = &m_NativeAccelStruct)
@@ -254,8 +254,8 @@ namespace Infinity.Graphics
 
             // Create scratch buffer
             VulkanAccelStructHelper.CreateDeviceAddressBuffer(device, sizeInfo.buildScratchSize,
-                VkBufferUsageFlags.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VkBufferUsageFlags.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                VkBufferUsageFlags.StorageBuffer | VkBufferUsageFlags.ShaderDeviceAddress,
+                VkMemoryPropertyFlags.DeviceLocal,
                 out m_NativeScratchBuffer, out m_NativeScratchMemory);
         }
 
@@ -275,10 +275,10 @@ namespace Infinity.Graphics
         {
             VkBufferCreateInfo bufferInfo = new VkBufferCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                sType = VkStructureType.BufferCreateInfo,
                 size = size,
                 usage = usage,
-                sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
+                sharingMode = VkSharingMode.Exclusive,
             };
 
             fixed (VkBuffer* bufferPtr = &buffer)
@@ -293,13 +293,13 @@ namespace Infinity.Graphics
 
             VkMemoryAllocateFlagsInfo flagsInfo = new VkMemoryAllocateFlagsInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
-                flags = VkMemoryAllocateFlags.VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+                sType = VkStructureType.MemoryAllocateFlagsInfo,
+                flags = VkMemoryAllocateFlags.DeviceAddress,
             };
 
             VkMemoryAllocateInfo allocInfo = new VkMemoryAllocateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                sType = VkStructureType.MemoryAllocateInfo,
                 pNext = &flagsInfo,
                 allocationSize = memRequirements.size,
                 memoryTypeIndex = memTypeIndex,
@@ -315,3 +315,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
+
+

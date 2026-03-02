@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 using Infinity.Mathmatics;
-using Evergine.Bindings.Vulkan;
+using Vortice.Vulkan;
 using System.Runtime.InteropServices;
 
 namespace Infinity.Graphics
@@ -17,7 +17,8 @@ namespace Infinity.Graphics
         private VkSurfaceKHR m_Surface;
         private RHISwapChainDescriptor m_Descriptor;
         private uint m_CurrentImageIndex;
-        private VkSemaphore m_ImageAvailableSemaphore;
+        private VkFence m_ImageAcquireFence;
+        private bool m_HasAcquiredImageThisFrame;
 
         public VulkanSwapChain(VulkanDevice device, in RHISwapChainDescriptor descriptor)
         {
@@ -26,7 +27,7 @@ namespace Infinity.Graphics
 
             CreateSurface(descriptor);
             CreateSwapChain(descriptor);
-            CreateImageAvailableSemaphore();
+            CreateImageAcquireFence();
         }
 
         private void CreateSurface(in RHISwapChainDescriptor descriptor)
@@ -39,7 +40,7 @@ namespace Infinity.Graphics
                 {
                     VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = new VkWin32SurfaceCreateInfoKHR()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+                        sType = VkStructureType.Win32SurfaceCreateInfoKHR,
                         hwnd = descriptor.Surface,
                         hinstance = System.Diagnostics.Process.GetCurrentProcess().Handle,
                     };
@@ -54,8 +55,8 @@ namespace Infinity.Graphics
                 {
                     VkXlibSurfaceCreateInfoKHR surfaceCreateInfo = new VkXlibSurfaceCreateInfoKHR()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
-                        window = (nint)descriptor.Surface.ToInt64(),
+                        sType = VkStructureType.XlibSurfaceCreateInfoKHR,
+                        window = (ulong)descriptor.Surface,
                     };
 
                     fixed (VkSurfaceKHR* surfacePtr = &m_Surface)
@@ -99,10 +100,10 @@ namespace Infinity.Graphics
             extent.width = descriptor.Extent.x;
             extent.height = descriptor.Extent.y;
 
-            VkImageUsageFlags usage = VkImageUsageFlags.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            VkImageUsageFlags usage = VkImageUsageFlags.ColorAttachment;
             if (!descriptor.FrameBufferOnly)
             {
-                usage |= VkImageUsageFlags.VK_IMAGE_USAGE_SAMPLED_BIT | VkImageUsageFlags.VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+                usage |= VkImageUsageFlags.Sampled | VkImageUsageFlags.TransferDst;
             }
 
             VulkanCommandQueue vkQueue = descriptor.PresentQueue as VulkanCommandQueue;
@@ -110,7 +111,7 @@ namespace Infinity.Graphics
 
             VkSwapchainCreateInfoKHR swapChainInfo = new VkSwapchainCreateInfoKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+                sType = VkStructureType.SwapchainCreateInfoKHR,
                 surface = m_Surface,
                 minImageCount = imageCount,
                 imageFormat = selectedFormat.format,
@@ -118,11 +119,11 @@ namespace Infinity.Graphics
                 imageExtent = extent,
                 imageArrayLayers = 1,
                 imageUsage = usage,
-                imageSharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
+                imageSharingMode = VkSharingMode.Exclusive,
                 queueFamilyIndexCount = 1,
                 pQueueFamilyIndices = &queueFamilyIndex,
                 preTransform = capabilities.currentTransform,
-                compositeAlpha = VkCompositeAlphaFlagsKHR.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+                compositeAlpha = VkCompositeAlphaFlagsKHR.Opaque,
                 presentMode = presentMode,
                 clipped = true,
             };
@@ -148,7 +149,7 @@ namespace Infinity.Graphics
             textureDescriptor.Extent = new uint3(m_Descriptor.Extent.xy, 1);
             textureDescriptor.MipCount = 1;
             textureDescriptor.SampleCount = ERHISampleCount.None;
-            textureDescriptor.Format = RHIUtility.ConvertToPixelFormat(m_Descriptor.Format);
+            textureDescriptor.Format = ConvertSwapchainVkFormatToRhiPixelFormat(format);
             textureDescriptor.UsageFlag = ERHITextureUsage.RenderTarget;
             textureDescriptor.Dimension = ERHITextureDimension.Texture2D;
             textureDescriptor.StorageMode = ERHIStorageMode.GPULocal;
@@ -159,31 +160,81 @@ namespace Infinity.Graphics
             }
         }
 
-        private void CreateImageAvailableSemaphore()
+        private void CreateImageAcquireFence()
         {
-            VkSemaphoreCreateInfo semaphoreInfo = new VkSemaphoreCreateInfo()
+            VkFenceCreateInfo fenceInfo = new VkFenceCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+                sType = VkStructureType.FenceCreateInfo,
+                flags = VkFenceCreateFlags.Signaled,
             };
 
-            fixed (VkSemaphore* semPtr = &m_ImageAvailableSemaphore)
+            fixed (VkFence* fencePtr = &m_ImageAcquireFence)
             {
-                VulkanUtility.CheckErrors(VulkanNative.vkCreateSemaphore(m_VulkanDevice.NativeDevice, &semaphoreInfo, null, semPtr));
+                VulkanUtility.CheckErrors(VulkanNative.vkCreateFence(m_VulkanDevice.NativeDevice, &fenceInfo, null, fencePtr));
             }
         }
 
         public override RHITexture AcquireBackBufferTexture()
         {
-            fixed (uint* imageIndexPtr = &m_CurrentImageIndex)
+            if (m_HasAcquiredImageThisFrame)
             {
-                VulkanNative.vkAcquireNextImageKHR(m_VulkanDevice.NativeDevice, m_NativeSwapChain, ulong.MaxValue, m_ImageAvailableSemaphore, default, imageIndexPtr);
+                return m_Textures[m_CurrentImageIndex];
             }
+
+            fixed (VkFence* fencePtr = &m_ImageAcquireFence)
+            {
+                VulkanUtility.CheckErrors(VulkanNative.vkWaitForFences(m_VulkanDevice.NativeDevice, 1, fencePtr, true, ulong.MaxValue));
+                VulkanUtility.CheckErrors(VulkanNative.vkResetFences(m_VulkanDevice.NativeDevice, 1, fencePtr));
+            }
+
+            const ulong acquireTimeoutNs = 1_000_000_000UL;
+            const int maxAcquireRetries = 8;
+            VkResult acquireResult = VkResult.Timeout;
+
+            for (int retry = 0; retry < maxAcquireRetries; ++retry)
+            {
+                fixed (uint* imageIndexPtr = &m_CurrentImageIndex)
+                {
+                    acquireResult = VulkanNative.vkAcquireNextImageKHR(
+                        m_VulkanDevice.NativeDevice,
+                        m_NativeSwapChain,
+                        acquireTimeoutNs,
+                        default,
+                        m_ImageAcquireFence,
+                        imageIndexPtr);
+                }
+
+                if (acquireResult == VkResult.Success || acquireResult == VkResult.SuboptimalKHR)
+                {
+                    break;
+                }
+
+                if (acquireResult != VkResult.Timeout && acquireResult != VkResult.NotReady)
+                {
+                    VulkanUtility.CheckErrors(acquireResult);
+                }
+
+                System.Threading.Thread.Sleep(1);
+            }
+
+            fixed (VkFence* fencePtr = &m_ImageAcquireFence)
+            {
+                VulkanUtility.CheckErrors(VulkanNative.vkWaitForFences(m_VulkanDevice.NativeDevice, 1, fencePtr, true, ulong.MaxValue));
+            }
+
+            if (acquireResult != VkResult.Success && acquireResult != VkResult.SuboptimalKHR)
+            {
+                VulkanUtility.CheckErrors(acquireResult);
+            }
+
+            m_HasAcquiredImageThisFrame = true;
             return m_Textures[m_CurrentImageIndex];
         }
 
         public override void Resize(in uint2 extent)
         {
             VulkanNative.vkDeviceWaitIdle(m_VulkanDevice.NativeDevice);
+            m_HasAcquiredImageThisFrame = false;
 
             // Release old textures (external image wrappers)
             ReleaseTextures();
@@ -200,13 +251,18 @@ namespace Infinity.Graphics
 
         public override void Present()
         {
+            if (!m_HasAcquiredImageThisFrame)
+            {
+                return;
+            }
+
             VulkanCommandQueue vkQueue = m_Descriptor.PresentQueue as VulkanCommandQueue;
             VkSwapchainKHR swapChain = m_NativeSwapChain;
             uint imageIndex = m_CurrentImageIndex;
 
             VkPresentInfoKHR presentInfo = new VkPresentInfoKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+                sType = VkStructureType.PresentInfoKHR,
                 waitSemaphoreCount = 0,
                 swapchainCount = 1,
                 pSwapchains = &swapChain,
@@ -214,6 +270,7 @@ namespace Infinity.Graphics
             };
 
             VulkanNative.vkQueuePresentKHR(vkQueue.NativeQueue, &presentInfo);
+            m_HasAcquiredImageThisFrame = false;
         }
 
         private void ReleaseTextures()
@@ -231,10 +288,24 @@ namespace Infinity.Graphics
         protected override void Release()
         {
             ReleaseTextures();
-            VulkanNative.vkDestroySemaphore(m_VulkanDevice.NativeDevice, m_ImageAvailableSemaphore, null);
+            VulkanNative.vkDestroyFence(m_VulkanDevice.NativeDevice, m_ImageAcquireFence, null);
             VulkanNative.vkDestroySwapchainKHR(m_VulkanDevice.NativeDevice, m_NativeSwapChain, null);
             VulkanNative.vkDestroySurfaceKHR(m_VulkanDevice.VulkanInstance.NativeInstance, m_Surface, null);
+        }
+
+        private static ERHIPixelFormat ConvertSwapchainVkFormatToRhiPixelFormat(in VkFormat format)
+        {
+            return format switch
+            {
+                VkFormat.B8G8R8A8Unorm => ERHIPixelFormat.B8G8R8A8_UNorm,
+                VkFormat.R8G8B8A8Unorm => ERHIPixelFormat.R8G8B8A8_UNorm,
+                VkFormat.A2B10G10R10UnormPack32 => ERHIPixelFormat.R10G10B10A2_UNorm,
+                VkFormat.R16G16B16A16Sfloat => ERHIPixelFormat.R16G16B16A16_Float,
+                _ => ERHIPixelFormat.B8G8R8A8_UNorm,
+            };
         }
     }
 #pragma warning restore CS8600, CS8602, CS8618
 }
+
+

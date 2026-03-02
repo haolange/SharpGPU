@@ -1,4 +1,4 @@
-using Evergine.Bindings.Vulkan;
+﻿using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -16,7 +16,7 @@ namespace Infinity.Graphics
 
             VkSemaphoreCreateInfo semaphoreInfo = new VkSemaphoreCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+                sType = VkStructureType.SemaphoreCreateInfo,
             };
 
             fixed (VkSemaphore* semPtr = &m_NativeSemaphore)
@@ -32,3 +32,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
+
+

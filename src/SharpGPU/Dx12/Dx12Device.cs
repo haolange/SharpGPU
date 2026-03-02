@@ -590,6 +590,7 @@ namespace Infinity.Graphics
             bool isHiddenSurfaceRemovalSupported = false;
             bool isBarycentricCoordSupported = false;
             bool isProgrammableSamplePositionSupported = false;
+            bool isMLSupported = ProbeDirectMLSupport();
             ERHIMatrixMajorons matrixMajorons = ERHIMatrixMajorons.RowMajor;
             ERHIDepthValueRange depthValueRange = ERHIDepthValueRange.ZeroToOne;
             ERHIMultiviewStrategy multiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
@@ -747,9 +748,8 @@ namespace Infinity.Graphics
                     break;
             }
 
-            // WorkGraph support requires D3D12_FEATURE_DATA_D3D12_OPTIONS21 which is not available
-            // in TerraFX.Interop.Windows v10.0.22621.5. Upgrade TerraFX to a newer SDK version
-            // (targeting Windows SDK 10.0.26100+) to enable WorkGraph feature detection.
+            // WorkGraph support requires D3D12_FEATURE_DATA_D3D12_OPTIONS21.
+            // This backend currently keeps WorkGraph disabled until an explicit implementation phase.
             isWorkgraphSupported = false;
 
             m_Limit = new Dx12DeviceLimit(uniformBufferAlignment,
@@ -792,12 +792,29 @@ namespace Infinity.Graphics
                                               isHiddenSurfaceRemovalSupported,
                                               isBarycentricCoordSupported,
                                               isProgrammableSamplePositionSupported,
-                                              true,
+                                              isMLSupported,
                                               matrixMajorons,
                                               depthValueRange,
                                               multiviewStrategy,
                                               waveOperationStrategy,
                                               isNativeRenderPassSupported);
+        }
+
+        private bool ProbeDirectMLSupport()
+        {
+            IDMLDevice* directMLDevice = null;
+            HRESULT hResult = DirectX.DMLCreateDevice((ID3D12Device*)m_NativeDevice,
+                                                      DML_CREATE_DEVICE_FLAGS.DML_CREATE_DEVICE_FLAG_NONE,
+                                                      __uuidof<IDMLDevice>(),
+                                                      (void**)&directMLDevice);
+
+            if (SUCCEEDED(hResult) && directMLDevice != null)
+            {
+                directMLDevice->Release();
+                return true;
+            }
+
+            return false;
         }
 
         private void CreateDescriptorHeaps()

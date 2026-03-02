@@ -4,7 +4,6 @@ using Infinity.Mathmatics;
 using Infinity.Collections;
 using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
-using System.Runtime.InteropServices;
 using Viewport = Infinity.Mathmatics.Viewport;
 
 namespace Infinity.Graphics
@@ -197,16 +196,14 @@ namespace Infinity.Graphics
 
         public override void PushDebugGroup(string name)
         {
-            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
-            Marshal.FreeHGlobal(namePtr);
+            Dx12PixEventMarker.BeginEvent((nint)dx12CommandBuffer.NativeCommandList, name);
         }
 
         public override void PopDebugGroup()
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->EndEvent();
+            Dx12PixEventMarker.EndEvent((nint)dx12CommandBuffer.NativeCommandList);
         }
 
         public override void WriteTimestamp(in uint index)
@@ -554,16 +551,14 @@ namespace Infinity.Graphics
 
         public override void PushDebugGroup(string name)
         {
-            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
-            Marshal.FreeHGlobal(namePtr);
+            Dx12PixEventMarker.BeginEvent((nint)dx12CommandBuffer.NativeCommandList, name);
         }
 
         public override void PopDebugGroup()
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->EndEvent();
+            Dx12PixEventMarker.EndEvent((nint)dx12CommandBuffer.NativeCommandList);
         }
 
         public override void WriteTimestamp(in uint index)
@@ -893,16 +888,14 @@ namespace Infinity.Graphics
 
         public override void PushDebugGroup(string name)
         {
-            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
-            Marshal.FreeHGlobal(namePtr);
+            Dx12PixEventMarker.BeginEvent((nint)dx12CommandBuffer.NativeCommandList, name);
         }
 
         public override void PopDebugGroup()
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->EndEvent();
+            Dx12PixEventMarker.EndEvent((nint)dx12CommandBuffer.NativeCommandList);
         }
 
         public override void WriteTimestamp(in uint index)
@@ -1238,16 +1231,14 @@ namespace Infinity.Graphics
 
         public override void PushDebugGroup(string name)
         {
-            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
-            Marshal.FreeHGlobal(namePtr);
+            Dx12PixEventMarker.BeginEvent((nint)dx12CommandBuffer.NativeCommandList, name);
         }
 
         public override void PopDebugGroup()
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->EndEvent();
+            Dx12PixEventMarker.EndEvent((nint)dx12CommandBuffer.NativeCommandList);
         }
 
         public override void WriteTimestamp(in uint index)
@@ -1896,16 +1887,14 @@ namespace Infinity.Graphics
 
         public override void PushDebugGroup(string name)
         {
-            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
-            Marshal.FreeHGlobal(namePtr);
+            Dx12PixEventMarker.BeginEvent((nint)dx12CommandBuffer.NativeCommandList, name);
         }
 
         public override void PopDebugGroup()
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList->EndEvent();
+            Dx12PixEventMarker.EndEvent((nint)dx12CommandBuffer.NativeCommandList);
         }
 
         public override void WriteTimestamp(in uint index)
@@ -2009,52 +1998,52 @@ namespace Infinity.Graphics
 
         internal override void BeginPass(in RHIWorkGraphPassDescriptor descriptor)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Requires TerraFX SDK upgrade. Tracked: ROADMAP.md P2-1.");
+            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
         }
 
         public override void ResourceBarrier(in RHIResourceBarrier barrier)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Requires TerraFX SDK upgrade. Tracked: ROADMAP.md P2-1.");
+            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
         }
 
         public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Requires TerraFX SDK upgrade. Tracked: ROADMAP.md P2-1.");
+            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
         }
 
         public override void PushDebugGroup(string name)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Requires TerraFX SDK upgrade. Tracked: ROADMAP.md P2-1.");
+            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
         }
 
         public override void PopDebugGroup()
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Requires TerraFX SDK upgrade. Tracked: ROADMAP.md P2-1.");
+            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
         }
 
         public override void WriteTimestamp(in uint index)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Requires TerraFX SDK upgrade. Tracked: ROADMAP.md P2-1.");
+            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
         }
 
         public override void SetPipeline(RHIWorkGraphPipeline pipeline)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Requires TerraFX SDK upgrade. Tracked: ROADMAP.md P2-1.");
+            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
         }
 
         public override void SetBackingMemory(RHIBuffer backingMemory, ulong byteOffset, ulong byteSize)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Requires TerraFX SDK upgrade. Tracked: ROADMAP.md P2-1.");
+            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
         }
 
         public override void DispatchGraph(string entrypoint, uint numRecords, ulong inputRecordByteStride, RHIBuffer? inputRecordBuffer = null)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Requires TerraFX SDK upgrade. Tracked: ROADMAP.md P2-1.");
+            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
         }
 
         public override void EndPass()
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Requires TerraFX SDK upgrade. Tracked: ROADMAP.md P2-1.");
+            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
         }
 
         protected override void Release()
@@ -2062,3 +2051,4 @@ namespace Infinity.Graphics
         }
     }
 }
+

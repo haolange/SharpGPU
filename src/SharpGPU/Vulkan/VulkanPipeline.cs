@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 using Infinity.Mathmatics;
-using Evergine.Bindings.Vulkan;
+using Vortice.Vulkan;
 using System.Runtime.InteropServices;
 
 namespace Infinity.Graphics
@@ -21,26 +21,56 @@ namespace Infinity.Graphics
             m_PushConstantSize = descriptor.PushConstantSize;
 
             int layoutCount = descriptor.ArgumentTableLayouts != null ? descriptor.ArgumentTableLayouts.Length : 0;
-            VkDescriptorSetLayout* setLayouts = stackalloc VkDescriptorSetLayout[Math.Max(layoutCount, 1)];
-
+            int setLayoutCount = 0;
+            int maxSetIndex = -1;
             for (int i = 0; i < layoutCount; ++i)
             {
                 VulkanArgumentTableLayout vkLayout = descriptor.ArgumentTableLayouts[i] as VulkanArgumentTableLayout;
-                setLayouts[i] = vkLayout.NativeDescriptorSetLayout;
+                maxSetIndex = Math.Max(maxSetIndex, (int)vkLayout.Descriptor.Index);
+            }
+            if (maxSetIndex >= 0)
+            {
+                setLayoutCount = maxSetIndex + 1;
+            }
+
+            VkDescriptorSetLayout* setLayouts = stackalloc VkDescriptorSetLayout[Math.Max(setLayoutCount, 1)];
+            VkDescriptorSetLayout emptySetLayout = default;
+
+            if (setLayoutCount > 0)
+            {
+                VkDescriptorSetLayoutCreateInfo emptyLayoutInfo = new VkDescriptorSetLayoutCreateInfo()
+                {
+                    sType = VkStructureType.DescriptorSetLayoutCreateInfo,
+                    bindingCount = 0,
+                    pBindings = null,
+                };
+
+                VulkanUtility.CheckErrors(VulkanNative.vkCreateDescriptorSetLayout(device.NativeDevice, &emptyLayoutInfo, null, &emptySetLayout));
+
+                for (int i = 0; i < setLayoutCount; ++i)
+                {
+                    setLayouts[i] = emptySetLayout;
+                }
+
+                for (int i = 0; i < layoutCount; ++i)
+                {
+                    VulkanArgumentTableLayout vkLayout = descriptor.ArgumentTableLayouts[i] as VulkanArgumentTableLayout;
+                    setLayouts[(int)vkLayout.Descriptor.Index] = vkLayout.NativeDescriptorSetLayout;
+                }
             }
 
             VkPushConstantRange pushConstantRange = new VkPushConstantRange()
             {
-                stageFlags = VkShaderStageFlags.VK_SHADER_STAGE_ALL,
+                stageFlags = VkShaderStageFlags.All,
                 offset = 0,
                 size = descriptor.PushConstantSize,
             };
 
             VkPipelineLayoutCreateInfo layoutInfo = new VkPipelineLayoutCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                setLayoutCount = (uint)layoutCount,
-                pSetLayouts = layoutCount > 0 ? setLayouts : null,
+                sType = VkStructureType.PipelineLayoutCreateInfo,
+                setLayoutCount = (uint)setLayoutCount,
+                pSetLayouts = setLayoutCount > 0 ? setLayouts : null,
                 pushConstantRangeCount = descriptor.PushConstantSize > 0 ? 1u : 0u,
                 pPushConstantRanges = descriptor.PushConstantSize > 0 ? &pushConstantRange : null,
             };
@@ -48,6 +78,11 @@ namespace Infinity.Graphics
             fixed (VkPipelineLayout* layoutPtr = &m_NativePipelineLayout)
             {
                 VulkanUtility.CheckErrors(VulkanNative.vkCreatePipelineLayout(device.NativeDevice, &layoutInfo, null, layoutPtr));
+            }
+
+            if (emptySetLayout.Handle != 0)
+            {
+                VulkanNative.vkDestroyDescriptorSetLayout(device.NativeDevice, emptySetLayout, null);
             }
         }
 
@@ -77,7 +112,7 @@ namespace Infinity.Graphics
 
             VkComputePipelineCreateInfo pipelineInfo = new VkComputePipelineCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+                sType = VkStructureType.ComputePipelineCreateInfo,
                 stage = stageInfo,
                 layout = m_VulkanPipelineLayout.NativePipelineLayout,
             };
@@ -153,7 +188,7 @@ namespace Infinity.Graphics
                     {
                         binding = layout.Index,
                         stride = layout.Stride,
-                        inputRate = layout.StepMode == ERHIVertexStepMode.PerVertex ? VkVertexInputRate.VK_VERTEX_INPUT_RATE_VERTEX : VkVertexInputRate.VK_VERTEX_INPUT_RATE_INSTANCE,
+                        inputRate = layout.StepMode == ERHIVertexStepMode.PerVertex ? VkVertexInputRate.Vertex : VkVertexInputRate.Instance,
                     };
                     vertexBindingCount++;
 
@@ -175,7 +210,7 @@ namespace Infinity.Graphics
 
             VkPipelineVertexInputStateCreateInfo vertexInputInfo = new VkPipelineVertexInputStateCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                sType = VkStructureType.PipelineVertexInputStateCreateInfo,
                 vertexBindingDescriptionCount = (uint)vertexBindingCount,
                 pVertexBindingDescriptions = vertexBindingCount > 0 ? vertexBindings : null,
                 vertexAttributeDescriptionCount = (uint)vertexAttributeCount,
@@ -185,7 +220,7 @@ namespace Infinity.Graphics
             // Input assembly
             VkPipelineInputAssemblyStateCreateInfo inputAssembly = new VkPipelineInputAssemblyStateCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                sType = VkStructureType.PipelineInputAssemblyStateCreateInfo,
                 topology = VulkanUtility.ConvertToVkPrimitiveTopology(descriptor.PrimitiveAssembler.PrimitiveTopology),
                 primitiveRestartEnable = false,
             };
@@ -193,7 +228,7 @@ namespace Infinity.Graphics
             // Viewport state (dynamic)
             VkPipelineViewportStateCreateInfo viewportState = new VkPipelineViewportStateCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                sType = VkStructureType.PipelineViewportStateCreateInfo,
                 viewportCount = 1,
                 scissorCount = 1,
             };
@@ -201,8 +236,8 @@ namespace Infinity.Graphics
             // Rasterization state
             VkPipelineRasterizationStateCreateInfo rasterizer = new VkPipelineRasterizationStateCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-                depthClampEnable = descriptor.RenderState.RasterizerState.DepthClipEnable,
+                sType = VkStructureType.PipelineRasterizationStateCreateInfo,
+                depthClampEnable = !descriptor.RenderState.RasterizerState.DepthClipEnable,
                 rasterizerDiscardEnable = false,
                 polygonMode = VulkanUtility.ConvertToVkPolygonMode(descriptor.RenderState.RasterizerState.FillMode),
                 cullMode = VulkanUtility.ConvertToVkCullMode(descriptor.RenderState.RasterizerState.CullMode),
@@ -217,7 +252,7 @@ namespace Infinity.Graphics
             // Multisample state
             VkPipelineMultisampleStateCreateInfo multisampling = new VkPipelineMultisampleStateCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                sType = VkStructureType.PipelineMultisampleStateCreateInfo,
                 rasterizationSamples = VulkanUtility.ConvertToVkSampleCount(descriptor.SampleCount),
                 sampleShadingEnable = false,
                 minSampleShading = 1.0f,
@@ -233,7 +268,7 @@ namespace Infinity.Graphics
             // Depth stencil state
             VkPipelineDepthStencilStateCreateInfo depthStencil = new VkPipelineDepthStencilStateCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+                sType = VkStructureType.PipelineDepthStencilStateCreateInfo,
                 depthTestEnable = descriptor.RenderState.DepthStencilState.DepthEnable,
                 depthWriteEnable = descriptor.RenderState.DepthStencilState.DepthWriteMask,
                 depthCompareOp = VulkanUtility.ConvertToVkCompareOp(descriptor.RenderState.DepthStencilState.ComparisonMode),
@@ -295,7 +330,7 @@ namespace Infinity.Graphics
 
             VkPipelineColorBlendStateCreateInfo colorBlending = new VkPipelineColorBlendStateCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                sType = VkStructureType.PipelineColorBlendStateCreateInfo,
                 logicOpEnable = false,
                 attachmentCount = (uint)colorFormatCount,
                 pAttachments = colorFormatCount > 0 ? colorBlendAttachments : null,
@@ -303,14 +338,14 @@ namespace Infinity.Graphics
 
             // Dynamic state
             VkDynamicState* dynamicStates = stackalloc VkDynamicState[4];
-            dynamicStates[0] = VkDynamicState.VK_DYNAMIC_STATE_VIEWPORT;
-            dynamicStates[1] = VkDynamicState.VK_DYNAMIC_STATE_SCISSOR;
-            dynamicStates[2] = VkDynamicState.VK_DYNAMIC_STATE_STENCIL_REFERENCE;
-            dynamicStates[3] = VkDynamicState.VK_DYNAMIC_STATE_BLEND_CONSTANTS;
+            dynamicStates[0] = VkDynamicState.Viewport;
+            dynamicStates[1] = VkDynamicState.Scissor;
+            dynamicStates[2] = VkDynamicState.StencilReference;
+            dynamicStates[3] = VkDynamicState.BlendConstants;
 
             VkPipelineDynamicStateCreateInfo dynamicState = new VkPipelineDynamicStateCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                sType = VkStructureType.PipelineDynamicStateCreateInfo,
                 dynamicStateCount = 4,
                 pDynamicStates = dynamicStates,
             };
@@ -324,16 +359,16 @@ namespace Infinity.Graphics
 
             VkPipelineRenderingCreateInfo renderingInfo = new VkPipelineRenderingCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+                sType = VkStructureType.PipelineRenderingCreateInfo,
                 colorAttachmentCount = (uint)colorFormatCount,
                 pColorAttachmentFormats = colorFormatCount > 0 ? colorFormats : null,
-                depthAttachmentFormat = descriptor.DepthFormat != ERHIPixelFormat.Unknown ? VulkanUtility.ConvertToVkFormat(descriptor.DepthFormat) : VkFormat.VK_FORMAT_UNDEFINED,
-                stencilAttachmentFormat = (descriptor.DepthFormat == ERHIPixelFormat.D24_UNorm_S8_UInt || descriptor.DepthFormat == ERHIPixelFormat.D32_Float_S8_UInt) ? VulkanUtility.ConvertToVkFormat(descriptor.DepthFormat) : VkFormat.VK_FORMAT_UNDEFINED,
+                depthAttachmentFormat = descriptor.DepthFormat != ERHIPixelFormat.Unknown ? VulkanUtility.ConvertToVkFormat(descriptor.DepthFormat) : VkFormat.Undefined,
+                stencilAttachmentFormat = (descriptor.DepthFormat == ERHIPixelFormat.D24_UNorm_S8_UInt || descriptor.DepthFormat == ERHIPixelFormat.D32_Float_S8_UInt) ? VulkanUtility.ConvertToVkFormat(descriptor.DepthFormat) : VkFormat.Undefined,
             };
 
             VkGraphicsPipelineCreateInfo pipelineInfo = new VkGraphicsPipelineCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                sType = VkStructureType.GraphicsPipelineCreateInfo,
                 pNext = &renderingInfo,
                 stageCount = (uint)stageCount,
                 pStages = shaderStages,
@@ -422,15 +457,15 @@ namespace Infinity.Graphics
             // Ray generation
             stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                stage = VkShaderStageFlags.VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+                sType = VkStructureType.PipelineShaderStageCreateInfo,
+                stage = VkShaderStageFlags.RaygenKHR,
                 module = functionLibrary.NativeShaderModule,
                 pName = descriptor.RayGeneration.General.EntryName.ToPointer(),
             };
             groups[groupIdx] = new VkRayTracingShaderGroupCreateInfoKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-                type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+                sType = VkStructureType.RayTracingShaderGroupCreateInfoKHR,
+                type = VkRayTracingShaderGroupTypeKHR.General,
                 generalShader = (uint)stageIdx,
                 closestHitShader = unusedShader,
                 anyHitShader = unusedShader,
@@ -445,15 +480,15 @@ namespace Infinity.Graphics
                 ref RHIRayGeneralGroupDescriptor missGroup = ref descriptor.RayMissGroups.Span[i];
                 stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                    stage = VkShaderStageFlags.VK_SHADER_STAGE_MISS_BIT_KHR,
+                    sType = VkStructureType.PipelineShaderStageCreateInfo,
+                    stage = VkShaderStageFlags.MissKHR,
                     module = functionLibrary.NativeShaderModule,
                     pName = missGroup.General.EntryName.ToPointer(),
                 };
                 groups[groupIdx] = new VkRayTracingShaderGroupCreateInfoKHR()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-                    type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+                    sType = VkStructureType.RayTracingShaderGroupCreateInfoKHR,
+                    type = VkRayTracingShaderGroupTypeKHR.General,
                     generalShader = (uint)stageIdx,
                     closestHitShader = unusedShader,
                     anyHitShader = unusedShader,
@@ -469,8 +504,8 @@ namespace Infinity.Graphics
                 ref RHIRayHitGroupDescriptor hitGroup = ref descriptor.RayHitGroups.Span[i];
                 bool hasIntersection = hitGroup.Intersect.HasValue;
                 var groupType = hasIntersection
-                    ? VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR
-                    : VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+                    ? VkRayTracingShaderGroupTypeKHR.ProceduralHitGroup
+                    : VkRayTracingShaderGroupTypeKHR.TrianglesHitGroup;
 
                 uint closestHitIdx = unusedShader;
                 uint anyHitIdx = unusedShader;
@@ -480,8 +515,8 @@ namespace Infinity.Graphics
                 {
                     stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                        stage = VkShaderStageFlags.VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+                        sType = VkStructureType.PipelineShaderStageCreateInfo,
+                        stage = VkShaderStageFlags.ClosestHitKHR,
                         module = functionLibrary.NativeShaderModule,
                         pName = hitGroup.ClosestHit.Value.EntryName.ToPointer(),
                     };
@@ -493,8 +528,8 @@ namespace Infinity.Graphics
                 {
                     stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                        stage = VkShaderStageFlags.VK_SHADER_STAGE_ANY_HIT_BIT_KHR,
+                        sType = VkStructureType.PipelineShaderStageCreateInfo,
+                        stage = VkShaderStageFlags.AnyHitKHR,
                         module = functionLibrary.NativeShaderModule,
                         pName = hitGroup.AnyHit.Value.EntryName.ToPointer(),
                     };
@@ -506,8 +541,8 @@ namespace Infinity.Graphics
                 {
                     stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                        stage = VkShaderStageFlags.VK_SHADER_STAGE_INTERSECTION_BIT_KHR,
+                        sType = VkStructureType.PipelineShaderStageCreateInfo,
+                        stage = VkShaderStageFlags.IntersectionKHR,
                         module = functionLibrary.NativeShaderModule,
                         pName = hitGroup.Intersect.Value.EntryName.ToPointer(),
                     };
@@ -517,7 +552,7 @@ namespace Infinity.Graphics
 
                 groups[groupIdx] = new VkRayTracingShaderGroupCreateInfoKHR()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+                    sType = VkStructureType.RayTracingShaderGroupCreateInfoKHR,
                     type = groupType,
                     generalShader = unusedShader,
                     closestHitShader = closestHitIdx,
@@ -533,15 +568,15 @@ namespace Infinity.Graphics
                 ref RHIRayGeneralGroupDescriptor callableGroup = ref descriptor.RayCallableGroups.Span[i];
                 stages[stageIdx] = new VkPipelineShaderStageCreateInfo()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                    stage = VkShaderStageFlags.VK_SHADER_STAGE_CALLABLE_BIT_KHR,
+                    sType = VkStructureType.PipelineShaderStageCreateInfo,
+                    stage = VkShaderStageFlags.CallableKHR,
                     module = functionLibrary.NativeShaderModule,
                     pName = callableGroup.General.EntryName.ToPointer(),
                 };
                 groups[groupIdx] = new VkRayTracingShaderGroupCreateInfoKHR()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-                    type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+                    sType = VkStructureType.RayTracingShaderGroupCreateInfoKHR,
+                    type = VkRayTracingShaderGroupTypeKHR.General,
                     generalShader = (uint)stageIdx,
                     closestHitShader = unusedShader,
                     anyHitShader = unusedShader,
@@ -563,7 +598,7 @@ namespace Infinity.Graphics
 
             VkRayTracingPipelineCreateInfoKHR pipelineInfo = new VkRayTracingPipelineCreateInfoKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR,
+                sType = VkStructureType.RayTracingPipelineCreateInfoKHR,
                 stageCount = (uint)stageIdx,
                 pStages = stages,
                 groupCount = (uint)groupIdx,
@@ -598,7 +633,7 @@ namespace Infinity.Graphics
 
             VkPipelineCacheCreateInfo cacheInfo = new VkPipelineCacheCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+                sType = VkStructureType.PipelineCacheCreateInfo,
             };
 
             fixed (VkPipelineCache* cachePtr = &m_NativePipelineCache)
@@ -716,3 +751,5 @@ namespace Infinity.Graphics
         }
     }
 }
+
+

@@ -1,5 +1,5 @@
-using System;
-using Evergine.Bindings.Vulkan;
+﻿using System;
+using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -13,7 +13,7 @@ namespace Infinity.Graphics
             get
             {
                 VkResult result = VulkanNative.vkGetFenceStatus(m_VulkanDevice.NativeDevice, m_NativeFence);
-                return result == VkResult.VK_SUCCESS ? EFenceStatus.Success : EFenceStatus.NotReady;
+                return result == VkResult.Success ? EFenceStatus.Success : EFenceStatus.NotReady;
             }
         }
 
@@ -26,7 +26,7 @@ namespace Infinity.Graphics
 
             VkFenceCreateInfo fenceInfo = new VkFenceCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+                sType = VkStructureType.FenceCreateInfo,
                 flags = 0,
             };
 
@@ -59,3 +59,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
+
+

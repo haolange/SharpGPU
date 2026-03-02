@@ -1,8 +1,8 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Infinity.Mathmatics;
-using Evergine.Bindings.Vulkan;
+using Vortice.Vulkan;
 using Viewport = Infinity.Mathmatics.Viewport;
 
 namespace Infinity.Graphics
@@ -43,7 +43,7 @@ namespace Infinity.Graphics
                         VulkanBuffer vkBuffer = barrier.BufferBarrierInfo.Handle as VulkanBuffer;
                         VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
                         {
-                            sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                            sType = VkStructureType.BufferMemoryBarrier,
                             srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.SrcState),
                             dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.DstState),
                             buffer = vkBuffer.NativeBuffer,
@@ -51,20 +51,27 @@ namespace Infinity.Graphics
                             size = unchecked((ulong)(-1)),
                         };
                         VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                            VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                            VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                            VkPipelineStageFlags.AllCommands,
+                            VkPipelineStageFlags.AllCommands,
                             0, 0, null, 1, &bufferBarrier, 0, null);
                     }
                     else
                     {
                         VulkanTexture vkTexture = barrier.TextureBarrierInfo.Handle as VulkanTexture;
+                        VkImageLayout oldLayout = vkTexture.CurrentLayout;
+                        VkImageLayout newLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.DstState);
+                        if (newLayout == VkImageLayout.Undefined)
+                        {
+                            newLayout = oldLayout;
+                        }
+
                         VkImageMemoryBarrier imageBarrier = new VkImageMemoryBarrier()
                         {
-                            sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                            sType = VkStructureType.ImageMemoryBarrier,
                             srcAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.SrcState),
                             dstAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.DstState),
-                            oldLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.SrcState),
-                            newLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.DstState),
+                            oldLayout = oldLayout,
+                            newLayout = newLayout,
                             srcQueueFamilyIndex = unchecked((uint)(-1)),
                             dstQueueFamilyIndex = unchecked((uint)(-1)),
                             image = vkTexture.NativeImage,
@@ -78,9 +85,11 @@ namespace Infinity.Graphics
                             },
                         };
                         VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                            VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                            VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                            VkPipelineStageFlags.AllCommands,
+                            VkPipelineStageFlags.AllCommands,
                             0, 0, null, 0, null, 1, &imageBarrier);
+
+                        vkTexture.CurrentLayout = newLayout;
                     }
                     break;
 
@@ -88,13 +97,13 @@ namespace Infinity.Graphics
                 {
                     VkMemoryBarrier memBarrier = new VkMemoryBarrier()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-                        srcAccessMask = VkAccessFlags.VK_ACCESS_SHADER_WRITE_BIT,
-                        dstAccessMask = VkAccessFlags.VK_ACCESS_SHADER_READ_BIT | VkAccessFlags.VK_ACCESS_SHADER_WRITE_BIT,
+                        sType = VkStructureType.MemoryBarrier,
+                        srcAccessMask = VkAccessFlags.ShaderWrite,
+                        dstAccessMask = VkAccessFlags.ShaderRead | VkAccessFlags.ShaderWrite,
                     };
                     VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                        VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                        VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                        VkPipelineStageFlags.AllCommands,
+                        VkPipelineStageFlags.AllCommands,
                         0, 1, &memBarrier, 0, null, 0, null);
                     break;
                 }
@@ -129,7 +138,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
-                VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, vkQuery.NativeQueryPool, index);
+                VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.AllCommands, vkQuery.NativeQueryPool, index);
             }
         }
 
@@ -178,7 +187,7 @@ namespace Infinity.Graphics
                 imageExtent = new VkExtent3D() { width = (uint)size.x, height = (uint)size.y, depth = (uint)size.z },
             };
 
-            VulkanNative.vkCmdCopyBufferToImage(vkCmdBuf.NativeCommandBuffer, vkSrcBuffer.NativeBuffer, vkDstTexture.NativeImage, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            VulkanNative.vkCmdCopyBufferToImage(vkCmdBuf.NativeCommandBuffer, vkSrcBuffer.NativeBuffer, vkDstTexture.NativeImage, VkImageLayout.TransferDstOptimal, 1, &region);
         }
 
         public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size)
@@ -203,7 +212,7 @@ namespace Infinity.Graphics
                 imageExtent = new VkExtent3D() { width = (uint)size.x, height = (uint)size.y, depth = (uint)size.z },
             };
 
-            VulkanNative.vkCmdCopyImageToBuffer(vkCmdBuf.NativeCommandBuffer, vkSrcTexture.NativeImage, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vkDstBuffer.NativeBuffer, 1, &region);
+            VulkanNative.vkCmdCopyImageToBuffer(vkCmdBuf.NativeCommandBuffer, vkSrcTexture.NativeImage, VkImageLayout.TransferSrcOptimal, vkDstBuffer.NativeBuffer, 1, &region);
         }
 
         public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
@@ -233,7 +242,7 @@ namespace Infinity.Graphics
                 extent = new VkExtent3D() { width = (uint)size.x, height = (uint)size.y, depth = (uint)size.z },
             };
 
-            VulkanNative.vkCmdCopyImage(vkCmdBuf.NativeCommandBuffer, vkSrc.NativeImage, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vkDst.NativeImage, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            VulkanNative.vkCmdCopyImage(vkCmdBuf.NativeCommandBuffer, vkSrc.NativeImage, VkImageLayout.TransferSrcOptimal, vkDst.NativeImage, VkImageLayout.TransferDstOptimal, 1, &region);
         }
 
         public override void EndPass()
@@ -285,7 +294,7 @@ namespace Infinity.Graphics
                     VulkanBuffer vkBuffer = barrier.BufferBarrierInfo.Handle as VulkanBuffer;
                     VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                        sType = VkStructureType.BufferMemoryBarrier,
                         srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.SrcState),
                         dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.DstState),
                         buffer = vkBuffer.NativeBuffer,
@@ -293,20 +302,27 @@ namespace Infinity.Graphics
                         size = unchecked((ulong)(-1)),
                     };
                     VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                        VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                        VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                        VkPipelineStageFlags.ComputeShader,
+                        VkPipelineStageFlags.ComputeShader,
                         0, 0, null, 1, &bufferBarrier, 0, null);
                 }
                 else
                 {
                     VulkanTexture vkTexture = barrier.TextureBarrierInfo.Handle as VulkanTexture;
+                    VkImageLayout oldLayout = vkTexture.CurrentLayout;
+                    VkImageLayout newLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.DstState);
+                    if (newLayout == VkImageLayout.Undefined)
+                    {
+                        newLayout = oldLayout;
+                    }
+
                     VkImageMemoryBarrier imageBarrier = new VkImageMemoryBarrier()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                        sType = VkStructureType.ImageMemoryBarrier,
                         srcAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.SrcState),
                         dstAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.DstState),
-                        oldLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.SrcState),
-                        newLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.DstState),
+                        oldLayout = oldLayout,
+                        newLayout = newLayout,
                         srcQueueFamilyIndex = unchecked((uint)(-1)),
                         dstQueueFamilyIndex = unchecked((uint)(-1)),
                         image = vkTexture.NativeImage,
@@ -320,22 +336,24 @@ namespace Infinity.Graphics
                         },
                     };
                     VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                        VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                        VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                        VkPipelineStageFlags.ComputeShader,
+                        VkPipelineStageFlags.ComputeShader,
                         0, 0, null, 0, null, 1, &imageBarrier);
+
+                    vkTexture.CurrentLayout = newLayout;
                 }
             }
             else
             {
                 VkMemoryBarrier memBarrier = new VkMemoryBarrier()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-                    srcAccessMask = VkAccessFlags.VK_ACCESS_SHADER_WRITE_BIT,
-                    dstAccessMask = VkAccessFlags.VK_ACCESS_SHADER_READ_BIT | VkAccessFlags.VK_ACCESS_SHADER_WRITE_BIT,
+                    sType = VkStructureType.MemoryBarrier,
+                    srcAccessMask = VkAccessFlags.ShaderWrite,
+                    dstAccessMask = VkAccessFlags.ShaderRead | VkAccessFlags.ShaderWrite,
                 };
                 VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                    VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VkPipelineStageFlags.ComputeShader,
+                    VkPipelineStageFlags.ComputeShader,
                     0, 1, &memBarrier, 0, null, 0, null);
             }
         }
@@ -366,7 +384,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
-                VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, vkQuery.NativeQueryPool, index);
+                VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.ComputeShader, vkQuery.NativeQueryPool, index);
             }
         }
 
@@ -397,7 +415,7 @@ namespace Infinity.Graphics
 
             VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                sType = VkStructureType.BufferMemoryBarrier,
                 srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(srcState),
                 dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(dstState),
                 buffer = vkBuffer.NativeBuffer,
@@ -406,8 +424,8 @@ namespace Infinity.Graphics
             };
 
             VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VkPipelineStageFlags.ComputeShader,
+                VkPipelineStageFlags.ComputeShader,
                 0, 0, null, 1, &bufferBarrier, 0, null);
         }
 
@@ -418,7 +436,7 @@ namespace Infinity.Graphics
 
             VkImageMemoryBarrier imageBarrier = new VkImageMemoryBarrier()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                sType = VkStructureType.ImageMemoryBarrier,
                 srcAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(srcState),
                 dstAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(dstState),
                 oldLayout = VulkanUtility.ConvertToVkImageLayout(srcState),
@@ -437,8 +455,8 @@ namespace Infinity.Graphics
             };
 
             VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VkPipelineStageFlags.ComputeShader,
+                VkPipelineStageFlags.ComputeShader,
                 0, 0, null, 0, null, 1, &imageBarrier);
         }
 
@@ -447,7 +465,7 @@ namespace Infinity.Graphics
             m_CachedPipeline = pipeline;
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
             VulkanComputePipeline vkPipeline = pipeline as VulkanComputePipeline;
-            VulkanNative.vkCmdBindPipeline(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_COMPUTE, vkPipeline.NativePipeline);
+            VulkanNative.vkCmdBindPipeline(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.Compute, vkPipeline.NativePipeline);
         }
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
@@ -456,7 +474,7 @@ namespace Infinity.Graphics
             VulkanArgumentTable vkArgumentTable = resourceTable as VulkanArgumentTable;
             VulkanComputePipeline vkPipeline = m_CachedPipeline as VulkanComputePipeline;
             VkDescriptorSet set = vkArgumentTable.NativeDescriptorSet;
-            VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_COMPUTE, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
+            VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.Compute, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
@@ -466,7 +484,7 @@ namespace Infinity.Graphics
 #if DEBUG
             Debug.Assert(offset + size <= vkPipeline.VulkanPipelineLayout.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({vkPipeline.VulkanPipelineLayout.PushConstantSize}).");
 #endif
-            VulkanNative.vkCmdPushConstants(vkCmdBuf.NativeCommandBuffer, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, VkShaderStageFlags.VK_SHADER_STAGE_ALL, offset, size, data.ToPointer());
+            VulkanNative.vkCmdPushConstants(vkCmdBuf.NativeCommandBuffer, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, VkShaderStageFlags.All, offset, size, data.ToPointer());
         }
 
         public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
@@ -505,6 +523,11 @@ namespace Infinity.Graphics
     internal unsafe class VulkanRasterEncoder : RHIRasterEncoder
     {
         private RHIRasterPassDescriptor m_PassDescriptor;
+        private bool m_RenderingActive;
+        private bool m_HasIssuedDraw;
+        private VkImageView[]? m_ActiveColorAttachmentViews;
+        private VkImageView m_ActiveDepthAttachmentView;
+        private bool m_ActiveHasDepthAttachmentView;
 
         public VulkanRasterEncoder(VulkanCommandBuffer cmdBuffer)
         {
@@ -514,6 +537,7 @@ namespace Infinity.Graphics
         internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
         {
             m_PassDescriptor = descriptor;
+            m_HasIssuedDraw = false;
 #if DEBUG
             PushDebugGroup(descriptor.Name);
 #endif
@@ -521,11 +545,22 @@ namespace Infinity.Graphics
             {
                 WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
             }
+            BeginRenderingIfNeeded();
+        }
+
+        private void BeginRenderingIfNeeded()
+        {
+            if (m_RenderingActive)
+            {
+                return;
+            }
 
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            DestroyActiveAttachmentViews(vkQueue);
 
-            // Use dynamic rendering (Vulkan 1.3)
-            int colorAttachmentCount = descriptor.ColorAttachments.Length;
+            int colorAttachmentCount = m_PassDescriptor.ColorAttachments.Length;
+            m_ActiveColorAttachmentViews = colorAttachmentCount > 0 ? new VkImageView[colorAttachmentCount] : null;
             VkRenderingAttachmentInfo* colorAttachments = stackalloc VkRenderingAttachmentInfo[Math.Max(colorAttachmentCount, 1)];
 
             uint renderWidth = 0;
@@ -533,19 +568,18 @@ namespace Infinity.Graphics
 
             for (int i = 0; i < colorAttachmentCount; ++i)
             {
-                ref RHIColorAttachmentDescriptor colorDesc = ref descriptor.ColorAttachments.Span[i];
+                ref RHIColorAttachmentDescriptor colorDesc = ref m_PassDescriptor.ColorAttachments.Span[i];
                 VulkanTexture vkTexture = colorDesc.RenderTarget as VulkanTexture;
 
-                // Create inline image view
                 VkImageViewCreateInfo viewInfo = new VkImageViewCreateInfo()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    sType = VkStructureType.ImageViewCreateInfo,
                     image = vkTexture.NativeImage,
-                    viewType = VkImageViewType.VK_IMAGE_VIEW_TYPE_2D,
+                    viewType = VkImageViewType.Image2D,
                     format = VulkanUtility.ConvertToVkFormat(vkTexture.Descriptor.Format),
                     subresourceRange = new VkImageSubresourceRange()
                     {
-                        aspectMask = VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT,
+                        aspectMask = VkImageAspectFlags.Color,
                         baseMipLevel = colorDesc.MipLevel,
                         levelCount = 1,
                         baseArrayLayer = colorDesc.ArraySlice,
@@ -553,9 +587,9 @@ namespace Infinity.Graphics
                     },
                 };
 
-                VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
                 VkImageView imageView;
                 VulkanNative.vkCreateImageView(vkQueue.VulkanDevice.NativeDevice, &viewInfo, null, &imageView);
+                m_ActiveColorAttachmentViews![i] = imageView;
 
                 VkClearValue clearValue = default;
                 clearValue.color.float32[0] = colorDesc.ClearValue.x;
@@ -565,9 +599,9 @@ namespace Infinity.Graphics
 
                 colorAttachments[i] = new VkRenderingAttachmentInfo()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                    sType = VkStructureType.RenderingAttachmentInfo,
                     imageView = imageView,
-                    imageLayout = VkImageLayout.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                    imageLayout = VkImageLayout.ColorAttachmentOptimal,
                     loadOp = VulkanUtility.ConvertToVkLoadOp(colorDesc.LoadAction),
                     storeOp = VulkanUtility.ConvertToVkStoreOp(colorDesc.StoreAction),
                     clearValue = clearValue,
@@ -580,21 +614,19 @@ namespace Infinity.Graphics
                 }
             }
 
-            // Depth stencil
             VkRenderingAttachmentInfo depthAttachment = default;
             VkRenderingAttachmentInfo* pDepthAttachment = null;
-            VkImageView depthImageView = default;
 
-            if (descriptor.DepthStencilAttachment.HasValue)
+            if (m_PassDescriptor.DepthStencilAttachment.HasValue)
             {
-                RHIDepthStencilAttachmentDescriptor depthDesc = descriptor.DepthStencilAttachment.Value;
+                RHIDepthStencilAttachmentDescriptor depthDesc = m_PassDescriptor.DepthStencilAttachment.Value;
                 VulkanTexture vkDepthTexture = depthDesc.RenderTarget as VulkanTexture;
 
                 VkImageViewCreateInfo depthViewInfo = new VkImageViewCreateInfo()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    sType = VkStructureType.ImageViewCreateInfo,
                     image = vkDepthTexture.NativeImage,
-                    viewType = VkImageViewType.VK_IMAGE_VIEW_TYPE_2D,
+                    viewType = VkImageViewType.Image2D,
                     format = VulkanUtility.ConvertToVkFormat(vkDepthTexture.Descriptor.Format),
                     subresourceRange = new VkImageSubresourceRange()
                     {
@@ -606,18 +638,17 @@ namespace Infinity.Graphics
                     },
                 };
 
-                VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+                VkImageView depthImageView;
                 VulkanNative.vkCreateImageView(vkQueue.VulkanDevice.NativeDevice, &depthViewInfo, null, &depthImageView);
+                m_ActiveDepthAttachmentView = depthImageView;
+                m_ActiveHasDepthAttachmentView = true;
 
-                VkClearValue depthClearValue = default;
-                depthClearValue.depthStencil.depth = depthDesc.DepthClearValue;
-                depthClearValue.depthStencil.stencil = (uint)depthDesc.StencilClearValue;
-
+                VkClearValue depthClearValue = new VkClearValue(depthDesc.DepthClearValue, (uint)depthDesc.StencilClearValue);
                 depthAttachment = new VkRenderingAttachmentInfo()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-                    imageView = depthImageView,
-                    imageLayout = VkImageLayout.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                    sType = VkStructureType.RenderingAttachmentInfo,
+                    imageView = m_ActiveDepthAttachmentView,
+                    imageLayout = VkImageLayout.DepthStencilAttachmentOptimal,
                     loadOp = VulkanUtility.ConvertToVkLoadOp(depthDesc.DepthLoadOp),
                     storeOp = VulkanUtility.ConvertToVkStoreOp(depthDesc.DepthStoreOp),
                     clearValue = depthClearValue,
@@ -633,7 +664,7 @@ namespace Infinity.Graphics
 
             VkRenderingInfo renderingInfo = new VkRenderingInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_RENDERING_INFO,
+                sType = VkStructureType.RenderingInfo,
                 renderArea = new VkRect2D()
                 {
                     offset = new VkOffset2D() { x = 0, y = 0 },
@@ -647,10 +678,50 @@ namespace Infinity.Graphics
             };
 
             VulkanNative.vkCmdBeginRendering(vkCmdBuf.NativeCommandBuffer, &renderingInfo);
+            m_RenderingActive = true;
+        }
+
+        private void EndRenderingIfNeeded()
+        {
+            if (!m_RenderingActive)
+            {
+                return;
+            }
+
+            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanNative.vkCmdEndRendering(vkCmdBuf.NativeCommandBuffer);
+            m_RenderingActive = false;
+            DestroyActiveAttachmentViews(vkQueue);
+        }
+
+        private void DestroyActiveAttachmentViews(VulkanCommandQueue vkQueue)
+        {
+            if (m_ActiveColorAttachmentViews != null)
+            {
+                for (int i = 0; i < m_ActiveColorAttachmentViews.Length; ++i)
+                {
+                    if (!m_ActiveColorAttachmentViews[i].Equals(default(VkImageView)))
+                    {
+                        VulkanNative.vkDestroyImageView(vkQueue.VulkanDevice.NativeDevice, m_ActiveColorAttachmentViews[i], null);
+                    }
+                }
+                m_ActiveColorAttachmentViews = null;
+            }
+
+            if (m_ActiveHasDepthAttachmentView && !m_ActiveDepthAttachmentView.Equals(default(VkImageView)))
+            {
+                VulkanNative.vkDestroyImageView(vkQueue.VulkanDevice.NativeDevice, m_ActiveDepthAttachmentView, null);
+            }
+
+            m_ActiveDepthAttachmentView = default;
+            m_ActiveHasDepthAttachmentView = false;
         }
 
         public override void ResourceBarrier(in RHIResourceBarrier barrier)
         {
+            EndRenderingIfNeeded();
+
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
 
             if (barrier.ResourceBarrierType == ERHIResourceBarrierType.Triansition)
@@ -658,13 +729,20 @@ namespace Infinity.Graphics
                 if (barrier.ResourceType == ERHIResourceType.Texture)
                 {
                     VulkanTexture vkTexture = barrier.TextureBarrierInfo.Handle as VulkanTexture;
+                    VkImageLayout oldLayout = vkTexture.CurrentLayout;
+                    VkImageLayout newLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.DstState);
+                    if (newLayout == VkImageLayout.Undefined)
+                    {
+                        newLayout = oldLayout;
+                    }
+
                     VkImageMemoryBarrier imageBarrier = new VkImageMemoryBarrier()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                        sType = VkStructureType.ImageMemoryBarrier,
                         srcAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.SrcState),
                         dstAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.DstState),
-                        oldLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.SrcState),
-                        newLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.DstState),
+                        oldLayout = oldLayout,
+                        newLayout = newLayout,
                         srcQueueFamilyIndex = unchecked((uint)(-1)),
                         dstQueueFamilyIndex = unchecked((uint)(-1)),
                         image = vkTexture.NativeImage,
@@ -677,11 +755,26 @@ namespace Infinity.Graphics
                             layerCount = unchecked((uint)(-1)),
                         },
                     };
-                    VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                        VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
-                        VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
-                        0, 0, null, 0, null, 1, &imageBarrier);
+
+                    VulkanNative.vkCmdPipelineBarrier(
+                        vkCmdBuf.NativeCommandBuffer,
+                        VkPipelineStageFlags.AllCommands,
+                        VkPipelineStageFlags.AllCommands,
+                        0,
+                        0,
+                        null,
+                        0,
+                        null,
+                        1,
+                        &imageBarrier);
+
+                    vkTexture.CurrentLayout = newLayout;
                 }
+            }
+
+            if (!m_HasIssuedDraw)
+            {
+                BeginRenderingIfNeeded();
             }
         }
 
@@ -711,7 +804,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
-                VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, vkQuery.NativeQueryPool, index);
+                VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.AllGraphics, vkQuery.NativeQueryPool, index);
             }
         }
 
@@ -721,7 +814,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Occlusion.Value.Query as VulkanQuery;
-                VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, VkQueryControlFlags.VK_QUERY_CONTROL_PRECISE_BIT);
+                VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, VkQueryControlFlags.Precise);
             }
         }
 
@@ -825,13 +918,18 @@ namespace Infinity.Graphics
         public override void SetStencilRef(in uint value)
         {
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanNative.vkCmdSetStencilReference(vkCmdBuf.NativeCommandBuffer, VkStencilFaceFlags.VK_STENCIL_FACE_FRONT_AND_BACK, value);
+            VulkanNative.vkCmdSetStencilReference(vkCmdBuf.NativeCommandBuffer, VkStencilFaceFlags.FrontAndBack, value);
         }
 
         public override void SetBlendFactor(in float4 value)
         {
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanNative.vkCmdSetBlendConstants(vkCmdBuf.NativeCommandBuffer, value.x);
+            float* blendConstants = stackalloc float[4];
+            blendConstants[0] = value.x;
+            blendConstants[1] = value.y;
+            blendConstants[2] = value.z;
+            blendConstants[3] = value.w;
+            VulkanNative.vkCmdSetBlendConstants(vkCmdBuf.NativeCommandBuffer, blendConstants);
         }
 
         public override void SetPipeline(RHIRasterPipeline pipeline)
@@ -839,7 +937,7 @@ namespace Infinity.Graphics
             m_CachedPipeline = pipeline;
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
             VulkanRasterPipeline vkPipeline = pipeline as VulkanRasterPipeline;
-            VulkanNative.vkCmdBindPipeline(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline.NativePipeline);
+            VulkanNative.vkCmdBindPipeline(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.Graphics, vkPipeline.NativePipeline);
         }
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
@@ -848,7 +946,7 @@ namespace Infinity.Graphics
             VulkanArgumentTable vkArgumentTable = resourceTable as VulkanArgumentTable;
             VulkanRasterPipeline vkPipeline = m_CachedPipeline as VulkanRasterPipeline;
             VkDescriptorSet set = vkArgumentTable.NativeDescriptorSet;
-            VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
+            VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.Graphics, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
@@ -858,14 +956,19 @@ namespace Infinity.Graphics
 #if DEBUG
             Debug.Assert(offset + size <= vkPipeline.VulkanPipelineLayout.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({vkPipeline.VulkanPipelineLayout.PushConstantSize}).");
 #endif
-            VulkanNative.vkCmdPushConstants(vkCmdBuf.NativeCommandBuffer, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, VkShaderStageFlags.VK_SHADER_STAGE_ALL, offset, size, data.ToPointer());
+            VulkanNative.vkCmdPushConstants(vkCmdBuf.NativeCommandBuffer, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, VkShaderStageFlags.All, offset, size, data.ToPointer());
         }
 
         public override void SetIndexBuffer(RHIBuffer buffer, in uint offset)
         {
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
             VulkanBuffer vkBuffer = buffer as VulkanBuffer;
-            VulkanNative.vkCmdBindIndexBuffer(vkCmdBuf.NativeCommandBuffer, vkBuffer.NativeBuffer, offset, VkIndexType.VK_INDEX_TYPE_UINT32);
+            VkIndexType indexType = buffer.Descriptor.Format switch
+            {
+                ERHIBufferFormat.UInt16 => VkIndexType.Uint16,
+                _ => VkIndexType.Uint32,
+            };
+            VulkanNative.vkCmdBindIndexBuffer(vkCmdBuf.NativeCommandBuffer, vkBuffer.NativeBuffer, offset, indexType);
         }
 
         public override void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset)
@@ -879,28 +982,32 @@ namespace Infinity.Graphics
 
         public override void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-
-            VkExtent2D fragmentSize = VulkanUtility.ConvertToVkFragmentExtent(shadingRate);
-            VkFragmentShadingRateCombinerOpKHR combiner0 = VulkanUtility.ConvertToVkShadingRateCombiner(shadingRateCombiner);
-
-            VulkanNative.vkCmdSetFragmentShadingRateKHR(vkCmdBuf.NativeCommandBuffer, &fragmentSize, combiner0);
+            // TODO: Enable only when bound pipeline declares VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR.
+            // Calling vkCmdSetFragmentShadingRateKHR unconditionally causes validation failures for static pipelines.
+            _ = shadingRate;
+            _ = shadingRateCombiner;
         }
 
         public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
         {
+            BeginRenderingIfNeeded();
+            m_HasIssuedDraw = true;
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
             VulkanNative.vkCmdDraw(vkCmdBuf.NativeCommandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
         }
 
         public override void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
         {
+            BeginRenderingIfNeeded();
+            m_HasIssuedDraw = true;
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
             VulkanNative.vkCmdDrawIndexed(vkCmdBuf.NativeCommandBuffer, indexCount, instanceCount, firstIndex, (int)baseVertex, firstInstance);
         }
 
         public override void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
+            BeginRenderingIfNeeded();
+            m_HasIssuedDraw = true;
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
             VulkanBuffer vkArgs = argsBuffer as VulkanBuffer;
             VulkanNative.vkCmdDrawIndirect(vkCmdBuf.NativeCommandBuffer, vkArgs.NativeBuffer, offset, drawCount, 20);
@@ -908,6 +1015,8 @@ namespace Infinity.Graphics
 
         public override void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
+            BeginRenderingIfNeeded();
+            m_HasIssuedDraw = true;
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
             VulkanBuffer vkArgs = argsBuffer as VulkanBuffer;
             VulkanNative.vkCmdDrawIndexedIndirect(vkCmdBuf.NativeCommandBuffer, vkArgs.NativeBuffer, offset, drawCount, 20);
@@ -915,12 +1024,16 @@ namespace Infinity.Graphics
 
         public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
+            BeginRenderingIfNeeded();
+            m_HasIssuedDraw = true;
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
             VulkanNative.vkCmdDrawMeshTasksEXT(vkCmdBuf.NativeCommandBuffer, groupCountX, groupCountY, groupCountZ);
         }
 
         public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
+            BeginRenderingIfNeeded();
+            m_HasIssuedDraw = true;
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
             VulkanBuffer vkArgs = argsBuffer as VulkanBuffer;
             VulkanNative.vkCmdDrawMeshTasksIndirectEXT(vkCmdBuf.NativeCommandBuffer, vkArgs.NativeBuffer, argsOffset, 1, 0);
@@ -933,8 +1046,7 @@ namespace Infinity.Graphics
 
         public override void EndPass()
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanNative.vkCmdEndRendering(vkCmdBuf.NativeCommandBuffer);
+            EndRenderingIfNeeded();
 
             if (m_PassDescriptor.Timestamp.HasValue)
             {
@@ -979,7 +1091,7 @@ namespace Infinity.Graphics
                 VulkanBuffer vkBuffer = barrier.BufferBarrierInfo.Handle as VulkanBuffer;
                 VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                    sType = VkStructureType.BufferMemoryBarrier,
                     srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.SrcState),
                     dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.DstState),
                     buffer = vkBuffer.NativeBuffer,
@@ -987,8 +1099,8 @@ namespace Infinity.Graphics
                     size = unchecked((ulong)(-1)),
                 };
                 VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                    VkPipelineStageFlags.VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                    VkPipelineStageFlags.VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                    VkPipelineStageFlags.RayTracingShaderKHR,
+                    VkPipelineStageFlags.RayTracingShaderKHR,
                     0, 0, null, 1, &bufferBarrier, 0, null);
             }
         }
@@ -1019,7 +1131,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
-                VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, vkQuery.NativeQueryPool, index);
+                VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.RayTracingShaderKHR, vkQuery.NativeQueryPool, index);
             }
         }
 
@@ -1049,7 +1161,7 @@ namespace Infinity.Graphics
             VulkanBuffer vkBuffer = buffer as VulkanBuffer;
             VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                sType = VkStructureType.BufferMemoryBarrier,
                 srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(srcState),
                 dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(dstState),
                 buffer = vkBuffer.NativeBuffer,
@@ -1057,8 +1169,8 @@ namespace Infinity.Graphics
                 size = unchecked((ulong)(-1)),
             };
             VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                VkPipelineStageFlags.VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                VkPipelineStageFlags.VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                VkPipelineStageFlags.RayTracingShaderKHR,
+                VkPipelineStageFlags.RayTracingShaderKHR,
                 0, 0, null, 1, &bufferBarrier, 0, null);
         }
 
@@ -1068,7 +1180,7 @@ namespace Infinity.Graphics
             VulkanTexture vkTexture = texture as VulkanTexture;
             VkImageMemoryBarrier imageBarrier = new VkImageMemoryBarrier()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                sType = VkStructureType.ImageMemoryBarrier,
                 srcAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(srcState),
                 dstAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(dstState),
                 oldLayout = VulkanUtility.ConvertToVkImageLayout(srcState),
@@ -1086,8 +1198,8 @@ namespace Infinity.Graphics
                 },
             };
             VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                VkPipelineStageFlags.VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-                VkPipelineStageFlags.VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                VkPipelineStageFlags.RayTracingShaderKHR,
+                VkPipelineStageFlags.RayTracingShaderKHR,
                 0, 0, null, 0, null, 1, &imageBarrier);
         }
 
@@ -1098,7 +1210,7 @@ namespace Infinity.Graphics
             VulkanRaytracingPipeline vkPipeline = pipeline as VulkanRaytracingPipeline;
             if (vkPipeline.NativePipeline.Handle != 0)
             {
-                VulkanNative.vkCmdBindPipeline(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkPipeline.NativePipeline);
+                VulkanNative.vkCmdBindPipeline(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.RayTracingKHR, vkPipeline.NativePipeline);
             }
         }
 
@@ -1108,7 +1220,7 @@ namespace Infinity.Graphics
             VulkanArgumentTable vkArgumentTable = resourceTable as VulkanArgumentTable;
             VulkanRaytracingPipeline vkPipeline = m_CachedPipeline as VulkanRaytracingPipeline;
             VkDescriptorSet set = vkArgumentTable.NativeDescriptorSet;
-            VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
+            VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.RayTracingKHR, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
         }
 
         public override void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct)
@@ -1119,7 +1231,7 @@ namespace Infinity.Graphics
             // Get instance buffer device address
             VkBufferDeviceAddressInfo instanceAddrInfo = new VkBufferDeviceAddressInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                sType = VkStructureType.BufferDeviceAddressInfo,
                 buffer = vkTLAS.NativeInstanceBuffer,
             };
             VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
@@ -1127,29 +1239,29 @@ namespace Infinity.Graphics
 
             VkAccelerationStructureGeometryKHR geometry = new VkAccelerationStructureGeometryKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-                geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_INSTANCES_KHR,
-                flags = VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR,
+                sType = VkStructureType.AccelerationStructureGeometryKHR,
+                geometryType = VkGeometryTypeKHR.Instances,
+                flags = VkGeometryFlagsKHR.Opaque,
             };
-            geometry.geometry.instances.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+            geometry.geometry.instances.sType = VkStructureType.AccelerationStructureGeometryInstancesDataKHR;
             geometry.geometry.instances.arrayOfPointers = false;
             geometry.geometry.instances.data.deviceAddress = instanceBufferAddress;
 
             // Get scratch buffer device address
             VkBufferDeviceAddressInfo scratchAddrInfo = new VkBufferDeviceAddressInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                sType = VkStructureType.BufferDeviceAddressInfo,
                 buffer = vkTLAS.NativeScratchBuffer,
             };
             ulong scratchAddress = VulkanNative.vkGetBufferDeviceAddress(vkQueue.VulkanDevice.NativeDevice, &scratchAddrInfo);
 
             VkAccelerationStructureBuildGeometryInfoKHR buildInfo = new VkAccelerationStructureBuildGeometryInfoKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-                type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-                flags = VkBuildAccelerationStructureFlagsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
-                        VkBuildAccelerationStructureFlagsKHR.VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
-                mode = VkBuildAccelerationStructureModeKHR.VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+                sType = VkStructureType.AccelerationStructureBuildGeometryInfoKHR,
+                type = VkAccelerationStructureTypeKHR.TopLevel,
+                flags = VkBuildAccelerationStructureFlagsKHR.PreferFastTrace |
+                        VkBuildAccelerationStructureFlagsKHR.AllowUpdate,
+                mode = VkBuildAccelerationStructureModeKHR.Build,
                 dstAccelerationStructure = vkTLAS.NativeAccelerationStructure,
                 geometryCount = 1,
                 pGeometries = &geometry,
@@ -1190,18 +1302,18 @@ namespace Infinity.Graphics
                     VulkanBuffer vertexBuffer = triangleGeometry.VertexBuffer as VulkanBuffer;
                     VkBufferDeviceAddressInfo vertexAddrInfo = new VkBufferDeviceAddressInfo()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                        sType = VkStructureType.BufferDeviceAddressInfo,
                         buffer = vertexBuffer.NativeBuffer,
                     };
                     ulong vertexAddress = VulkanNative.vkGetBufferDeviceAddress(vkQueue.VulkanDevice.NativeDevice, &vertexAddrInfo);
 
                     geometries[i] = new VkAccelerationStructureGeometryKHR()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-                        geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_TRIANGLES_KHR,
-                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR : 0,
+                        sType = VkStructureType.AccelerationStructureGeometryKHR,
+                        geometryType = VkGeometryTypeKHR.Triangles,
+                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
                     };
-                    geometries[i].geometry.triangles.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+                    geometries[i].geometry.triangles.sType = VkStructureType.AccelerationStructureGeometryTrianglesDataKHR;
                     geometries[i].geometry.triangles.vertexFormat = VulkanUtility.ConvertToVkFormat(triangleGeometry.VertexFormat);
                     geometries[i].geometry.triangles.vertexData.deviceAddress = vertexAddress + triangleGeometry.VertexOffset;
                     geometries[i].geometry.triangles.vertexStride = triangleGeometry.VertexStride;
@@ -1212,7 +1324,7 @@ namespace Infinity.Graphics
                         VulkanBuffer indexBuffer = triangleGeometry.IndexBuffer as VulkanBuffer;
                         VkBufferDeviceAddressInfo indexAddrInfo = new VkBufferDeviceAddressInfo()
                         {
-                            sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                            sType = VkStructureType.BufferDeviceAddressInfo,
                             buffer = indexBuffer.NativeBuffer,
                         };
                         ulong indexAddress = VulkanNative.vkGetBufferDeviceAddress(vkQueue.VulkanDevice.NativeDevice, &indexAddrInfo);
@@ -1222,7 +1334,7 @@ namespace Infinity.Graphics
                     }
                     else
                     {
-                        geometries[i].geometry.triangles.indexType = VkIndexType.VK_INDEX_TYPE_NONE_KHR;
+                        geometries[i].geometry.triangles.indexType = VkIndexType.NoneKHR;
                         rangeInfos[i].primitiveCount = triangleGeometry.VertexCount / 3;
                     }
                 }
@@ -1232,18 +1344,18 @@ namespace Infinity.Graphics
                     VulkanBuffer aabbBuffer = aabbGeometry.AABBBuffer as VulkanBuffer;
                     VkBufferDeviceAddressInfo aabbAddrInfo = new VkBufferDeviceAddressInfo()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                        sType = VkStructureType.BufferDeviceAddressInfo,
                         buffer = aabbBuffer.NativeBuffer,
                     };
                     ulong aabbAddress = VulkanNative.vkGetBufferDeviceAddress(vkQueue.VulkanDevice.NativeDevice, &aabbAddrInfo);
 
                     geometries[i] = new VkAccelerationStructureGeometryKHR()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-                        geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_AABBS_KHR,
-                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR : 0,
+                        sType = VkStructureType.AccelerationStructureGeometryKHR,
+                        geometryType = VkGeometryTypeKHR.Aabbs,
+                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
                     };
-                    geometries[i].geometry.aabbs.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
+                    geometries[i].geometry.aabbs.sType = VkStructureType.AccelerationStructureGeometryAabbsDataKHR;
                     geometries[i].geometry.aabbs.data.deviceAddress = aabbAddress + aabbGeometry.Offset;
                     geometries[i].geometry.aabbs.stride = aabbGeometry.Stride;
                     rangeInfos[i].primitiveCount = aabbGeometry.Count;
@@ -1253,17 +1365,17 @@ namespace Infinity.Graphics
             // Get scratch buffer device address
             VkBufferDeviceAddressInfo scratchAddrInfo = new VkBufferDeviceAddressInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                sType = VkStructureType.BufferDeviceAddressInfo,
                 buffer = vkBLAS.NativeScratchBuffer,
             };
             ulong scratchAddress = VulkanNative.vkGetBufferDeviceAddress(vkQueue.VulkanDevice.NativeDevice, &scratchAddrInfo);
 
             VkAccelerationStructureBuildGeometryInfoKHR buildInfo = new VkAccelerationStructureBuildGeometryInfoKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-                type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-                flags = VkBuildAccelerationStructureFlagsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
-                mode = VkBuildAccelerationStructureModeKHR.VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+                sType = VkStructureType.AccelerationStructureBuildGeometryInfoKHR,
+                type = VkAccelerationStructureTypeKHR.BottomLevel,
+                flags = VkBuildAccelerationStructureFlagsKHR.PreferFastTrace,
+                mode = VkBuildAccelerationStructureModeKHR.Build,
                 dstAccelerationStructure = vkBLAS.NativeAccelerationStructure,
                 geometryCount = (uint)geometryCount,
                 pGeometries = geometries,
@@ -1310,7 +1422,7 @@ namespace Infinity.Graphics
             VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
             VkBufferDeviceAddressInfo addrInfo = new VkBufferDeviceAddressInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                sType = VkStructureType.BufferDeviceAddressInfo,
                 buffer = vkArgsBuffer.NativeBuffer,
             };
             ulong indirectAddress = VulkanNative.vkGetBufferDeviceAddress(vkQueue.VulkanDevice.NativeDevice, &addrInfo) + argsOffset;
@@ -1376,7 +1488,7 @@ namespace Infinity.Graphics
                 VulkanBuffer vkBuffer = barrier.BufferBarrierInfo.Handle as VulkanBuffer;
                 VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                    sType = VkStructureType.BufferMemoryBarrier,
                     srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.SrcState),
                     dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.DstState),
                     buffer = vkBuffer.NativeBuffer,
@@ -1384,21 +1496,21 @@ namespace Infinity.Graphics
                     size = unchecked((ulong)(-1)),
                 };
                 VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                    VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VkPipelineStageFlags.ComputeShader,
+                    VkPipelineStageFlags.ComputeShader,
                     0, 0, null, 1, &bufferBarrier, 0, null);
             }
             else if (barrier.ResourceBarrierType == ERHIResourceBarrierType.UAV)
             {
                 VkMemoryBarrier memBarrier = new VkMemoryBarrier()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-                    srcAccessMask = VkAccessFlags.VK_ACCESS_SHADER_WRITE_BIT,
-                    dstAccessMask = VkAccessFlags.VK_ACCESS_SHADER_READ_BIT | VkAccessFlags.VK_ACCESS_SHADER_WRITE_BIT,
+                    sType = VkStructureType.MemoryBarrier,
+                    srcAccessMask = VkAccessFlags.ShaderWrite,
+                    dstAccessMask = VkAccessFlags.ShaderRead | VkAccessFlags.ShaderWrite,
                 };
                 VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                    VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                    VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VkPipelineStageFlags.ComputeShader,
+                    VkPipelineStageFlags.ComputeShader,
                     0, 1, &memBarrier, 0, null, 0, null);
             }
         }
@@ -1429,7 +1541,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
-                VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, vkQuery.NativeQueryPool, index);
+                VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.ComputeShader, vkQuery.NativeQueryPool, index);
             }
         }
 
@@ -1544,3 +1656,5 @@ namespace Infinity.Graphics
         }
     }
 }
+
+

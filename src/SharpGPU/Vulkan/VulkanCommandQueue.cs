@@ -1,5 +1,5 @@
-using System;
-using Evergine.Bindings.Vulkan;
+﻿using System;
+using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -63,11 +63,11 @@ namespace Infinity.Graphics
         {
             VkSubmitInfo submitInfo = new VkSubmitInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                sType = VkStructureType.SubmitInfo,
             };
 
             VkSemaphore waitSem = default;
-            VkPipelineStageFlags waitStage = VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+            VkPipelineStageFlags waitStage = VkPipelineStageFlags.AllCommands;
             if (waitSemaphore != null)
             {
                 VulkanSemaphore vkWaitSem = waitSemaphore as VulkanSemaphore;
@@ -109,7 +109,7 @@ namespace Infinity.Graphics
         {
             VkSubmitInfo submitInfo = new VkSubmitInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                sType = VkStructureType.SubmitInfo,
             };
 
             int waitCount = waitSemaphores != null ? waitSemaphores.Length : 0;
@@ -121,7 +121,7 @@ namespace Infinity.Graphics
                 {
                     VulkanSemaphore vkSem = waitSemaphores[i] as VulkanSemaphore;
                     waitSems[i] = vkSem.NativeSemaphore;
-                    waitStages[i] = VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+                    waitStages[i] = VkPipelineStageFlags.AllCommands;
                 }
                 submitInfo.waitSemaphoreCount = (uint)waitCount;
                 submitInfo.pWaitSemaphores = waitSems;
@@ -164,7 +164,7 @@ namespace Infinity.Graphics
         {
             VkSubmitInfo submitInfo = new VkSubmitInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                sType = VkStructureType.SubmitInfo,
             };
 
             int waitCount = waitSemaphores != null ? waitSemaphores.Length : 0;
@@ -176,7 +176,7 @@ namespace Infinity.Graphics
                 {
                     VulkanSemaphore vkSem = waitSemaphores[i] as VulkanSemaphore;
                     waitSems[i] = vkSem.NativeSemaphore;
-                    waitStages[i] = VkPipelineStageFlags.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+                    waitStages[i] = VkPipelineStageFlags.AllCommands;
                 }
                 submitInfo.waitSemaphoreCount = (uint)waitCount;
                 submitInfo.pWaitSemaphores = waitSems;
@@ -255,7 +255,7 @@ namespace Infinity.Graphics
                 {
                     subresource = new VkImageSubresource()
                     {
-                        aspectMask = VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT,
+                        aspectMask = VkImageAspectFlags.Color,
                         mipLevel = (uint)region.MipLevel,
                         arrayLayer = (uint)region.Layer,
                     },
@@ -281,7 +281,7 @@ namespace Infinity.Graphics
 
             VkBindSparseInfo bindInfo = new VkBindSparseInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BIND_SPARSE_INFO,
+                sType = VkStructureType.BindSparseInfo,
                 imageBindCount = 1,
                 pImageBinds = &imageMemoryBindInfo,
             };
@@ -306,7 +306,7 @@ namespace Infinity.Graphics
                     size = 0,
                     memory = bind ? default : default,
                     memoryOffset = 0,
-                    flags = VkSparseMemoryBindFlags.VK_SPARSE_MEMORY_BIND_METADATA_BIT,
+                    flags = VkSparseMemoryBindFlags.Metadata,
                 };
             }
 
@@ -322,7 +322,7 @@ namespace Infinity.Graphics
 
             VkBindSparseInfo bindInfo = new VkBindSparseInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BIND_SPARSE_INFO,
+                sType = VkStructureType.BindSparseInfo,
                 imageOpaqueBindCount = 1,
                 pImageOpaqueBinds = &opaqueBindInfo,
             };
@@ -337,3 +337,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8600, CS8602, CS8618
 }
+
+

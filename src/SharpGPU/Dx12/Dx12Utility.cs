@@ -10,7 +10,6 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using static TerraFX.Interop.Windows.Windows;
 using TerraFX.Interop.Windows;
-using Silk.NET.Core.Native;
 
 namespace Infinity.Graphics
 {

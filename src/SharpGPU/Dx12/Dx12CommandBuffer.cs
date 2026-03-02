@@ -2,7 +2,6 @@
 using System.Diagnostics;
 using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
-using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using static TerraFX.Interop.Windows.Windows;
 
@@ -68,9 +67,7 @@ namespace Infinity.Graphics
             m_NativeCommandList->Reset(m_NativeCommandAllocator, null);
 
 #if DEBUG
-            IntPtr namePtr = Marshal.StringToHGlobalUni(name);
-            m_NativeCommandList->BeginEvent(0, namePtr.ToPointer(), (uint)name.Length * 2);
-            Marshal.FreeHGlobal(namePtr);
+            Dx12PixEventMarker.BeginEvent((nint)m_NativeCommandList, name);
 #endif
 
             Dx12CommandQueue commandQueue = m_CommandQueue as Dx12CommandQueue;
@@ -150,7 +147,9 @@ namespace Infinity.Graphics
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void End()
         {
-            m_NativeCommandList->EndEvent();
+#if DEBUG
+            Dx12PixEventMarker.EndEvent((nint)m_NativeCommandList);
+#endif
             m_NativeCommandList->Close();
         }
 

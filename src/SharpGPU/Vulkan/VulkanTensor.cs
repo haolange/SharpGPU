@@ -1,5 +1,5 @@
-using System;
-using Evergine.Bindings.Vulkan;
+﻿using System;
+using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -29,10 +29,10 @@ namespace Infinity.Graphics
 
             VkBufferCreateInfo bufferInfo = new VkBufferCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                sType = VkStructureType.BufferCreateInfo,
                 size = bufferSize,
-                usage = VkBufferUsageFlags.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VkBufferUsageFlags.VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VkBufferUsageFlags.VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
+                usage = VkBufferUsageFlags.StorageBuffer | VkBufferUsageFlags.TransferSrc | VkBufferUsageFlags.TransferDst,
+                sharingMode = VkSharingMode.Exclusive,
             };
 
             fixed (VkBuffer* bufferPtr = &m_NativeBuffer)
@@ -48,7 +48,7 @@ namespace Infinity.Graphics
 
             VkMemoryAllocateInfo allocInfo = new VkMemoryAllocateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                sType = VkStructureType.MemoryAllocateInfo,
                 allocationSize = memRequirements.size,
                 memoryTypeIndex = memTypeIndex,
             };
@@ -90,3 +90,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
+
+

@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 using System.Diagnostics;
-using Evergine.Bindings.Vulkan;
+using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -32,6 +32,8 @@ namespace Infinity.Graphics
         private VulkanDevice m_VulkanDevice;
         private VkBuffer m_NativeBuffer;
         private VkDeviceMemory m_NativeMemory;
+        private void* m_MappedBaseAddress;
+        private bool m_IsMapped;
 
         public VulkanBuffer(VulkanDevice device, in RHIBufferDescriptor descriptor)
         {
@@ -40,10 +42,10 @@ namespace Infinity.Graphics
 
             VkBufferCreateInfo bufferInfo = new VkBufferCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                sType = VkStructureType.BufferCreateInfo,
                 size = (ulong)descriptor.ByteSize,
                 usage = VulkanUtility.ConvertToVkBufferUsage(descriptor.UsageFlag),
-                sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
+                sharingMode = VkSharingMode.Exclusive,
             };
 
             fixed (VkBuffer* bufferPtr = &m_NativeBuffer)
@@ -59,10 +61,17 @@ namespace Infinity.Graphics
 
             VkMemoryAllocateInfo allocInfo = new VkMemoryAllocateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                sType = VkStructureType.MemoryAllocateInfo,
                 allocationSize = memRequirements.size,
                 memoryTypeIndex = memTypeIndex,
             };
+            VkMemoryAllocateFlagsInfo allocFlagsInfo = default;
+            if ((bufferInfo.usage & VkBufferUsageFlags.ShaderDeviceAddress) != 0)
+            {
+                allocFlagsInfo.sType = VkStructureType.MemoryAllocateFlagsInfo;
+                allocFlagsInfo.flags = VkMemoryAllocateFlags.DeviceAddress;
+                allocInfo.pNext = &allocFlagsInfo;
+            }
 
             fixed (VkDeviceMemory* memPtr = &m_NativeMemory)
             {
@@ -85,9 +94,16 @@ namespace Infinity.Graphics
 #if DEBUG
             Debug.Assert(m_Descriptor.StorageMode != ERHIStorageMode.GPULocal, "StorageMode is GPULocal it can't use Map()");
 #endif
-            void* data;
-            VulkanUtility.CheckErrors(VulkanNative.vkMapMemory(m_VulkanDevice.NativeDevice, m_NativeMemory, readBegin, readEnd - readBegin, 0, &data));
-            return new IntPtr(data);
+            if (!m_IsMapped)
+            {
+                void* data;
+                VulkanUtility.CheckErrors(VulkanNative.vkMapMemory(m_VulkanDevice.NativeDevice, m_NativeMemory, 0, ulong.MaxValue, 0, &data));
+                m_MappedBaseAddress = data;
+                m_IsMapped = true;
+            }
+
+            byte* mappedAddress = (byte*)m_MappedBaseAddress + readBegin;
+            return new IntPtr(mappedAddress);
         }
 
         public override void UnMap(in uint writeBegin, in uint writeEnd)
@@ -99,14 +115,21 @@ namespace Infinity.Graphics
             {
                 VkMappedMemoryRange range = new VkMappedMemoryRange()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+                    sType = VkStructureType.MappedMemoryRange,
                     memory = m_NativeMemory,
-                    offset = writeBegin,
-                    size = writeEnd - writeBegin,
+                    // Flush whole allocation to satisfy non-coherent atom-size alignment constraints.
+                    offset = 0,
+                    size = ulong.MaxValue,
                 };
                 VulkanNative.vkFlushMappedMemoryRanges(m_VulkanDevice.NativeDevice, 1, &range);
             }
-            VulkanNative.vkUnmapMemory(m_VulkanDevice.NativeDevice, m_NativeMemory);
+
+            if (m_IsMapped)
+            {
+                VulkanNative.vkUnmapMemory(m_VulkanDevice.NativeDevice, m_NativeMemory);
+                m_MappedBaseAddress = null;
+                m_IsMapped = false;
+            }
         }
 
         public override RHIBufferView CreateBufferView(in RHIBufferViewDescriptor descriptor)
@@ -122,3 +145,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
+
+

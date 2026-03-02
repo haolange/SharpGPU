@@ -1,5 +1,4 @@
 ﻿using Infinity.Core;
-using TerraFX.Interop.Gdiplus;
 
 namespace Infinity.Graphics
 {

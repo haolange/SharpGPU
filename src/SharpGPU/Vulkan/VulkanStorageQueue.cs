@@ -1,7 +1,7 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using Evergine.Bindings.Vulkan;
+using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -27,8 +27,8 @@ namespace Infinity.Graphics
 
             VkCommandPoolCreateInfo poolInfo = new VkCommandPoolCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-                flags = VkCommandPoolCreateFlags.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+                sType = VkStructureType.CommandPoolCreateInfo,
+                flags = VkCommandPoolCreateFlags.ResetCommandBuffer,
                 queueFamilyIndex = queueFamilyIndex,
             };
 
@@ -39,9 +39,9 @@ namespace Infinity.Graphics
 
             VkCommandBufferAllocateInfo allocInfo = new VkCommandBufferAllocateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                sType = VkStructureType.CommandBufferAllocateInfo,
                 commandPool = m_CommandPool,
-                level = VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                level = VkCommandBufferLevel.Primary,
                 commandBufferCount = 1,
             };
 
@@ -122,8 +122,8 @@ namespace Infinity.Graphics
                 // Record copy command
                 VkCommandBufferBeginInfo beginInfo = new VkCommandBufferBeginInfo()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                    flags = VkCommandBufferUsageFlags.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+                    sType = VkStructureType.CommandBufferBeginInfo,
+                    flags = VkCommandBufferUsageFlags.OneTimeSubmit,
                 };
                 VulkanNative.vkBeginCommandBuffer(m_CommandBuffer, &beginInfo);
 
@@ -140,7 +140,7 @@ namespace Infinity.Graphics
                 VkCommandBuffer cmdBuf = m_CommandBuffer;
                 VkSubmitInfo submitInfo = new VkSubmitInfo()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                    sType = VkStructureType.SubmitInfo,
                     commandBufferCount = 1,
                     pCommandBuffers = &cmdBuf,
                 };
@@ -188,23 +188,23 @@ namespace Infinity.Graphics
                 // Record copy commands
                 VkCommandBufferBeginInfo beginInfo = new VkCommandBufferBeginInfo()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                    flags = VkCommandBufferUsageFlags.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+                    sType = VkStructureType.CommandBufferBeginInfo,
+                    flags = VkCommandBufferUsageFlags.OneTimeSubmit,
                 };
                 VulkanNative.vkBeginCommandBuffer(m_CommandBuffer, &beginInfo);
 
                 // Transition image to TRANSFER_DST
                 VkImageMemoryBarrier preCopyBarrier = new VkImageMemoryBarrier()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                    sType = VkStructureType.ImageMemoryBarrier,
                     srcAccessMask = 0,
-                    dstAccessMask = VkAccessFlags.VK_ACCESS_TRANSFER_WRITE_BIT,
-                    oldLayout = VkImageLayout.VK_IMAGE_LAYOUT_UNDEFINED,
-                    newLayout = VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    dstAccessMask = VkAccessFlags.TransferWrite,
+                    oldLayout = VkImageLayout.Undefined,
+                    newLayout = VkImageLayout.TransferDstOptimal,
                     image = vkDstTexture.NativeImage,
                     subresourceRange = new VkImageSubresourceRange()
                     {
-                        aspectMask = VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT,
+                        aspectMask = VkImageAspectFlags.Color,
                         baseMipLevel = 0,
                         levelCount = 1,
                         baseArrayLayer = 0,
@@ -212,8 +212,8 @@ namespace Infinity.Graphics
                     },
                 };
                 VulkanNative.vkCmdPipelineBarrier(m_CommandBuffer,
-                    VkPipelineStageFlags.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                    VkPipelineStageFlags.VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VkPipelineStageFlags.TopOfPipe,
+                    VkPipelineStageFlags.Transfer,
                     0, 0, null, 0, null, 1, &preCopyBarrier);
 
                 // Copy buffer to image
@@ -224,7 +224,7 @@ namespace Infinity.Graphics
                     bufferImageHeight = 0,
                     imageSubresource = new VkImageSubresourceLayers()
                     {
-                        aspectMask = VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT,
+                        aspectMask = VkImageAspectFlags.Color,
                         mipLevel = 0,
                         baseArrayLayer = 0,
                         layerCount = 1,
@@ -237,17 +237,17 @@ namespace Infinity.Graphics
                         depth = Math.Max(1u, vkDstTexture.Descriptor.Extent.z),
                     },
                 };
-                VulkanNative.vkCmdCopyBufferToImage(m_CommandBuffer, stagingBuffer.NativeBuffer, vkDstTexture.NativeImage, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+                VulkanNative.vkCmdCopyBufferToImage(m_CommandBuffer, stagingBuffer.NativeBuffer, vkDstTexture.NativeImage, VkImageLayout.TransferDstOptimal, 1, &region);
 
                 // Transition image to SHADER_READ
                 VkImageMemoryBarrier postCopyBarrier = preCopyBarrier;
-                postCopyBarrier.srcAccessMask = VkAccessFlags.VK_ACCESS_TRANSFER_WRITE_BIT;
-                postCopyBarrier.dstAccessMask = VkAccessFlags.VK_ACCESS_SHADER_READ_BIT;
-                postCopyBarrier.oldLayout = VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-                postCopyBarrier.newLayout = VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                postCopyBarrier.srcAccessMask = VkAccessFlags.TransferWrite;
+                postCopyBarrier.dstAccessMask = VkAccessFlags.ShaderRead;
+                postCopyBarrier.oldLayout = VkImageLayout.TransferDstOptimal;
+                postCopyBarrier.newLayout = VkImageLayout.ShaderReadOnlyOptimal;
                 VulkanNative.vkCmdPipelineBarrier(m_CommandBuffer,
-                    VkPipelineStageFlags.VK_PIPELINE_STAGE_TRANSFER_BIT,
-                    VkPipelineStageFlags.VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    VkPipelineStageFlags.Transfer,
+                    VkPipelineStageFlags.FragmentShader,
                     0, 0, null, 0, null, 1, &postCopyBarrier);
 
                 VulkanNative.vkEndCommandBuffer(m_CommandBuffer);
@@ -256,7 +256,7 @@ namespace Infinity.Graphics
                 VkCommandBuffer cmdBuf = m_CommandBuffer;
                 VkSubmitInfo submitInfo = new VkSubmitInfo()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                    sType = VkStructureType.SubmitInfo,
                     commandBufferCount = 1,
                     pCommandBuffers = &cmdBuf,
                 };
@@ -276,7 +276,7 @@ namespace Infinity.Graphics
 
                 VkSubmitInfo submitInfo = new VkSubmitInfo()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                    sType = VkStructureType.SubmitInfo,
                     commandBufferCount = 0,
                 };
                 VulkanNative.vkQueueSubmit(m_TransferQueue, 1, &submitInfo, vkFence.NativeFence);
@@ -290,3 +290,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8600, CS8602, CS8618
 }
+
+

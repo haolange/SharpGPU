@@ -4,7 +4,6 @@ using System.Diagnostics;
 using TerraFX.Interop.Windows;
 using TerraFX.Interop.DirectX;
 using static TerraFX.Interop.Windows.Windows;
-using Silk.NET.Core.Native;
 
 namespace Infinity.Graphics
 {

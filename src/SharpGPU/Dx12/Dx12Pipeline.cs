@@ -1083,7 +1083,7 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            // TODO(ROADMAP-P2-1): Release COM resources after TerraFX SDK upgrade.
+            // TODO(ROADMAP-P2-1): Release WorkGraph resources when implementation is enabled.
         }
     }
 

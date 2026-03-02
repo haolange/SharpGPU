@@ -1,4 +1,4 @@
-using Evergine.Bindings.Vulkan;
+﻿using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -30,7 +30,7 @@ namespace Infinity.Graphics
 
             VkMemoryAllocateInfo allocInfo = new VkMemoryAllocateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                sType = VkStructureType.MemoryAllocateInfo,
                 allocationSize = descriptor.Size,
                 memoryTypeIndex = memTypeIndex,
             };
@@ -48,3 +48,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
+
+

@@ -1,4 +1,4 @@
-using Evergine.Bindings.Vulkan;
+﻿using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -16,7 +16,7 @@ namespace Infinity.Graphics
 
             VkSamplerCreateInfo samplerInfo = new VkSamplerCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                sType = VkStructureType.SamplerCreateInfo,
                 magFilter = VulkanUtility.ConvertToVkFilter(descriptor.MagFilter),
                 minFilter = VulkanUtility.ConvertToVkFilter(descriptor.MinFilter),
                 mipmapMode = VulkanUtility.ConvertToVkMipmapMode(descriptor.MipFilter),
@@ -30,7 +30,7 @@ namespace Infinity.Graphics
                 compareOp = VulkanUtility.ConvertToVkCompareOp(descriptor.ComparisonMode),
                 minLod = descriptor.LodMin,
                 maxLod = descriptor.LodMax,
-                borderColor = VkBorderColor.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+                borderColor = VkBorderColor.IntOpaqueBlack,
                 unnormalizedCoordinates = false,
             };
 
@@ -55,3 +55,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
+
+

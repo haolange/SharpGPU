@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 using System.Runtime.CompilerServices;
-using Evergine.Bindings.Vulkan;
+using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -40,8 +40,8 @@ namespace Infinity.Graphics
             // Create command pool
             VkCommandPoolCreateInfo poolInfo = new VkCommandPoolCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-                flags = VkCommandPoolCreateFlags.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+                sType = VkStructureType.CommandPoolCreateInfo,
+                flags = VkCommandPoolCreateFlags.ResetCommandBuffer,
                 queueFamilyIndex = vkQueue.QueueFamilyIndex,
             };
 
@@ -53,9 +53,9 @@ namespace Infinity.Graphics
             // Allocate command buffer
             VkCommandBufferAllocateInfo allocInfo = new VkCommandBufferAllocateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                sType = VkStructureType.CommandBufferAllocateInfo,
                 commandPool = m_NativeCommandPool,
-                level = VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                level = VkCommandBufferLevel.Primary,
                 commandBufferCount = 1,
             };
 
@@ -79,8 +79,8 @@ namespace Infinity.Graphics
 
             VkCommandBufferBeginInfo beginInfo = new VkCommandBufferBeginInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                flags = VkCommandBufferUsageFlags.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+                sType = VkStructureType.CommandBufferBeginInfo,
+                flags = VkCommandBufferUsageFlags.OneTimeSubmit,
             };
 
             VulkanUtility.CheckErrors(VulkanNative.vkBeginCommandBuffer(m_NativeCommandBuffer, &beginInfo));
@@ -213,3 +213,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8600, CS8602, CS8618
 }
+
+

@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 using System.Linq;
-using Evergine.Bindings.Vulkan;
+using Vortice.Vulkan;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
@@ -163,16 +163,16 @@ namespace Infinity.Graphics
         {
             VkApplicationInfo appInfo = new VkApplicationInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_APPLICATION_INFO,
+                sType = VkStructureType.ApplicationInfo,
                 pApplicationName = "Hello Triangle".ToPointer(),
-                applicationVersion = VulkanUtility.Version(1, 0, 0),
+                applicationVersion = new VkVersion(VulkanUtility.Version(1, 0, 0)),
                 pEngineName = "No Engine".ToPointer(),
-                engineVersion = VulkanUtility.Version(1, 0, 0),
-                apiVersion = VulkanUtility.Version(1, 3, 0),
+                engineVersion = new VkVersion(VulkanUtility.Version(1, 0, 0)),
+                apiVersion = new VkVersion(VulkanUtility.Version(1, 3, 0)),
             };
 
             VkInstanceCreateInfo createInfo = default;
-            createInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+            createInfo.sType = VkStructureType.InstanceCreateInfo;
             createInfo.pApplicationInfo = &appInfo;
 
             // Extensions
@@ -334,3 +334,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
+
+

@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 using Infinity.Mathmatics;
-using Evergine.Bindings.Vulkan;
+using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -28,6 +28,11 @@ namespace Infinity.Graphics
                 return m_NativeMemory;
             }
         }
+        internal VkImageLayout CurrentLayout
+        {
+            get;
+            set;
+        }
 
         private bool m_IsExternalImage;
         private VulkanDevice m_VulkanDevice;
@@ -39,10 +44,11 @@ namespace Infinity.Graphics
             m_VulkanDevice = device;
             m_Descriptor = descriptor;
             m_IsExternalImage = false;
+            CurrentLayout = VkImageLayout.Undefined;
 
             VkImageCreateInfo imageInfo = new VkImageCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                sType = VkStructureType.ImageCreateInfo,
                 flags = VulkanUtility.ConvertToVkImageCreateFlags(descriptor.Dimension),
                 imageType = VulkanUtility.ConvertToVkImageType(descriptor.Dimension),
                 format = VulkanUtility.ConvertToVkFormat(descriptor.Format),
@@ -50,10 +56,10 @@ namespace Infinity.Graphics
                 mipLevels = descriptor.MipCount,
                 arrayLayers = VulkanUtility.GetArrayLayers(descriptor.Dimension, descriptor.Extent.z),
                 samples = VulkanUtility.ConvertToVkSampleCount(descriptor.SampleCount),
-                tiling = VkImageTiling.VK_IMAGE_TILING_OPTIMAL,
+                tiling = VkImageTiling.Optimal,
                 usage = VulkanUtility.ConvertToVkImageUsage(descriptor.UsageFlag),
-                sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
-                initialLayout = VkImageLayout.VK_IMAGE_LAYOUT_UNDEFINED,
+                sharingMode = VkSharingMode.Exclusive,
+                initialLayout = VkImageLayout.Undefined,
             };
 
             fixed (VkImage* imagePtr = &m_NativeImage)
@@ -69,7 +75,7 @@ namespace Infinity.Graphics
 
             VkMemoryAllocateInfo allocInfo = new VkMemoryAllocateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                sType = VkStructureType.MemoryAllocateInfo,
                 allocationSize = memRequirements.size,
                 memoryTypeIndex = memTypeIndex,
             };
@@ -88,6 +94,7 @@ namespace Infinity.Graphics
             m_Descriptor = descriptor;
             m_NativeImage = existingImage;
             m_IsExternalImage = true;
+            CurrentLayout = VkImageLayout.Undefined;
         }
 
         public override RHITextureView CreateTextureView(in RHITextureViewDescriptor descriptor)
@@ -106,3 +113,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
+
+

@@ -1,6 +1,6 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
-using Evergine.Bindings.Vulkan;
+using Vortice.Vulkan;
 using System.Runtime.InteropServices;
 
 namespace Infinity.Graphics
@@ -20,7 +20,7 @@ namespace Infinity.Graphics
 
             VkShaderModuleCreateInfo createInfo = new VkShaderModuleCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                sType = VkStructureType.ShaderModuleCreateInfo,
                 codeSize = (nuint)descriptor.ByteSize,
                 pCode = (uint*)descriptor.ByteCode,
             };
@@ -35,7 +35,7 @@ namespace Infinity.Graphics
         {
             return new VkPipelineShaderStageCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                sType = VkStructureType.PipelineShaderStageCreateInfo,
                 stage = VulkanUtility.ConvertToVkShaderStageBit(m_Descriptor.Type),
                 module = m_NativeShaderModule,
                 pName = m_Descriptor.EntryName.ToPointer(),
@@ -62,7 +62,7 @@ namespace Infinity.Graphics
 
             VkShaderModuleCreateInfo createInfo = new VkShaderModuleCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                sType = VkStructureType.ShaderModuleCreateInfo,
                 codeSize = (nuint)descriptor.ByteSize,
                 pCode = (uint*)descriptor.ByteCode,
             };
@@ -321,8 +321,8 @@ namespace Infinity.Graphics
             VulkanAccelStructHelper.CreateDeviceAddressBuffer(
                 m_VulkanDevice,
                 m_TotalSbtSize,
-                VkBufferUsageFlags.VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VkBufferUsageFlags.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                VkBufferUsageFlags.ShaderBindingTableKHR | VkBufferUsageFlags.ShaderDeviceAddress,
+                VkMemoryPropertyFlags.HostVisible | VkMemoryPropertyFlags.HostCoherent,
                 out m_SbtBuffer,
                 out m_SbtMemory);
 
@@ -356,7 +356,7 @@ namespace Infinity.Graphics
 
             VkBufferDeviceAddressInfo addrInfo = new VkBufferDeviceAddressInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                sType = VkStructureType.BufferDeviceAddressInfo,
                 buffer = m_SbtBuffer,
             };
             ulong baseAddress = VulkanNative.vkGetBufferDeviceAddress(m_VulkanDevice.NativeDevice, &addrInfo);
@@ -408,11 +408,11 @@ namespace Infinity.Graphics
         {
             VkPhysicalDeviceRayTracingPipelinePropertiesKHR rtProperties = new VkPhysicalDeviceRayTracingPipelinePropertiesKHR()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR,
+                sType = VkStructureType.PhysicalDeviceRayTracingPipelinePropertiesKHR,
             };
             VkPhysicalDeviceProperties2 properties2 = new VkPhysicalDeviceProperties2()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+                sType = VkStructureType.PhysicalDeviceProperties2,
                 pNext = &rtProperties,
             };
             VulkanNative.vkGetPhysicalDeviceProperties2(m_VulkanDevice.NativePhysicalDevice, &properties2);
@@ -608,3 +608,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
+
+

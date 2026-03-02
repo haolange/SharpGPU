@@ -1,5 +1,5 @@
-using System;
-using Evergine.Bindings.Vulkan;
+﻿using System;
+using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -38,8 +38,8 @@ namespace Infinity.Graphics
                 if (element.Count > 1)
                 {
                     hasBindless = true;
-                    bindingFlags[i] = VkDescriptorBindingFlags.VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
-                                    | VkDescriptorBindingFlags.VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+                    bindingFlags[i] = VkDescriptorBindingFlags.PartiallyBound
+                                    | VkDescriptorBindingFlags.UpdateAfterBind;
                 }
                 else
                 {
@@ -49,16 +49,16 @@ namespace Infinity.Graphics
 
             VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo = new VkDescriptorSetLayoutBindingFlagsCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+                sType = VkStructureType.DescriptorSetLayoutBindingFlagsCreateInfo,
                 bindingCount = (uint)elementCount,
                 pBindingFlags = bindingFlags,
             };
 
             VkDescriptorSetLayoutCreateInfo layoutInfo = new VkDescriptorSetLayoutCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                sType = VkStructureType.DescriptorSetLayoutCreateInfo,
                 pNext = hasBindless ? &bindingFlagsInfo : null,
-                flags = hasBindless ? VkDescriptorSetLayoutCreateFlags.VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT : 0,
+                flags = hasBindless ? VkDescriptorSetLayoutCreateFlags.UpdateAfterBindPool : 0,
                 bindingCount = (uint)elementCount,
                 pBindings = bindings,
             };
@@ -92,7 +92,7 @@ namespace Infinity.Graphics
 
             VkDescriptorSetAllocateInfo allocInfo = new VkDescriptorSetAllocateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                sType = VkStructureType.DescriptorSetAllocateInfo,
                 descriptorPool = device.NativeDescriptorPool,
                 descriptorSetCount = 1,
                 pSetLayouts = &layout,
@@ -119,7 +119,7 @@ namespace Infinity.Graphics
         {
             VkWriteDescriptorSet writeDescriptor = new VkWriteDescriptorSet()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                sType = VkStructureType.WriteDescriptorSet,
                 dstSet = m_NativeDescriptorSet,
                 dstBinding = (uint)slot,
                 dstArrayElement = 0,
@@ -164,7 +164,7 @@ namespace Infinity.Graphics
                     if (element.TextureView != null)
                     {
                         VulkanTextureView vkTextureView = element.TextureView as VulkanTextureView;
-                        VkDescriptorImageInfo imageInfo = vkTextureView.GetDescriptorImageInfo(VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                        VkDescriptorImageInfo imageInfo = vkTextureView.GetDescriptorImageInfo(VkImageLayout.ShaderReadOnlyOptimal);
                         writeDescriptor.pImageInfo = &imageInfo;
                         VulkanNative.vkUpdateDescriptorSets(m_VulkanDevice.NativeDevice, 1, &writeDescriptor, 0, null);
                     }
@@ -181,7 +181,7 @@ namespace Infinity.Graphics
                     if (element.TextureView != null)
                     {
                         VulkanTextureView vkTextureView = element.TextureView as VulkanTextureView;
-                        VkDescriptorImageInfo imageInfo = vkTextureView.GetDescriptorImageInfo(VkImageLayout.VK_IMAGE_LAYOUT_GENERAL);
+                        VkDescriptorImageInfo imageInfo = vkTextureView.GetDescriptorImageInfo(VkImageLayout.General);
                         writeDescriptor.pImageInfo = &imageInfo;
                         VulkanNative.vkUpdateDescriptorSets(m_VulkanDevice.NativeDevice, 1, &writeDescriptor, 0, null);
                     }
@@ -195,7 +195,7 @@ namespace Infinity.Graphics
                         VkAccelerationStructureKHR accelStructHandle = vkTLAS.NativeAccelerationStructure;
                         VkWriteDescriptorSetAccelerationStructureKHR accelInfo = new VkWriteDescriptorSetAccelerationStructureKHR()
                         {
-                            sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+                            sType = VkStructureType.WriteDescriptorSetAccelerationStructureKHR,
                             accelerationStructureCount = 1,
                             pAccelerationStructures = &accelStructHandle,
                         };
@@ -211,7 +211,7 @@ namespace Infinity.Graphics
         {
             VkWriteDescriptorSet writeDescriptor = new VkWriteDescriptorSet()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                sType = VkStructureType.WriteDescriptorSet,
                 dstSet = m_NativeDescriptorSet,
                 dstBinding = (uint)slot,
                 dstArrayElement = (uint)arrayIndex,
@@ -256,7 +256,7 @@ namespace Infinity.Graphics
                     if (element.TextureView != null)
                     {
                         VulkanTextureView vkTextureView = element.TextureView as VulkanTextureView;
-                        VkDescriptorImageInfo imageInfo = vkTextureView.GetDescriptorImageInfo(VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                        VkDescriptorImageInfo imageInfo = vkTextureView.GetDescriptorImageInfo(VkImageLayout.ShaderReadOnlyOptimal);
                         writeDescriptor.pImageInfo = &imageInfo;
                         VulkanNative.vkUpdateDescriptorSets(m_VulkanDevice.NativeDevice, 1, &writeDescriptor, 0, null);
                     }
@@ -273,7 +273,7 @@ namespace Infinity.Graphics
                     if (element.TextureView != null)
                     {
                         VulkanTextureView vkTextureView = element.TextureView as VulkanTextureView;
-                        VkDescriptorImageInfo imageInfo = vkTextureView.GetDescriptorImageInfo(VkImageLayout.VK_IMAGE_LAYOUT_GENERAL);
+                        VkDescriptorImageInfo imageInfo = vkTextureView.GetDescriptorImageInfo(VkImageLayout.General);
                         writeDescriptor.pImageInfo = &imageInfo;
                         VulkanNative.vkUpdateDescriptorSets(m_VulkanDevice.NativeDevice, 1, &writeDescriptor, 0, null);
                     }
@@ -287,7 +287,7 @@ namespace Infinity.Graphics
                         VkAccelerationStructureKHR accelStructHandle = vkTLAS.NativeAccelerationStructure;
                         VkWriteDescriptorSetAccelerationStructureKHR accelInfo = new VkWriteDescriptorSetAccelerationStructureKHR()
                         {
-                            sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+                            sType = VkStructureType.WriteDescriptorSetAccelerationStructureKHR,
                             accelerationStructureCount = 1,
                             pAccelerationStructures = &accelStructHandle,
                         };
@@ -309,3 +309,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8600, CS8602, CS8618
 }
+
+

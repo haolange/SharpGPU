@@ -1,4 +1,4 @@
-using Evergine.Bindings.Vulkan;
+﻿using Vortice.Vulkan;
 
 namespace Infinity.Graphics
 {
@@ -15,20 +15,20 @@ namespace Infinity.Graphics
         {
             m_VulkanTexture = texture;
 
-            VkImageAspectFlags aspect = VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT;
+            VkImageAspectFlags aspect = VkImageAspectFlags.Color;
 
             VkImageViewCreateInfo viewInfo = new VkImageViewCreateInfo()
             {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                sType = VkStructureType.ImageViewCreateInfo,
                 image = texture.NativeImage,
                 viewType = VulkanUtility.ConvertToVkImageViewType(texture.Descriptor.Dimension),
                 format = VulkanUtility.ConvertToVkFormat(texture.Descriptor.Format),
                 components = new VkComponentMapping()
                 {
-                    r = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_IDENTITY,
-                    g = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_IDENTITY,
-                    b = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_IDENTITY,
-                    a = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_IDENTITY,
+                    r = VkComponentSwizzle.Identity,
+                    g = VkComponentSwizzle.Identity,
+                    b = VkComponentSwizzle.Identity,
+                    a = VkComponentSwizzle.Identity,
                 },
                 subresourceRange = new VkImageSubresourceRange()
                 {
@@ -62,3 +62,5 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
+
+
