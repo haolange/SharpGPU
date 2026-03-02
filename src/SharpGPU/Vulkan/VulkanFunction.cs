@@ -293,6 +293,11 @@ namespace Infinity.Graphics
             m_AlignedHandleSize = AlignUp(m_HandleSize, m_HandleAlignment);
             m_LocalDataStrideInBytes = m_CachedPipeline.Descriptor.LocalDataStrideInBytes;
             m_EntryStride = AlignUp(m_AlignedHandleSize + m_LocalDataStrideInBytes, m_HandleAlignment);
+            if (m_EntryStride == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Invalid Vulkan SBT entry stride (0). handleSize={m_HandleSize}, handleAlignment={m_HandleAlignment}, localDataStride={m_LocalDataStrideInBytes}.");
+            }
 
             ValidateAllRecords();
             FetchShaderGroupHandles();
@@ -311,13 +316,19 @@ namespace Infinity.Graphics
             m_MissRegionOffset = m_RayGenRegionOffset + rayGenRegionSizeAligned;
             m_HitRegionOffset = m_MissRegionOffset + missRegionSizeAligned;
             m_CallableRegionOffset = m_HitRegionOffset + hitRegionSizeAligned;
-            m_TotalSbtSize = m_CallableRegionOffset + callableRegionSizeAligned;
-            if (m_TotalSbtSize == 0)
+            ulong totalSbtSize = m_CallableRegionOffset + callableRegionSizeAligned;
+            if (totalSbtSize == 0)
             {
-                m_TotalSbtSize = rayGenRegionSizeAligned;
+                totalSbtSize = rayGenRegionSizeAligned;
+            }
+
+            if (totalSbtSize == 0)
+            {
+                throw new InvalidOperationException("Invalid Vulkan SBT total size (0).");
             }
 
             ReleaseSBT();
+            m_TotalSbtSize = totalSbtSize;
             VulkanAccelStructHelper.CreateDeviceAddressBuffer(
                 m_VulkanDevice,
                 m_TotalSbtSize,

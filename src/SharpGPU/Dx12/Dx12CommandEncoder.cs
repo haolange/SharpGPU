@@ -461,7 +461,10 @@ namespace Infinity.Graphics
         {
             if (stage == ERHIPipelineStage.RayTracing || pipeline == ERHIPipelineType.Graphics)
             {
-                return Vortice.Direct3D12.BarrierSync.Raytracing;
+                return Vortice.Direct3D12.BarrierSync.Raytracing
+                       | Vortice.Direct3D12.BarrierSync.BuildRaytracingAccelerationStructure
+                       | Vortice.Direct3D12.BarrierSync.CopyRaytracingAccelerationStructure
+                       | Vortice.Direct3D12.BarrierSync.EmitRaytracingAccelerationStructurePostBuildInfo;
             }
 
             return ResolveShaderAccessSync(stage, pipeline);
@@ -507,7 +510,7 @@ namespace Infinity.Graphics
                     return Vortice.Direct3D12.BarrierSync.ComputeShading;
 
                 case ERHIPipelineType.Graphics:
-                    return Vortice.Direct3D12.BarrierSync.All;
+                    return Vortice.Direct3D12.BarrierSync.All | Vortice.Direct3D12.BarrierSync.Copy | Vortice.Direct3D12.BarrierSync.Resolve;
 
                 default:
                     throw new InvalidOperationException(String.Format("Unsupported pipeline type '{0}' for enhanced barrier sync conversion.", pipeline));
@@ -525,7 +528,24 @@ namespace Infinity.Graphics
                     return Vortice.Direct3D12.BarrierSync.ComputeShading | Vortice.Direct3D12.BarrierSync.Copy;
 
                 case ERHIPipelineType.Graphics:
-                    return Vortice.Direct3D12.BarrierSync.All;
+                    return Vortice.Direct3D12.BarrierSync.All
+                           | Vortice.Direct3D12.BarrierSync.AllShading
+                           | Vortice.Direct3D12.BarrierSync.Copy
+                           | Vortice.Direct3D12.BarrierSync.Resolve
+                           | Vortice.Direct3D12.BarrierSync.ExecuteIndirect
+                           | Vortice.Direct3D12.BarrierSync.Raytracing
+                           | Vortice.Direct3D12.BarrierSync.BuildRaytracingAccelerationStructure
+                           | Vortice.Direct3D12.BarrierSync.CopyRaytracingAccelerationStructure
+                           | Vortice.Direct3D12.BarrierSync.EmitRaytracingAccelerationStructurePostBuildInfo
+                           | Vortice.Direct3D12.BarrierSync.ClearUnorderedAccessView
+                           | Vortice.Direct3D12.BarrierSync.IndexInput
+                           | Vortice.Direct3D12.BarrierSync.Draw
+                           | Vortice.Direct3D12.BarrierSync.VertexShading
+                           | Vortice.Direct3D12.BarrierSync.PixelShading
+                           | Vortice.Direct3D12.BarrierSync.NonPixelShading
+                           | Vortice.Direct3D12.BarrierSync.RenderTarget
+                           | Vortice.Direct3D12.BarrierSync.DepthStencil
+                           | Vortice.Direct3D12.BarrierSync.ComputeShading;
 
                 default:
                     throw new InvalidOperationException(String.Format("Unsupported command queue pipeline '{0}' for enhanced barrier sync.", queuePipeline));
@@ -575,7 +595,24 @@ namespace Infinity.Graphics
                     return Vortice.Direct3D12.BarrierSync.Copy | Vortice.Direct3D12.BarrierSync.ComputeShading | Vortice.Direct3D12.BarrierSync.ExecuteIndirect;
 
                 case ERHIPipelineType.Graphics:
-                    return Vortice.Direct3D12.BarrierSync.All;
+                    return Vortice.Direct3D12.BarrierSync.All
+                           | Vortice.Direct3D12.BarrierSync.AllShading
+                           | Vortice.Direct3D12.BarrierSync.Copy
+                           | Vortice.Direct3D12.BarrierSync.Resolve
+                           | Vortice.Direct3D12.BarrierSync.ExecuteIndirect
+                           | Vortice.Direct3D12.BarrierSync.Raytracing
+                           | Vortice.Direct3D12.BarrierSync.BuildRaytracingAccelerationStructure
+                           | Vortice.Direct3D12.BarrierSync.CopyRaytracingAccelerationStructure
+                           | Vortice.Direct3D12.BarrierSync.EmitRaytracingAccelerationStructurePostBuildInfo
+                           | Vortice.Direct3D12.BarrierSync.ClearUnorderedAccessView
+                           | Vortice.Direct3D12.BarrierSync.IndexInput
+                           | Vortice.Direct3D12.BarrierSync.Draw
+                           | Vortice.Direct3D12.BarrierSync.VertexShading
+                           | Vortice.Direct3D12.BarrierSync.PixelShading
+                           | Vortice.Direct3D12.BarrierSync.NonPixelShading
+                           | Vortice.Direct3D12.BarrierSync.RenderTarget
+                           | Vortice.Direct3D12.BarrierSync.DepthStencil
+                           | Vortice.Direct3D12.BarrierSync.ComputeShading;
 
                 default:
                     throw new InvalidOperationException(String.Format("Unsupported command queue pipeline '{0}' for enhanced barrier validation.", queuePipeline));
@@ -751,17 +788,7 @@ namespace Infinity.Graphics
         {
             if (state == ERHITextureState.Undefine)
             {
-                switch (queuePipeline)
-                {
-                    case ERHIPipelineType.Compute:
-                        return Vortice.Direct3D12.BarrierLayout.ComputeQueueCommon;
-
-                    case ERHIPipelineType.Graphics:
-                        return Vortice.Direct3D12.BarrierLayout.DirectQueueCommon;
-
-                    default:
-                        return Vortice.Direct3D12.BarrierLayout.Common;
-                }
+                return Vortice.Direct3D12.BarrierLayout.Undefined;
             }
 
             if ((state & ERHITextureState.Present) != 0) return Vortice.Direct3D12.BarrierLayout.Present;

@@ -234,6 +234,17 @@ namespace Infinity.Graphics
 
     internal unsafe class VulkanBottomLevelAccelStruct : RHIBottomLevelAccelStruct
     {
+        [StructLayout(LayoutKind.Sequential)]
+        private struct VkAabbPositionRaw
+        {
+            public float MinX;
+            public float MinY;
+            public float MinZ;
+            public float MaxX;
+            public float MaxY;
+            public float MaxZ;
+        }
+
         public VkAccelerationStructureKHR NativeAccelerationStructure => m_NativeAccelStruct;
         public VkBuffer NativeBuffer => m_NativeBuffer;
         public VkBuffer NativeScratchBuffer => m_NativeScratchBuffer;
@@ -244,6 +255,8 @@ namespace Infinity.Graphics
         private VkDeviceMemory m_NativeMemory;
         private VkBuffer m_NativeScratchBuffer;
         private VkDeviceMemory m_NativeScratchMemory;
+        private VkBuffer[] m_NativeCurveAabbBuffers;
+        private VkDeviceMemory[] m_NativeCurveAabbMemories;
 
         public VulkanBottomLevelAccelStruct(VulkanDevice device, in RHIBottomLevelAccelStructDescriptor descriptor)
         {
@@ -253,6 +266,8 @@ namespace Infinity.Graphics
             int geometryCount = descriptor.Geometries.Length;
             VkAccelerationStructureGeometryKHR* geometries = stackalloc VkAccelerationStructureGeometryKHR[Math.Max(geometryCount, 1)];
             uint* maxPrimitiveCounts = stackalloc uint[Math.Max(geometryCount, 1)];
+            m_NativeCurveAabbBuffers = geometryCount > 0 ? new VkBuffer[geometryCount] : Array.Empty<VkBuffer>();
+            m_NativeCurveAabbMemories = geometryCount > 0 ? new VkDeviceMemory[geometryCount] : Array.Empty<VkDeviceMemory>();
 
             for (int i = 0; i < geometryCount; ++i)
             {
@@ -261,7 +276,8 @@ namespace Infinity.Graphics
                 if (geom.GeometryType == EAccelStructGeometryType.Triangle)
                 {
                     RHIAccelStructTriangles triangleGeometry = (RHIAccelStructTriangles)geom;
-                    VulkanBuffer vertexBuffer = triangleGeometry.VertexBuffer as VulkanBuffer;
+                    VulkanBuffer vertexBuffer = triangleGeometry.VertexBuffer as VulkanBuffer
+                        ?? throw new InvalidOperationException("Triangle geometry requires a Vulkan vertex buffer.");
                     VkBufferDeviceAddressInfo vertexAddrInfo = new VkBufferDeviceAddressInfo()
                     {
                         sType = VkStructureType.BufferDeviceAddressInfo,
@@ -276,14 +292,15 @@ namespace Infinity.Graphics
                         flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
                     };
                     geometries[i].geometry.triangles.sType = VkStructureType.AccelerationStructureGeometryTrianglesDataKHR;
-                    geometries[i].geometry.triangles.vertexFormat = VulkanUtility.ConvertToVkFormat(triangleGeometry.VertexFormat);
+                    geometries[i].geometry.triangles.vertexFormat = VulkanUtility.ConvertToVkAccelerationStructureVertexFormat(triangleGeometry.VertexFormat);
                     geometries[i].geometry.triangles.vertexData.deviceAddress = vertexAddress + triangleGeometry.VertexOffset;
                     geometries[i].geometry.triangles.vertexStride = triangleGeometry.VertexStride;
                     geometries[i].geometry.triangles.maxVertex = triangleGeometry.VertexCount;
 
                     if (triangleGeometry.IndexBuffer != null)
                     {
-                        VulkanBuffer indexBuffer = triangleGeometry.IndexBuffer as VulkanBuffer;
+                        VulkanBuffer indexBuffer = triangleGeometry.IndexBuffer as VulkanBuffer
+                            ?? throw new InvalidOperationException("Triangle index buffer is not a Vulkan buffer.");
                         VkBufferDeviceAddressInfo indexAddrInfo = new VkBufferDeviceAddressInfo()
                         {
                             sType = VkStructureType.BufferDeviceAddressInfo,
@@ -303,7 +320,8 @@ namespace Infinity.Graphics
                 else if (geom.GeometryType == EAccelStructGeometryType.AABB)
                 {
                     RHIAccelStructAABBs aabbGeometry = (RHIAccelStructAABBs)geom;
-                    VulkanBuffer aabbBuffer = aabbGeometry.AABBBuffer as VulkanBuffer;
+                    VulkanBuffer aabbBuffer = aabbGeometry.AABBBuffer as VulkanBuffer
+                        ?? throw new InvalidOperationException("AABB geometry requires a Vulkan buffer.");
                     VkBufferDeviceAddressInfo aabbAddrInfo = new VkBufferDeviceAddressInfo()
                     {
                         sType = VkStructureType.BufferDeviceAddressInfo,
@@ -321,6 +339,108 @@ namespace Infinity.Graphics
                     geometries[i].geometry.aabbs.data.deviceAddress = aabbAddress + aabbGeometry.Offset;
                     geometries[i].geometry.aabbs.stride = aabbGeometry.Stride;
                     maxPrimitiveCounts[i] = aabbGeometry.Count;
+                }
+                else if (geom.GeometryType == EAccelStructGeometryType.Curves)
+                {
+                    RHIAccelStructCurves curveGeometry = geom as RHIAccelStructCurves
+                        ?? throw new InvalidOperationException("Curve geometry descriptor type mismatch.");
+                    VulkanBuffer controlPointBuffer = curveGeometry.ControlPointBuffer as VulkanBuffer
+                        ?? throw new InvalidOperationException("Curve geometry requires a Vulkan control-point buffer.");
+                    VulkanBuffer radiusBuffer = curveGeometry.RadiusBuffer as VulkanBuffer
+                        ?? throw new InvalidOperationException("Curve geometry requires a Vulkan radius buffer.");
+                    VulkanBuffer curveIndexBuffer = curveGeometry.IndexBuffer as VulkanBuffer;
+                    if (curveGeometry.IndexBuffer != null && curveIndexBuffer == null)
+                    {
+                        throw new InvalidOperationException("Curve index buffer is not a Vulkan buffer.");
+                    }
+
+                    uint curveAabbCount = curveGeometry.SegmentCount;
+                    if (curveAabbCount == 0)
+                    {
+                        throw new InvalidOperationException("Curve geometry has no segments.");
+                    }
+
+                    uint segmentControlPointCount = curveGeometry.SegmentControlPointCount;
+                    if (segmentControlPointCount == 0)
+                    {
+                        throw new InvalidOperationException("Curve geometry segment control-point count must be greater than zero.");
+                    }
+
+                    if (curveGeometry.ControlPointStride < 12u)
+                    {
+                        throw new InvalidOperationException($"Curve control-point stride ({curveGeometry.ControlPointStride}) is smaller than 3-float position size.");
+                    }
+
+                    if (curveGeometry.RadiusStride < 4u)
+                    {
+                        throw new InvalidOperationException($"Curve radius stride ({curveGeometry.RadiusStride}) is smaller than float size.");
+                    }
+
+                    ulong curveAabbBufferSize = (ulong)curveAabbCount * (ulong)sizeof(VkAabbPositionRaw);
+                    VulkanAccelStructHelper.CreateDeviceAddressBuffer(
+                        device,
+                        curveAabbBufferSize,
+                        VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyKHR | VkBufferUsageFlags.ShaderDeviceAddress,
+                        VkMemoryPropertyFlags.HostVisible | VkMemoryPropertyFlags.HostCoherent,
+                        out VkBuffer curveAabbBuffer,
+                        out VkDeviceMemory curveAabbMemory);
+
+                    m_NativeCurveAabbBuffers[i] = curveAabbBuffer;
+                    m_NativeCurveAabbMemories[i] = curveAabbMemory;
+
+                    IntPtr mappedControlPoint = controlPointBuffer.Map(0, 0);
+                    IntPtr mappedRadius = radiusBuffer.Map(0, 0);
+                    IntPtr mappedIndex = IntPtr.Zero;
+                    if (curveIndexBuffer != null)
+                    {
+                        mappedIndex = curveIndexBuffer.Map(0, 0);
+                    }
+
+                    void* mappedAabb = null;
+                    VulkanUtility.CheckErrors(VulkanNative.vkMapMemory(device.NativeDevice, curveAabbMemory, 0, curveAabbBufferSize, 0, &mappedAabb));
+                    try
+                    {
+                        BuildCurveAabbs(
+                            (VkAabbPositionRaw*)mappedAabb,
+                            curveAabbCount,
+                            segmentControlPointCount,
+                            curveGeometry,
+                            (byte*)mappedControlPoint.ToPointer(),
+                            (byte*)mappedRadius.ToPointer(),
+                            mappedIndex == IntPtr.Zero ? null : (byte*)mappedIndex.ToPointer());
+                    }
+                    finally
+                    {
+                        VulkanNative.vkUnmapMemory(device.NativeDevice, curveAabbMemory);
+                        if (curveIndexBuffer != null)
+                        {
+                            curveIndexBuffer.UnMap(0, 0);
+                        }
+                        radiusBuffer.UnMap(0, 0);
+                        controlPointBuffer.UnMap(0, 0);
+                    }
+
+                    VkBufferDeviceAddressInfo curveAabbAddrInfo = new VkBufferDeviceAddressInfo()
+                    {
+                        sType = VkStructureType.BufferDeviceAddressInfo,
+                        buffer = curveAabbBuffer,
+                    };
+                    ulong curveAabbAddress = VulkanNative.vkGetBufferDeviceAddress(device.NativeDevice, &curveAabbAddrInfo);
+
+                    geometries[i] = new VkAccelerationStructureGeometryKHR()
+                    {
+                        sType = VkStructureType.AccelerationStructureGeometryKHR,
+                        geometryType = VkGeometryTypeKHR.Aabbs,
+                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
+                    };
+                    geometries[i].geometry.aabbs.sType = VkStructureType.AccelerationStructureGeometryAabbsDataKHR;
+                    geometries[i].geometry.aabbs.data.deviceAddress = curveAabbAddress;
+                    geometries[i].geometry.aabbs.stride = (ulong)sizeof(VkAabbPositionRaw);
+                    maxPrimitiveCounts[i] = curveAabbCount;
+                }
+                else
+                {
+                    throw new NotSupportedException($"Unsupported BLAS geometry type '{geom.GeometryType}'.");
                 }
             }
 
@@ -372,11 +492,122 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
+            for (int i = 0; i < m_NativeCurveAabbBuffers.Length; ++i)
+            {
+                VkBuffer curveAabbBuffer = m_NativeCurveAabbBuffers[i];
+                if (curveAabbBuffer.Handle != 0)
+                {
+                    VulkanNative.vkDestroyBuffer(m_VulkanDevice.NativeDevice, curveAabbBuffer, null);
+                    m_NativeCurveAabbBuffers[i] = default;
+                }
+
+                VkDeviceMemory curveAabbMemory = m_NativeCurveAabbMemories[i];
+                if (curveAabbMemory.Handle != 0)
+                {
+                    VulkanNative.vkFreeMemory(m_VulkanDevice.NativeDevice, curveAabbMemory, null);
+                    m_NativeCurveAabbMemories[i] = default;
+                }
+            }
+
             VulkanNative.vkDestroyAccelerationStructureKHR(m_VulkanDevice.NativeDevice, m_NativeAccelStruct, null);
             VulkanNative.vkDestroyBuffer(m_VulkanDevice.NativeDevice, m_NativeBuffer, null);
             VulkanNative.vkFreeMemory(m_VulkanDevice.NativeDevice, m_NativeMemory, null);
             VulkanNative.vkDestroyBuffer(m_VulkanDevice.NativeDevice, m_NativeScratchBuffer, null);
             VulkanNative.vkFreeMemory(m_VulkanDevice.NativeDevice, m_NativeScratchMemory, null);
+        }
+
+        internal VkBuffer GetCurveAabbBuffer(in int geometryIndex)
+        {
+            if ((uint)geometryIndex >= (uint)m_NativeCurveAabbBuffers.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(geometryIndex));
+            }
+
+            VkBuffer curveAabbBuffer = m_NativeCurveAabbBuffers[geometryIndex];
+            if (curveAabbBuffer.Handle == 0)
+            {
+                throw new InvalidOperationException($"Curve AABB buffer for geometry index {geometryIndex} is not initialized.");
+            }
+
+            return curveAabbBuffer;
+        }
+
+        private static void BuildCurveAabbs(
+            VkAabbPositionRaw* aabbs,
+            in uint segmentCount,
+            in uint segmentControlPointCount,
+            in RHIAccelStructCurves curveGeometry,
+            byte* controlPointData,
+            byte* radiusData,
+            byte* indexData)
+        {
+            byte* controlPointBase = controlPointData + curveGeometry.ControlPointOffset;
+            byte* radiusBase = radiusData + curveGeometry.RadiusOffset;
+            byte* indexBase = indexData != null ? indexData + curveGeometry.IndexOffset : null;
+            uint sequentialSegmentStep = segmentControlPointCount > 1u ? segmentControlPointCount - 1u : 1u;
+
+            for (uint segmentIndex = 0; segmentIndex < segmentCount; ++segmentIndex)
+            {
+                float minX = float.PositiveInfinity;
+                float minY = float.PositiveInfinity;
+                float minZ = float.PositiveInfinity;
+                float maxX = float.NegativeInfinity;
+                float maxY = float.NegativeInfinity;
+                float maxZ = float.NegativeInfinity;
+
+                for (uint localControlPoint = 0; localControlPoint < segmentControlPointCount; ++localControlPoint)
+                {
+                    uint controlPointIndex;
+                    if (indexBase != null)
+                    {
+                        uint indexElement = segmentIndex * segmentControlPointCount + localControlPoint;
+                        controlPointIndex = ReadCurveControlPointIndex(indexBase, curveGeometry.IndexFormat, indexElement);
+                    }
+                    else
+                    {
+                        controlPointIndex = segmentIndex * sequentialSegmentStep + localControlPoint;
+                    }
+
+                    if (controlPointIndex >= curveGeometry.ControlPointCount)
+                    {
+                        throw new InvalidOperationException($"Curve control-point index {controlPointIndex} out of range (count={curveGeometry.ControlPointCount}).");
+                    }
+
+                    float* controlPoint = (float*)(controlPointBase + (controlPointIndex * curveGeometry.ControlPointStride));
+                    float* radius = (float*)(radiusBase + (controlPointIndex * curveGeometry.RadiusStride));
+                    float inflatedRadius = *radius;
+                    float candidateMinX = controlPoint[0] - inflatedRadius;
+                    float candidateMinY = controlPoint[1] - inflatedRadius;
+                    float candidateMinZ = controlPoint[2] - inflatedRadius;
+                    float candidateMaxX = controlPoint[0] + inflatedRadius;
+                    float candidateMaxY = controlPoint[1] + inflatedRadius;
+                    float candidateMaxZ = controlPoint[2] + inflatedRadius;
+
+                    if (candidateMinX < minX) minX = candidateMinX;
+                    if (candidateMinY < minY) minY = candidateMinY;
+                    if (candidateMinZ < minZ) minZ = candidateMinZ;
+                    if (candidateMaxX > maxX) maxX = candidateMaxX;
+                    if (candidateMaxY > maxY) maxY = candidateMaxY;
+                    if (candidateMaxZ > maxZ) maxZ = candidateMaxZ;
+                }
+
+                aabbs[segmentIndex].MinX = minX;
+                aabbs[segmentIndex].MinY = minY;
+                aabbs[segmentIndex].MinZ = minZ;
+                aabbs[segmentIndex].MaxX = maxX;
+                aabbs[segmentIndex].MaxY = maxY;
+                aabbs[segmentIndex].MaxZ = maxZ;
+            }
+        }
+
+        private static uint ReadCurveControlPointIndex(byte* indexBase, in ERHIBufferFormat format, in uint elementIndex)
+        {
+            return format switch
+            {
+                ERHIBufferFormat.UInt16 => ((ushort*)indexBase)[elementIndex],
+                ERHIBufferFormat.UInt32 => ((uint*)indexBase)[elementIndex],
+                _ => throw new NotSupportedException($"Unsupported curve index format '{format}'."),
+            };
         }
     }
 
@@ -384,6 +615,11 @@ namespace Infinity.Graphics
     {
         internal static void CreateDeviceAddressBuffer(VulkanDevice device, ulong size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps, out VkBuffer buffer, out VkDeviceMemory memory)
         {
+            if (size == 0)
+            {
+                throw new InvalidOperationException("Vulkan buffer size must be greater than zero.");
+            }
+
             VkBufferCreateInfo bufferInfo = new VkBufferCreateInfo()
             {
                 sType = VkStructureType.BufferCreateInfo,

@@ -379,6 +379,18 @@ namespace Infinity.Graphics
             }
         }
 
+        public static VkFormat ConvertToVkAccelerationStructureVertexFormat(in ERHIPixelFormat format)
+        {
+            VkFormat vkFormat = ConvertToVkFormat(format);
+            if (vkFormat == VkFormat.R32G32B32A32Sfloat)
+            {
+                // RT triangle geometry consumes xyz; keep float4 layout by using xyz format + explicit stride.
+                return VkFormat.R32G32B32Sfloat;
+            }
+
+            return vkFormat;
+        }
+
         public static VkBufferUsageFlags ConvertToVkBufferUsage(in ERHIBufferUsage usage)
         {
             // Keep transfer usage enabled by default because the current RHI upload path
@@ -402,7 +414,8 @@ namespace Infinity.Graphics
             if ((usage & ERHIBufferUsage.UnorderedAccess) == ERHIBufferUsage.UnorderedAccess)
                 result |= VkBufferUsageFlags.StorageBuffer;
             if ((usage & ERHIBufferUsage.AccelStruct) == ERHIBufferUsage.AccelStruct)
-                result |= VkBufferUsageFlags.AccelerationStructureStorageKHR;
+                result |= VkBufferUsageFlags.AccelerationStructureStorageKHR
+                          | VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyKHR;
             if ((usage & ERHIBufferUsage.ShaderResource) == ERHIBufferUsage.ShaderResource
                 || (usage & ERHIBufferUsage.UnorderedAccess) == ERHIBufferUsage.UnorderedAccess
                 || (usage & ERHIBufferUsage.AccelStruct) == ERHIBufferUsage.AccelStruct)

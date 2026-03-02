@@ -1347,7 +1347,8 @@ namespace Infinity.Graphics
                 if (geom.GeometryType == EAccelStructGeometryType.Triangle)
                 {
                     RHIAccelStructTriangles triangleGeometry = (RHIAccelStructTriangles)geom;
-                    VulkanBuffer vertexBuffer = triangleGeometry.VertexBuffer as VulkanBuffer;
+                    VulkanBuffer vertexBuffer = triangleGeometry.VertexBuffer as VulkanBuffer
+                        ?? throw new InvalidOperationException("Triangle geometry requires a Vulkan vertex buffer.");
                     VkBufferDeviceAddressInfo vertexAddrInfo = new VkBufferDeviceAddressInfo()
                     {
                         sType = VkStructureType.BufferDeviceAddressInfo,
@@ -1362,14 +1363,15 @@ namespace Infinity.Graphics
                         flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
                     };
                     geometries[i].geometry.triangles.sType = VkStructureType.AccelerationStructureGeometryTrianglesDataKHR;
-                    geometries[i].geometry.triangles.vertexFormat = VulkanUtility.ConvertToVkFormat(triangleGeometry.VertexFormat);
+                    geometries[i].geometry.triangles.vertexFormat = VulkanUtility.ConvertToVkAccelerationStructureVertexFormat(triangleGeometry.VertexFormat);
                     geometries[i].geometry.triangles.vertexData.deviceAddress = vertexAddress + triangleGeometry.VertexOffset;
                     geometries[i].geometry.triangles.vertexStride = triangleGeometry.VertexStride;
                     geometries[i].geometry.triangles.maxVertex = triangleGeometry.VertexCount;
 
                     if (triangleGeometry.IndexBuffer != null)
                     {
-                        VulkanBuffer indexBuffer = triangleGeometry.IndexBuffer as VulkanBuffer;
+                        VulkanBuffer indexBuffer = triangleGeometry.IndexBuffer as VulkanBuffer
+                            ?? throw new InvalidOperationException("Triangle index buffer is not a Vulkan buffer.");
                         VkBufferDeviceAddressInfo indexAddrInfo = new VkBufferDeviceAddressInfo()
                         {
                             sType = VkStructureType.BufferDeviceAddressInfo,
@@ -1378,18 +1380,25 @@ namespace Infinity.Graphics
                         ulong indexAddress = VulkanNative.vkGetBufferDeviceAddress(vkQueue.VulkanDevice.NativeDevice, &indexAddrInfo);
                         geometries[i].geometry.triangles.indexType = VulkanUtility.ConvertToVkIndexType(triangleGeometry.IndexFormat);
                         geometries[i].geometry.triangles.indexData.deviceAddress = indexAddress + triangleGeometry.IndexOffset;
-                        rangeInfos[i].primitiveCount = triangleGeometry.IndexCount / 3;
+                        rangeInfos[i] = new VkAccelerationStructureBuildRangeInfoKHR()
+                        {
+                            primitiveCount = triangleGeometry.IndexCount / 3,
+                        };
                     }
                     else
                     {
                         geometries[i].geometry.triangles.indexType = VkIndexType.NoneKHR;
-                        rangeInfos[i].primitiveCount = triangleGeometry.VertexCount / 3;
+                        rangeInfos[i] = new VkAccelerationStructureBuildRangeInfoKHR()
+                        {
+                            primitiveCount = triangleGeometry.VertexCount / 3,
+                        };
                     }
                 }
                 else if (geom.GeometryType == EAccelStructGeometryType.AABB)
                 {
                     RHIAccelStructAABBs aabbGeometry = (RHIAccelStructAABBs)geom;
-                    VulkanBuffer aabbBuffer = aabbGeometry.AABBBuffer as VulkanBuffer;
+                    VulkanBuffer aabbBuffer = aabbGeometry.AABBBuffer as VulkanBuffer
+                        ?? throw new InvalidOperationException("AABB geometry requires a Vulkan buffer.");
                     VkBufferDeviceAddressInfo aabbAddrInfo = new VkBufferDeviceAddressInfo()
                     {
                         sType = VkStructureType.BufferDeviceAddressInfo,
@@ -1406,7 +1415,41 @@ namespace Infinity.Graphics
                     geometries[i].geometry.aabbs.sType = VkStructureType.AccelerationStructureGeometryAabbsDataKHR;
                     geometries[i].geometry.aabbs.data.deviceAddress = aabbAddress + aabbGeometry.Offset;
                     geometries[i].geometry.aabbs.stride = aabbGeometry.Stride;
-                    rangeInfos[i].primitiveCount = aabbGeometry.Count;
+                    rangeInfos[i] = new VkAccelerationStructureBuildRangeInfoKHR()
+                    {
+                        primitiveCount = aabbGeometry.Count,
+                    };
+                }
+                else if (geom.GeometryType == EAccelStructGeometryType.Curves)
+                {
+                    RHIAccelStructCurves curveGeometry = geom as RHIAccelStructCurves
+                        ?? throw new InvalidOperationException("Curve geometry descriptor type mismatch.");
+                    VkBuffer curveAabbBuffer = vkBLAS.GetCurveAabbBuffer(i);
+
+                    VkBufferDeviceAddressInfo curveAabbAddrInfo = new VkBufferDeviceAddressInfo()
+                    {
+                        sType = VkStructureType.BufferDeviceAddressInfo,
+                        buffer = curveAabbBuffer,
+                    };
+                    ulong curveAabbAddress = VulkanNative.vkGetBufferDeviceAddress(vkQueue.VulkanDevice.NativeDevice, &curveAabbAddrInfo);
+
+                    geometries[i] = new VkAccelerationStructureGeometryKHR()
+                    {
+                        sType = VkStructureType.AccelerationStructureGeometryKHR,
+                        geometryType = VkGeometryTypeKHR.Aabbs,
+                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
+                    };
+                    geometries[i].geometry.aabbs.sType = VkStructureType.AccelerationStructureGeometryAabbsDataKHR;
+                    geometries[i].geometry.aabbs.data.deviceAddress = curveAabbAddress;
+                    geometries[i].geometry.aabbs.stride = (ulong)sizeof(float) * 6UL;
+                    rangeInfos[i] = new VkAccelerationStructureBuildRangeInfoKHR()
+                    {
+                        primitiveCount = curveGeometry.SegmentCount,
+                    };
+                }
+                else
+                {
+                    throw new NotSupportedException($"Unsupported BLAS geometry type '{geom.GeometryType}'.");
                 }
             }
 
