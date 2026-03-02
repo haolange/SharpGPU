@@ -42,6 +42,10 @@ namespace Infinity.Graphics
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
+            if (commandAllocator == null)
+            {
+                throw new InvalidOperationException("Failed to create ID3D12CommandAllocator.");
+            }
             m_NativeCommandAllocator = commandAllocator;
 
             Vortice.Direct3D12.ID3D12GraphicsCommandList7 commandList;
@@ -49,12 +53,18 @@ namespace Infinity.Graphics
                 0,
                 Dx12Utility.ConvertToDx12QueueType(commandQueue.PipelineType),
                 m_NativeCommandAllocator,
-                null,
+                null!,
                 out commandList);
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
+            if (commandList == null)
+            {
+                throw new InvalidOperationException("Failed to create ID3D12GraphicsCommandList7.");
+            }
             m_NativeCommandList = commandList;
+            // D3D12 command lists are created in the recording state; close once so the first Begin() can Reset safely.
+            m_NativeCommandList.Close();
 
             m_TransferEncoder = new Dx12TransferEncoder(this);
             m_ComputeEncoder = new Dx12ComputeEncoder(this);
@@ -277,6 +287,10 @@ namespace Infinity.Graphics
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
+            if (resource == null)
+            {
+                throw new InvalidOperationException("Failed to create compute indirect argument buffer resource.");
+            }
             m_NativeArgumentBuffer = resource;
         }
 
@@ -335,6 +349,10 @@ namespace Infinity.Graphics
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
+            if (resource == null)
+            {
+                throw new InvalidOperationException("Failed to create ray tracing indirect argument buffer resource.");
+            }
             m_NativeArgumentBuffer = resource;
         }
 
@@ -393,6 +411,10 @@ namespace Infinity.Graphics
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
+            if (resource == null)
+            {
+                throw new InvalidOperationException("Failed to create raster indirect argument buffer resource.");
+            }
             m_NativeArgumentBuffer = resource;
         }
 

@@ -5,11 +5,13 @@ namespace Infinity.Graphics
 #pragma warning disable CS8600, CS8602, CA1416, CS8602, CS8604
     internal unsafe class Dx12SwapChain : RHISwapChain
     {
-        public override int BackTextureIndex => (int)m_NativeSwapChain.CurrentBackBufferIndex;
+        public override int BackTextureIndex => m_NativeSwapChain3 != null ? (int)m_NativeSwapChain3.CurrentBackBufferIndex : m_FallbackBackTextureIndex;
 
         private Dx12Device m_Dx12Device;
         private Dx12Texture[] m_Textures;
-        private Vortice.DXGI.IDXGISwapChain4 m_NativeSwapChain;
+        private Vortice.DXGI.IDXGISwapChain1 m_NativeSwapChain;
+        private Vortice.DXGI.IDXGISwapChain3? m_NativeSwapChain3;
+        private int m_FallbackBackTextureIndex;
         private RHISwapChainDescriptor m_Descriptor;
 
         public Dx12SwapChain(Dx12Device device, in RHISwapChainDescriptor descriptor)
@@ -41,12 +43,17 @@ namespace Infinity.Graphics
             Dx12Utility.CHECK_HR(hResult);
 #endif
             m_Descriptor.Extent = extent;
+            m_FallbackBackTextureIndex = 0;
             FetchDx12Textures(m_Descriptor);
         }
 
         public override void Present()
         {
             m_NativeSwapChain.Present(Dx12Utility.ConvertToDx12SyncInterval(m_Descriptor.PresentMode), 0);
+            if (m_NativeSwapChain3 == null)
+            {
+                m_FallbackBackTextureIndex = (m_FallbackBackTextureIndex + 1) % m_Textures.Length;
+            }
         }
 
         private void CreateDX12SwapChain(in RHISwapChainDescriptor descriptor) 
@@ -72,7 +79,9 @@ namespace Infinity.Graphics
                 desc,
                 null,
                 null);
-            m_NativeSwapChain = (Vortice.DXGI.IDXGISwapChain4)dx12SwapChain1;
+            m_NativeSwapChain = dx12SwapChain1;
+            m_NativeSwapChain3 = dx12SwapChain1.QueryInterfaceOrNull<Vortice.DXGI.IDXGISwapChain3>();
+            m_FallbackBackTextureIndex = 0;
 #else
             Vortice.DXGI.SwapChainDescription desc = new Vortice.DXGI.SwapChainDescription();
             //desc.Flags = (uint)Vortice.DXGI.SwapChainFlags.AllowModeSwitch;
@@ -95,7 +104,14 @@ namespace Infinity.Graphics
 #if DEBUG
             Dx12Utility.CHECK_HR(hResult);
 #endif
-            m_NativeSwapChain = (Vortice.DXGI.IDXGISwapChain4)dx12SwapChain1;
+            m_NativeSwapChain = dx12SwapChain1.QueryInterfaceOrNull<Vortice.DXGI.IDXGISwapChain1>();
+            m_NativeSwapChain3 = m_NativeSwapChain?.QueryInterfaceOrNull<Vortice.DXGI.IDXGISwapChain3>();
+            m_FallbackBackTextureIndex = 0;
+            dx12SwapChain1.Release();
+            if (m_NativeSwapChain == null)
+            {
+                throw new System.InvalidOperationException("Failed to query IDXGISwapChain1 from DXGI swap chain.");
+            }
 #endif
         }
 
@@ -125,6 +141,11 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
+            if (m_NativeSwapChain3 != null)
+            {
+                m_NativeSwapChain3.Release();
+                m_NativeSwapChain3 = null;
+            }
             m_NativeSwapChain.Release();
         }
     }
