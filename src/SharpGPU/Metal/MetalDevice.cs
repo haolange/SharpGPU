@@ -39,7 +39,7 @@ namespace Infinity.Graphics
                 throw new InvalidOperationException("Metal device pointer is null.");
             }
 
-            m_Name = m_NativeDevice.Name.ToString();
+            m_Name = m_NativeDevice.Name.ToString() ?? string.Empty;
             m_Type = m_NativeDevice.IsHeadless ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
             m_VendorId.IntValue = (uint)ERHIVendorType.Apple;
             m_DeviceId.IntValue = (uint)(m_NativeDevice.RegistryID & uint.MaxValue);
@@ -47,6 +47,16 @@ namespace Infinity.Graphics
             m_SupportsMetal4 = SafeSupportsFamily(MTLGPUFamily.Metal4);
             m_SupportsArgumentTable = m_SupportsMetal4 && SafeSupportsSelector(s_NewArgumentTableWithDescriptorError);
             m_SupportsMetal4Barriers = m_SupportsMetal4;
+
+            if (!m_SupportsMetal4)
+            {
+                throw new NotSupportedException("Metal backend requires Metal 4 support.");
+            }
+
+            if (!m_SupportsArgumentTable)
+            {
+                throw new NotSupportedException("Metal backend requires MTL4 argument table support.");
+            }
 
             BuildLimitAndFeature();
             CreateCommandQueues(computeQueueCount, transferQueueCount, graphicsQueueCount);
@@ -227,7 +237,17 @@ namespace Infinity.Graphics
                 maxTexture2DSize: maxTextureSize,
                 maxTextureCubeSize: maxCubeTextureSize);
 
-            bool isRayTracingSupported = m_NativeDevice.SupportsRaytracing;
+            // MTL4 ray tracing requires hardware support. Apple M1/M2 expose software-emulated RT
+            // capability flags but assert when building acceleration structures through MTL4.
+            bool rawRayTracingCapability = m_NativeDevice.SupportsRaytracing && m_NativeDevice.SupportsRaytracingFromRender;
+            string deviceName = m_Name ?? string.Empty;
+            bool isAppleSilicon = deviceName.StartsWith("Apple M", StringComparison.OrdinalIgnoreCase);
+            bool hasKnownHardwareRayTracing = !isAppleSilicon || IsAppleM3OrNewer(deviceName);
+            bool isRayTracingSupported = rawRayTracingCapability && hasKnownHardwareRayTracing;
+            if (rawRayTracingCapability && !isRayTracingSupported)
+            {
+                Console.WriteLine($"[MetalDevice] Ray tracing capability appears software-emulated on '{deviceName}'; disabling RT for MTL4 runtime stability.");
+            }
             bool isMetal3 = m_SupportsMetal3;
             bool isTimestampSupported = m_NativeDevice.CounterSets.Count > 0;
 
@@ -261,6 +281,39 @@ namespace Infinity.Graphics
                 depthValueRange: ERHIDepthValueRange.ZeroToOne,
                 multiviewStrategy: ERHIMultiviewStrategy.Unsupported,
                 waveOperationStrategy: ERHIWaveOperationStrategy.Basic);
+        }
+
+        private static bool IsAppleM3OrNewer(string deviceName)
+        {
+            if (string.IsNullOrWhiteSpace(deviceName))
+            {
+                return false;
+            }
+
+            int markerIndex = deviceName.IndexOf("Apple M", StringComparison.OrdinalIgnoreCase);
+            if (markerIndex < 0)
+            {
+                return false;
+            }
+
+            int generationStart = markerIndex + "Apple M".Length;
+            int generationEnd = generationStart;
+            while (generationEnd < deviceName.Length && char.IsDigit(deviceName[generationEnd]))
+            {
+                ++generationEnd;
+            }
+
+            if (generationEnd == generationStart)
+            {
+                return false;
+            }
+
+            if (!int.TryParse(deviceName.Substring(generationStart, generationEnd - generationStart), out int generation))
+            {
+                return false;
+            }
+
+            return generation >= 3;
         }
 
         private void CreateCommandQueues(in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
