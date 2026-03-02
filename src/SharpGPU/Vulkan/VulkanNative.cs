@@ -392,6 +392,18 @@ namespace Infinity.Graphics
             return result;
         }
 
+        public static VkResult vkCreateAndroidSurfaceKHR(VkInstance instance, VkAndroidSurfaceCreateInfoKHR* createInfo, VkAllocationCallbacks* allocator, VkSurfaceKHR* surface)
+        {
+            VkResult result = GetInstanceApi(instance).vkCreateAndroidSurfaceKHR(createInfo, allocator, surface);
+            return result;
+        }
+
+        public static VkResult vkCreateMetalSurfaceEXT(VkInstance instance, VkMetalSurfaceCreateInfoEXT* createInfo, VkAllocationCallbacks* allocator, VkSurfaceKHR* surface)
+        {
+            VkResult result = GetInstanceApi(instance).vkCreateMetalSurfaceEXT(createInfo, allocator, surface);
+            return result;
+        }
+
         public static VkResult vkCreateWin32SurfaceKHR(VkInstance instance, VkWin32SurfaceCreateInfoKHR* createInfo, VkAllocationCallbacks* allocator, VkSurfaceKHR* surface)
         {
             VkResult result = GetInstanceApi(instance).vkCreateWin32SurfaceKHR(createInfo, allocator, surface);
@@ -566,6 +578,12 @@ namespace Infinity.Graphics
             GetDeviceApi(device).vkGetAccelerationStructureBuildSizesKHR(buildType, buildInfo, maxPrimitiveCounts, sizeInfo);
         }
 
+        public static ulong vkGetAccelerationStructureDeviceAddressKHR(VkDevice device, VkAccelerationStructureDeviceAddressInfoKHR* info)
+        {
+            ulong result = GetDeviceApi(device).vkGetAccelerationStructureDeviceAddressKHR(info);
+            return result;
+        }
+
         public static ulong vkGetBufferDeviceAddress(VkDevice device, VkBufferDeviceAddressInfo* info)
         {
             ulong result = GetDeviceApi(device).vkGetBufferDeviceAddress(info);
@@ -720,4 +738,3 @@ namespace Infinity.Graphics
 
     }
 }
-

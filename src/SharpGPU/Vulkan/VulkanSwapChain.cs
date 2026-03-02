@@ -1,12 +1,14 @@
-﻿using System;
+using System;
 using Infinity.Mathmatics;
 using Vortice.Vulkan;
 using System.Runtime.InteropServices;
+using SharpMetal.ObjectiveCCore;
+using SharpMetal.QuartzCore;
 
 namespace Infinity.Graphics
 {
-#pragma warning disable CS8600, CS8602, CS8618
-    internal unsafe class VulkanSwapChain : RHISwapChain
+#pragma warning disable CS8600, CS8602, CS8618, CA1416
+    internal unsafe partial class VulkanSwapChain : RHISwapChain
     {
         public override int BackTextureIndex => (int)m_CurrentImageIndex;
         public VkSwapchainKHR NativeSwapChain => m_NativeSwapChain;
@@ -19,6 +21,25 @@ namespace Infinity.Graphics
         private uint m_CurrentImageIndex;
         private VkFence m_ImageAcquireFence;
         private bool m_HasAcquiredImageThisFrame;
+        private IntPtr m_X11Display;
+        private IntPtr m_MetalLayerHandle;
+
+        private static ObjectiveCClass s_NSWindowClass;
+        private static ObjectiveCClass s_NSViewClass;
+        private static readonly ObjectiveCClass s_CAMetalLayerClass = new ObjectiveCClass("CAMetalLayer");
+        private static ObjectiveCClass s_UIWindowClass;
+        private static ObjectiveCClass s_UIViewClass;
+        private static bool s_AppKitClassesInitialized;
+        private static bool s_UIKitClassesInitialized;
+
+        private static readonly Selector s_IsKindOfClassSelector = "isKindOfClass:";
+        private static readonly Selector s_ContentViewSelector = "contentView";
+        private static readonly Selector s_RootViewControllerSelector = "rootViewController";
+        private static readonly Selector s_ViewSelector = "view";
+        private static readonly Selector s_LayerSelector = "layer";
+        private static readonly Selector s_SetWantsLayerSelector = "setWantsLayer:";
+        private static readonly Selector s_SetLayerSelector = "setLayer:";
+        private static readonly Selector s_AddSublayerSelector = "addSublayer:";
 
         public VulkanSwapChain(VulkanDevice device, in RHISwapChainDescriptor descriptor)
         {
@@ -38,11 +59,18 @@ namespace Infinity.Graphics
             {
                 case EOSPlatform.Windows:
                 {
+                    // TODO(UNVERIFIED): Validate on Windows runtime (x64/x86_64).
+                    IntPtr moduleHandle = GetModuleHandle(null);
+                    if (moduleHandle == IntPtr.Zero)
+                    {
+                        moduleHandle = System.Diagnostics.Process.GetCurrentProcess().Handle;
+                    }
+
                     VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = new VkWin32SurfaceCreateInfoKHR()
                     {
                         sType = VkStructureType.Win32SurfaceCreateInfoKHR,
                         hwnd = descriptor.Surface,
-                        hinstance = System.Diagnostics.Process.GetCurrentProcess().Handle,
+                        hinstance = moduleHandle,
                     };
 
                     fixed (VkSurfaceKHR* surfacePtr = &m_Surface)
@@ -53,9 +81,17 @@ namespace Infinity.Graphics
                 }
                 case EOSPlatform.Linux:
                 {
+                    // TODO(UNVERIFIED): Validate on Linux/X11 runtime.
+                    m_X11Display = XOpenDisplay(IntPtr.Zero);
+                    if (m_X11Display == IntPtr.Zero)
+                    {
+                        throw new InvalidOperationException("Failed to open X11 display via XOpenDisplay(null).");
+                    }
+
                     VkXlibSurfaceCreateInfoKHR surfaceCreateInfo = new VkXlibSurfaceCreateInfoKHR()
                     {
                         sType = VkStructureType.XlibSurfaceCreateInfoKHR,
+                        dpy = m_X11Display,
                         window = (ulong)descriptor.Surface,
                     };
 
@@ -65,7 +101,183 @@ namespace Infinity.Graphics
                     }
                     break;
                 }
+                case EOSPlatform.Android:
+                {
+                    // TODO(UNVERIFIED): Validate on Android runtime with ANativeWindow* surface handle.
+                    VkAndroidSurfaceCreateInfoKHR surfaceCreateInfo = new VkAndroidSurfaceCreateInfoKHR()
+                    {
+                        sType = VkStructureType.AndroidSurfaceCreateInfoKHR,
+                        window = descriptor.Surface,
+                    };
+
+                    fixed (VkSurfaceKHR* surfacePtr = &m_Surface)
+                    {
+                        VulkanUtility.CheckErrors(VulkanNative.vkCreateAndroidSurfaceKHR(vkInstance.NativeInstance, &surfaceCreateInfo, null, surfacePtr));
+                    }
+                    break;
+                }
+                case EOSPlatform.MacOS:
+                case EOSPlatform.iOS:
+                {
+                    // TODO(UNVERIFIED): iOS path requires device runtime verification.
+                    m_MetalLayerHandle = ResolveMetalLayer(descriptor.Surface, VulkanUtility.GetCurrentOSPlatfom());
+                    if (m_MetalLayerHandle == IntPtr.Zero)
+                    {
+                        throw new InvalidOperationException("Failed to resolve CAMetalLayer for Vulkan surface creation.");
+                    }
+
+                    VkMetalSurfaceCreateInfoEXT surfaceCreateInfo = new VkMetalSurfaceCreateInfoEXT()
+                    {
+                        sType = VkStructureType.MetalSurfaceCreateInfoEXT,
+                        pLayer = m_MetalLayerHandle,
+                    };
+                    CreateMetalSurface(vkInstance.NativeInstance, in surfaceCreateInfo);
+                    break;
+                }
+                default:
+                    throw new PlatformNotSupportedException("Vulkan swapchain surface creation is not supported on the current platform.");
             }
+        }
+
+        private static bool IsObjectOfClass(IntPtr objectPtr, ObjectiveCClass cls)
+        {
+            return objectPtr != IntPtr.Zero && cls.NativePtr != IntPtr.Zero && ObjectiveCRuntime.bool_objc_msgSend(objectPtr, (IntPtr)s_IsKindOfClassSelector, cls.NativePtr);
+        }
+
+        private void CreateMetalSurface(VkInstance instance, in VkMetalSurfaceCreateInfoEXT surfaceCreateInfo)
+        {
+            fixed (VkMetalSurfaceCreateInfoEXT* createInfoPtr = &surfaceCreateInfo)
+            fixed (VkSurfaceKHR* surfacePtr = &m_Surface)
+            {
+                VulkanUtility.CheckErrors(VulkanNative.vkCreateMetalSurfaceEXT(instance, createInfoPtr, null, surfacePtr));
+            }
+        }
+
+        private static void EnsureUIKitClassesLoaded()
+        {
+            if (s_UIKitClassesInitialized)
+            {
+                return;
+            }
+
+            s_UIWindowClass = new ObjectiveCClass("UIWindow");
+            s_UIViewClass = new ObjectiveCClass("UIView");
+            s_UIKitClassesInitialized = true;
+        }
+
+        private static void EnsureAppKitClassesLoaded()
+        {
+            if (s_AppKitClassesInitialized)
+            {
+                return;
+            }
+
+            s_NSWindowClass = new ObjectiveCClass("NSWindow");
+            s_NSViewClass = new ObjectiveCClass("NSView");
+            s_AppKitClassesInitialized = true;
+        }
+
+        private static IntPtr ResolveMetalLayer(IntPtr surfaceHandle, EOSPlatform platform)
+        {
+            if (surfaceHandle == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("SwapChain surface pointer is null.");
+            }
+
+            if (IsObjectOfClass(surfaceHandle, s_CAMetalLayerClass))
+            {
+                ObjectiveCRuntime.Retain(surfaceHandle);
+                return surfaceHandle;
+            }
+
+            if (platform == EOSPlatform.MacOS)
+            {
+                EnsureAppKitClassesLoaded();
+
+                if (IsObjectOfClass(surfaceHandle, s_NSWindowClass))
+                {
+                    IntPtr contentView = ObjectiveCRuntime.IntPtr_objc_msgSend(surfaceHandle, s_ContentViewSelector);
+                    return EnsureMetalLayerForMacView(contentView);
+                }
+
+                if (IsObjectOfClass(surfaceHandle, s_NSViewClass))
+                {
+                    return EnsureMetalLayerForMacView(surfaceHandle);
+                }
+            }
+
+            if (platform == EOSPlatform.iOS)
+            {
+                EnsureUIKitClassesLoaded();
+
+                if (IsObjectOfClass(surfaceHandle, s_UIWindowClass))
+                {
+                    IntPtr rootViewController = ObjectiveCRuntime.IntPtr_objc_msgSend(surfaceHandle, s_RootViewControllerSelector);
+                    IntPtr rootView = rootViewController != IntPtr.Zero ? ObjectiveCRuntime.IntPtr_objc_msgSend(rootViewController, s_ViewSelector) : IntPtr.Zero;
+                    return EnsureMetalLayerForUIKitView(rootView);
+                }
+
+                if (IsObjectOfClass(surfaceHandle, s_UIViewClass))
+                {
+                    return EnsureMetalLayerForUIKitView(surfaceHandle);
+                }
+            }
+
+            throw new InvalidOperationException("Unsupported Apple surface handle type. Expected NSWindow/NSView/UIWindow/UIView/CAMetalLayer.");
+        }
+
+        private static IntPtr EnsureMetalLayerForMacView(IntPtr nsView)
+        {
+            if (nsView == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("NSView pointer is null while resolving CAMetalLayer.");
+            }
+
+            ObjectiveCRuntime.objc_msgSend(nsView, s_SetWantsLayerSelector, true);
+            IntPtr existingLayer = ObjectiveCRuntime.IntPtr_objc_msgSend(nsView, s_LayerSelector);
+            if (IsObjectOfClass(existingLayer, s_CAMetalLayerClass))
+            {
+                ObjectiveCRuntime.Retain(existingLayer);
+                return existingLayer;
+            }
+
+            CAMetalLayer newLayer = CAMetalLayer.New();
+            if (newLayer.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create CAMetalLayer for NSView.");
+            }
+
+            ObjectiveCRuntime.objc_msgSend(nsView, s_SetLayerSelector, newLayer.NativePtr);
+            return newLayer.NativePtr;
+        }
+
+        private static IntPtr EnsureMetalLayerForUIKitView(IntPtr uiView)
+        {
+            if (uiView == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("UIView pointer is null while resolving CAMetalLayer.");
+            }
+
+            IntPtr baseLayer = ObjectiveCRuntime.IntPtr_objc_msgSend(uiView, s_LayerSelector);
+            if (baseLayer == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("UIView layer pointer is null while resolving CAMetalLayer.");
+            }
+
+            if (IsObjectOfClass(baseLayer, s_CAMetalLayerClass))
+            {
+                ObjectiveCRuntime.Retain(baseLayer);
+                return baseLayer;
+            }
+
+            CAMetalLayer newLayer = CAMetalLayer.New();
+            if (newLayer.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create CAMetalLayer for UIView.");
+            }
+
+            ObjectiveCRuntime.objc_msgSend(baseLayer, s_AddSublayerSelector, newLayer.NativePtr);
+            return newLayer.NativePtr;
         }
 
         private void CreateSwapChain(in RHISwapChainDescriptor descriptor)
@@ -291,6 +503,18 @@ namespace Infinity.Graphics
             VulkanNative.vkDestroyFence(m_VulkanDevice.NativeDevice, m_ImageAcquireFence, null);
             VulkanNative.vkDestroySwapchainKHR(m_VulkanDevice.NativeDevice, m_NativeSwapChain, null);
             VulkanNative.vkDestroySurfaceKHR(m_VulkanDevice.VulkanInstance.NativeInstance, m_Surface, null);
+
+            if (m_X11Display != IntPtr.Zero)
+            {
+                XCloseDisplay(m_X11Display);
+                m_X11Display = IntPtr.Zero;
+            }
+
+            if (m_MetalLayerHandle != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_MetalLayerHandle);
+                m_MetalLayerHandle = IntPtr.Zero;
+            }
         }
 
         private static ERHIPixelFormat ConvertSwapchainVkFormatToRhiPixelFormat(in VkFormat format)
@@ -304,8 +528,15 @@ namespace Infinity.Graphics
                 _ => ERHIPixelFormat.B8G8R8A8_UNorm,
             };
         }
+
+        [LibraryImport("kernel32", EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
+        private static partial IntPtr GetModuleHandle(string? moduleName);
+
+        [LibraryImport("libX11.so.6", EntryPoint = "XOpenDisplay")]
+        private static partial IntPtr XOpenDisplay(IntPtr displayName);
+
+        [LibraryImport("libX11.so.6", EntryPoint = "XCloseDisplay")]
+        private static partial int XCloseDisplay(IntPtr display);
     }
-#pragma warning restore CS8600, CS8602, CS8618
+#pragma warning restore CS8600, CS8602, CS8618, CA1416
 }
-
-

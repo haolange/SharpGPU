@@ -24,7 +24,32 @@ namespace Infinity.Graphics
     {
         public static EOSPlatform GetCurrentOSPlatfom()
         {
-            return !RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? EOSPlatform.Windows : (!RuntimeInformation.OSDescription.Contains("Darwin") ? EOSPlatform.MacOS : EOSPlatform.iOS)) : (!RuntimeInformation.OSDescription.Contains("Unix") ? EOSPlatform.Linux : EOSPlatform.Android)) : EOSPlatform.Windows;
+            if (OperatingSystem.IsAndroid() || RuntimeInformation.IsOSPlatform(OSPlatform.Create("ANDROID")))
+            {
+                return EOSPlatform.Android;
+            }
+
+            if (OperatingSystem.IsIOS() || RuntimeInformation.IsOSPlatform(OSPlatform.Create("IOS")))
+            {
+                return EOSPlatform.iOS;
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return EOSPlatform.Windows;
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                return EOSPlatform.MacOS;
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                return EOSPlatform.Linux;
+            }
+
+            throw new PlatformNotSupportedException($"Unsupported OS platform: '{RuntimeInformation.OSDescription}'.");
         }
 
         public static byte* ToPointer(this string text)
@@ -1025,5 +1050,4 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8600, CS8602, CA1416
 }
-
 

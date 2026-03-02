@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using Vortice.Vulkan;
 using System.Collections.Generic;
@@ -17,6 +17,7 @@ namespace Infinity.Graphics
 
         private VkInstance m_VkInstance;
         private bool m_HasDebugUtils;
+        private bool m_EnablePortabilityEnumeration;
         private List<VulkanDevice> m_Devices;
         private List<string> m_ValidationLayers;
         private List<string> m_RequiredExtensions;
@@ -30,14 +31,28 @@ namespace Infinity.Graphics
             public byte* pLabelName;
             public float color0, color1, color2, color3;
         }
+
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         private delegate IntPtr PFN_vkGetInstanceProcAddr(VkInstance instance, byte* pName);
+
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        private delegate VkResult PFN_vkEnumerateInstanceExtensionProperties(byte* layerName, uint* propertyCount, VkExtensionProperties* properties);
+
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        private delegate VkResult PFN_vkEnumerateInstanceLayerProperties(uint* propertyCount, VkLayerProperties* properties);
+
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         private delegate void PFN_vkCmdBeginDebugUtilsLabel(VkCommandBuffer commandBuffer, VkDebugUtilsLabelEXT_* pLabelInfo);
+
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         private delegate void PFN_vkCmdEndDebugUtilsLabel(VkCommandBuffer commandBuffer);
+
         private PFN_vkCmdBeginDebugUtilsLabel m_CmdBeginDebugUtilsLabel;
         private PFN_vkCmdEndDebugUtilsLabel m_CmdEndDebugUtilsLabel;
+        private static IntPtr s_VulkanGlobalLibrary;
+        private static PFN_vkEnumerateInstanceExtensionProperties s_EnumerateInstanceExtensionProperties;
+        private static PFN_vkEnumerateInstanceLayerProperties s_EnumerateInstanceLayerProperties;
+        private static bool s_GlobalFunctionsLoaded;
 
         public VulkanInstance(in RHIInstanceDescriptor descriptor)
         {
@@ -51,77 +66,98 @@ namespace Infinity.Graphics
             EnumeratePhysicalDevices(descriptor);
         }
 
-        private void CheckExtension(string[] availableinstanceExtensions, List<string> extensionsToEnable, string extension)
+        private static bool ContainsExtension(HashSet<string> availableExtensions, string extension)
         {
-            if (!availableinstanceExtensions.Any((string e) => e == extension))
+            return availableExtensions.Contains(extension);
+        }
+
+        private static void RequireExtension(HashSet<string> availableExtensions, List<string> extensionsToEnable, string extension)
+        {
+            if (!ContainsExtension(availableExtensions, extension))
             {
-                Console.WriteLine("Vulkan", "The requiered instance extensions was not available: " + extension);
+                throw new InvalidOperationException($"Required Vulkan instance extension is not available: {extension}");
             }
 
-            extensionsToEnable.Add(extension);
+            if (!extensionsToEnable.Contains(extension))
+            {
+                extensionsToEnable.Add(extension);
+            }
+        }
+
+        private static void EnableExtensionIfAvailable(HashSet<string> availableExtensions, List<string> extensionsToEnable, string extension)
+        {
+            if (ContainsExtension(availableExtensions, extension) && !extensionsToEnable.Contains(extension))
+            {
+                extensionsToEnable.Add(extension);
+            }
         }
 
         private void CheckExtensionSupport(in RHIInstanceDescriptor descriptor)
         {
+            EnsureGlobalVulkanFunctionsLoaded();
             uint supportedExtensionCount = 0;
-            VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceExtensionProperties(null, &supportedExtensionCount, null));
+            VulkanUtility.CheckErrors(s_EnumerateInstanceExtensionProperties(null, &supportedExtensionCount, null));
             VkExtensionProperties* supportedExtensions = stackalloc VkExtensionProperties[(int)supportedExtensionCount];
-            VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceExtensionProperties(null, &supportedExtensionCount, supportedExtensions));
+            VulkanUtility.CheckErrors(s_EnumerateInstanceExtensionProperties(null, &supportedExtensionCount, supportedExtensions));
 
-            string[] array = new string[supportedExtensionCount];
+            HashSet<string> availableExtensions = new HashSet<string>(StringComparer.Ordinal);
             for (int i = 0; i < supportedExtensionCount; ++i)
             {
-                array[i] = VulkanUtility.GetString(supportedExtensions[i].extensionName);
+                availableExtensions.Add(VulkanUtility.GetString(supportedExtensions[i].extensionName));
             }
 
             m_RequiredExtensions = new List<string>();
+            m_EnablePortabilityEnumeration = false;
 
-            CheckExtension(array, m_RequiredExtensions, "VK_KHR_surface");
+            RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_surface");
 
             switch (VulkanUtility.GetCurrentOSPlatfom())
             {
                 case EOSPlatform.Windows:
-                    CheckExtension(array, m_RequiredExtensions, "VK_KHR_win32_surface");
+                    RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_win32_surface");
                     break;
                 case EOSPlatform.Linux:
-                    CheckExtension(array, m_RequiredExtensions, "VK_KHR_xlib_surface");
+                    // TODO(UNVERIFIED): Wayland surface path is pending; current Linux path targets X11 only.
+                    RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_xlib_surface");
                     break;
                 case EOSPlatform.Android:
-                    CheckExtension(array, m_RequiredExtensions, "VK_KHR_android_surface");
+                    RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_android_surface");
                     break;
                 case EOSPlatform.MacOS:
-                    CheckExtension(array, m_RequiredExtensions, "VK_MVK_macos_surface");
-                    break;
                 case EOSPlatform.iOS:
-                    CheckExtension(array, m_RequiredExtensions, "VK_MVK_ios_surface");
+                    // TODO(UNVERIFIED): iOS runtime verification pending.
+                    RequireExtension(availableExtensions, m_RequiredExtensions, "VK_EXT_metal_surface");
+                    if (ContainsExtension(availableExtensions, "VK_KHR_portability_enumeration"))
+                    {
+                        EnableExtensionIfAvailable(availableExtensions, m_RequiredExtensions, "VK_KHR_portability_enumeration");
+                        m_EnablePortabilityEnumeration = true;
+                    }
                     break;
             }
 
-            if (array.Any((string e) => e == "VK_KHR_get_physical_device_properties2"))
-            {
-                m_RequiredExtensions.Add("VK_KHR_get_physical_device_properties2");
-            }
+            EnableExtensionIfAvailable(availableExtensions, m_RequiredExtensions, "VK_KHR_get_physical_device_properties2");
 
             if (descriptor.EnableValidatior)
             {
-                if (array.Any((string e) => e == "VK_EXT_debug_utils"))
+                if (ContainsExtension(availableExtensions, "VK_EXT_debug_utils"))
                 {
-                    m_RequiredExtensions.Add("VK_EXT_debug_utils");
+                    EnableExtensionIfAvailable(availableExtensions, m_RequiredExtensions, "VK_EXT_debug_utils");
                     m_HasDebugUtils = true;
                 }
                 else
                 {
-                    m_RequiredExtensions.Add("VK_EXT_debug_report");
+                    EnableExtensionIfAvailable(availableExtensions, m_RequiredExtensions, "VK_EXT_debug_report");
                 }
             }
         }
 
         private void CheckValidationLayerSupport(in RHIInstanceDescriptor descriptor)
         {
+            EnsureGlobalVulkanFunctionsLoaded();
             uint layerCount = 0;
-            VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceLayerProperties(&layerCount, null));
+            VulkanUtility.CheckErrors(s_EnumerateInstanceLayerProperties(&layerCount, null));
             VkLayerProperties* availableLayers = stackalloc VkLayerProperties[(int)layerCount];
-            VulkanUtility.CheckErrors(VulkanNative.vkEnumerateInstanceLayerProperties(&layerCount, availableLayers));
+            VulkanUtility.CheckErrors(s_EnumerateInstanceLayerProperties(&layerCount, availableLayers));
 
             string[] array = new string[layerCount];
             for (int i = 0; i < layerCount; ++i)
@@ -146,10 +182,12 @@ namespace Infinity.Graphics
                         {
                             m_ValidationLayers.Add("VK_LAYER_LUNARG_core_validation");
                         }
+
                         if (array.Any((string l) => l == "VK_LAYER_LUNARG_swapchain"))
                         {
                             m_ValidationLayers.Add("VK_LAYER_LUNARG_swapchain");
                         }
+
                         if (array.Any((string l) => l == "VK_LAYER_LUNARG_parameter_validation"))
                         {
                             m_ValidationLayers.Add("VK_LAYER_LUNARG_parameter_validation");
@@ -161,12 +199,14 @@ namespace Infinity.Graphics
 
         private void CreateVulkanInstance(in RHIInstanceDescriptor descriptor)
         {
+            byte* appName = "Hello Triangle".ToPointer();
+            byte* engineName = "No Engine".ToPointer();
             VkApplicationInfo appInfo = new VkApplicationInfo()
             {
                 sType = VkStructureType.ApplicationInfo,
-                pApplicationName = "Hello Triangle".ToPointer(),
+                pApplicationName = appName,
                 applicationVersion = new VkVersion(VulkanUtility.Version(1, 0, 0)),
-                pEngineName = "No Engine".ToPointer(),
+                pEngineName = engineName,
                 engineVersion = new VkVersion(VulkanUtility.Version(1, 0, 0)),
                 apiVersion = new VkVersion(VulkanUtility.Version(1, 3, 0)),
             };
@@ -174,25 +214,31 @@ namespace Infinity.Graphics
             VkInstanceCreateInfo createInfo = default;
             createInfo.sType = VkStructureType.InstanceCreateInfo;
             createInfo.pApplicationInfo = &appInfo;
+            if (m_EnablePortabilityEnumeration)
+            {
+                createInfo.flags |= VkInstanceCreateFlags.EnumeratePortabilityKHR;
+            }
 
-            // Extensions
             IntPtr* extensionsToBytesArray = stackalloc IntPtr[m_RequiredExtensions.Count];
             for (int i = 0; i < m_RequiredExtensions.Count; ++i)
             {
                 extensionsToBytesArray[i] = Marshal.StringToHGlobalAnsi(m_RequiredExtensions[i]);
             }
+
+            IntPtr* layersToBytesArray = stackalloc IntPtr[Math.Max(1, m_ValidationLayers.Count)];
+            int layerPointerCount = m_ValidationLayers.Count;
+
             createInfo.enabledExtensionCount = (uint)m_RequiredExtensions.Count;
             createInfo.ppEnabledExtensionNames = (byte**)extensionsToBytesArray;
 
-            // Validation layers
 #if DEBUG
             if (m_ValidationLayers.Count > 0)
             {
-                IntPtr* layersToBytesArray = stackalloc IntPtr[m_ValidationLayers.Count];
                 for (int i = 0; i < m_ValidationLayers.Count; ++i)
                 {
                     layersToBytesArray[i] = Marshal.StringToHGlobalAnsi(m_ValidationLayers[i]);
                 }
+
                 createInfo.enabledLayerCount = (uint)m_ValidationLayers.Count;
                 createInfo.ppEnabledLayerNames = (byte**)layersToBytesArray;
             }
@@ -205,9 +251,33 @@ namespace Infinity.Graphics
             createInfo.pNext = null;
 #endif
 
-            fixed (VkInstance* instancePtr = &m_VkInstance)
+            try
             {
-                VulkanUtility.CheckErrors(VulkanNative.vkCreateInstance(&createInfo, null, instancePtr));
+                fixed (VkInstance* instancePtr = &m_VkInstance)
+                {
+                    VulkanUtility.CheckErrors(VulkanNative.vkCreateInstance(&createInfo, null, instancePtr));
+                }
+            }
+            finally
+            {
+                for (int i = 0; i < m_RequiredExtensions.Count; ++i)
+                {
+                    if (extensionsToBytesArray[i] != IntPtr.Zero)
+                    {
+                        Marshal.FreeHGlobal(extensionsToBytesArray[i]);
+                    }
+                }
+
+                for (int i = 0; i < layerPointerCount; ++i)
+                {
+                    if (layersToBytesArray[i] != IntPtr.Zero)
+                    {
+                        Marshal.FreeHGlobal(layersToBytesArray[i]);
+                    }
+                }
+
+                Marshal.FreeHGlobal((IntPtr)appName);
+                Marshal.FreeHGlobal((IntPtr)engineName);
             }
         }
 
@@ -241,8 +311,11 @@ namespace Infinity.Graphics
                 if (!System.Runtime.InteropServices.NativeLibrary.TryLoad("vulkan-1", out vkLib) &&
                     !System.Runtime.InteropServices.NativeLibrary.TryLoad("libvulkan.so.1", out vkLib) &&
                     !System.Runtime.InteropServices.NativeLibrary.TryLoad("libvulkan.so", out vkLib) &&
+                    !System.Runtime.InteropServices.NativeLibrary.TryLoad("libvulkan.1.dylib", out vkLib) &&
                     !System.Runtime.InteropServices.NativeLibrary.TryLoad("libvulkan.dylib", out vkLib) &&
-                    !System.Runtime.InteropServices.NativeLibrary.TryLoad("libMoltenVK.dylib", out vkLib))
+                    !System.Runtime.InteropServices.NativeLibrary.TryLoad("libMoltenVK.dylib", out vkLib) &&
+                    !System.Runtime.InteropServices.NativeLibrary.TryLoad("/usr/local/lib/libvulkan.1.dylib", out vkLib) &&
+                    !System.Runtime.InteropServices.NativeLibrary.TryLoad("/usr/local/lib/libvulkan.dylib", out vkLib))
                 {
                     m_HasDebugUtils = false;
                     return;
@@ -257,7 +330,8 @@ namespace Infinity.Graphics
 
                 var vkGetInstanceProcAddr = Marshal.GetDelegateForFunctionPointer<PFN_vkGetInstanceProcAddr>(getProcAddrPtr);
 
-                IntPtr beginPtr, endPtr;
+                IntPtr beginPtr;
+                IntPtr endPtr;
                 byte* beginName = (byte*)"vkCmdBeginDebugUtilsLabelEXT".ToPointer();
                 byte* endName = (byte*)"vkCmdEndDebugUtilsLabelEXT".ToPointer();
                 try
@@ -287,10 +361,46 @@ namespace Infinity.Graphics
             }
         }
 
+        private static void EnsureGlobalVulkanFunctionsLoaded()
+        {
+            if (s_GlobalFunctionsLoaded)
+            {
+                return;
+            }
+
+            if (!NativeLibrary.TryLoad("vulkan-1", out s_VulkanGlobalLibrary) &&
+                !NativeLibrary.TryLoad("libvulkan.so.1", out s_VulkanGlobalLibrary) &&
+                !NativeLibrary.TryLoad("libvulkan.so", out s_VulkanGlobalLibrary) &&
+                !NativeLibrary.TryLoad("libvulkan.1.dylib", out s_VulkanGlobalLibrary) &&
+                !NativeLibrary.TryLoad("libvulkan.dylib", out s_VulkanGlobalLibrary) &&
+                !NativeLibrary.TryLoad("libMoltenVK.dylib", out s_VulkanGlobalLibrary) &&
+                !NativeLibrary.TryLoad("/usr/local/lib/libvulkan.1.dylib", out s_VulkanGlobalLibrary) &&
+                !NativeLibrary.TryLoad("/usr/local/lib/libvulkan.dylib", out s_VulkanGlobalLibrary))
+            {
+                throw new InvalidOperationException("Failed to load Vulkan loader library.");
+            }
+
+            if (!NativeLibrary.TryGetExport(s_VulkanGlobalLibrary, "vkEnumerateInstanceExtensionProperties", out IntPtr enumExtensionsPtr))
+            {
+                throw new InvalidOperationException("Failed to load vkEnumerateInstanceExtensionProperties.");
+            }
+
+            if (!NativeLibrary.TryGetExport(s_VulkanGlobalLibrary, "vkEnumerateInstanceLayerProperties", out IntPtr enumLayersPtr))
+            {
+                throw new InvalidOperationException("Failed to load vkEnumerateInstanceLayerProperties.");
+            }
+
+            s_EnumerateInstanceExtensionProperties = Marshal.GetDelegateForFunctionPointer<PFN_vkEnumerateInstanceExtensionProperties>(enumExtensionsPtr);
+            s_EnumerateInstanceLayerProperties = Marshal.GetDelegateForFunctionPointer<PFN_vkEnumerateInstanceLayerProperties>(enumLayersPtr);
+            s_GlobalFunctionsLoaded = true;
+        }
+
         internal void CmdBeginDebugUtilsLabel(VkCommandBuffer commandBuffer, string name)
         {
             if (!m_HasDebugUtils || m_CmdBeginDebugUtilsLabel == null)
+            {
                 return;
+            }
 
             byte* namePtr = (byte*)Marshal.StringToHGlobalAnsi(name);
             try
@@ -313,7 +423,10 @@ namespace Infinity.Graphics
         internal void CmdEndDebugUtilsLabel(VkCommandBuffer commandBuffer)
         {
             if (!m_HasDebugUtils || m_CmdEndDebugUtilsLabel == null)
+            {
                 return;
+            }
+
             m_CmdEndDebugUtilsLabel(commandBuffer);
         }
 
@@ -329,10 +442,10 @@ namespace Infinity.Graphics
                 m_Devices[i].Dispose();
             }
 
+            m_Devices.Clear();
             VulkanNative.vkDestroyInstance(m_VkInstance, null);
         }
     }
+
 #pragma warning restore CS8618
 }
-
-

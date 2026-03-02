@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Vortice.Vulkan;
 
 namespace Infinity.Graphics
@@ -30,6 +32,8 @@ namespace Infinity.Graphics
         private VulkanWorkGraphEncoder m_WorkGraphEncoder;
         private VkCommandPool m_NativeCommandPool;
         private VkCommandBuffer m_NativeCommandBuffer;
+        private List<IntPtr>? m_TransientAllocations;
+        private List<VkImageView>? m_TransientImageViews;
 
         public VulkanCommandBuffer(VulkanCommandQueue commandQueue)
         {
@@ -76,6 +80,7 @@ namespace Infinity.Graphics
         public override void Begin(string name)
         {
             VulkanUtility.CheckErrors(VulkanNative.vkResetCommandBuffer(m_NativeCommandBuffer, 0));
+            ReleaseTransientResources();
 
             VkCommandBufferBeginInfo beginInfo = new VkCommandBufferBeginInfo()
             {
@@ -84,6 +89,62 @@ namespace Infinity.Graphics
             };
 
             VulkanUtility.CheckErrors(VulkanNative.vkBeginCommandBuffer(m_NativeCommandBuffer, &beginInfo));
+        }
+
+        internal void RegisterTransientAllocation(void* ptr)
+        {
+            if (ptr == null)
+            {
+                return;
+            }
+
+            m_TransientAllocations ??= new List<IntPtr>(16);
+            m_TransientAllocations.Add((IntPtr)ptr);
+        }
+
+        internal void RegisterTransientImageView(VkImageView imageView)
+        {
+            if (imageView.Equals(default(VkImageView)))
+            {
+                return;
+            }
+
+            m_TransientImageViews ??= new List<VkImageView>(16);
+            m_TransientImageViews.Add(imageView);
+        }
+
+        private void ReleaseTransientResources()
+        {
+            VulkanCommandQueue vkQueue = m_CommandQueue as VulkanCommandQueue;
+
+            if (m_TransientImageViews != null && m_TransientImageViews.Count > 0)
+            {
+                // Dynamic rendering image views are baked into recorded commands;
+                // destroy them only after command buffer reset confirms prior execution is complete.
+                for (int i = 0; i < m_TransientImageViews.Count; ++i)
+                {
+                    if (!m_TransientImageViews[i].Equals(default(VkImageView)))
+                    {
+                        VulkanNative.vkDestroyImageView(vkQueue.VulkanDevice.NativeDevice, m_TransientImageViews[i], null);
+                    }
+                }
+                m_TransientImageViews.Clear();
+            }
+
+            if (m_TransientAllocations == null || m_TransientAllocations.Count == 0)
+            {
+                return;
+            }
+
+            for (int i = 0; i < m_TransientAllocations.Count; ++i)
+            {
+                if (m_TransientAllocations[i] != IntPtr.Zero)
+                {
+                    NativeMemory.Free((void*)m_TransientAllocations[i]);
+                }
+            }
+
+            m_TransientAllocations.Clear();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -207,11 +268,10 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
+            ReleaseTransientResources();
             VulkanCommandQueue vkQueue = m_CommandQueue as VulkanCommandQueue;
             VulkanNative.vkDestroyCommandPool(vkQueue.VulkanDevice.NativeDevice, m_NativeCommandPool, null);
         }
     }
 #pragma warning restore CS8600, CS8602, CS8618
 }
-
-

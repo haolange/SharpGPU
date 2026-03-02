@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Infinity.Mathmatics;
 using Vortice.Vulkan;
 using Viewport = Infinity.Mathmatics.Viewport;
@@ -528,6 +529,8 @@ namespace Infinity.Graphics
         private VkImageView[]? m_ActiveColorAttachmentViews;
         private VkImageView m_ActiveDepthAttachmentView;
         private bool m_ActiveHasDepthAttachmentView;
+        private VkRenderingAttachmentInfo* m_ActiveColorAttachments;
+        private VkRenderingAttachmentInfo* m_ActiveDepthAttachment;
 
         public VulkanRasterEncoder(VulkanCommandBuffer cmdBuffer)
         {
@@ -557,11 +560,14 @@ namespace Infinity.Graphics
 
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
             VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
-            DestroyActiveAttachmentViews(vkQueue);
+            ClearActiveAttachmentViews();
+            DestroyActiveAttachmentInfos();
 
             int colorAttachmentCount = m_PassDescriptor.ColorAttachments.Length;
             m_ActiveColorAttachmentViews = colorAttachmentCount > 0 ? new VkImageView[colorAttachmentCount] : null;
-            VkRenderingAttachmentInfo* colorAttachments = stackalloc VkRenderingAttachmentInfo[Math.Max(colorAttachmentCount, 1)];
+            m_ActiveColorAttachments = (VkRenderingAttachmentInfo*)NativeMemory.AllocZeroed((nuint)Math.Max(colorAttachmentCount, 1), (nuint)sizeof(VkRenderingAttachmentInfo));
+            vkCmdBuf.RegisterTransientAllocation(m_ActiveColorAttachments);
+            VkRenderingAttachmentInfo* colorAttachments = m_ActiveColorAttachments;
 
             uint renderWidth = 0;
             uint renderHeight = 0;
@@ -588,8 +594,9 @@ namespace Infinity.Graphics
                 };
 
                 VkImageView imageView;
-                VulkanNative.vkCreateImageView(vkQueue.VulkanDevice.NativeDevice, &viewInfo, null, &imageView);
+                VulkanUtility.CheckErrors(VulkanNative.vkCreateImageView(vkQueue.VulkanDevice.NativeDevice, &viewInfo, null, &imageView));
                 m_ActiveColorAttachmentViews![i] = imageView;
+                vkCmdBuf.RegisterTransientImageView(imageView);
 
                 VkClearValue clearValue = default;
                 clearValue.color.float32[0] = colorDesc.ClearValue.x;
@@ -614,8 +621,8 @@ namespace Infinity.Graphics
                 }
             }
 
-            VkRenderingAttachmentInfo depthAttachment = default;
             VkRenderingAttachmentInfo* pDepthAttachment = null;
+            m_ActiveDepthAttachment = null;
 
             if (m_PassDescriptor.DepthStencilAttachment.HasValue)
             {
@@ -639,12 +646,15 @@ namespace Infinity.Graphics
                 };
 
                 VkImageView depthImageView;
-                VulkanNative.vkCreateImageView(vkQueue.VulkanDevice.NativeDevice, &depthViewInfo, null, &depthImageView);
+                VulkanUtility.CheckErrors(VulkanNative.vkCreateImageView(vkQueue.VulkanDevice.NativeDevice, &depthViewInfo, null, &depthImageView));
                 m_ActiveDepthAttachmentView = depthImageView;
                 m_ActiveHasDepthAttachmentView = true;
+                vkCmdBuf.RegisterTransientImageView(depthImageView);
 
                 VkClearValue depthClearValue = new VkClearValue(depthDesc.DepthClearValue, (uint)depthDesc.StencilClearValue);
-                depthAttachment = new VkRenderingAttachmentInfo()
+                m_ActiveDepthAttachment = (VkRenderingAttachmentInfo*)NativeMemory.AllocZeroed(1, (nuint)sizeof(VkRenderingAttachmentInfo));
+                vkCmdBuf.RegisterTransientAllocation(m_ActiveDepthAttachment);
+                m_ActiveDepthAttachment[0] = new VkRenderingAttachmentInfo()
                 {
                     sType = VkStructureType.RenderingAttachmentInfo,
                     imageView = m_ActiveDepthAttachmentView,
@@ -653,7 +663,7 @@ namespace Infinity.Graphics
                     storeOp = VulkanUtility.ConvertToVkStoreOp(depthDesc.DepthStoreOp),
                     clearValue = depthClearValue,
                 };
-                pDepthAttachment = &depthAttachment;
+                pDepthAttachment = m_ActiveDepthAttachment;
 
                 if (renderWidth == 0)
                 {
@@ -674,11 +684,20 @@ namespace Infinity.Graphics
                 colorAttachmentCount = (uint)colorAttachmentCount,
                 pColorAttachments = colorAttachmentCount > 0 ? colorAttachments : null,
                 pDepthAttachment = pDepthAttachment,
-                pStencilAttachment = pDepthAttachment,
+                pStencilAttachment = null,
             };
 
-            VulkanNative.vkCmdBeginRendering(vkCmdBuf.NativeCommandBuffer, &renderingInfo);
-            m_RenderingActive = true;
+            try
+            {
+                VulkanNative.vkCmdBeginRendering(vkCmdBuf.NativeCommandBuffer, &renderingInfo);
+                m_RenderingActive = true;
+            }
+            catch
+            {
+                ClearActiveAttachmentViews();
+                DestroyActiveAttachmentInfos();
+                throw;
+            }
         }
 
         private void EndRenderingIfNeeded()
@@ -689,33 +708,23 @@ namespace Infinity.Graphics
             }
 
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
             VulkanNative.vkCmdEndRendering(vkCmdBuf.NativeCommandBuffer);
             m_RenderingActive = false;
-            DestroyActiveAttachmentViews(vkQueue);
+            ClearActiveAttachmentViews();
+            DestroyActiveAttachmentInfos();
         }
 
-        private void DestroyActiveAttachmentViews(VulkanCommandQueue vkQueue)
+        private void ClearActiveAttachmentViews()
         {
-            if (m_ActiveColorAttachmentViews != null)
-            {
-                for (int i = 0; i < m_ActiveColorAttachmentViews.Length; ++i)
-                {
-                    if (!m_ActiveColorAttachmentViews[i].Equals(default(VkImageView)))
-                    {
-                        VulkanNative.vkDestroyImageView(vkQueue.VulkanDevice.NativeDevice, m_ActiveColorAttachmentViews[i], null);
-                    }
-                }
-                m_ActiveColorAttachmentViews = null;
-            }
-
-            if (m_ActiveHasDepthAttachmentView && !m_ActiveDepthAttachmentView.Equals(default(VkImageView)))
-            {
-                VulkanNative.vkDestroyImageView(vkQueue.VulkanDevice.NativeDevice, m_ActiveDepthAttachmentView, null);
-            }
-
+            m_ActiveColorAttachmentViews = null;
             m_ActiveDepthAttachmentView = default;
             m_ActiveHasDepthAttachmentView = false;
+        }
+
+        private void DestroyActiveAttachmentInfos()
+        {
+            m_ActiveColorAttachments = null;
+            m_ActiveDepthAttachment = null;
         }
 
         public override void ResourceBarrier(in RHIResourceBarrier barrier)
@@ -1086,22 +1095,61 @@ namespace Infinity.Graphics
         {
             VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
 
-            if (barrier.ResourceBarrierType == ERHIResourceBarrierType.Triansition && barrier.ResourceType == ERHIResourceType.Buffer)
+            if (barrier.ResourceBarrierType == ERHIResourceBarrierType.Triansition)
             {
-                VulkanBuffer vkBuffer = barrier.BufferBarrierInfo.Handle as VulkanBuffer;
-                VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
+                if (barrier.ResourceType == ERHIResourceType.Buffer)
                 {
-                    sType = VkStructureType.BufferMemoryBarrier,
-                    srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.SrcState),
-                    dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.DstState),
-                    buffer = vkBuffer.NativeBuffer,
-                    offset = 0,
-                    size = unchecked((ulong)(-1)),
-                };
-                VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                    VkPipelineStageFlags.RayTracingShaderKHR,
-                    VkPipelineStageFlags.RayTracingShaderKHR,
-                    0, 0, null, 1, &bufferBarrier, 0, null);
+                    VulkanBuffer vkBuffer = barrier.BufferBarrierInfo.Handle as VulkanBuffer;
+                    VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
+                    {
+                        sType = VkStructureType.BufferMemoryBarrier,
+                        srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.SrcState),
+                        dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.DstState),
+                        buffer = vkBuffer.NativeBuffer,
+                        offset = 0,
+                        size = unchecked((ulong)(-1)),
+                    };
+                    VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
+                        VkPipelineStageFlags.RayTracingShaderKHR,
+                        VkPipelineStageFlags.RayTracingShaderKHR,
+                        0, 0, null, 1, &bufferBarrier, 0, null);
+                }
+                else if (barrier.ResourceType == ERHIResourceType.Texture)
+                {
+                    VulkanTexture vkTexture = barrier.TextureBarrierInfo.Handle as VulkanTexture;
+                    VkImageLayout oldLayout = vkTexture.CurrentLayout;
+                    VkImageLayout newLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.DstState);
+                    if (newLayout == VkImageLayout.Undefined)
+                    {
+                        newLayout = oldLayout;
+                    }
+
+                    VkImageMemoryBarrier imageBarrier = new VkImageMemoryBarrier()
+                    {
+                        sType = VkStructureType.ImageMemoryBarrier,
+                        srcAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.SrcState),
+                        dstAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.DstState),
+                        oldLayout = oldLayout,
+                        newLayout = newLayout,
+                        srcQueueFamilyIndex = unchecked((uint)(-1)),
+                        dstQueueFamilyIndex = unchecked((uint)(-1)),
+                        image = vkTexture.NativeImage,
+                        subresourceRange = new VkImageSubresourceRange()
+                        {
+                            aspectMask = VulkanUtility.GetVkImageAspect(vkTexture.Descriptor.Format),
+                            baseMipLevel = 0,
+                            levelCount = unchecked((uint)(-1)),
+                            baseArrayLayer = 0,
+                            layerCount = unchecked((uint)(-1)),
+                        },
+                    };
+                    VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
+                        VkPipelineStageFlags.RayTracingShaderKHR,
+                        VkPipelineStageFlags.RayTracingShaderKHR,
+                        0, 0, null, 0, null, 1, &imageBarrier);
+
+                    vkTexture.CurrentLayout = newLayout;
+                }
             }
         }
 
@@ -1235,7 +1283,7 @@ namespace Infinity.Graphics
                 buffer = vkTLAS.NativeInstanceBuffer,
             };
             VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
-            ulong instanceBufferAddress = VulkanNative.vkGetBufferDeviceAddress(vkQueue.VulkanDevice.NativeDevice, &instanceAddrInfo);
+            ulong instanceBufferAddress = VulkanNative.vkGetBufferDeviceAddress(vkQueue.VulkanDevice.NativeDevice, &instanceAddrInfo) + topLevelAccelStruct.Descriptor.Offset;
 
             VkAccelerationStructureGeometryKHR geometry = new VkAccelerationStructureGeometryKHR()
             {
@@ -1670,4 +1718,3 @@ namespace Infinity.Graphics
         }
     }
 }
-

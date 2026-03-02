@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using Vortice.Vulkan;
 
 namespace Infinity.Graphics
@@ -6,6 +7,15 @@ namespace Infinity.Graphics
 #pragma warning disable CS8618
     internal unsafe class VulkanTopLevelAccelStruct : RHITopLevelAccelStruct
     {
+        [StructLayout(LayoutKind.Sequential)]
+        private struct VkAccelerationStructureInstanceRaw
+        {
+            public fixed float transform[12];
+            public uint instanceCustomIndexAndMask;
+            public uint instanceSbtRecordOffsetAndFlags;
+            public ulong accelerationStructureReference;
+        }
+
         public VkAccelerationStructureKHR NativeAccelerationStructure => m_NativeAccelStruct;
         public VkBuffer NativeBuffer => m_NativeBuffer;
         public VkDeviceMemory NativeMemory => m_NativeMemory;
@@ -20,6 +30,7 @@ namespace Infinity.Graphics
         private VkDeviceMemory m_NativeScratchMemory;
         private VkBuffer m_NativeInstanceBuffer;
         private VkDeviceMemory m_NativeInstanceMemory;
+        private ulong m_InstanceBufferSize;
 
         public VulkanTopLevelAccelStruct(VulkanDevice device, in RHITopLevelAccelStructDescriptor descriptor)
         {
@@ -29,7 +40,9 @@ namespace Infinity.Graphics
             uint instanceCount = (uint)descriptor.Instances.Length;
 
             // Create instance buffer for VkAccelerationStructureInstanceKHR data
-            ulong instanceBufferSize = instanceCount * 64; // sizeof(VkAccelerationStructureInstanceKHR) = 64
+            ulong instanceDataSize = Math.Max(instanceCount, 1u) * (ulong)sizeof(VkAccelerationStructureInstanceRaw);
+            ulong instanceBufferSize = descriptor.Offset + instanceDataSize;
+            m_InstanceBufferSize = instanceBufferSize;
             VulkanAccelStructHelper.CreateDeviceAddressBuffer(device, instanceBufferSize,
                 VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyKHR |
                 VkBufferUsageFlags.ShaderDeviceAddress,
@@ -53,7 +66,7 @@ namespace Infinity.Graphics
             };
             geometry.geometry.instances.sType = VkStructureType.AccelerationStructureGeometryInstancesDataKHR;
             geometry.geometry.instances.arrayOfPointers = false;
-            geometry.geometry.instances.data.deviceAddress = instanceBufferAddress;
+            geometry.geometry.instances.data.deviceAddress = instanceBufferAddress + descriptor.Offset;
 
             // Get build sizes
             VkAccelerationStructureBuildGeometryInfoKHR buildInfo = new VkAccelerationStructureBuildGeometryInfoKHR()
@@ -70,9 +83,10 @@ namespace Infinity.Graphics
             {
                 sType = VkStructureType.AccelerationStructureBuildSizesInfoKHR,
             };
+            uint buildSizeInstanceCount = Math.Max(instanceCount, 1u);
             VulkanNative.vkGetAccelerationStructureBuildSizesKHR(device.NativeDevice,
                 VkAccelerationStructureBuildTypeKHR.Device,
-                &buildInfo, &instanceCount, &sizeInfo);
+                &buildInfo, &buildSizeInstanceCount, &sizeInfo);
 
             // Create result buffer
             VulkanAccelStructHelper.CreateDeviceAddressBuffer(device, sizeInfo.accelerationStructureSize,
@@ -100,13 +114,110 @@ namespace Infinity.Graphics
                 VkBufferUsageFlags.StorageBuffer | VkBufferUsageFlags.ShaderDeviceAddress,
                 VkMemoryPropertyFlags.DeviceLocal,
                 out m_NativeScratchBuffer, out m_NativeScratchMemory);
+
+            UploadInstanceData(descriptor);
         }
 
         public override void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
         {
             m_Descriptor = descriptor;
-            // Instance data update is handled when BuildAccelerationStructure is called on the encoder
-            // with VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR
+            UploadInstanceData(descriptor);
+        }
+
+        private void UploadInstanceData(in RHITopLevelAccelStructDescriptor descriptor)
+        {
+            int instanceCount = descriptor.Instances.Length;
+            if (instanceCount == 0)
+            {
+                return;
+            }
+
+            ulong byteSize = (ulong)(instanceCount * sizeof(VkAccelerationStructureInstanceRaw));
+            ulong uploadOffset = descriptor.Offset;
+            if (uploadOffset + byteSize > m_InstanceBufferSize)
+            {
+                throw new InvalidOperationException("TLAS instance upload exceeds allocated instance buffer size.");
+            }
+            VkAccelerationStructureInstanceRaw* rawInstances = stackalloc VkAccelerationStructureInstanceRaw[instanceCount];
+
+            Span<RHIAccelStructInstance> instances = descriptor.Instances.Span;
+            for (int i = 0; i < instanceCount; ++i)
+            {
+                rawInstances[i] = BuildRawInstance(in instances[i]);
+            }
+
+            void* mapped = null;
+            VulkanUtility.CheckErrors(VulkanNative.vkMapMemory(m_VulkanDevice.NativeDevice, m_NativeInstanceMemory, uploadOffset, byteSize, 0, &mapped));
+            try
+            {
+                Buffer.MemoryCopy(rawInstances, mapped, byteSize, byteSize);
+            }
+            finally
+            {
+                VulkanNative.vkUnmapMemory(m_VulkanDevice.NativeDevice, m_NativeInstanceMemory);
+            }
+        }
+
+        private VkAccelerationStructureInstanceRaw BuildRawInstance(in RHIAccelStructInstance instance)
+        {
+            VulkanBottomLevelAccelStruct vkBLAS = instance.BottomLevelAccelStruct as VulkanBottomLevelAccelStruct
+                ?? throw new InvalidOperationException("TLAS instance references a non-Vulkan BLAS.");
+
+            VkAccelerationStructureInstanceRaw raw = default;
+            raw.transform[0] = instance.TransformMatrix.c0.x;
+            raw.transform[1] = instance.TransformMatrix.c1.x;
+            raw.transform[2] = instance.TransformMatrix.c2.x;
+            raw.transform[3] = instance.TransformMatrix.c3.x;
+            raw.transform[4] = instance.TransformMatrix.c0.y;
+            raw.transform[5] = instance.TransformMatrix.c1.y;
+            raw.transform[6] = instance.TransformMatrix.c2.y;
+            raw.transform[7] = instance.TransformMatrix.c3.y;
+            raw.transform[8] = instance.TransformMatrix.c0.z;
+            raw.transform[9] = instance.TransformMatrix.c1.z;
+            raw.transform[10] = instance.TransformMatrix.c2.z;
+            raw.transform[11] = instance.TransformMatrix.c3.z;
+
+            uint instanceCustomIndex = instance.InstanceID & 0x00FFFFFFu;
+            uint instanceMask = (uint)instance.InstanceMask & 0xFFu;
+            uint sbtRecordOffset = instance.HitGroupIndex & 0x00FFFFFFu;
+            uint geometryInstanceFlags = ((uint)ConvertToVkGeometryInstanceFlags(instance.Flag)) & 0xFFu;
+
+            raw.instanceCustomIndexAndMask = instanceCustomIndex | (instanceMask << 24);
+            raw.instanceSbtRecordOffsetAndFlags = sbtRecordOffset | (geometryInstanceFlags << 24);
+            raw.accelerationStructureReference = GetAccelerationStructureDeviceAddress(vkBLAS.NativeAccelerationStructure);
+            return raw;
+        }
+
+        private ulong GetAccelerationStructureDeviceAddress(VkAccelerationStructureKHR accelerationStructure)
+        {
+            VkAccelerationStructureDeviceAddressInfoKHR addressInfo = new VkAccelerationStructureDeviceAddressInfoKHR()
+            {
+                sType = VkStructureType.AccelerationStructureDeviceAddressInfoKHR,
+                accelerationStructure = accelerationStructure,
+            };
+            return VulkanNative.vkGetAccelerationStructureDeviceAddressKHR(m_VulkanDevice.NativeDevice, &addressInfo);
+        }
+
+        private static VkGeometryInstanceFlagsKHR ConvertToVkGeometryInstanceFlags(EAccelStructInstanceFlag flag)
+        {
+            VkGeometryInstanceFlagsKHR result = 0;
+            if ((flag & EAccelStructInstanceFlag.TriangleCullDisable) != 0)
+            {
+                result |= VkGeometryInstanceFlagsKHR.TriangleFacingCullDisable;
+            }
+            if ((flag & EAccelStructInstanceFlag.TriangleFrontCounterclockwise) != 0)
+            {
+                result |= VkGeometryInstanceFlagsKHR.TriangleFrontCounterclockwise;
+            }
+            if ((flag & EAccelStructInstanceFlag.ForceOpaque) != 0)
+            {
+                result |= VkGeometryInstanceFlagsKHR.ForceOpaque;
+            }
+            if ((flag & EAccelStructInstanceFlag.ForceNonOpaque) != 0)
+            {
+                result |= VkGeometryInstanceFlagsKHR.ForceNoOpaque;
+            }
+            return result;
         }
 
         protected override void Release()
@@ -315,5 +426,3 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8618
 }
-
-

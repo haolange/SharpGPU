@@ -225,6 +225,22 @@ namespace Infinity.Graphics
                 m_TransferQueueFamilyIndex = 0;
             }
 
+            int actualGraphicsQueueCount = 0;
+            int actualComputeQueueCount = 0;
+            int actualTransferQueueCount = 0;
+            if (m_GraphicsQueueFamilyIndex >= 0 && familyQueueCounts.TryGetValue(m_GraphicsQueueFamilyIndex, out uint graphicsCreatedCount))
+            {
+                actualGraphicsQueueCount = (int)Math.Min((uint)Math.Max(graphicsQueueCount, 0), graphicsCreatedCount);
+            }
+            if (m_ComputeQueueFamilyIndex >= 0 && familyQueueCounts.TryGetValue(m_ComputeQueueFamilyIndex, out uint computeCreatedCount))
+            {
+                actualComputeQueueCount = (int)Math.Min((uint)Math.Max(computeQueueCount, 0), computeCreatedCount);
+            }
+            if (m_TransferQueueFamilyIndex >= 0 && familyQueueCounts.TryGetValue(m_TransferQueueFamilyIndex, out uint transferCreatedCount))
+            {
+                actualTransferQueueCount = (int)Math.Min((uint)Math.Max(transferQueueCount, 0), transferCreatedCount);
+            }
+
             VkDeviceQueueCreateInfo* queueCreateInfos = stackalloc VkDeviceQueueCreateInfo[familyCount];
             int idx = 0;
             foreach (int familyIndex in uniqueFamilies)
@@ -259,37 +275,95 @@ namespace Infinity.Graphics
                 availableExtNames.Add(VulkanUtility.GetString(availableExtensions[i].extensionName));
             }
 
-            if (availableExtNames.Contains("VK_KHR_dynamic_rendering"))
-                deviceExtensions.Add("VK_KHR_dynamic_rendering");
-
-            // Raytracing extensions
+            bool hasDynamicRendering = availableExtNames.Contains("VK_KHR_dynamic_rendering");
             bool hasAccelStruct = availableExtNames.Contains("VK_KHR_acceleration_structure");
             bool hasRTPipeline = availableExtNames.Contains("VK_KHR_ray_tracing_pipeline");
             bool hasDeferredOps = availableExtNames.Contains("VK_KHR_deferred_host_operations");
             bool hasRTQuery = availableExtNames.Contains("VK_KHR_ray_query");
-            bool rtSupported = hasAccelStruct && hasRTPipeline && hasDeferredOps;
-            // TODO: Re-enable Vulkan ray tracing once the Vortice RT descriptor/binding path is stabilized.
-            rtSupported = false;
+            bool hasMeshShader = availableExtNames.Contains("VK_EXT_mesh_shader");
+            bool hasFragmentShadingRate = availableExtNames.Contains("VK_KHR_fragment_shading_rate");
+            VkPhysicalDeviceFeatures supportedCoreFeatures = default;
+            VulkanNative.vkGetPhysicalDeviceFeatures(m_PhysicalDevice, &supportedCoreFeatures);
+
+            VkPhysicalDeviceRayQueryFeaturesKHR rtQueryFeaturesQuery = new VkPhysicalDeviceRayQueryFeaturesKHR()
+            {
+                sType = VkStructureType.PhysicalDeviceRayQueryFeaturesKHR,
+                pNext = null,
+            };
+            VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeaturesQuery = new VkPhysicalDeviceRayTracingPipelineFeaturesKHR()
+            {
+                sType = VkStructureType.PhysicalDeviceRayTracingPipelineFeaturesKHR,
+                pNext = hasRTQuery ? &rtQueryFeaturesQuery : null,
+            };
+            VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeaturesQuery = new VkPhysicalDeviceAccelerationStructureFeaturesKHR()
+            {
+                sType = VkStructureType.PhysicalDeviceAccelerationStructureFeaturesKHR,
+                pNext = hasRTPipeline ? &rtPipelineFeaturesQuery : (hasRTQuery ? &rtQueryFeaturesQuery : null),
+            };
+            VkPhysicalDeviceMeshShaderFeaturesEXT meshFeaturesQuery = new VkPhysicalDeviceMeshShaderFeaturesEXT()
+            {
+                sType = VkStructureType.PhysicalDeviceMeshShaderFeaturesEXT,
+                pNext = hasAccelStruct ? &accelFeaturesQuery : (hasRTPipeline ? &rtPipelineFeaturesQuery : (hasRTQuery ? &rtQueryFeaturesQuery : null)),
+            };
+            VkPhysicalDeviceFragmentShadingRateFeaturesKHR vrsFeaturesQuery = new VkPhysicalDeviceFragmentShadingRateFeaturesKHR()
+            {
+                sType = VkStructureType.PhysicalDeviceFragmentShadingRateFeaturesKHR,
+                pNext = hasMeshShader ? &meshFeaturesQuery : (hasAccelStruct ? &accelFeaturesQuery : (hasRTPipeline ? &rtPipelineFeaturesQuery : (hasRTQuery ? &rtQueryFeaturesQuery : null))),
+            };
+            VkPhysicalDeviceVulkan13Features vulkan13FeaturesQuery = new VkPhysicalDeviceVulkan13Features()
+            {
+                sType = VkStructureType.PhysicalDeviceVulkan13Features,
+                pNext = hasFragmentShadingRate ? &vrsFeaturesQuery : (hasMeshShader ? &meshFeaturesQuery : (hasAccelStruct ? &accelFeaturesQuery : (hasRTPipeline ? &rtPipelineFeaturesQuery : (hasRTQuery ? &rtQueryFeaturesQuery : null)))),
+            };
+            VkPhysicalDeviceVulkan12Features vulkan12FeaturesQuery = new VkPhysicalDeviceVulkan12Features()
+            {
+                sType = VkStructureType.PhysicalDeviceVulkan12Features,
+                pNext = &vulkan13FeaturesQuery,
+            };
+            VkPhysicalDeviceFeatures2 features2Query = new VkPhysicalDeviceFeatures2()
+            {
+                sType = VkStructureType.PhysicalDeviceFeatures2,
+                pNext = &vulkan12FeaturesQuery,
+            };
+            VulkanNative.vkGetPhysicalDeviceFeatures2(m_PhysicalDevice, &features2Query);
+
+            bool accelFeatureSupported = hasAccelStruct && accelFeaturesQuery.accelerationStructure;
+            bool rtPipelineFeatureSupported = hasRTPipeline && rtPipelineFeaturesQuery.rayTracingPipeline;
+            bool rtQueryFeatureSupported = hasRTQuery && rtQueryFeaturesQuery.rayQuery;
+            bool meshShaderFeatureSupported = hasMeshShader && meshFeaturesQuery.meshShader;
+            bool taskShaderFeatureSupported = hasMeshShader && meshFeaturesQuery.taskShader;
+            bool fragmentShadingRateFeatureSupported = hasFragmentShadingRate && vrsFeaturesQuery.pipelineFragmentShadingRate;
+
+            bool rtSupported = hasAccelStruct && hasRTPipeline && hasDeferredOps && accelFeatureSupported && rtPipelineFeatureSupported;
+            bool rtInlineSupported = rtSupported && rtQueryFeatureSupported;
+            bool meshSupported = hasMeshShader && meshShaderFeatureSupported;
+            bool vrsSupported = hasFragmentShadingRate && fragmentShadingRateFeatureSupported;
+
+            if (hasDynamicRendering)
+            {
+                deviceExtensions.Add("VK_KHR_dynamic_rendering");
+            }
+
             if (rtSupported)
             {
                 deviceExtensions.Add("VK_KHR_acceleration_structure");
                 deviceExtensions.Add("VK_KHR_ray_tracing_pipeline");
                 deviceExtensions.Add("VK_KHR_deferred_host_operations");
-                if (hasRTQuery)
+                if (rtInlineSupported)
+                {
                     deviceExtensions.Add("VK_KHR_ray_query");
+                }
             }
 
-            // Mesh shader extension
-            bool hasMeshShader = availableExtNames.Contains("VK_EXT_mesh_shader");
-            if (hasMeshShader)
+            if (meshSupported)
+            {
                 deviceExtensions.Add("VK_EXT_mesh_shader");
+            }
 
-            // Variable rate shading
-            bool hasFragmentShadingRate = availableExtNames.Contains("VK_KHR_fragment_shading_rate");
-            if (hasFragmentShadingRate)
+            if (vrsSupported)
+            {
                 deviceExtensions.Add("VK_KHR_fragment_shading_rate");
-
-            // Sparse binding is a core feature, no extension needed
+            }
 
             IntPtr* extensionPtrs = stackalloc IntPtr[deviceExtensions.Count];
             for (int i = 0; i < deviceExtensions.Count; ++i)
@@ -297,48 +371,47 @@ namespace Infinity.Graphics
                 extensionPtrs[i] = Marshal.StringToHGlobalAnsi(deviceExtensions[i]);
             }
 
-            // Enable features
             VkPhysicalDeviceFeatures enabledFeatures = default;
-            enabledFeatures.samplerAnisotropy = true;
-            enabledFeatures.fillModeNonSolid = true;
-            enabledFeatures.multiDrawIndirect = true;
-            enabledFeatures.drawIndirectFirstInstance = true;
-            enabledFeatures.fragmentStoresAndAtomics = true;
-            enabledFeatures.shaderStorageImageExtendedFormats = true;
-            enabledFeatures.pipelineStatisticsQuery = true;
-            enabledFeatures.occlusionQueryPrecise = true;
-            enabledFeatures.sparseBinding = true;
-            enabledFeatures.sparseResidencyImage2D = true;
+            enabledFeatures.samplerAnisotropy = supportedCoreFeatures.samplerAnisotropy;
+            enabledFeatures.fillModeNonSolid = supportedCoreFeatures.fillModeNonSolid;
+            enabledFeatures.multiDrawIndirect = supportedCoreFeatures.multiDrawIndirect;
+            enabledFeatures.drawIndirectFirstInstance = supportedCoreFeatures.drawIndirectFirstInstance;
+            enabledFeatures.fragmentStoresAndAtomics = supportedCoreFeatures.fragmentStoresAndAtomics;
+            enabledFeatures.shaderStorageImageExtendedFormats = supportedCoreFeatures.shaderStorageImageExtendedFormats;
+            enabledFeatures.pipelineStatisticsQuery = supportedCoreFeatures.pipelineStatisticsQuery;
+            enabledFeatures.occlusionQueryPrecise = supportedCoreFeatures.occlusionQueryPrecise;
 
-            // Build pNext chain for extended features
             void* pNextChain = null;
 
-            // Vulkan 1.3 features
-            VkPhysicalDeviceVulkan13Features vulkan13Features = default;
-            vulkan13Features.sType = VkStructureType.PhysicalDeviceVulkan13Features;
-            vulkan13Features.dynamicRendering = true;
-            vulkan13Features.synchronization2 = true;
+            VkPhysicalDeviceVulkan13Features vulkan13Features = new VkPhysicalDeviceVulkan13Features()
+            {
+                sType = VkStructureType.PhysicalDeviceVulkan13Features,
+                dynamicRendering = vulkan13FeaturesQuery.dynamicRendering,
+                synchronization2 = vulkan13FeaturesQuery.synchronization2,
+            };
 
-            VkPhysicalDeviceVulkan12Features vulkan12Features = default;
-            vulkan12Features.sType = VkStructureType.PhysicalDeviceVulkan12Features;
-            vulkan12Features.pNext = &vulkan13Features;
-            vulkan12Features.descriptorIndexing = true;
-            vulkan12Features.shaderSampledImageArrayNonUniformIndexing = true;
-            vulkan12Features.shaderStorageBufferArrayNonUniformIndexing = true;
-            vulkan12Features.shaderStorageImageArrayNonUniformIndexing = true;
-            vulkan12Features.descriptorBindingSampledImageUpdateAfterBind = true;
-            vulkan12Features.descriptorBindingStorageImageUpdateAfterBind = true;
-            vulkan12Features.descriptorBindingStorageBufferUpdateAfterBind = true;
-            vulkan12Features.descriptorBindingUniformBufferUpdateAfterBind = true;
-            vulkan12Features.descriptorBindingPartiallyBound = true;
-            vulkan12Features.runtimeDescriptorArray = true;
-            vulkan12Features.timelineSemaphore = true;
-            vulkan12Features.bufferDeviceAddress = true;
+            VkPhysicalDeviceVulkan12Features vulkan12Features = new VkPhysicalDeviceVulkan12Features()
+            {
+                sType = VkStructureType.PhysicalDeviceVulkan12Features,
+                pNext = &vulkan13Features,
+                descriptorIndexing = vulkan12FeaturesQuery.descriptorIndexing,
+                shaderSampledImageArrayNonUniformIndexing = vulkan12FeaturesQuery.shaderSampledImageArrayNonUniformIndexing,
+                shaderStorageBufferArrayNonUniformIndexing = vulkan12FeaturesQuery.shaderStorageBufferArrayNonUniformIndexing,
+                shaderStorageImageArrayNonUniformIndexing = vulkan12FeaturesQuery.shaderStorageImageArrayNonUniformIndexing,
+                descriptorBindingSampledImageUpdateAfterBind = vulkan12FeaturesQuery.descriptorBindingSampledImageUpdateAfterBind,
+                descriptorBindingStorageImageUpdateAfterBind = vulkan12FeaturesQuery.descriptorBindingStorageImageUpdateAfterBind,
+                descriptorBindingStorageBufferUpdateAfterBind = vulkan12FeaturesQuery.descriptorBindingStorageBufferUpdateAfterBind,
+                descriptorBindingUniformBufferUpdateAfterBind = vulkan12FeaturesQuery.descriptorBindingUniformBufferUpdateAfterBind,
+                descriptorBindingPartiallyBound = vulkan12FeaturesQuery.descriptorBindingPartiallyBound,
+                runtimeDescriptorArray = vulkan12FeaturesQuery.runtimeDescriptorArray,
+                timelineSemaphore = vulkan12FeaturesQuery.timelineSemaphore,
+                bufferDeviceAddress = vulkan12FeaturesQuery.bufferDeviceAddress,
+            };
             pNextChain = &vulkan12Features;
 
-            // Raytracing features
             VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeatures = default;
             VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeatures = default;
+            VkPhysicalDeviceRayQueryFeaturesKHR rtQueryFeatures = default;
             if (rtSupported)
             {
                 accelFeatures.sType = VkStructureType.PhysicalDeviceAccelerationStructureFeaturesKHR;
@@ -348,23 +421,32 @@ namespace Infinity.Graphics
                 rtPipelineFeatures.sType = VkStructureType.PhysicalDeviceRayTracingPipelineFeaturesKHR;
                 rtPipelineFeatures.rayTracingPipeline = true;
                 rtPipelineFeatures.pNext = &accelFeatures;
-                pNextChain = &rtPipelineFeatures;
+
+                if (rtInlineSupported)
+                {
+                    rtQueryFeatures.sType = VkStructureType.PhysicalDeviceRayQueryFeaturesKHR;
+                    rtQueryFeatures.rayQuery = true;
+                    rtQueryFeatures.pNext = &rtPipelineFeatures;
+                    pNextChain = &rtQueryFeatures;
+                }
+                else
+                {
+                    pNextChain = &rtPipelineFeatures;
+                }
             }
 
-            // Mesh shader features
             VkPhysicalDeviceMeshShaderFeaturesEXT meshFeatures = default;
-            if (hasMeshShader)
+            if (meshSupported)
             {
                 meshFeatures.sType = VkStructureType.PhysicalDeviceMeshShaderFeaturesEXT;
                 meshFeatures.meshShader = true;
-                meshFeatures.taskShader = true;
+                meshFeatures.taskShader = taskShaderFeatureSupported;
                 meshFeatures.pNext = pNextChain;
                 pNextChain = &meshFeatures;
             }
 
-            // Fragment shading rate features
             VkPhysicalDeviceFragmentShadingRateFeaturesKHR vrsFeatures = default;
-            if (hasFragmentShadingRate)
+            if (vrsSupported)
             {
                 vrsFeatures.sType = VkStructureType.PhysicalDeviceFragmentShadingRateFeaturesKHR;
                 vrsFeatures.pipelineFragmentShadingRate = true;
@@ -383,19 +465,31 @@ namespace Infinity.Graphics
                 pEnabledFeatures = &enabledFeatures,
             };
 
-            fixed (VkDevice* devicePtr = &m_NativeDevice)
+            try
             {
-                VulkanUtility.CheckErrors(VulkanNative.vkCreateDevice(m_PhysicalDevice, &deviceCreateInfo, null, devicePtr));
+                fixed (VkDevice* devicePtr = &m_NativeDevice)
+                {
+                    VulkanUtility.CheckErrors(VulkanNative.vkCreateDevice(m_PhysicalDevice, &deviceCreateInfo, null, devicePtr));
+                }
+            }
+            finally
+            {
+                for (int i = 0; i < deviceExtensions.Count; ++i)
+                {
+                    if (extensionPtrs[i] != IntPtr.Zero)
+                    {
+                        Marshal.FreeHGlobal(extensionPtrs[i]);
+                    }
+                }
             }
 
-            // Store detected capability flags for feature reporting
             m_RaytracingSupported = rtSupported;
-            m_RaytracingInlineSupported = rtSupported && hasRTQuery;
-            m_MeshShadingSupported = hasMeshShader;
-            m_VariableRateShadingSupported = hasFragmentShadingRate;
+            m_RaytracingInlineSupported = rtInlineSupported;
+            m_MeshShadingSupported = meshSupported;
+            m_VariableRateShadingSupported = vrsSupported;
 
             // Create command queues
-            CreateCommandQueues(computeQueueCount, transferQueueCount, graphicsQueueCount);
+            CreateCommandQueues(actualComputeQueueCount, actualTransferQueueCount, actualGraphicsQueueCount);
         }
 
         private void UpdateDeviceFeatures()
@@ -717,5 +811,3 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8600, CS8602, CS8618
 }
-
-
