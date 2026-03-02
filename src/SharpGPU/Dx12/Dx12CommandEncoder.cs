@@ -90,6 +90,761 @@ namespace Infinity.Graphics
         }
     }
 
+    internal static unsafe class Dx12BarrierEmitter
+    {
+        private static readonly Vortice.Direct3D12.BarrierSubresourceRange s_AllSubresourcesRange = new Vortice.Direct3D12.BarrierSubresourceRange
+        {
+            IndexOrFirstMipLevel = Vortice.Direct3D12.D3D12.ResourceBarrierAllSubResources,
+            NumMipLevels = 0,
+            FirstArraySlice = 0,
+            NumArraySlices = 0,
+            FirstPlane = 0,
+            NumPlanes = 0
+        };
+
+        public static void EmitResourceBarrier(Dx12CommandBuffer commandBuffer, in RHIResourceBarrier barrier)
+        {
+            ReadOnlySpan<RHIResourceBarrier> singleBarrier = MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in barrier), 1);
+            EmitResourceBarriers(commandBuffer, singleBarrier);
+        }
+
+        public static void EmitResourceBarriers(Dx12CommandBuffer commandBuffer, ReadOnlySpan<RHIResourceBarrier> barriers)
+        {
+            if (barriers.Length == 0)
+            {
+                return;
+            }
+
+            Dx12Device device = ((Dx12CommandQueue)commandBuffer.CommandQueue).Dx12Device;
+            bool useEnhancedBarriers = device.IsEnhancedBarriersSupported;
+            if (useEnhancedBarriers)
+            {
+                EmitEnhancedBarriers(commandBuffer, barriers);
+            }
+            else
+            {
+                EmitLegacyBarriers(commandBuffer, barriers);
+            }
+        }
+
+        private static void EmitLegacyBarriers(Dx12CommandBuffer commandBuffer, ReadOnlySpan<RHIResourceBarrier> barriers)
+        {
+            Vortice.Direct3D12.ResourceBarrier* nativeBarriers = stackalloc Vortice.Direct3D12.ResourceBarrier[barriers.Length];
+
+            for (int i = 0; i < barriers.Length; ++i)
+            {
+                ref readonly RHIResourceBarrier barrier = ref barriers[i];
+
+                switch (barrier.ResourceBarrierType)
+                {
+                    case ERHIResourceBarrierType.UAV:
+                        nativeBarriers[i] = Dx12ResourceBarrierUtil.InitUAV(GetBarrierResource(barrier, i));
+                        break;
+
+                    case ERHIResourceBarrierType.Aliasing:
+                        nativeBarriers[i] = Dx12ResourceBarrierUtil.InitAliasing(null, GetBarrierResource(barrier, i));
+                        break;
+
+                    case ERHIResourceBarrierType.Triansition:
+                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                        {
+                            Vortice.Direct3D12.ID3D12Resource nativeResource = GetBufferResource(barrier.BufferBarrierInfo, i);
+                            Vortice.Direct3D12.ResourceStates srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
+                            Vortice.Direct3D12.ResourceStates dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
+                            nativeBarriers[i] = Dx12ResourceBarrierUtil.InitTransition(nativeResource, srcState, dstState);
+                        }
+                        else
+                        {
+                            Vortice.Direct3D12.ID3D12Resource nativeResource = GetTextureResource(barrier.TextureBarrierInfo, i);
+                            Vortice.Direct3D12.ResourceStates srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
+                            Vortice.Direct3D12.ResourceStates dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
+                            nativeBarriers[i] = Dx12ResourceBarrierUtil.InitTransition(nativeResource, srcState, dstState);
+                        }
+                        break;
+
+                    default:
+                        throw new InvalidOperationException($"Unsupported barrier type {barrier.ResourceBarrierType}.");
+                }
+            }
+
+            commandBuffer.NativeCommandList.ResourceBarrier((uint)barriers.Length, nativeBarriers);
+        }
+
+        private static void EmitEnhancedBarriers(Dx12CommandBuffer commandBuffer, ReadOnlySpan<RHIResourceBarrier> barriers)
+        {
+            ERHIPipelineType queuePipeline = commandBuffer.CommandQueue.PipelineType;
+            List<Vortice.Direct3D12.GlobalBarrier>? globalBarriers = null;
+            List<Vortice.Direct3D12.BufferBarrier>? bufferBarriers = null;
+            List<Vortice.Direct3D12.TextureBarrier>? textureBarriers = null;
+
+            for (int i = 0; i < barriers.Length; ++i)
+            {
+                ref readonly RHIResourceBarrier barrier = ref barriers[i];
+
+                switch (barrier.ResourceBarrierType)
+                {
+                    case ERHIResourceBarrierType.UAV:
+                        EnsureUavBarrierQueueCompatibility(queuePipeline, i);
+                        Vortice.Direct3D12.BarrierSync uavSync = GetUavBarrierSync(queuePipeline);
+                        (globalBarriers ??= new List<Vortice.Direct3D12.GlobalBarrier>(barriers.Length)).Add(
+                            new Vortice.Direct3D12.GlobalBarrier(
+                                uavSync,
+                                uavSync,
+                                Vortice.Direct3D12.BarrierAccess.UnorderedAccess,
+                                Vortice.Direct3D12.BarrierAccess.UnorderedAccess));
+                        break;
+
+                    case ERHIResourceBarrierType.Aliasing:
+                        Vortice.Direct3D12.BarrierSync aliasingSyncBefore;
+                        Vortice.Direct3D12.BarrierSync aliasingSyncAfter;
+                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                        {
+                            aliasingSyncBefore = ResolveBarrierSync(ERHIPipelineStage.Common, barrier.BufferBarrierInfo.SrcPipeline, queuePipeline);
+                            aliasingSyncAfter = ResolveBarrierSync(ERHIPipelineStage.Common, barrier.BufferBarrierInfo.DstPipeline, queuePipeline);
+                        }
+                        else
+                        {
+                            aliasingSyncBefore = ResolveBarrierSync(ERHIPipelineStage.Common, barrier.TextureBarrierInfo.SrcPipeline, queuePipeline);
+                            aliasingSyncAfter = ResolveBarrierSync(ERHIPipelineStage.Common, barrier.TextureBarrierInfo.DstPipeline, queuePipeline);
+                        }
+
+                        (globalBarriers ??= new List<Vortice.Direct3D12.GlobalBarrier>(barriers.Length)).Add(
+                            new Vortice.Direct3D12.GlobalBarrier(
+                                aliasingSyncBefore,
+                                aliasingSyncAfter,
+                                Vortice.Direct3D12.BarrierAccess.NoAccess,
+                                Vortice.Direct3D12.BarrierAccess.NoAccess));
+                        break;
+
+                    case ERHIResourceBarrierType.Triansition:
+                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                        {
+                            RHIBufferBarrierDescriptor bufferBarrier = barrier.BufferBarrierInfo;
+                            ValidateBufferStateForQueue(queuePipeline, bufferBarrier.SrcState, i, true);
+                            ValidateBufferStateForQueue(queuePipeline, bufferBarrier.DstState, i, false);
+                            Vortice.Direct3D12.BarrierAccess accessBefore = ConvertToBarrierAccess(bufferBarrier.SrcState);
+                            Vortice.Direct3D12.BarrierAccess accessAfter = ConvertToBarrierAccess(bufferBarrier.DstState);
+                            Vortice.Direct3D12.BarrierSync syncBefore = ResolveBufferBarrierSync(bufferBarrier.SrcStage, bufferBarrier.SrcPipeline, queuePipeline, accessBefore);
+                            Vortice.Direct3D12.BarrierSync syncAfter = ResolveBufferBarrierSync(bufferBarrier.DstStage, bufferBarrier.DstPipeline, queuePipeline, accessAfter);
+                            (bufferBarriers ??= new List<Vortice.Direct3D12.BufferBarrier>(barriers.Length)).Add(new Vortice.Direct3D12.BufferBarrier
+                            {
+                                SyncBefore = syncBefore,
+                                SyncAfter = syncAfter,
+                                AccessBefore = accessBefore,
+                                AccessAfter = accessAfter,
+                                Resource = GetBufferResource(bufferBarrier, i),
+                                Offset = 0,
+                                Size = ulong.MaxValue
+                            });
+                        }
+                        else
+                        {
+                            RHITextureBarrierDescriptor textureBarrier = barrier.TextureBarrierInfo;
+                            ValidateTextureStateForQueue(queuePipeline, textureBarrier.SrcState, i, true);
+                            ValidateTextureStateForQueue(queuePipeline, textureBarrier.DstState, i, false);
+                            Vortice.Direct3D12.BarrierAccess accessBefore = ConvertToBarrierAccess(textureBarrier.SrcState);
+                            Vortice.Direct3D12.BarrierAccess accessAfter = ConvertToBarrierAccess(textureBarrier.DstState);
+                            Vortice.Direct3D12.BarrierSync syncBefore = ResolveTextureBarrierSync(textureBarrier.SrcStage, textureBarrier.SrcPipeline, queuePipeline, textureBarrier.SrcState, accessBefore);
+                            Vortice.Direct3D12.BarrierSync syncAfter = ResolveTextureBarrierSync(textureBarrier.DstStage, textureBarrier.DstPipeline, queuePipeline, textureBarrier.DstState, accessAfter);
+                            Vortice.Direct3D12.BarrierLayout layoutBefore = ConvertToBarrierLayout(textureBarrier.SrcState, queuePipeline);
+                            Vortice.Direct3D12.BarrierLayout layoutAfter = ConvertToBarrierLayout(textureBarrier.DstState, queuePipeline);
+                            (textureBarriers ??= new List<Vortice.Direct3D12.TextureBarrier>(barriers.Length)).Add(new Vortice.Direct3D12.TextureBarrier
+                            {
+                                SyncBefore = syncBefore,
+                                SyncAfter = syncAfter,
+                                AccessBefore = accessBefore,
+                                AccessAfter = accessAfter,
+                                LayoutBefore = layoutBefore,
+                                LayoutAfter = layoutAfter,
+                                Resource = GetTextureResource(textureBarrier, i),
+                                Subresources = s_AllSubresourcesRange,
+                                Flags = Vortice.Direct3D12.TextureBarrierFlags.None
+                            });
+                        }
+                        break;
+
+                    default:
+                        throw new InvalidOperationException($"Unsupported barrier type {barrier.ResourceBarrierType}.");
+                }
+            }
+
+            if (globalBarriers is { Count: > 0 })
+            {
+                commandBuffer.NativeCommandList.Barrier(new Vortice.Direct3D12.BarrierGroup(globalBarriers.ToArray()));
+            }
+
+            if (bufferBarriers is { Count: > 0 })
+            {
+                commandBuffer.NativeCommandList.Barrier(new Vortice.Direct3D12.BarrierGroup(bufferBarriers.ToArray()));
+            }
+
+            if (textureBarriers is { Count: > 0 })
+            {
+                commandBuffer.NativeCommandList.Barrier(new Vortice.Direct3D12.BarrierGroup(textureBarriers.ToArray()));
+            }
+        }
+
+        private static Vortice.Direct3D12.ID3D12Resource GetBarrierResource(in RHIResourceBarrier barrier, in int index)
+        {
+            if (barrier.ResourceType == ERHIResourceType.Buffer)
+            {
+                return GetBufferResource(barrier.BufferBarrierInfo, index);
+            }
+
+            return GetTextureResource(barrier.TextureBarrierInfo, index);
+        }
+
+        private static Vortice.Direct3D12.ID3D12Resource GetBufferResource(in RHIBufferBarrierDescriptor barrier, in int index)
+        {
+            Dx12Buffer buffer = barrier.Handle as Dx12Buffer;
+#if DEBUG
+            Debug.Assert(buffer != null, index >= 0 ? String.Format("Barrier Buffer is null at index {0}.", index) : "Barrier Buffer is null");
+#endif
+            if (buffer == null)
+            {
+                throw new InvalidOperationException(index >= 0 ? String.Format("Barrier Buffer is null at index {0}.", index) : "Barrier Buffer is null");
+            }
+
+            return buffer.NativeResource;
+        }
+
+        private static Vortice.Direct3D12.ID3D12Resource GetTextureResource(in RHITextureBarrierDescriptor barrier, in int index)
+        {
+            Dx12Texture texture = barrier.Handle as Dx12Texture;
+#if DEBUG
+            Debug.Assert(texture != null, index >= 0 ? String.Format("Barrier Texture is null at index {0}.", index) : "Barrier Texture is null");
+#endif
+            if (texture == null)
+            {
+                throw new InvalidOperationException(index >= 0 ? String.Format("Barrier Texture is null at index {0}.", index) : "Barrier Texture is null");
+            }
+
+            return texture.NativeResource;
+        }
+
+        private static Vortice.Direct3D12.BarrierSync ResolveBarrierSync(in ERHIPipelineStage stage,
+                                                                          in ERHIPipelineType pipeline,
+                                                                          in ERHIPipelineType queuePipeline)
+        {
+            Vortice.Direct3D12.BarrierSync sync = ConvertToBarrierSync(stage);
+            if (sync == Vortice.Direct3D12.BarrierSync.None)
+            {
+                sync = ConvertToBarrierSync(pipeline);
+            }
+
+            if (sync == Vortice.Direct3D12.BarrierSync.None)
+            {
+                sync = GetDefaultQueueSync(queuePipeline);
+            }
+
+            return NormalizeBarrierSyncForQueue(sync, queuePipeline);
+        }
+
+        private static Vortice.Direct3D12.BarrierSync ResolveBufferBarrierSync(in ERHIPipelineStage stage,
+                                                                                in ERHIPipelineType pipeline,
+                                                                                in ERHIPipelineType queuePipeline,
+                                                                                in Vortice.Direct3D12.BarrierAccess access)
+        {
+            Vortice.Direct3D12.BarrierSync sync = Vortice.Direct3D12.BarrierSync.None;
+
+            if ((access & (Vortice.Direct3D12.BarrierAccess.CopySource | Vortice.Direct3D12.BarrierAccess.CopyDestination)) != 0)
+            {
+                sync |= Vortice.Direct3D12.BarrierSync.Copy;
+            }
+            if ((access & Vortice.Direct3D12.BarrierAccess.IndexBuffer) != 0)
+            {
+                sync |= Vortice.Direct3D12.BarrierSync.IndexInput;
+            }
+            if ((access & Vortice.Direct3D12.BarrierAccess.VertexBuffer) != 0)
+            {
+                sync |= Vortice.Direct3D12.BarrierSync.Draw | Vortice.Direct3D12.BarrierSync.VertexShading;
+            }
+            if ((access & Vortice.Direct3D12.BarrierAccess.IndirectArgument) != 0)
+            {
+                sync |= Vortice.Direct3D12.BarrierSync.ExecuteIndirect;
+            }
+            if ((access & (Vortice.Direct3D12.BarrierAccess.ConstantBuffer | Vortice.Direct3D12.BarrierAccess.ShaderResource | Vortice.Direct3D12.BarrierAccess.UnorderedAccess)) != 0)
+            {
+                sync |= ResolveShaderAccessSync(stage, pipeline);
+            }
+            if ((access & (Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureRead | Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureWrite)) != 0)
+            {
+                sync |= ResolveRaytracingAccessSync(stage, pipeline);
+            }
+
+            if (sync == Vortice.Direct3D12.BarrierSync.None)
+            {
+                sync = ResolveBarrierSync(stage, pipeline, queuePipeline);
+            }
+
+            return NormalizeBarrierSyncForQueue(sync, queuePipeline);
+        }
+
+        private static Vortice.Direct3D12.BarrierSync ResolveTextureBarrierSync(in ERHIPipelineStage stage,
+                                                                                 in ERHIPipelineType pipeline,
+                                                                                 in ERHIPipelineType queuePipeline,
+                                                                                 in ERHITextureState textureState,
+                                                                                 in Vortice.Direct3D12.BarrierAccess access)
+        {
+            Vortice.Direct3D12.BarrierSync sync = Vortice.Direct3D12.BarrierSync.None;
+
+            if ((textureState & ERHITextureState.RenderTarget) != 0)
+            {
+                sync |= Vortice.Direct3D12.BarrierSync.RenderTarget;
+            }
+            if ((textureState & (ERHITextureState.DepthRead | ERHITextureState.DepthWrite)) != 0)
+            {
+                sync |= Vortice.Direct3D12.BarrierSync.DepthStencil;
+            }
+            if ((textureState & (ERHITextureState.ResolveSrc | ERHITextureState.ResolveDst)) != 0)
+            {
+                sync |= Vortice.Direct3D12.BarrierSync.Resolve;
+            }
+            if ((textureState & (ERHITextureState.CopySrc | ERHITextureState.CopyDst)) != 0)
+            {
+                sync |= Vortice.Direct3D12.BarrierSync.Copy;
+            }
+            if ((textureState & ERHITextureState.ShadingRateSurface) != 0)
+            {
+                sync |= Vortice.Direct3D12.BarrierSync.Draw;
+            }
+            if ((access & (Vortice.Direct3D12.BarrierAccess.ShaderResource | Vortice.Direct3D12.BarrierAccess.UnorderedAccess)) != 0)
+            {
+                sync |= ResolveShaderAccessSync(stage, pipeline);
+            }
+
+            if (sync == Vortice.Direct3D12.BarrierSync.None)
+            {
+                sync = ResolveBarrierSync(stage, pipeline, queuePipeline);
+            }
+
+            return NormalizeBarrierSyncForQueue(sync, queuePipeline);
+        }
+
+        private static Vortice.Direct3D12.BarrierSync ResolveShaderAccessSync(in ERHIPipelineStage stage, in ERHIPipelineType pipeline)
+        {
+            switch (stage)
+            {
+                case ERHIPipelineStage.Vertex:
+                    return Vortice.Direct3D12.BarrierSync.VertexShading;
+
+                case ERHIPipelineStage.Fragment:
+                    return Vortice.Direct3D12.BarrierSync.PixelShading;
+
+                case ERHIPipelineStage.Compute:
+                case ERHIPipelineStage.MachineLearning:
+                    return Vortice.Direct3D12.BarrierSync.ComputeShading;
+
+                case ERHIPipelineStage.Task:
+                case ERHIPipelineStage.Mesh:
+                    return Vortice.Direct3D12.BarrierSync.NonPixelShading;
+
+                case ERHIPipelineStage.RayTracing:
+                    return Vortice.Direct3D12.BarrierSync.Raytracing;
+
+                default:
+                    switch (pipeline)
+                    {
+                        case ERHIPipelineType.Compute:
+                            return Vortice.Direct3D12.BarrierSync.ComputeShading;
+
+                        case ERHIPipelineType.Graphics:
+                            return Vortice.Direct3D12.BarrierSync.AllShading;
+
+                        default:
+                            return Vortice.Direct3D12.BarrierSync.None;
+                    }
+            }
+        }
+
+        private static Vortice.Direct3D12.BarrierSync ResolveRaytracingAccessSync(in ERHIPipelineStage stage, in ERHIPipelineType pipeline)
+        {
+            if (stage == ERHIPipelineStage.RayTracing || pipeline == ERHIPipelineType.Graphics)
+            {
+                return Vortice.Direct3D12.BarrierSync.Raytracing;
+            }
+
+            return ResolveShaderAccessSync(stage, pipeline);
+        }
+
+        private static Vortice.Direct3D12.BarrierSync ConvertToBarrierSync(in ERHIPipelineStage stage)
+        {
+            switch (stage)
+            {
+                case ERHIPipelineStage.Common:
+                    return Vortice.Direct3D12.BarrierSync.None;
+
+                case ERHIPipelineStage.Vertex:
+                    return Vortice.Direct3D12.BarrierSync.VertexShading;
+
+                case ERHIPipelineStage.Fragment:
+                    return Vortice.Direct3D12.BarrierSync.PixelShading;
+
+                case ERHIPipelineStage.Compute:
+                case ERHIPipelineStage.MachineLearning:
+                    return Vortice.Direct3D12.BarrierSync.ComputeShading;
+
+                case ERHIPipelineStage.Task:
+                case ERHIPipelineStage.Mesh:
+                    return Vortice.Direct3D12.BarrierSync.NonPixelShading;
+
+                case ERHIPipelineStage.RayTracing:
+                    return Vortice.Direct3D12.BarrierSync.Raytracing;
+
+                default:
+                    throw new InvalidOperationException(String.Format("Unsupported pipeline stage '{0}' for enhanced barrier sync conversion.", stage));
+            }
+        }
+
+        private static Vortice.Direct3D12.BarrierSync ConvertToBarrierSync(in ERHIPipelineType pipeline)
+        {
+            switch (pipeline)
+            {
+                case ERHIPipelineType.Transfer:
+                    return Vortice.Direct3D12.BarrierSync.Copy;
+
+                case ERHIPipelineType.Compute:
+                    return Vortice.Direct3D12.BarrierSync.ComputeShading;
+
+                case ERHIPipelineType.Graphics:
+                    return Vortice.Direct3D12.BarrierSync.All;
+
+                default:
+                    throw new InvalidOperationException(String.Format("Unsupported pipeline type '{0}' for enhanced barrier sync conversion.", pipeline));
+            }
+        }
+
+        private static Vortice.Direct3D12.BarrierSync GetDefaultQueueSync(in ERHIPipelineType queuePipeline)
+        {
+            switch (queuePipeline)
+            {
+                case ERHIPipelineType.Transfer:
+                    return Vortice.Direct3D12.BarrierSync.Copy;
+
+                case ERHIPipelineType.Compute:
+                    return Vortice.Direct3D12.BarrierSync.ComputeShading | Vortice.Direct3D12.BarrierSync.Copy;
+
+                case ERHIPipelineType.Graphics:
+                    return Vortice.Direct3D12.BarrierSync.All;
+
+                default:
+                    throw new InvalidOperationException(String.Format("Unsupported command queue pipeline '{0}' for enhanced barrier sync.", queuePipeline));
+            }
+        }
+
+        private static Vortice.Direct3D12.BarrierSync GetUavBarrierSync(in ERHIPipelineType queuePipeline)
+        {
+            switch (queuePipeline)
+            {
+                case ERHIPipelineType.Compute:
+                    return Vortice.Direct3D12.BarrierSync.ComputeShading;
+
+                case ERHIPipelineType.Graphics:
+                    return Vortice.Direct3D12.BarrierSync.AllShading;
+
+                default:
+                    throw new InvalidOperationException(String.Format("Enhanced UAV barrier does not support queue pipeline '{0}'.", queuePipeline));
+            }
+        }
+
+        private static Vortice.Direct3D12.BarrierSync NormalizeBarrierSyncForQueue(in Vortice.Direct3D12.BarrierSync sync, in ERHIPipelineType queuePipeline)
+        {
+            Vortice.Direct3D12.BarrierSync queueSupportedSync = GetQueueSupportedSyncMask(queuePipeline);
+            if (sync == Vortice.Direct3D12.BarrierSync.None)
+            {
+                return GetDefaultQueueSync(queuePipeline);
+            }
+
+            Vortice.Direct3D12.BarrierSync unsupportedSync = sync & ~queueSupportedSync;
+            if (unsupportedSync != Vortice.Direct3D12.BarrierSync.None)
+            {
+                throw new InvalidOperationException(String.Format("Enhanced barrier sync '{0}' contains unsupported bits '{1}' for queue '{2}'.", sync, unsupportedSync, queuePipeline));
+            }
+
+            return sync;
+        }
+
+        private static Vortice.Direct3D12.BarrierSync GetQueueSupportedSyncMask(in ERHIPipelineType queuePipeline)
+        {
+            switch (queuePipeline)
+            {
+                case ERHIPipelineType.Transfer:
+                    return Vortice.Direct3D12.BarrierSync.Copy;
+
+                case ERHIPipelineType.Compute:
+                    return Vortice.Direct3D12.BarrierSync.Copy | Vortice.Direct3D12.BarrierSync.ComputeShading | Vortice.Direct3D12.BarrierSync.ExecuteIndirect;
+
+                case ERHIPipelineType.Graphics:
+                    return Vortice.Direct3D12.BarrierSync.All;
+
+                default:
+                    throw new InvalidOperationException(String.Format("Unsupported command queue pipeline '{0}' for enhanced barrier validation.", queuePipeline));
+            }
+        }
+
+        private static void EnsureUavBarrierQueueCompatibility(in ERHIPipelineType queuePipeline, in int index)
+        {
+            if (queuePipeline == ERHIPipelineType.Transfer)
+            {
+                throw new InvalidOperationException(String.Format("Enhanced UAV barrier at index {0} is invalid on Transfer queue.", index));
+            }
+        }
+
+        private static void ValidateBufferStateForQueue(in ERHIPipelineType queuePipeline, in ERHIBufferState state, in int index, in bool isBefore)
+        {
+            string phase = isBefore ? "before" : "after";
+            ERHIBufferState allKnownStates = ERHIBufferState.CopySrc
+                                             | ERHIBufferState.CopyDst
+                                             | ERHIBufferState.IndexBuffer
+                                             | ERHIBufferState.VertexBuffer
+                                             | ERHIBufferState.ConstantBuffer
+                                             | ERHIBufferState.IndirectArgument
+                                             | ERHIBufferState.ShaderResource
+                                             | ERHIBufferState.UnorderedAccess
+                                             | ERHIBufferState.RasterizerOrdered
+                                             | ERHIBufferState.AccelStructRead
+                                             | ERHIBufferState.AccelStructWrite
+                                             | ERHIBufferState.AccelStructBuildInput
+                                             | ERHIBufferState.AccelStructBuildBlast;
+
+            ERHIBufferState unknownBits = state & ~allKnownStates;
+            if (unknownBits != 0)
+            {
+                throw new InvalidOperationException(String.Format("Enhanced buffer transition at index {0} has unknown {1} state bits '{2}'.", index, phase, unknownBits));
+            }
+
+            ERHIBufferState allowedStates;
+            switch (queuePipeline)
+            {
+                case ERHIPipelineType.Transfer:
+                    allowedStates = ERHIBufferState.CopySrc | ERHIBufferState.CopyDst;
+                    break;
+
+                case ERHIPipelineType.Compute:
+                    allowedStates = ERHIBufferState.CopySrc
+                                    | ERHIBufferState.CopyDst
+                                    | ERHIBufferState.ConstantBuffer
+                                    | ERHIBufferState.IndirectArgument
+                                    | ERHIBufferState.ShaderResource
+                                    | ERHIBufferState.UnorderedAccess
+                                    | ERHIBufferState.RasterizerOrdered;
+                    break;
+
+                case ERHIPipelineType.Graphics:
+                    allowedStates = allKnownStates;
+                    break;
+
+                default:
+                    throw new InvalidOperationException(String.Format("Unsupported command queue pipeline '{0}' for enhanced buffer transition validation.", queuePipeline));
+            }
+
+            ERHIBufferState unsupportedStates = state & ~allowedStates;
+            if (unsupportedStates != 0)
+            {
+                throw new InvalidOperationException(String.Format("Enhanced buffer transition at index {0} has unsupported {1} state '{2}' on {3} queue.", index, phase, state, queuePipeline));
+            }
+        }
+
+        private static void ValidateTextureStateForQueue(in ERHIPipelineType queuePipeline, in ERHITextureState state, in int index, in bool isBefore)
+        {
+            string phase = isBefore ? "before" : "after";
+            ERHITextureState allKnownStates = ERHITextureState.Present
+                                              | ERHITextureState.CopySrc
+                                              | ERHITextureState.CopyDst
+                                              | ERHITextureState.ResolveSrc
+                                              | ERHITextureState.ResolveDst
+                                              | ERHITextureState.DepthRead
+                                              | ERHITextureState.DepthWrite
+                                              | ERHITextureState.RenderTarget
+                                              | ERHITextureState.ShaderResource
+                                              | ERHITextureState.UnorderedAccess
+                                              | ERHITextureState.RasterizerOrdered
+                                              | ERHITextureState.ShadingRateSurface;
+
+            ERHITextureState unknownBits = state & ~allKnownStates;
+            if (unknownBits != 0)
+            {
+                throw new InvalidOperationException(String.Format("Enhanced texture transition at index {0} has unknown {1} state bits '{2}'.", index, phase, unknownBits));
+            }
+
+            ERHITextureState allowedStates;
+            switch (queuePipeline)
+            {
+                case ERHIPipelineType.Transfer:
+                    allowedStates = ERHITextureState.CopySrc | ERHITextureState.CopyDst;
+                    break;
+
+                case ERHIPipelineType.Compute:
+                    allowedStates = ERHITextureState.CopySrc
+                                    | ERHITextureState.CopyDst
+                                    | ERHITextureState.ShaderResource
+                                    | ERHITextureState.UnorderedAccess
+                                    | ERHITextureState.RasterizerOrdered;
+                    break;
+
+                case ERHIPipelineType.Graphics:
+                    allowedStates = allKnownStates;
+                    break;
+
+                default:
+                    throw new InvalidOperationException(String.Format("Unsupported command queue pipeline '{0}' for enhanced texture transition validation.", queuePipeline));
+            }
+
+            ERHITextureState unsupportedStates = state & ~allowedStates;
+            if (unsupportedStates != 0)
+            {
+                throw new InvalidOperationException(String.Format("Enhanced texture transition at index {0} has unsupported {1} state '{2}' on {3} queue.", index, phase, state, queuePipeline));
+            }
+        }
+
+        private static Vortice.Direct3D12.BarrierAccess ConvertToBarrierAccess(in ERHIBufferState state)
+        {
+            if (state == ERHIBufferState.Undefine)
+            {
+                return Vortice.Direct3D12.BarrierAccess.NoAccess;
+            }
+
+            Vortice.Direct3D12.BarrierAccess result = Vortice.Direct3D12.BarrierAccess.Common;
+
+            if ((state & ERHIBufferState.CopyDst) != 0) result |= Vortice.Direct3D12.BarrierAccess.CopyDestination;
+            if ((state & ERHIBufferState.CopySrc) != 0) result |= Vortice.Direct3D12.BarrierAccess.CopySource;
+            if ((state & ERHIBufferState.IndexBuffer) != 0) result |= Vortice.Direct3D12.BarrierAccess.IndexBuffer;
+            if ((state & ERHIBufferState.VertexBuffer) != 0) result |= Vortice.Direct3D12.BarrierAccess.VertexBuffer;
+            if ((state & ERHIBufferState.ConstantBuffer) != 0) result |= Vortice.Direct3D12.BarrierAccess.ConstantBuffer;
+            if ((state & ERHIBufferState.IndirectArgument) != 0) result |= Vortice.Direct3D12.BarrierAccess.IndirectArgument;
+            if ((state & ERHIBufferState.ShaderResource) != 0) result |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
+            if ((state & ERHIBufferState.UnorderedAccess) != 0) result |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
+            if ((state & ERHIBufferState.RasterizerOrdered) != 0) result |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
+            if ((state & ERHIBufferState.AccelStructRead) != 0) result |= Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureRead;
+            if ((state & ERHIBufferState.AccelStructWrite) != 0) result |= Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureWrite;
+            if ((state & ERHIBufferState.AccelStructBuildInput) != 0) result |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
+            if ((state & ERHIBufferState.AccelStructBuildBlast) != 0) result |= Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureWrite;
+
+            return result;
+        }
+
+        private static Vortice.Direct3D12.BarrierAccess ConvertToBarrierAccess(in ERHITextureState state)
+        {
+            if (state == ERHITextureState.Undefine)
+            {
+                return Vortice.Direct3D12.BarrierAccess.NoAccess;
+            }
+
+            Vortice.Direct3D12.BarrierAccess result = Vortice.Direct3D12.BarrierAccess.Common;
+
+            if ((state & ERHITextureState.CopyDst) != 0) result |= Vortice.Direct3D12.BarrierAccess.CopyDestination;
+            if ((state & ERHITextureState.CopySrc) != 0) result |= Vortice.Direct3D12.BarrierAccess.CopySource;
+            if ((state & ERHITextureState.ResolveDst) != 0) result |= Vortice.Direct3D12.BarrierAccess.ResolveDestination;
+            if ((state & ERHITextureState.ResolveSrc) != 0) result |= Vortice.Direct3D12.BarrierAccess.ResolveSource;
+            if ((state & ERHITextureState.DepthRead) != 0) result |= Vortice.Direct3D12.BarrierAccess.DepthStencilRead;
+            if ((state & ERHITextureState.DepthWrite) != 0) result |= Vortice.Direct3D12.BarrierAccess.DepthStencilWrite;
+            if ((state & ERHITextureState.RenderTarget) != 0) result |= Vortice.Direct3D12.BarrierAccess.RenderTarget;
+            if ((state & ERHITextureState.ShaderResource) != 0) result |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
+            if ((state & ERHITextureState.UnorderedAccess) != 0) result |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
+            if ((state & ERHITextureState.RasterizerOrdered) != 0) result |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
+            if ((state & ERHITextureState.ShadingRateSurface) != 0) result |= Vortice.Direct3D12.BarrierAccess.ShadingRateSource;
+
+            return result;
+        }
+
+        private static Vortice.Direct3D12.BarrierLayout ConvertToBarrierLayout(in ERHITextureState state, in ERHIPipelineType queuePipeline)
+        {
+            if (state == ERHITextureState.Undefine)
+            {
+                switch (queuePipeline)
+                {
+                    case ERHIPipelineType.Compute:
+                        return Vortice.Direct3D12.BarrierLayout.ComputeQueueCommon;
+
+                    case ERHIPipelineType.Graphics:
+                        return Vortice.Direct3D12.BarrierLayout.DirectQueueCommon;
+
+                    default:
+                        return Vortice.Direct3D12.BarrierLayout.Common;
+                }
+            }
+
+            if ((state & ERHITextureState.Present) != 0) return Vortice.Direct3D12.BarrierLayout.Present;
+            if ((state & ERHITextureState.RenderTarget) != 0) return Vortice.Direct3D12.BarrierLayout.RenderTarget;
+            if ((state & ERHITextureState.DepthWrite) != 0) return Vortice.Direct3D12.BarrierLayout.DepthStencilWrite;
+            if ((state & ERHITextureState.DepthRead) != 0) return Vortice.Direct3D12.BarrierLayout.DepthStencilRead;
+            if ((state & ERHITextureState.UnorderedAccess) != 0 || (state & ERHITextureState.RasterizerOrdered) != 0)
+            {
+                switch (queuePipeline)
+                {
+                    case ERHIPipelineType.Compute:
+                        return Vortice.Direct3D12.BarrierLayout.ComputeQueueUnorderedAccess;
+
+                    case ERHIPipelineType.Graphics:
+                        return Vortice.Direct3D12.BarrierLayout.DirectQueueUnorderedAccess;
+
+                    default:
+                        return Vortice.Direct3D12.BarrierLayout.UnorderedAccess;
+                }
+            }
+            if ((state & ERHITextureState.ShaderResource) != 0)
+            {
+                switch (queuePipeline)
+                {
+                    case ERHIPipelineType.Compute:
+                        return Vortice.Direct3D12.BarrierLayout.ComputeQueueShaderResource;
+
+                    case ERHIPipelineType.Graphics:
+                        return Vortice.Direct3D12.BarrierLayout.DirectQueueShaderResource;
+
+                    default:
+                        return Vortice.Direct3D12.BarrierLayout.ShaderResource;
+                }
+            }
+            if ((state & ERHITextureState.ShadingRateSurface) != 0) return Vortice.Direct3D12.BarrierLayout.ShadingRateSource;
+            if ((state & ERHITextureState.ResolveSrc) != 0) return Vortice.Direct3D12.BarrierLayout.ResolveSource;
+            if ((state & ERHITextureState.ResolveDst) != 0) return Vortice.Direct3D12.BarrierLayout.ResolveDestination;
+            if ((state & ERHITextureState.CopySrc) != 0)
+            {
+                switch (queuePipeline)
+                {
+                    case ERHIPipelineType.Compute:
+                        return Vortice.Direct3D12.BarrierLayout.ComputeQueueCopySource;
+
+                    case ERHIPipelineType.Graphics:
+                        return Vortice.Direct3D12.BarrierLayout.DirectQueueCopySource;
+
+                    default:
+                        return Vortice.Direct3D12.BarrierLayout.CopySource;
+                }
+            }
+            if ((state & ERHITextureState.CopyDst) != 0)
+            {
+                switch (queuePipeline)
+                {
+                    case ERHIPipelineType.Compute:
+                        return Vortice.Direct3D12.BarrierLayout.ComputeQueueCopyDestination;
+
+                    case ERHIPipelineType.Graphics:
+                        return Vortice.Direct3D12.BarrierLayout.DirectQueueCopyDestination;
+
+                    default:
+                        return Vortice.Direct3D12.BarrierLayout.CopyDestination;
+                }
+            }
+
+            switch (queuePipeline)
+            {
+                case ERHIPipelineType.Compute:
+                    return Vortice.Direct3D12.BarrierLayout.ComputeQueueCommon;
+
+                case ERHIPipelineType.Graphics:
+                    return Vortice.Direct3D12.BarrierLayout.DirectQueueCommon;
+
+                case ERHIPipelineType.Transfer:
+                    return Vortice.Direct3D12.BarrierLayout.Common;
+
+                default:
+                    throw new InvalidOperationException(String.Format("Unsupported command queue pipeline '{0}' for enhanced texture layout conversion.", queuePipeline));
+            }
+        }
+    }
+
     internal unsafe class Dx12TransferEncoder : RHITransferEncoder
     {
         public Dx12TransferEncoder(Dx12CommandBuffer cmdBuffer)
@@ -106,167 +861,14 @@ namespace Infinity.Graphics
 
         public override void ResourceBarrier(in RHIResourceBarrier barrier)
         {
-            Vortice.Direct3D12.ID3D12Resource resource = null;
-            Vortice.Direct3D12.ResourceBarrier resourceBarrier;
-
-            switch (barrier.ResourceBarrierType)
-            {
-                case ERHIResourceBarrierType.UAV:
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-                        resource = buffer.NativeResource;
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-                        resource = texture.NativeResource;
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitUAV(resource);
-                    break;
-
-                case ERHIResourceBarrierType.Aliasing:
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-                        resource = buffer.NativeResource;
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-                        resource = texture.NativeResource;
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitAliasing(null, resource);
-                    break;
-
-                case ERHIResourceBarrierType.Triansition:
-                    Vortice.Direct3D12.ResourceStates srcState;
-                    Vortice.Direct3D12.ResourceStates dstState;
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-
-                        resource = buffer.NativeResource;
-                        srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
-                        dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-
-                        resource = texture.NativeResource;
-                        srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
-                        dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitTransition(resource, srcState, dstState);
-                    break;
-            }
-
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier(1, &resourceBarrier);
+            Dx12BarrierEmitter.EmitResourceBarrier(dx12CommandBuffer, barrier);
         }
 
         public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
         {
-            Vortice.Direct3D12.ID3D12Resource resource;
-            Vortice.Direct3D12.ResourceStates srcState;
-            Vortice.Direct3D12.ResourceStates dstState;
-            Vortice.Direct3D12.ResourceBarrier* resourceBarriers = stackalloc Vortice.Direct3D12.ResourceBarrier[barriers.Length];
-
-            for (int i = 0; i < barriers.Length; ++i)
-            {
-                ref RHIResourceBarrier barrier = ref barriers.Span[i];
-
-                switch (barrier.ResourceBarrierType)
-                {
-                    case ERHIResourceBarrierType.UAV:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-                            resource = buffer.NativeResource;
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-                            resource = texture.NativeResource;
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitUAV(resource);
-                        break;
-
-                    case ERHIResourceBarrierType.Aliasing:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-                            resource = buffer.NativeResource;
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-                            resource = texture.NativeResource;
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitAliasing(null, resource);
-                        break;
-
-                    case ERHIResourceBarrierType.Triansition:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-
-                            resource = buffer.NativeResource;
-                            srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
-                            dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-
-                            resource = texture.NativeResource;
-                            srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
-                            dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitTransition(resource, srcState, dstState);
-                        break;
-                }
-            }
-
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier((uint)barriers.Length, resourceBarriers);
+            Dx12BarrierEmitter.EmitResourceBarriers(dx12CommandBuffer, barriers.Span);
         }
 
         public override void PushDebugGroup(string name)
@@ -461,167 +1063,14 @@ namespace Infinity.Graphics
 
         public override void ResourceBarrier(in RHIResourceBarrier barrier)
         {
-            Vortice.Direct3D12.ID3D12Resource resource = null;
-            Vortice.Direct3D12.ResourceBarrier resourceBarrier;
-
-            switch (barrier.ResourceBarrierType)
-            {
-                case ERHIResourceBarrierType.UAV:
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-                        resource = buffer.NativeResource;
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-                        resource = texture.NativeResource;
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitUAV(resource);
-                    break;
-
-                case ERHIResourceBarrierType.Aliasing:
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-                        resource = buffer.NativeResource;
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-                        resource = texture.NativeResource;
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitAliasing(null, resource);
-                    break;
-
-                case ERHIResourceBarrierType.Triansition:
-                    Vortice.Direct3D12.ResourceStates srcState;
-                    Vortice.Direct3D12.ResourceStates dstState;
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-
-                        resource = buffer.NativeResource;
-                        srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
-                        dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-
-                        resource = texture.NativeResource;
-                        srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
-                        dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitTransition(resource, srcState, dstState);
-                    break;
-            }
-
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier(1, &resourceBarrier);
+            Dx12BarrierEmitter.EmitResourceBarrier(dx12CommandBuffer, barrier);
         }
 
         public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
         {
-            Vortice.Direct3D12.ID3D12Resource resource;
-            Vortice.Direct3D12.ResourceStates srcState;
-            Vortice.Direct3D12.ResourceStates dstState;
-            Vortice.Direct3D12.ResourceBarrier* resourceBarriers = stackalloc Vortice.Direct3D12.ResourceBarrier[barriers.Length];
-
-            for (int i = 0; i < barriers.Length; ++i)
-            {
-                ref RHIResourceBarrier barrier = ref barriers.Span[i];
-
-                switch (barrier.ResourceBarrierType)
-                {
-                    case ERHIResourceBarrierType.UAV:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-                            resource = buffer.NativeResource;
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-                            resource = texture.NativeResource;
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitUAV(resource);
-                        break;
-
-                    case ERHIResourceBarrierType.Aliasing:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-                            resource = buffer.NativeResource;
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-                            resource = texture.NativeResource;
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitAliasing(null, resource);
-                        break;
-
-                    case ERHIResourceBarrierType.Triansition:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-
-                            resource = buffer.NativeResource;
-                            srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
-                            dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-
-                            resource = texture.NativeResource;
-                            srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
-                            dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitTransition(resource, srcState, dstState);
-                        break;
-                }
-            }
-
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier((uint)barriers.Length, resourceBarriers);
+            Dx12BarrierEmitter.EmitResourceBarriers(dx12CommandBuffer, barriers.Span);
         }
 
         public override void PushDebugGroup(string name)
@@ -798,167 +1247,14 @@ namespace Infinity.Graphics
 
         public override void ResourceBarrier(in RHIResourceBarrier barrier)
         {
-            Vortice.Direct3D12.ID3D12Resource resource = null;
-            Vortice.Direct3D12.ResourceBarrier resourceBarrier;
-
-            switch (barrier.ResourceBarrierType)
-            {
-                case ERHIResourceBarrierType.UAV:
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-                        resource = buffer.NativeResource;
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-                        resource = texture.NativeResource;
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitUAV(resource);
-                    break;
-
-                case ERHIResourceBarrierType.Aliasing:
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-                        resource = buffer.NativeResource;
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-                        resource = texture.NativeResource;
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitAliasing(null, resource);
-                    break;
-
-                case ERHIResourceBarrierType.Triansition:
-                    Vortice.Direct3D12.ResourceStates srcState;
-                    Vortice.Direct3D12.ResourceStates dstState;
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-
-                        resource = buffer.NativeResource;
-                        srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
-                        dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-
-                        resource = texture.NativeResource;
-                        srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
-                        dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitTransition(resource, srcState, dstState);
-                    break;
-            }
-
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier(1, &resourceBarrier);
+            Dx12BarrierEmitter.EmitResourceBarrier(dx12CommandBuffer, barrier);
         }
 
         public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
         {
-            Vortice.Direct3D12.ID3D12Resource resource;
-            Vortice.Direct3D12.ResourceStates srcState;
-            Vortice.Direct3D12.ResourceStates dstState;
-            Vortice.Direct3D12.ResourceBarrier* resourceBarriers = stackalloc Vortice.Direct3D12.ResourceBarrier[barriers.Length];
-
-            for (int i = 0; i < barriers.Length; ++i)
-            {
-                ref RHIResourceBarrier barrier = ref barriers.Span[i];
-
-                switch (barrier.ResourceBarrierType)
-                {
-                    case ERHIResourceBarrierType.UAV:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-                            resource = buffer.NativeResource;
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-                            resource = texture.NativeResource;
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitUAV(resource);
-                        break;
-
-                    case ERHIResourceBarrierType.Aliasing:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-                            resource = buffer.NativeResource;
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-                            resource = texture.NativeResource;
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitAliasing(null, resource);
-                        break;
-
-                    case ERHIResourceBarrierType.Triansition:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-
-                            resource = buffer.NativeResource;
-                            srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
-                            dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-
-                            resource = texture.NativeResource;
-                            srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
-                            dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitTransition(resource, srcState, dstState);
-                        break;
-                }
-            }
-
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier((uint)barriers.Length, resourceBarriers);
+            Dx12BarrierEmitter.EmitResourceBarriers(dx12CommandBuffer, barriers.Span);
         }
 
         public override void PushDebugGroup(string name)
@@ -1176,12 +1472,20 @@ namespace Infinity.Graphics
     {
         protected byte m_SubPassIndex;
         protected List<Dx12AttachmentInfo> m_AttachmentInfos;
+        private bool m_UseNativeRenderPass;
+        private bool m_IsNativeRenderPassActive;
+        private Vortice.Direct3D12.RenderPassRenderTargetDescription[] m_NativeRenderPassColorDescriptions;
+        private Vortice.Direct3D12.RenderPassDepthStencilDescription? m_NativeRenderPassDepthStencilDescription;
 
         public Dx12RasterEncoder(Dx12CommandBuffer cmdBuffer)
         {
             m_SubPassIndex = 0;
             m_CommandBuffer = cmdBuffer;
             m_AttachmentInfos = new List<Dx12AttachmentInfo>(5);
+            m_UseNativeRenderPass = false;
+            m_IsNativeRenderPassActive = false;
+            m_NativeRenderPassColorDescriptions = Array.Empty<Vortice.Direct3D12.RenderPassRenderTargetDescription>();
+            m_NativeRenderPassDepthStencilDescription = null;
         }
 
         internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
@@ -1191,28 +1495,54 @@ namespace Infinity.Graphics
 #endif
             m_SubPassIndex = 0;
             m_AttachmentInfos.Clear();
+            m_UseNativeRenderPass = false;
+            m_IsNativeRenderPassActive = false;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
+            Vortice.Direct3D12.CpuDescriptorHandle[] rtvHandles = CreateColorAttachmentViews(descriptor);
+            Vortice.Direct3D12.CpuDescriptorHandle? dsvHandle = CreateDepthStencilAttachmentView(descriptor);
 
-            Vortice.Direct3D12.CpuDescriptorHandle? dsvHandle = null;
-            Vortice.Direct3D12.CpuDescriptorHandle* rtvHandles = stackalloc Vortice.Direct3D12.CpuDescriptorHandle[descriptor.ColorAttachments.Length];
+            if (dx12Device.IsNativeRenderPassSupported)
+            {
+                CacheNativeRenderPass(dx12CommandBuffer, descriptor, rtvHandles, dsvHandle);
+                m_UseNativeRenderPass = true;
+            }
+            else
+            {
+                BeginLegacyRasterPass(dx12CommandBuffer, descriptor, rtvHandles, dsvHandle);
+            }
 
-            // create render target views
+            if (descriptor.ShadingRateTexture != null)
+            {
+                Dx12Texture dx12Texture = descriptor.ShadingRateTexture as Dx12Texture;
+                dx12CommandBuffer.NativeCommandList.RSSetShadingRateImage(dx12Texture.NativeResource);
+            }
+        }
+
+        private Vortice.Direct3D12.CpuDescriptorHandle[] CreateColorAttachmentViews(in RHIRasterPassDescriptor descriptor)
+        {
+            Vortice.Direct3D12.CpuDescriptorHandle[] rtvHandles = new Vortice.Direct3D12.CpuDescriptorHandle[descriptor.ColorAttachments.Length];
+
             for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
             {
                 Dx12Texture texture = descriptor.ColorAttachments.Span[i].RenderTarget as Dx12Texture;
 #if DEBUG
                 Debug.Assert(texture != null, "ColorRenderTarget Texture is null");
 #endif
+                if (texture == null)
+                {
+                    throw new InvalidOperationException($"Color render target at index {i} is null.");
+                }
+
                 RHITextureViewDescriptor viewDescriptor;
                 {
                     viewDescriptor.MipCount = texture.Descriptor.MipCount;
                     viewDescriptor.BaseMipLevel = 0;
                     viewDescriptor.ArrayCount = texture.Descriptor.Extent.z;
                     viewDescriptor.BaseArraySlice = 0;
-                    //viewDescriptor.Format = texture.Descriptor.Format;
                     viewDescriptor.ViewType = ERHITextureViewType.Pending;
-                    //viewDescriptor.Dimension = texture.Descriptor.Dimension;
                 }
+
                 Vortice.Direct3D12.RenderTargetViewDescription desc = new Vortice.Direct3D12.RenderTargetViewDescription();
                 desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
                 desc.ViewDimension = Dx12Utility.ConvertToDx12TextureRTVDimension(texture.Descriptor.Dimension);
@@ -1231,50 +1561,66 @@ namespace Infinity.Graphics
                 texture.Dx12Device.NativeDevice.CreateRenderTargetView(texture.NativeResource, desc, rtvHandles[i]);
             }
 
-            // create depth stencil view
-            if (descriptor.DepthStencilAttachment.HasValue)
+            return rtvHandles;
+        }
+
+        private Vortice.Direct3D12.CpuDescriptorHandle? CreateDepthStencilAttachmentView(in RHIRasterPassDescriptor descriptor)
+        {
+            if (!descriptor.DepthStencilAttachment.HasValue)
             {
-                Dx12Texture texture = descriptor.DepthStencilAttachment.Value.RenderTarget as Dx12Texture;
-#if DEBUG
-                Debug.Assert(texture != null, "DepthStencilTarget texture is null");
-#endif
-                RHITextureViewDescriptor viewDescriptor;
-                {
-                    viewDescriptor.MipCount = texture.Descriptor.MipCount;
-                    viewDescriptor.BaseMipLevel = 0;
-                    viewDescriptor.ArrayCount = texture.Descriptor.Extent.z;
-                    viewDescriptor.BaseArraySlice = 0;
-                    //viewDescriptor.Format = texture.Descriptor.Format;
-                    viewDescriptor.ViewType = ERHITextureViewType.Pending;
-                    //viewDescriptor.Dimension = texture.Descriptor.Dimension;
-                }
-                Vortice.Direct3D12.DepthStencilViewDescription desc = new Vortice.Direct3D12.DepthStencilViewDescription();
-                desc.Flags = Dx12Utility.GetDx12DSVFlag(false, false);
-                //desc.Flags = Dx12Utility.GetDx12DSVFlag(descriptor.DepthStencilAttachment.Value.DepthReadOnly, descriptor.DepthStencilAttachment.Value.StencilReadOnly);
-                desc.Format = Dx12Utility.ConvertToDx12Format(texture.Descriptor.Format);
-                desc.ViewDimension = Dx12Utility.ConvertToDx12TextureDSVDimension(texture.Descriptor.Dimension);
-                Dx12Utility.FillTexture2DDSV(ref desc.Texture2D, viewDescriptor, texture.Descriptor.Dimension);
-                Dx12Utility.FillTexture2DArrayDSV(ref desc.Texture2DArray, viewDescriptor, texture.Descriptor.Dimension);
-
-                Dx12AttachmentInfo dx12AttachmentInfo = new Dx12AttachmentInfo();
-                {
-                    dx12AttachmentInfo.bDepthStencil = true;
-                    dx12AttachmentInfo.AttachmentInfo = texture.Dx12Device.AllocateDsvDescriptor(1);
-                }
-                m_AttachmentInfos.Add(dx12AttachmentInfo);
-
-                dsvHandle = dx12AttachmentInfo.AttachmentInfo.CpuHandle;
-                texture.Dx12Device.NativeDevice.CreateDepthStencilView(texture.NativeResource, desc, dsvHandle.Value);
+                return null;
             }
 
-            // set render targets
-            dx12CommandBuffer.NativeCommandList.OMSetRenderTargets((uint)descriptor.ColorAttachments.Length, rtvHandles, false, dsvHandle);
+            Dx12Texture texture = descriptor.DepthStencilAttachment.Value.RenderTarget as Dx12Texture;
+#if DEBUG
+            Debug.Assert(texture != null, "DepthStencilTarget texture is null");
+#endif
+            if (texture == null)
+            {
+                throw new InvalidOperationException("Depth stencil render target is null.");
+            }
 
-            // clear render targets
+            RHITextureViewDescriptor viewDescriptor;
+            {
+                viewDescriptor.MipCount = texture.Descriptor.MipCount;
+                viewDescriptor.BaseMipLevel = 0;
+                viewDescriptor.ArrayCount = texture.Descriptor.Extent.z;
+                viewDescriptor.BaseArraySlice = 0;
+                viewDescriptor.ViewType = ERHITextureViewType.Pending;
+            }
+
+            Vortice.Direct3D12.DepthStencilViewDescription desc = new Vortice.Direct3D12.DepthStencilViewDescription();
+            desc.Flags = Dx12Utility.GetDx12DSVFlag(false, false);
+            desc.Format = Dx12Utility.ConvertToDx12Format(texture.Descriptor.Format);
+            desc.ViewDimension = Dx12Utility.ConvertToDx12TextureDSVDimension(texture.Descriptor.Dimension);
+            Dx12Utility.FillTexture2DDSV(ref desc.Texture2D, viewDescriptor, texture.Descriptor.Dimension);
+            Dx12Utility.FillTexture2DArrayDSV(ref desc.Texture2DArray, viewDescriptor, texture.Descriptor.Dimension);
+
+            Dx12AttachmentInfo dx12AttachmentInfo = new Dx12AttachmentInfo();
+            {
+                dx12AttachmentInfo.bDepthStencil = true;
+                dx12AttachmentInfo.AttachmentInfo = texture.Dx12Device.AllocateDsvDescriptor(1);
+            }
+            m_AttachmentInfos.Add(dx12AttachmentInfo);
+
+            Vortice.Direct3D12.CpuDescriptorHandle dsvHandle = dx12AttachmentInfo.AttachmentInfo.CpuHandle;
+            texture.Dx12Device.NativeDevice.CreateDepthStencilView(texture.NativeResource, desc, dsvHandle);
+            return dsvHandle;
+        }
+
+        private static void BeginLegacyRasterPass(Dx12CommandBuffer dx12CommandBuffer,
+                                                  in RHIRasterPassDescriptor descriptor,
+                                                  Vortice.Direct3D12.CpuDescriptorHandle[] rtvHandles,
+                                                  Vortice.Direct3D12.CpuDescriptorHandle? dsvHandle)
+        {
+            fixed (Vortice.Direct3D12.CpuDescriptorHandle* rtvHandlesPtr = rtvHandles)
+            {
+                dx12CommandBuffer.NativeCommandList.OMSetRenderTargets((uint)rtvHandles.Length, rtvHandlesPtr, false, dsvHandle);
+            }
+
             for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
             {
                 ref RHIColorAttachmentDescriptor colorAttachmentDescriptor = ref descriptor.ColorAttachments.Span[i];
-
                 if (colorAttachmentDescriptor.LoadAction != ERHILoadAction.Clear)
                 {
                     continue;
@@ -1285,28 +1631,222 @@ namespace Infinity.Graphics
                 dx12CommandBuffer.NativeCommandList.ClearRenderTargetView(rtvHandles[i], nativeClearValue);
             }
 
-            // clear depth stencil target
-            if (dsvHandle.HasValue)
+            if (dsvHandle.HasValue && descriptor.DepthStencilAttachment.HasValue)
             {
-                RHIDepthStencilAttachmentDescriptor? depthStencilAttachmentDescriptor = descriptor.DepthStencilAttachment;
-                if (depthStencilAttachmentDescriptor?.DepthLoadOp != ERHILoadAction.Clear && depthStencilAttachmentDescriptor?.StencilLoadOp != ERHILoadAction.Clear)
+                RHIDepthStencilAttachmentDescriptor depthStencilAttachmentDescriptor = descriptor.DepthStencilAttachment.Value;
+                if (depthStencilAttachmentDescriptor.DepthLoadOp == ERHILoadAction.Clear || depthStencilAttachmentDescriptor.StencilLoadOp == ERHILoadAction.Clear)
                 {
-                    return;
+                    dx12CommandBuffer.NativeCommandList.ClearDepthStencilView(
+                        dsvHandle.Value,
+                        Dx12Utility.GetDx12ClearFlagByDSA(depthStencilAttachmentDescriptor),
+                        depthStencilAttachmentDescriptor.DepthClearValue,
+                        Convert.ToByte(depthStencilAttachmentDescriptor.StencilClearValue));
+                }
+            }
+        }
+
+        private void CacheNativeRenderPass(Dx12CommandBuffer dx12CommandBuffer,
+                                           in RHIRasterPassDescriptor descriptor,
+                                           Vortice.Direct3D12.CpuDescriptorHandle[] rtvHandles,
+                                           Vortice.Direct3D12.CpuDescriptorHandle? dsvHandle)
+        {
+            Vortice.Direct3D12.RenderPassRenderTargetDescription[] colorDescriptions = new Vortice.Direct3D12.RenderPassRenderTargetDescription[descriptor.ColorAttachments.Length];
+            for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
+            {
+                ref RHIColorAttachmentDescriptor colorAttachmentDescriptor = ref descriptor.ColorAttachments.Span[i];
+                Dx12Texture colorTexture = colorAttachmentDescriptor.RenderTarget as Dx12Texture;
+#if DEBUG
+                Debug.Assert(colorTexture != null, "ColorRenderTarget Texture is null");
+#endif
+                if (colorTexture == null)
+                {
+                    throw new InvalidOperationException($"Color render target at index {i} is null.");
                 }
 
-                dx12CommandBuffer.NativeCommandList.ClearDepthStencilView(
-                    dsvHandle.Value,
-                    Dx12Utility.GetDx12ClearFlagByDSA(depthStencilAttachmentDescriptor.Value),
-                    depthStencilAttachmentDescriptor.Value.DepthClearValue,
-                    Convert.ToByte(depthStencilAttachmentDescriptor.Value.StencilClearValue));
+                float4 clearColor = colorAttachmentDescriptor.ClearValue;
+                Vortice.Mathematics.Color4 nativeClearColor = new Vortice.Mathematics.Color4(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
+                Vortice.Direct3D12.ClearValue clearValue = new Vortice.Direct3D12.ClearValue(Dx12Utility.ConvertToDx12ViewFormat(colorTexture.Descriptor.Format), nativeClearColor);
+                Vortice.Direct3D12.RenderPassBeginningAccess beginningAccess = BuildBeginningAccess(colorAttachmentDescriptor.LoadAction, clearValue);
+                Vortice.Direct3D12.RenderPassEndingAccess endingAccess = BuildColorEndingAccess(colorAttachmentDescriptor);
+                colorDescriptions[i] = new Vortice.Direct3D12.RenderPassRenderTargetDescription(rtvHandles[i], beginningAccess, endingAccess);
             }
 
-            // set shading rate
-            if (descriptor.ShadingRateTexture != null)
+            Vortice.Direct3D12.RenderPassDepthStencilDescription? depthStencilDescription = null;
+            if (dsvHandle.HasValue && descriptor.DepthStencilAttachment.HasValue)
             {
-                Dx12Texture dx12Texture = descriptor.ShadingRateTexture as Dx12Texture;
-                dx12CommandBuffer.NativeCommandList.RSSetShadingRateImage(dx12Texture.NativeResource);
+                RHIDepthStencilAttachmentDescriptor depthStencilAttachment = descriptor.DepthStencilAttachment.Value;
+                Dx12Texture depthStencilTexture = depthStencilAttachment.RenderTarget as Dx12Texture;
+#if DEBUG
+                Debug.Assert(depthStencilTexture != null, "DepthStencilTarget texture is null");
+#endif
+                if (depthStencilTexture == null)
+                {
+                    throw new InvalidOperationException("Depth stencil render target is null.");
+                }
+
+                Vortice.Direct3D12.DepthStencilValue depthStencilClear = new Vortice.Direct3D12.DepthStencilValue(depthStencilAttachment.DepthClearValue, Convert.ToByte(depthStencilAttachment.StencilClearValue));
+                Vortice.Direct3D12.ClearValue clearValue = new Vortice.Direct3D12.ClearValue(Dx12Utility.ConvertToDx12Format(depthStencilTexture.Descriptor.Format), depthStencilClear);
+                Vortice.Direct3D12.RenderPassBeginningAccess depthBeginningAccess = BuildBeginningAccess(depthStencilAttachment.DepthLoadOp, clearValue);
+                Vortice.Direct3D12.RenderPassBeginningAccess stencilBeginningAccess = BuildBeginningAccess(depthStencilAttachment.StencilLoadOp, clearValue);
+                Vortice.Direct3D12.RenderPassEndingAccess depthEndingAccess = BuildDepthStencilEndingAccess(depthStencilAttachment, true);
+                Vortice.Direct3D12.RenderPassEndingAccess stencilEndingAccess = BuildDepthStencilEndingAccess(depthStencilAttachment, false);
+                depthStencilDescription = new Vortice.Direct3D12.RenderPassDepthStencilDescription(dsvHandle.Value, depthBeginningAccess, stencilBeginningAccess, depthEndingAccess, stencilEndingAccess);
             }
+
+            m_NativeRenderPassColorDescriptions = colorDescriptions;
+            m_NativeRenderPassDepthStencilDescription = depthStencilDescription;
+        }
+
+        private void EnsureNativeRenderPassActive()
+        {
+            if (!m_UseNativeRenderPass || m_IsNativeRenderPassActive)
+            {
+                return;
+            }
+
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            dx12CommandBuffer.NativeCommandList.BeginRenderPass(m_NativeRenderPassColorDescriptions, m_NativeRenderPassDepthStencilDescription, Vortice.Direct3D12.RenderPassFlags.None);
+            m_IsNativeRenderPassActive = true;
+        }
+
+        private static Vortice.Direct3D12.RenderPassBeginningAccess BuildBeginningAccess(in ERHILoadAction loadAction, in Vortice.Direct3D12.ClearValue clearValue)
+        {
+            switch (loadAction)
+            {
+                case ERHILoadAction.Load:
+                    return new Vortice.Direct3D12.RenderPassBeginningAccess(Vortice.Direct3D12.RenderPassBeginningAccessType.Preserve);
+
+                case ERHILoadAction.Clear:
+                    return new Vortice.Direct3D12.RenderPassBeginningAccess(clearValue);
+
+                case ERHILoadAction.DontCare:
+                    return new Vortice.Direct3D12.RenderPassBeginningAccess(Vortice.Direct3D12.RenderPassBeginningAccessType.Discard);
+
+                default:
+                    return new Vortice.Direct3D12.RenderPassBeginningAccess(Vortice.Direct3D12.RenderPassBeginningAccessType.Preserve);
+            }
+        }
+
+        private static Vortice.Direct3D12.RenderPassEndingAccess BuildColorEndingAccess(in RHIColorAttachmentDescriptor colorAttachmentDescriptor)
+        {
+            switch (colorAttachmentDescriptor.StoreAction)
+            {
+                case ERHIStoreAction.Store:
+                    return new Vortice.Direct3D12.RenderPassEndingAccess(Vortice.Direct3D12.RenderPassEndingAccessType.Preserve);
+
+                case ERHIStoreAction.DontCare:
+                    return new Vortice.Direct3D12.RenderPassEndingAccess(Vortice.Direct3D12.RenderPassEndingAccessType.Discard);
+
+                case ERHIStoreAction.Resolve:
+                case ERHIStoreAction.StoreAndResolve:
+                    if (colorAttachmentDescriptor.ResolveTarget == null)
+                    {
+                        throw new InvalidOperationException("Color resolve requires ResolveTarget to be set.");
+                    }
+
+                    Dx12Texture srcTexture = colorAttachmentDescriptor.RenderTarget as Dx12Texture;
+                    Dx12Texture dstTexture = colorAttachmentDescriptor.ResolveTarget as Dx12Texture;
+                    if (srcTexture == null || dstTexture == null)
+                    {
+                        throw new InvalidOperationException("Color resolve requires Dx12 textures for source and destination.");
+                    }
+
+                    Vortice.Direct3D12.RenderPassEndingAccessResolveParameters resolveParameters = new Vortice.Direct3D12.RenderPassEndingAccessResolveParameters
+                    {
+                        SrcResource = srcTexture.NativeResource,
+                        DstResource = dstTexture.NativeResource,
+                        SubresourceCount = 1,
+                        SubresourceParameters = new Vortice.Direct3D12.RenderPassEndingAccessResolveSubresourceParameters(
+                            ComputeResolveSubresourceIndex(srcTexture, colorAttachmentDescriptor.MipLevel, colorAttachmentDescriptor.ArraySlice),
+                            ComputeResolveSubresourceIndex(dstTexture, colorAttachmentDescriptor.ResolveMipLevel, colorAttachmentDescriptor.ResolveArraySlice),
+                            0,
+                            0,
+                            default),
+                        Format = Dx12Utility.ConvertToDx12Format(srcTexture.Descriptor.Format),
+                        ResolveMode = Vortice.Direct3D12.ResolveMode.Average,
+                        PreserveResolveSource = colorAttachmentDescriptor.StoreAction == ERHIStoreAction.StoreAndResolve
+                    };
+                    resolveParameters.Format = Dx12Utility.ConvertToDx12ViewFormat(srcTexture.Descriptor.Format);
+                    return new Vortice.Direct3D12.RenderPassEndingAccess(resolveParameters);
+
+                default:
+                    return new Vortice.Direct3D12.RenderPassEndingAccess(Vortice.Direct3D12.RenderPassEndingAccessType.Preserve);
+            }
+        }
+
+        private static Vortice.Direct3D12.RenderPassEndingAccess BuildDepthStencilEndingAccess(in RHIDepthStencilAttachmentDescriptor depthStencilAttachmentDescriptor, bool isDepth)
+        {
+            ERHIStoreAction storeAction = isDepth ? depthStencilAttachmentDescriptor.DepthStoreOp : depthStencilAttachmentDescriptor.StencilStoreOp;
+
+            switch (storeAction)
+            {
+                case ERHIStoreAction.Store:
+                    return new Vortice.Direct3D12.RenderPassEndingAccess(Vortice.Direct3D12.RenderPassEndingAccessType.Preserve);
+
+                case ERHIStoreAction.DontCare:
+                    return new Vortice.Direct3D12.RenderPassEndingAccess(Vortice.Direct3D12.RenderPassEndingAccessType.Discard);
+
+                case ERHIStoreAction.Resolve:
+                case ERHIStoreAction.StoreAndResolve:
+                    if (depthStencilAttachmentDescriptor.ResolveTarget == null)
+                    {
+                        throw new InvalidOperationException("Depth/stencil resolve requires ResolveTarget to be set.");
+                    }
+
+                    Dx12Texture srcTexture = depthStencilAttachmentDescriptor.RenderTarget as Dx12Texture;
+                    Dx12Texture dstTexture = depthStencilAttachmentDescriptor.ResolveTarget as Dx12Texture;
+                    if (srcTexture == null || dstTexture == null)
+                    {
+                        throw new InvalidOperationException("Depth/stencil resolve requires Dx12 textures for source and destination.");
+                    }
+
+                    Vortice.Direct3D12.ResolveMode resolveMode = ConvertDepthResolveMode(depthStencilAttachmentDescriptor.ResolveMode);
+                    Vortice.Direct3D12.RenderPassEndingAccessResolveParameters resolveParameters = new Vortice.Direct3D12.RenderPassEndingAccessResolveParameters
+                    {
+                        SrcResource = srcTexture.NativeResource,
+                        DstResource = dstTexture.NativeResource,
+                        SubresourceCount = 1,
+                        SubresourceParameters = new Vortice.Direct3D12.RenderPassEndingAccessResolveSubresourceParameters(
+                            ComputeResolveSubresourceIndex(srcTexture, depthStencilAttachmentDescriptor.MipLevel, depthStencilAttachmentDescriptor.ArraySlice),
+                            ComputeResolveSubresourceIndex(dstTexture, depthStencilAttachmentDescriptor.ResolveMipLevel, depthStencilAttachmentDescriptor.ResolveArraySlice),
+                            0,
+                            0,
+                            default),
+                        ResolveMode = resolveMode,
+                        PreserveResolveSource = storeAction == ERHIStoreAction.StoreAndResolve
+                    };
+                    resolveParameters.Format = Dx12Utility.ConvertToDx12ViewFormat(srcTexture.Descriptor.Format);
+                    return new Vortice.Direct3D12.RenderPassEndingAccess(resolveParameters);
+
+                default:
+                    return new Vortice.Direct3D12.RenderPassEndingAccess(Vortice.Direct3D12.RenderPassEndingAccessType.Preserve);
+            }
+        }
+
+        private static Vortice.Direct3D12.ResolveMode ConvertDepthResolveMode(in EResolveMode resolveMode)
+        {
+            switch (resolveMode)
+            {
+                case EResolveMode.None:
+                    return Vortice.Direct3D12.ResolveMode.Average;
+
+                case EResolveMode.Min:
+                    return Vortice.Direct3D12.ResolveMode.Min;
+
+                case EResolveMode.Max:
+                    return Vortice.Direct3D12.ResolveMode.Max;
+
+                case EResolveMode.Sample0:
+                    throw new NotSupportedException("Depth/stencil resolve mode Sample0 is not supported in DX12 render pass path.");
+
+                default:
+                    return Vortice.Direct3D12.ResolveMode.Average;
+            }
+        }
+
+        private static uint ComputeResolveSubresourceIndex(Dx12Texture texture, in uint mipLevel, in uint arraySlice)
+        {
+            return arraySlice * texture.Descriptor.MipCount + mipLevel;
         }
 
         public override void PushDebugGroup(string name)
@@ -1373,167 +1913,24 @@ namespace Infinity.Graphics
 
         public override void ResourceBarrier(in RHIResourceBarrier barrier)
         {
-            Vortice.Direct3D12.ID3D12Resource resource = null;
-            Vortice.Direct3D12.ResourceBarrier resourceBarrier;
-
-            switch (barrier.ResourceBarrierType)
-            {
-                case ERHIResourceBarrierType.UAV:
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-                        resource = buffer.NativeResource;
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-                        resource = texture.NativeResource;
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitUAV(resource);
-                    break;
-
-                case ERHIResourceBarrierType.Aliasing:
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-                        resource = buffer.NativeResource;
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-                        resource = texture.NativeResource;
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitAliasing(null, resource);
-                    break;
-
-                case ERHIResourceBarrierType.Triansition:
-                    Vortice.Direct3D12.ResourceStates srcState;
-                    Vortice.Direct3D12.ResourceStates dstState;
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-
-                        resource = buffer.NativeResource;
-                        srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
-                        dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-
-                        resource = texture.NativeResource;
-                        srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
-                        dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitTransition(resource, srcState, dstState);
-                    break;
-            }
-
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier(1, &resourceBarrier);
+            if (m_UseNativeRenderPass && m_IsNativeRenderPassActive)
+            {
+                dx12CommandBuffer.NativeCommandList.EndRenderPass();
+                m_IsNativeRenderPassActive = false;
+            }
+            Dx12BarrierEmitter.EmitResourceBarrier(dx12CommandBuffer, barrier);
         }
 
         public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
         {
-            Vortice.Direct3D12.ID3D12Resource resource;
-            Vortice.Direct3D12.ResourceStates srcState;
-            Vortice.Direct3D12.ResourceStates dstState;
-            Vortice.Direct3D12.ResourceBarrier* resourceBarriers = stackalloc Vortice.Direct3D12.ResourceBarrier[barriers.Length];
-
-            for (int i = 0; i < barriers.Length; ++i)
-            {
-                ref RHIResourceBarrier barrier = ref barriers.Span[i];
-
-                switch (barrier.ResourceBarrierType)
-                {
-                    case ERHIResourceBarrierType.UAV:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-                            resource = buffer.NativeResource;
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-                            resource = texture.NativeResource;
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitUAV(resource);
-                        break;
-
-                    case ERHIResourceBarrierType.Aliasing:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-                            resource = buffer.NativeResource;
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-                            resource = texture.NativeResource;
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitAliasing(null, resource);
-                        break;
-
-                    case ERHIResourceBarrierType.Triansition:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-
-                            resource = buffer.NativeResource;
-                            srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
-                            dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-
-                            resource = texture.NativeResource;
-                            srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
-                            dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitTransition(resource, srcState, dstState);
-                        break;
-                }
-            }
-
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier((uint)barriers.Length, resourceBarriers);
+            if (m_UseNativeRenderPass && m_IsNativeRenderPassActive)
+            {
+                dx12CommandBuffer.NativeCommandList.EndRenderPass();
+                m_IsNativeRenderPassActive = false;
+            }
+            Dx12BarrierEmitter.EmitResourceBarriers(dx12CommandBuffer, barriers.Span);
         }
 
         public override void NextSubPass()
@@ -1699,18 +2096,21 @@ namespace Infinity.Graphics
 
         public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
         {
+            EnsureNativeRenderPassActive();
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList.DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
         }
 
         public override void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
         {
+            EnsureNativeRenderPassActive();
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList.DrawIndexedInstanced(indexCount, instanceCount, firstIndex, (int)baseVertex, firstInstance);
         }
 
         public override void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
+            EnsureNativeRenderPassActive();
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1719,6 +2119,7 @@ namespace Infinity.Graphics
 
         public override void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
+            EnsureNativeRenderPassActive();
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
@@ -1727,6 +2128,7 @@ namespace Infinity.Graphics
 
         public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
+            EnsureNativeRenderPassActive();
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
             if(dx12Device.Feature.IsMeshShadingSupported)
             {
@@ -1737,6 +2139,7 @@ namespace Infinity.Graphics
 
         public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
+            EnsureNativeRenderPassActive();
             Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
             Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
             if (dx12Device.Feature.IsMeshShadingSupported)
@@ -1748,6 +2151,7 @@ namespace Infinity.Graphics
 
         public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
         {
+            EnsureNativeRenderPassActive();
             Dx12RasterIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RasterIndirectCommandBuffer;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
@@ -1759,6 +2163,16 @@ namespace Infinity.Graphics
             PopDebugGroup();
 #endif
             m_CachedPipeline = null;
+
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            if (m_IsNativeRenderPassActive)
+            {
+                dx12CommandBuffer.NativeCommandList.EndRenderPass();
+                m_IsNativeRenderPassActive = false;
+            }
+            m_UseNativeRenderPass = false;
+            m_NativeRenderPassColorDescriptions = Array.Empty<Vortice.Direct3D12.RenderPassRenderTargetDescription>();
+            m_NativeRenderPassDepthStencilDescription = null;
 
             Dx12Device device = (m_CommandBuffer.CommandQueue as Dx12CommandQueue).Dx12Device;
 
@@ -1803,167 +2217,14 @@ namespace Infinity.Graphics
 
         public override void ResourceBarrier(in RHIResourceBarrier barrier)
         {
-            Vortice.Direct3D12.ID3D12Resource resource = null;
-            Vortice.Direct3D12.ResourceBarrier resourceBarrier;
-
-            switch (barrier.ResourceBarrierType)
-            {
-                case ERHIResourceBarrierType.UAV:
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-                        resource = buffer.NativeResource;
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-                        resource = texture.NativeResource;
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitUAV(resource);
-                    break;
-
-                case ERHIResourceBarrierType.Aliasing:
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-                        resource = buffer.NativeResource;
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-                        resource = texture.NativeResource;
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitAliasing(null, resource);
-                    break;
-
-                case ERHIResourceBarrierType.Triansition:
-                    Vortice.Direct3D12.ResourceStates srcState;
-                    Vortice.Direct3D12.ResourceStates dstState;
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                        Debug.Assert(buffer != null, "Barrier Buffer is null");
-#endif
-
-                        resource = buffer.NativeResource;
-                        srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
-                        dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
-                    }
-                    else
-                    {
-                        Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                        Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-
-                        resource = texture.NativeResource;
-                        srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
-                        dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
-                    }
-                    resourceBarrier = Dx12ResourceBarrierUtil.InitTransition(resource, srcState, dstState);
-                    break;
-            }
-
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier(1, &resourceBarrier);
+            Dx12BarrierEmitter.EmitResourceBarrier(dx12CommandBuffer, barrier);
         }
 
         public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
         {
-            Vortice.Direct3D12.ID3D12Resource resource;
-            Vortice.Direct3D12.ResourceStates srcState;
-            Vortice.Direct3D12.ResourceStates dstState;
-            Vortice.Direct3D12.ResourceBarrier* resourceBarriers = stackalloc Vortice.Direct3D12.ResourceBarrier[barriers.Length];
-
-            for (int i = 0; i < barriers.Length; ++i)
-            {
-                ref RHIResourceBarrier barrier = ref barriers.Span[i];
-
-                switch (barrier.ResourceBarrierType)
-                {
-                    case ERHIResourceBarrierType.UAV:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-                            resource = buffer.NativeResource;
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-                            resource = texture.NativeResource;
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitUAV(resource);
-                        break;
-
-                    case ERHIResourceBarrierType.Aliasing:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-                            resource = buffer.NativeResource;
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-                            resource = texture.NativeResource;
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitAliasing(null, resource);
-                        break;
-
-                    case ERHIResourceBarrierType.Triansition:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Dx12Buffer buffer = barrier.BufferBarrierInfo.Handle as Dx12Buffer;
-#if DEBUG
-                            Debug.Assert(buffer != null, String.Format("Barrier Buffer is null at index {0}.", i));
-#endif
-
-                            resource = buffer.NativeResource;
-                            srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
-                            dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
-                        }
-                        else
-                        {
-                            Dx12Texture texture = barrier.TextureBarrierInfo.Handle as Dx12Texture;
-#if DEBUG
-                            Debug.Assert(texture != null, String.Format("Barrier Texture is null at index {0}.", i));
-#endif
-
-                            resource = texture.NativeResource;
-                            srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
-                            dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
-                        }
-                        resourceBarriers[i] = Dx12ResourceBarrierUtil.InitTransition(resource, srcState, dstState);
-                        break;
-                }
-            }
-
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier((uint)barriers.Length, resourceBarriers);
+            Dx12BarrierEmitter.EmitResourceBarriers(dx12CommandBuffer, barriers.Span);
         }
 
         public override void PushDebugGroup(string name)

@@ -44,6 +44,7 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12DeviceFeature : RHIDeviceFeature
     {
+        public readonly bool IsEnhancedBarriersSupported;
         public readonly bool IsNativeRenderPassSupported;
 
         internal Dx12DeviceFeature(in bool isFlipProjection,
@@ -75,6 +76,7 @@ namespace Infinity.Graphics
                                 in ERHIDepthValueRange depthValueRange,
                                 in ERHIMultiviewStrategy multiviewStrategy,
                                 in ERHIWaveOperationStrategy waveOperationStrategy,
+                                in bool isEnhancedBarriersSupported,
                                 in bool isNativeRenderPassSupported) : base(isFlipProjection,
                                                                         isHDRPresentSupported,
                                                                         isUnifiedMemorySupported,
@@ -105,6 +107,7 @@ namespace Infinity.Graphics
                                                                         multiviewStrategy,
                                                                         waveOperationStrategy)
         {
+            IsEnhancedBarriersSupported = isEnhancedBarriersSupported;
             IsNativeRenderPassSupported = isNativeRenderPassSupported;
         }
     }
@@ -207,6 +210,20 @@ namespace Infinity.Graphics
             get
             {
                 return m_DispatchComputeIndirectSignature;
+            }
+        }
+        internal bool IsEnhancedBarriersSupported
+        {
+            get
+            {
+                return (m_Feature as Dx12DeviceFeature)?.IsEnhancedBarriersSupported ?? false;
+            }
+        }
+        internal bool IsNativeRenderPassSupported
+        {
+            get
+            {
+                return (m_Feature as Dx12DeviceFeature)?.IsNativeRenderPassSupported ?? false;
             }
         }
 
@@ -590,6 +607,7 @@ namespace Infinity.Graphics
             ERHIDepthValueRange depthValueRange = ERHIDepthValueRange.ZeroToOne;
             ERHIMultiviewStrategy multiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
             ERHIWaveOperationStrategy waveOperationStrategy = ERHIWaveOperationStrategy.Basic;
+            bool isEnhancedBarriersSupported = false;
             bool isNativeRenderPassSupported = false;
 
             // check feature level
@@ -731,6 +749,9 @@ namespace Infinity.Graphics
                     break;
             }
 
+            // check enhanced barrier support
+            isEnhancedBarriersSupported = featureOptions12.EnhancedBarriersSupported;
+
             // check mesh shading level
             switch (featureOptions7.MeshShaderTier)
             {
@@ -792,6 +813,7 @@ namespace Infinity.Graphics
                                               depthValueRange,
                                               multiviewStrategy,
                                               waveOperationStrategy,
+                                              isEnhancedBarriersSupported,
                                               isNativeRenderPassSupported);
         }
 
