@@ -102,13 +102,13 @@ namespace Infinity.Graphics
             NumPlanes = 0
         };
 
-        public static void EmitResourceBarrier(Dx12CommandBuffer commandBuffer, in RHIResourceBarrier barrier)
+        public static void EmitBarrier(Dx12CommandBuffer commandBuffer, in RHIBarrier barrier)
         {
-            ReadOnlySpan<RHIResourceBarrier> singleBarrier = MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in barrier), 1);
-            EmitResourceBarriers(commandBuffer, singleBarrier);
+            ReadOnlySpan<RHIBarrier> singleBarrier = MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in barrier), 1);
+            EmitBarriers(commandBuffer, singleBarrier);
         }
 
-        public static void EmitResourceBarriers(Dx12CommandBuffer commandBuffer, ReadOnlySpan<RHIResourceBarrier> barriers)
+        public static void EmitBarriers(Dx12CommandBuffer commandBuffer, ReadOnlySpan<RHIBarrier> barriers)
         {
             if (barriers.Length == 0)
             {
@@ -116,8 +116,7 @@ namespace Infinity.Graphics
             }
 
             Dx12Device device = ((Dx12CommandQueue)commandBuffer.CommandQueue).Dx12Device;
-            bool useEnhancedBarriers = device.IsEnhancedBarriersSupported;
-            if (useEnhancedBarriers)
+            if (device.IsEnhancedBarriersSupported)
             {
                 EmitEnhancedBarriers(commandBuffer, barriers);
             }
@@ -127,50 +126,63 @@ namespace Infinity.Graphics
             }
         }
 
-        private static void EmitLegacyBarriers(Dx12CommandBuffer commandBuffer, ReadOnlySpan<RHIResourceBarrier> barriers)
+        private static void EmitLegacyBarriers(Dx12CommandBuffer commandBuffer, ReadOnlySpan<RHIBarrier> barriers)
         {
-            Vortice.Direct3D12.ResourceBarrier* nativeBarriers = stackalloc Vortice.Direct3D12.ResourceBarrier[barriers.Length];
+            Vortice.Direct3D12.ResourceBarrier[] nativeBarriers = new Vortice.Direct3D12.ResourceBarrier[barriers.Length];
+            int barrierCount = 0;
 
             for (int i = 0; i < barriers.Length; ++i)
             {
-                ref readonly RHIResourceBarrier barrier = ref barriers[i];
-
-                switch (barrier.ResourceBarrierType)
+                ref readonly RHIBarrier barrier = ref barriers[i];
+                switch (barrier.Kind)
                 {
-                    case ERHIResourceBarrierType.UAV:
-                        nativeBarriers[i] = Dx12ResourceBarrierUtil.InitUAV(GetBarrierResource(barrier, i));
+                    case ERHIBarrierKind.Global:
+                        // TODO: Legacy D3D12 cannot express global memory barriers with sync/access granularity.
+                        // Use a conservative global UAV barrier.
+                        nativeBarriers[barrierCount++] = Dx12ResourceBarrierUtil.InitUAV(null);
                         break;
 
-                    case ERHIResourceBarrierType.Aliasing:
-                        nativeBarriers[i] = Dx12ResourceBarrierUtil.InitAliasing(null, GetBarrierResource(barrier, i));
+                    case ERHIBarrierKind.Buffer:
+                    {
+                        RHIBufferBarrier bufferBarrier = barrier.BufferBarrier;
+                        Vortice.Direct3D12.ResourceStates stateBefore = ConvertToLegacyBufferStates(bufferBarrier.AccessBefore);
+                        Vortice.Direct3D12.ResourceStates stateAfter = ConvertToLegacyBufferStates(bufferBarrier.AccessAfter);
+                        nativeBarriers[barrierCount++] = Dx12ResourceBarrierUtil.InitTransition(
+                            GetBufferResource(bufferBarrier.Resource, i),
+                            stateBefore,
+                            stateAfter);
                         break;
+                    }
 
-                    case ERHIResourceBarrierType.Triansition:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
-                        {
-                            Vortice.Direct3D12.ID3D12Resource nativeResource = GetBufferResource(barrier.BufferBarrierInfo, i);
-                            Vortice.Direct3D12.ResourceStates srcState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.SrcState);
-                            Vortice.Direct3D12.ResourceStates dstState = Dx12Utility.ConvertToDx12BufferState(barrier.BufferBarrierInfo.DstState);
-                            nativeBarriers[i] = Dx12ResourceBarrierUtil.InitTransition(nativeResource, srcState, dstState);
-                        }
-                        else
-                        {
-                            Vortice.Direct3D12.ID3D12Resource nativeResource = GetTextureResource(barrier.TextureBarrierInfo, i);
-                            Vortice.Direct3D12.ResourceStates srcState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.SrcState);
-                            Vortice.Direct3D12.ResourceStates dstState = Dx12Utility.ConvertToDx12TextureState(barrier.TextureBarrierInfo.DstState);
-                            nativeBarriers[i] = Dx12ResourceBarrierUtil.InitTransition(nativeResource, srcState, dstState);
-                        }
+                    case ERHIBarrierKind.Texture:
+                    {
+                        RHITextureBarrier textureBarrier = barrier.TextureBarrier;
+                        Vortice.Direct3D12.ResourceStates stateBefore = ConvertToLegacyTextureStates(textureBarrier.LayoutBefore, textureBarrier.AccessBefore);
+                        Vortice.Direct3D12.ResourceStates stateAfter = ConvertToLegacyTextureStates(textureBarrier.LayoutAfter, textureBarrier.AccessAfter);
+                        nativeBarriers[barrierCount++] = Dx12ResourceBarrierUtil.InitTransition(
+                            GetTextureResource(textureBarrier.Resource, i),
+                            stateBefore,
+                            stateAfter);
                         break;
+                    }
 
                     default:
-                        throw new InvalidOperationException($"Unsupported barrier type {barrier.ResourceBarrierType}.");
+                        throw new InvalidOperationException($"Unsupported barrier kind {barrier.Kind}.");
                 }
             }
 
-            commandBuffer.NativeCommandList.ResourceBarrier((uint)barriers.Length, nativeBarriers);
+            if (barrierCount == 0)
+            {
+                return;
+            }
+
+            fixed (Vortice.Direct3D12.ResourceBarrier* nativeBarriersPtr = nativeBarriers)
+            {
+                commandBuffer.NativeCommandList.ResourceBarrier((uint)barrierCount, nativeBarriersPtr);
+            }
         }
 
-        private static void EmitEnhancedBarriers(Dx12CommandBuffer commandBuffer, ReadOnlySpan<RHIResourceBarrier> barriers)
+        private static void EmitEnhancedBarriers(Dx12CommandBuffer commandBuffer, ReadOnlySpan<RHIBarrier> barriers)
         {
             ERHIPipelineType queuePipeline = commandBuffer.CommandQueue.PipelineType;
             List<Vortice.Direct3D12.GlobalBarrier>? globalBarriers = null;
@@ -179,92 +191,56 @@ namespace Infinity.Graphics
 
             for (int i = 0; i < barriers.Length; ++i)
             {
-                ref readonly RHIResourceBarrier barrier = ref barriers[i];
-
-                switch (barrier.ResourceBarrierType)
+                ref readonly RHIBarrier barrier = ref barriers[i];
+                switch (barrier.Kind)
                 {
-                    case ERHIResourceBarrierType.UAV:
-                        EnsureUavBarrierQueueCompatibility(queuePipeline, i);
-                        Vortice.Direct3D12.BarrierSync uavSync = GetUavBarrierSync(queuePipeline);
-                        (globalBarriers ??= new List<Vortice.Direct3D12.GlobalBarrier>(barriers.Length)).Add(
-                            new Vortice.Direct3D12.GlobalBarrier(
-                                uavSync,
-                                uavSync,
-                                Vortice.Direct3D12.BarrierAccess.UnorderedAccess,
-                                Vortice.Direct3D12.BarrierAccess.UnorderedAccess));
+                    case ERHIBarrierKind.Global:
+                    {
+                        RHIGlobalBarrier globalBarrier = barrier.GlobalBarrier;
+                        (globalBarriers ??= new List<Vortice.Direct3D12.GlobalBarrier>(barriers.Length)).Add(new Vortice.Direct3D12.GlobalBarrier(
+                            ResolveBarrierSync(globalBarrier.SyncBefore, queuePipeline),
+                            ResolveBarrierSync(globalBarrier.SyncAfter, queuePipeline),
+                            ConvertToBarrierAccess(globalBarrier.AccessBefore),
+                            ConvertToBarrierAccess(globalBarrier.AccessAfter)));
                         break;
+                    }
 
-                    case ERHIResourceBarrierType.Aliasing:
-                        Vortice.Direct3D12.BarrierSync aliasingSyncBefore;
-                        Vortice.Direct3D12.BarrierSync aliasingSyncAfter;
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                    case ERHIBarrierKind.Buffer:
+                    {
+                        RHIBufferBarrier bufferBarrier = barrier.BufferBarrier;
+                        (bufferBarriers ??= new List<Vortice.Direct3D12.BufferBarrier>(barriers.Length)).Add(new Vortice.Direct3D12.BufferBarrier
                         {
-                            aliasingSyncBefore = ResolveBarrierSync(ERHIPipelineStage.Common, barrier.BufferBarrierInfo.SrcPipeline, queuePipeline);
-                            aliasingSyncAfter = ResolveBarrierSync(ERHIPipelineStage.Common, barrier.BufferBarrierInfo.DstPipeline, queuePipeline);
-                        }
-                        else
-                        {
-                            aliasingSyncBefore = ResolveBarrierSync(ERHIPipelineStage.Common, barrier.TextureBarrierInfo.SrcPipeline, queuePipeline);
-                            aliasingSyncAfter = ResolveBarrierSync(ERHIPipelineStage.Common, barrier.TextureBarrierInfo.DstPipeline, queuePipeline);
-                        }
-
-                        (globalBarriers ??= new List<Vortice.Direct3D12.GlobalBarrier>(barriers.Length)).Add(
-                            new Vortice.Direct3D12.GlobalBarrier(
-                                aliasingSyncBefore,
-                                aliasingSyncAfter,
-                                Vortice.Direct3D12.BarrierAccess.NoAccess,
-                                Vortice.Direct3D12.BarrierAccess.NoAccess));
+                            SyncBefore = ResolveBarrierSync(bufferBarrier.SyncBefore, queuePipeline),
+                            SyncAfter = ResolveBarrierSync(bufferBarrier.SyncAfter, queuePipeline),
+                            AccessBefore = ConvertToBarrierAccess(bufferBarrier.AccessBefore),
+                            AccessAfter = ConvertToBarrierAccess(bufferBarrier.AccessAfter),
+                            Resource = GetBufferResource(bufferBarrier.Resource, i),
+                            Offset = bufferBarrier.Range.Offset,
+                            Size = bufferBarrier.Range.Size == 0 ? RHIBufferRange.WholeSize : bufferBarrier.Range.Size
+                        });
                         break;
+                    }
 
-                    case ERHIResourceBarrierType.Triansition:
-                        if (barrier.ResourceType == ERHIResourceType.Buffer)
+                    case ERHIBarrierKind.Texture:
+                    {
+                        RHITextureBarrier textureBarrier = barrier.TextureBarrier;
+                        (textureBarriers ??= new List<Vortice.Direct3D12.TextureBarrier>(barriers.Length)).Add(new Vortice.Direct3D12.TextureBarrier
                         {
-                            RHIBufferBarrierDescriptor bufferBarrier = barrier.BufferBarrierInfo;
-                            ValidateBufferStateForQueue(queuePipeline, bufferBarrier.SrcState, i, true);
-                            ValidateBufferStateForQueue(queuePipeline, bufferBarrier.DstState, i, false);
-                            Vortice.Direct3D12.BarrierAccess accessBefore = ConvertToBarrierAccess(bufferBarrier.SrcState);
-                            Vortice.Direct3D12.BarrierAccess accessAfter = ConvertToBarrierAccess(bufferBarrier.DstState);
-                            Vortice.Direct3D12.BarrierSync syncBefore = ResolveBufferBarrierSync(bufferBarrier.SrcStage, bufferBarrier.SrcPipeline, queuePipeline, accessBefore);
-                            Vortice.Direct3D12.BarrierSync syncAfter = ResolveBufferBarrierSync(bufferBarrier.DstStage, bufferBarrier.DstPipeline, queuePipeline, accessAfter);
-                            (bufferBarriers ??= new List<Vortice.Direct3D12.BufferBarrier>(barriers.Length)).Add(new Vortice.Direct3D12.BufferBarrier
-                            {
-                                SyncBefore = syncBefore,
-                                SyncAfter = syncAfter,
-                                AccessBefore = accessBefore,
-                                AccessAfter = accessAfter,
-                                Resource = GetBufferResource(bufferBarrier, i),
-                                Offset = 0,
-                                Size = ulong.MaxValue
-                            });
-                        }
-                        else
-                        {
-                            RHITextureBarrierDescriptor textureBarrier = barrier.TextureBarrierInfo;
-                            ValidateTextureStateForQueue(queuePipeline, textureBarrier.SrcState, i, true);
-                            ValidateTextureStateForQueue(queuePipeline, textureBarrier.DstState, i, false);
-                            Vortice.Direct3D12.BarrierAccess accessBefore = ConvertToBarrierAccess(textureBarrier.SrcState);
-                            Vortice.Direct3D12.BarrierAccess accessAfter = ConvertToBarrierAccess(textureBarrier.DstState);
-                            Vortice.Direct3D12.BarrierSync syncBefore = ResolveTextureBarrierSync(textureBarrier.SrcStage, textureBarrier.SrcPipeline, queuePipeline, textureBarrier.SrcState, accessBefore);
-                            Vortice.Direct3D12.BarrierSync syncAfter = ResolveTextureBarrierSync(textureBarrier.DstStage, textureBarrier.DstPipeline, queuePipeline, textureBarrier.DstState, accessAfter);
-                            Vortice.Direct3D12.BarrierLayout layoutBefore = ConvertToBarrierLayout(textureBarrier.SrcState, queuePipeline);
-                            Vortice.Direct3D12.BarrierLayout layoutAfter = ConvertToBarrierLayout(textureBarrier.DstState, queuePipeline);
-                            (textureBarriers ??= new List<Vortice.Direct3D12.TextureBarrier>(barriers.Length)).Add(new Vortice.Direct3D12.TextureBarrier
-                            {
-                                SyncBefore = syncBefore,
-                                SyncAfter = syncAfter,
-                                AccessBefore = accessBefore,
-                                AccessAfter = accessAfter,
-                                LayoutBefore = layoutBefore,
-                                LayoutAfter = layoutAfter,
-                                Resource = GetTextureResource(textureBarrier, i),
-                                Subresources = s_AllSubresourcesRange,
-                                Flags = Vortice.Direct3D12.TextureBarrierFlags.None
-                            });
-                        }
+                            SyncBefore = ResolveBarrierSync(textureBarrier.SyncBefore, queuePipeline),
+                            SyncAfter = ResolveBarrierSync(textureBarrier.SyncAfter, queuePipeline),
+                            AccessBefore = ConvertToBarrierAccess(textureBarrier.AccessBefore),
+                            AccessAfter = ConvertToBarrierAccess(textureBarrier.AccessAfter),
+                            LayoutBefore = ConvertToBarrierLayout(textureBarrier.LayoutBefore, queuePipeline),
+                            LayoutAfter = ConvertToBarrierLayout(textureBarrier.LayoutAfter, queuePipeline),
+                            Resource = GetTextureResource(textureBarrier.Resource, i),
+                            Subresources = ConvertToSubresourceRange(textureBarrier.SubresourceRange),
+                            Flags = Vortice.Direct3D12.TextureBarrierFlags.None
+                        });
                         break;
+                    }
 
                     default:
-                        throw new InvalidOperationException($"Unsupported barrier type {barrier.ResourceBarrierType}.");
+                        throw new InvalidOperationException($"Unsupported barrier kind {barrier.Kind}.");
                 }
             }
 
@@ -284,19 +260,9 @@ namespace Infinity.Graphics
             }
         }
 
-        private static Vortice.Direct3D12.ID3D12Resource GetBarrierResource(in RHIResourceBarrier barrier, in int index)
+        private static Vortice.Direct3D12.ID3D12Resource GetBufferResource(RHIBuffer resource, in int index)
         {
-            if (barrier.ResourceType == ERHIResourceType.Buffer)
-            {
-                return GetBufferResource(barrier.BufferBarrierInfo, index);
-            }
-
-            return GetTextureResource(barrier.TextureBarrierInfo, index);
-        }
-
-        private static Vortice.Direct3D12.ID3D12Resource GetBufferResource(in RHIBufferBarrierDescriptor barrier, in int index)
-        {
-            Dx12Buffer buffer = barrier.Handle as Dx12Buffer;
+            Dx12Buffer buffer = resource as Dx12Buffer;
 #if DEBUG
             Debug.Assert(buffer != null, index >= 0 ? String.Format("Barrier Buffer is null at index {0}.", index) : "Barrier Buffer is null");
 #endif
@@ -308,9 +274,9 @@ namespace Infinity.Graphics
             return buffer.NativeResource;
         }
 
-        private static Vortice.Direct3D12.ID3D12Resource GetTextureResource(in RHITextureBarrierDescriptor barrier, in int index)
+        private static Vortice.Direct3D12.ID3D12Resource GetTextureResource(RHITexture resource, in int index)
         {
-            Dx12Texture texture = barrier.Handle as Dx12Texture;
+            Dx12Texture texture = resource as Dx12Texture;
 #if DEBUG
             Debug.Assert(texture != null, index >= 0 ? String.Format("Barrier Texture is null at index {0}.", index) : "Barrier Texture is null");
 #endif
@@ -322,16 +288,33 @@ namespace Infinity.Graphics
             return texture.NativeResource;
         }
 
-        private static Vortice.Direct3D12.BarrierSync ResolveBarrierSync(in ERHIPipelineStage stage,
-                                                                          in ERHIPipelineType pipeline,
-                                                                          in ERHIPipelineType queuePipeline)
+        private static Vortice.Direct3D12.BarrierSubresourceRange ConvertToSubresourceRange(in RHITextureSubresourceRange range)
         {
-            Vortice.Direct3D12.BarrierSync sync = ConvertToBarrierSync(stage);
-            if (sync == Vortice.Direct3D12.BarrierSync.None)
+            bool isWholeRange = range.BaseMipLevel == 0
+                                && range.MipLevelCount == RHITextureSubresourceRange.All
+                                && range.BaseArrayLayer == 0
+                                && range.ArrayLayerCount == RHITextureSubresourceRange.All;
+            if (isWholeRange)
             {
-                sync = ConvertToBarrierSync(pipeline);
+                return s_AllSubresourcesRange;
             }
 
+            // TODO: plane range is not exposed in the RHI barrier model.
+            // D3D12 enhanced texture barrier plane dimension is conservatively widened.
+            return new Vortice.Direct3D12.BarrierSubresourceRange
+            {
+                IndexOrFirstMipLevel = range.BaseMipLevel,
+                NumMipLevels = range.MipLevelCount == RHITextureSubresourceRange.All ? 0u : range.MipLevelCount,
+                FirstArraySlice = range.BaseArrayLayer,
+                NumArraySlices = range.ArrayLayerCount == RHITextureSubresourceRange.All ? 0u : range.ArrayLayerCount,
+                FirstPlane = 0,
+                NumPlanes = 0
+            };
+        }
+
+        private static Vortice.Direct3D12.BarrierSync ResolveBarrierSync(in ERHISyncStageMask syncMask, in ERHIPipelineType queuePipeline)
+        {
+            Vortice.Direct3D12.BarrierSync sync = ConvertToBarrierSync(syncMask);
             if (sync == Vortice.Direct3D12.BarrierSync.None)
             {
                 sync = GetDefaultQueueSync(queuePipeline);
@@ -340,163 +323,191 @@ namespace Infinity.Graphics
             return NormalizeBarrierSyncForQueue(sync, queuePipeline);
         }
 
-        private static Vortice.Direct3D12.BarrierSync ResolveBufferBarrierSync(in ERHIPipelineStage stage,
-                                                                                in ERHIPipelineType pipeline,
-                                                                                in ERHIPipelineType queuePipeline,
-                                                                                in Vortice.Direct3D12.BarrierAccess access)
+        private static Vortice.Direct3D12.BarrierSync ConvertToBarrierSync(in ERHISyncStageMask syncMask)
         {
+            if (syncMask == ERHISyncStageMask.None)
+            {
+                return Vortice.Direct3D12.BarrierSync.None;
+            }
+
             Vortice.Direct3D12.BarrierSync sync = Vortice.Direct3D12.BarrierSync.None;
-
-            if ((access & (Vortice.Direct3D12.BarrierAccess.CopySource | Vortice.Direct3D12.BarrierAccess.CopyDestination)) != 0)
+            if ((syncMask & ERHISyncStageMask.Transfer) != 0) sync |= Vortice.Direct3D12.BarrierSync.Copy | Vortice.Direct3D12.BarrierSync.Resolve;
+            if ((syncMask & ERHISyncStageMask.Indirect) != 0) sync |= Vortice.Direct3D12.BarrierSync.ExecuteIndirect;
+            if ((syncMask & ERHISyncStageMask.IndexInput) != 0) sync |= Vortice.Direct3D12.BarrierSync.IndexInput;
+            if ((syncMask & ERHISyncStageMask.VertexInput) != 0) sync |= Vortice.Direct3D12.BarrierSync.IndexInput;
+            if ((syncMask & ERHISyncStageMask.Vertex) != 0) sync |= Vortice.Direct3D12.BarrierSync.VertexShading;
+            if ((syncMask & ERHISyncStageMask.Fragment) != 0) sync |= Vortice.Direct3D12.BarrierSync.PixelShading;
+            if ((syncMask & ERHISyncStageMask.Compute) != 0) sync |= Vortice.Direct3D12.BarrierSync.ComputeShading;
+            if ((syncMask & ERHISyncStageMask.Task) != 0) sync |= Vortice.Direct3D12.BarrierSync.NonPixelShading;
+            if ((syncMask & ERHISyncStageMask.Mesh) != 0) sync |= Vortice.Direct3D12.BarrierSync.NonPixelShading;
+            if ((syncMask & ERHISyncStageMask.AccelStructBuild) != 0) sync |= Vortice.Direct3D12.BarrierSync.BuildRaytracingAccelerationStructure;
+            if ((syncMask & ERHISyncStageMask.AccelStructCopy) != 0) sync |= Vortice.Direct3D12.BarrierSync.CopyRaytracingAccelerationStructure;
+            if ((syncMask & ERHISyncStageMask.MachineLearning) != 0) sync |= Vortice.Direct3D12.BarrierSync.ComputeShading;
+            if ((syncMask & ERHISyncStageMask.RayTracing) != 0)
             {
-                sync |= Vortice.Direct3D12.BarrierSync.Copy;
-            }
-            if ((access & Vortice.Direct3D12.BarrierAccess.IndexBuffer) != 0)
-            {
-                sync |= Vortice.Direct3D12.BarrierSync.IndexInput;
-            }
-            if ((access & Vortice.Direct3D12.BarrierAccess.VertexBuffer) != 0)
-            {
-                sync |= Vortice.Direct3D12.BarrierSync.Draw | Vortice.Direct3D12.BarrierSync.VertexShading;
-            }
-            if ((access & Vortice.Direct3D12.BarrierAccess.IndirectArgument) != 0)
-            {
-                sync |= Vortice.Direct3D12.BarrierSync.ExecuteIndirect;
-            }
-            if ((access & (Vortice.Direct3D12.BarrierAccess.ConstantBuffer | Vortice.Direct3D12.BarrierAccess.ShaderResource | Vortice.Direct3D12.BarrierAccess.UnorderedAccess)) != 0)
-            {
-                sync |= ResolveShaderAccessSync(stage, pipeline);
-            }
-            if ((access & (Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureRead | Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureWrite)) != 0)
-            {
-                sync |= ResolveRaytracingAccessSync(stage, pipeline);
+                sync |= Vortice.Direct3D12.BarrierSync.Raytracing
+                        | Vortice.Direct3D12.BarrierSync.BuildRaytracingAccelerationStructure
+                        | Vortice.Direct3D12.BarrierSync.CopyRaytracingAccelerationStructure
+                        | Vortice.Direct3D12.BarrierSync.EmitRaytracingAccelerationStructurePostBuildInfo;
             }
 
-            if (sync == Vortice.Direct3D12.BarrierSync.None)
+            if ((syncMask & ERHISyncStageMask.AllGraphics) != 0)
             {
-                sync = ResolveBarrierSync(stage, pipeline, queuePipeline);
+                sync |= Vortice.Direct3D12.BarrierSync.Draw
+                        | Vortice.Direct3D12.BarrierSync.RenderTarget
+                        | Vortice.Direct3D12.BarrierSync.DepthStencil;
             }
 
-            return NormalizeBarrierSyncForQueue(sync, queuePipeline);
+            return sync;
         }
 
-        private static Vortice.Direct3D12.BarrierSync ResolveTextureBarrierSync(in ERHIPipelineStage stage,
-                                                                                 in ERHIPipelineType pipeline,
-                                                                                 in ERHIPipelineType queuePipeline,
-                                                                                 in ERHITextureState textureState,
-                                                                                 in Vortice.Direct3D12.BarrierAccess access)
+        private static Vortice.Direct3D12.BarrierAccess ConvertToBarrierAccess(in ERHIAccessMask accessMask)
         {
-            Vortice.Direct3D12.BarrierSync sync = Vortice.Direct3D12.BarrierSync.None;
-
-            if ((textureState & ERHITextureState.RenderTarget) != 0)
+            if (accessMask == ERHIAccessMask.None)
             {
-                sync |= Vortice.Direct3D12.BarrierSync.RenderTarget;
-            }
-            if ((textureState & (ERHITextureState.DepthRead | ERHITextureState.DepthWrite)) != 0)
-            {
-                sync |= Vortice.Direct3D12.BarrierSync.DepthStencil;
-            }
-            if ((textureState & (ERHITextureState.ResolveSrc | ERHITextureState.ResolveDst)) != 0)
-            {
-                sync |= Vortice.Direct3D12.BarrierSync.Resolve;
-            }
-            if ((textureState & (ERHITextureState.CopySrc | ERHITextureState.CopyDst)) != 0)
-            {
-                sync |= Vortice.Direct3D12.BarrierSync.Copy;
-            }
-            if ((textureState & ERHITextureState.ShadingRateSurface) != 0)
-            {
-                sync |= Vortice.Direct3D12.BarrierSync.Draw;
-            }
-            if ((access & (Vortice.Direct3D12.BarrierAccess.ShaderResource | Vortice.Direct3D12.BarrierAccess.UnorderedAccess)) != 0)
-            {
-                sync |= ResolveShaderAccessSync(stage, pipeline);
+                return Vortice.Direct3D12.BarrierAccess.NoAccess;
             }
 
-            if (sync == Vortice.Direct3D12.BarrierSync.None)
-            {
-                sync = ResolveBarrierSync(stage, pipeline, queuePipeline);
-            }
-
-            return NormalizeBarrierSyncForQueue(sync, queuePipeline);
+            Vortice.Direct3D12.BarrierAccess access = Vortice.Direct3D12.BarrierAccess.NoAccess;
+            if ((accessMask & ERHIAccessMask.TransferRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.CopySource;
+            if ((accessMask & ERHIAccessMask.TransferWrite) != 0) access |= Vortice.Direct3D12.BarrierAccess.CopyDestination;
+            if ((accessMask & ERHIAccessMask.ResolveRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.ResolveSource;
+            if ((accessMask & ERHIAccessMask.ResolveWrite) != 0) access |= Vortice.Direct3D12.BarrierAccess.ResolveDestination;
+            if ((accessMask & ERHIAccessMask.IndexRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.IndexBuffer;
+            if ((accessMask & ERHIAccessMask.VertexRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.VertexBuffer;
+            if ((accessMask & ERHIAccessMask.ConstantRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.ConstantBuffer;
+            if ((accessMask & ERHIAccessMask.IndirectCommandRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.IndirectArgument;
+            if ((accessMask & ERHIAccessMask.ShaderRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
+            if ((accessMask & ERHIAccessMask.ShaderWrite) != 0) access |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
+            if ((accessMask & ERHIAccessMask.RenderTargetRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.RenderTarget;
+            if ((accessMask & ERHIAccessMask.RenderTargetWrite) != 0) access |= Vortice.Direct3D12.BarrierAccess.RenderTarget;
+            if ((accessMask & ERHIAccessMask.DepthStencilRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.DepthStencilRead;
+            if ((accessMask & ERHIAccessMask.DepthStencilWrite) != 0) access |= Vortice.Direct3D12.BarrierAccess.DepthStencilWrite;
+            if ((accessMask & ERHIAccessMask.ShadingRateRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.ShadingRateSource;
+            if ((accessMask & ERHIAccessMask.AccelStructRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureRead;
+            if ((accessMask & ERHIAccessMask.AccelStructWrite) != 0) access |= Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureWrite;
+            if ((accessMask & ERHIAccessMask.Present) != 0) access |= Vortice.Direct3D12.BarrierAccess.Common;
+            return access;
         }
 
-        private static Vortice.Direct3D12.BarrierSync ResolveShaderAccessSync(in ERHIPipelineStage stage, in ERHIPipelineType pipeline)
+        private static Vortice.Direct3D12.BarrierLayout ConvertToBarrierLayout(in ERHITextureLayout layout, in ERHIPipelineType queuePipeline)
         {
-            switch (stage)
+            switch (layout)
             {
-                case ERHIPipelineStage.Vertex:
-                    return Vortice.Direct3D12.BarrierSync.VertexShading;
-
-                case ERHIPipelineStage.Fragment:
-                    return Vortice.Direct3D12.BarrierSync.PixelShading;
-
-                case ERHIPipelineStage.Compute:
-                case ERHIPipelineStage.MachineLearning:
-                    return Vortice.Direct3D12.BarrierSync.ComputeShading;
-
-                case ERHIPipelineStage.Task:
-                case ERHIPipelineStage.Mesh:
-                    return Vortice.Direct3D12.BarrierSync.NonPixelShading;
-
-                case ERHIPipelineStage.RayTracing:
-                    return Vortice.Direct3D12.BarrierSync.Raytracing;
-
+                case ERHITextureLayout.Undefined:
+                    return Vortice.Direct3D12.BarrierLayout.Undefined;
+                case ERHITextureLayout.Present:
+                    return Vortice.Direct3D12.BarrierLayout.Present;
+                case ERHITextureLayout.RenderTarget:
+                    return Vortice.Direct3D12.BarrierLayout.RenderTarget;
+                case ERHITextureLayout.DepthStencilWrite:
+                    return Vortice.Direct3D12.BarrierLayout.DepthStencilWrite;
+                case ERHITextureLayout.DepthStencilReadOnly:
+                    return Vortice.Direct3D12.BarrierLayout.DepthStencilRead;
+                case ERHITextureLayout.General:
+                    return queuePipeline == ERHIPipelineType.Compute
+                        ? Vortice.Direct3D12.BarrierLayout.ComputeQueueUnorderedAccess
+                        : Vortice.Direct3D12.BarrierLayout.DirectQueueUnorderedAccess;
+                case ERHITextureLayout.ShaderReadOnly:
+                    return queuePipeline == ERHIPipelineType.Compute
+                        ? Vortice.Direct3D12.BarrierLayout.ComputeQueueShaderResource
+                        : Vortice.Direct3D12.BarrierLayout.DirectQueueShaderResource;
+                case ERHITextureLayout.CopySource:
+                    return queuePipeline == ERHIPipelineType.Compute
+                        ? Vortice.Direct3D12.BarrierLayout.ComputeQueueCopySource
+                        : Vortice.Direct3D12.BarrierLayout.DirectQueueCopySource;
+                case ERHITextureLayout.CopyDestination:
+                    return queuePipeline == ERHIPipelineType.Compute
+                        ? Vortice.Direct3D12.BarrierLayout.ComputeQueueCopyDestination
+                        : Vortice.Direct3D12.BarrierLayout.DirectQueueCopyDestination;
+                case ERHITextureLayout.ResolveSource:
+                    return Vortice.Direct3D12.BarrierLayout.ResolveSource;
+                case ERHITextureLayout.ResolveDestination:
+                    return Vortice.Direct3D12.BarrierLayout.ResolveDestination;
+                case ERHITextureLayout.ShadingRateSurface:
+                    return Vortice.Direct3D12.BarrierLayout.ShadingRateSource;
                 default:
-                    switch (pipeline)
-                    {
-                        case ERHIPipelineType.Compute:
-                            return Vortice.Direct3D12.BarrierSync.ComputeShading;
-
-                        case ERHIPipelineType.Graphics:
-                            return Vortice.Direct3D12.BarrierSync.AllShading;
-
-                        default:
-                            return Vortice.Direct3D12.BarrierSync.None;
-                    }
+                    return Vortice.Direct3D12.BarrierLayout.Common;
             }
         }
 
-        private static Vortice.Direct3D12.BarrierSync ResolveRaytracingAccessSync(in ERHIPipelineStage stage, in ERHIPipelineType pipeline)
+        private static Vortice.Direct3D12.ResourceStates ConvertToLegacyBufferStates(in ERHIAccessMask accessMask)
         {
-            if (stage == ERHIPipelineStage.RayTracing || pipeline == ERHIPipelineType.Graphics)
+            if (accessMask == ERHIAccessMask.None)
             {
-                return Vortice.Direct3D12.BarrierSync.Raytracing
-                       | Vortice.Direct3D12.BarrierSync.BuildRaytracingAccelerationStructure
-                       | Vortice.Direct3D12.BarrierSync.CopyRaytracingAccelerationStructure
-                       | Vortice.Direct3D12.BarrierSync.EmitRaytracingAccelerationStructurePostBuildInfo;
+                return Vortice.Direct3D12.ResourceStates.Common;
             }
 
-            return ResolveShaderAccessSync(stage, pipeline);
+            Vortice.Direct3D12.ResourceStates result = Vortice.Direct3D12.ResourceStates.Common;
+            if ((accessMask & ERHIAccessMask.TransferRead) != 0) result |= Vortice.Direct3D12.ResourceStates.CopySource;
+            if ((accessMask & ERHIAccessMask.TransferWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.CopyDest;
+            if ((accessMask & ERHIAccessMask.IndexRead) != 0) result |= Vortice.Direct3D12.ResourceStates.IndexBuffer;
+            if ((accessMask & ERHIAccessMask.VertexRead) != 0) result |= Vortice.Direct3D12.ResourceStates.VertexAndConstantBuffer;
+            if ((accessMask & ERHIAccessMask.ConstantRead) != 0) result |= Vortice.Direct3D12.ResourceStates.VertexAndConstantBuffer;
+            if ((accessMask & ERHIAccessMask.IndirectCommandRead) != 0) result |= Vortice.Direct3D12.ResourceStates.IndirectArgument;
+            if ((accessMask & ERHIAccessMask.ShaderRead) != 0) result |= Vortice.Direct3D12.ResourceStates.PixelShaderResource | Vortice.Direct3D12.ResourceStates.NonPixelShaderResource;
+            if ((accessMask & ERHIAccessMask.ShaderWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.UnorderedAccess;
+            if ((accessMask & ERHIAccessMask.AccelStructRead) != 0) result |= Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure;
+            if ((accessMask & ERHIAccessMask.AccelStructWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure;
+            if ((accessMask & ERHIAccessMask.ShadingRateRead) != 0) result |= Vortice.Direct3D12.ResourceStates.ShadingRateSource;
+            return result;
         }
 
-        private static Vortice.Direct3D12.BarrierSync ConvertToBarrierSync(in ERHIPipelineStage stage)
+        private static Vortice.Direct3D12.ResourceStates ConvertToLegacyTextureStates(in ERHITextureLayout layout, in ERHIAccessMask accessMask)
         {
-            switch (stage)
+            Vortice.Direct3D12.ResourceStates result = ConvertTextureLayoutToLegacyState(layout);
+            result |= ConvertTextureAccessToLegacyState(accessMask);
+            return result;
+        }
+
+        private static Vortice.Direct3D12.ResourceStates ConvertTextureLayoutToLegacyState(in ERHITextureLayout layout)
+        {
+            switch (layout)
             {
-                case ERHIPipelineStage.Common:
-                    return Vortice.Direct3D12.BarrierSync.None;
-
-                case ERHIPipelineStage.Vertex:
-                    return Vortice.Direct3D12.BarrierSync.VertexShading;
-
-                case ERHIPipelineStage.Fragment:
-                    return Vortice.Direct3D12.BarrierSync.PixelShading;
-
-                case ERHIPipelineStage.Compute:
-                case ERHIPipelineStage.MachineLearning:
-                    return Vortice.Direct3D12.BarrierSync.ComputeShading;
-
-                case ERHIPipelineStage.Task:
-                case ERHIPipelineStage.Mesh:
-                    return Vortice.Direct3D12.BarrierSync.NonPixelShading;
-
-                case ERHIPipelineStage.RayTracing:
-                    return Vortice.Direct3D12.BarrierSync.Raytracing;
-
+                case ERHITextureLayout.Present:
+                    return Vortice.Direct3D12.ResourceStates.Present;
+                case ERHITextureLayout.CopySource:
+                    return Vortice.Direct3D12.ResourceStates.CopySource;
+                case ERHITextureLayout.CopyDestination:
+                    return Vortice.Direct3D12.ResourceStates.CopyDest;
+                case ERHITextureLayout.ResolveSource:
+                    return Vortice.Direct3D12.ResourceStates.ResolveSource;
+                case ERHITextureLayout.ResolveDestination:
+                    return Vortice.Direct3D12.ResourceStates.ResolveDest;
+                case ERHITextureLayout.DepthStencilReadOnly:
+                    return Vortice.Direct3D12.ResourceStates.DepthRead;
+                case ERHITextureLayout.DepthStencilWrite:
+                    return Vortice.Direct3D12.ResourceStates.DepthWrite;
+                case ERHITextureLayout.RenderTarget:
+                    return Vortice.Direct3D12.ResourceStates.RenderTarget;
+                case ERHITextureLayout.ShaderReadOnly:
+                    return Vortice.Direct3D12.ResourceStates.PixelShaderResource | Vortice.Direct3D12.ResourceStates.NonPixelShaderResource;
+                case ERHITextureLayout.General:
+                    return Vortice.Direct3D12.ResourceStates.UnorderedAccess;
+                case ERHITextureLayout.ShadingRateSurface:
+                    return Vortice.Direct3D12.ResourceStates.ShadingRateSource;
+                case ERHITextureLayout.Undefined:
                 default:
-                    throw new InvalidOperationException(String.Format("Unsupported pipeline stage '{0}' for enhanced barrier sync conversion.", stage));
+                    return Vortice.Direct3D12.ResourceStates.Common;
             }
+        }
+
+        private static Vortice.Direct3D12.ResourceStates ConvertTextureAccessToLegacyState(in ERHIAccessMask accessMask)
+        {
+            Vortice.Direct3D12.ResourceStates result = Vortice.Direct3D12.ResourceStates.Common;
+            if ((accessMask & ERHIAccessMask.TransferRead) != 0) result |= Vortice.Direct3D12.ResourceStates.CopySource;
+            if ((accessMask & ERHIAccessMask.TransferWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.CopyDest;
+            if ((accessMask & ERHIAccessMask.ResolveRead) != 0) result |= Vortice.Direct3D12.ResourceStates.ResolveSource;
+            if ((accessMask & ERHIAccessMask.ResolveWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.ResolveDest;
+            if ((accessMask & ERHIAccessMask.DepthStencilRead) != 0) result |= Vortice.Direct3D12.ResourceStates.DepthRead;
+            if ((accessMask & ERHIAccessMask.DepthStencilWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.DepthWrite;
+            if ((accessMask & ERHIAccessMask.RenderTargetRead) != 0) result |= Vortice.Direct3D12.ResourceStates.RenderTarget;
+            if ((accessMask & ERHIAccessMask.RenderTargetWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.RenderTarget;
+            if ((accessMask & ERHIAccessMask.ShaderRead) != 0) result |= Vortice.Direct3D12.ResourceStates.PixelShaderResource | Vortice.Direct3D12.ResourceStates.NonPixelShaderResource;
+            if ((accessMask & ERHIAccessMask.ShaderWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.UnorderedAccess;
+            if ((accessMask & ERHIAccessMask.ShadingRateRead) != 0) result |= Vortice.Direct3D12.ResourceStates.ShadingRateSource;
+            if ((accessMask & ERHIAccessMask.Present) != 0) result |= Vortice.Direct3D12.ResourceStates.Present;
+            return result;
         }
 
         private static Vortice.Direct3D12.BarrierSync ConvertToBarrierSync(in ERHIPipelineType pipeline)
@@ -886,16 +897,16 @@ namespace Infinity.Graphics
 #endif
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12BarrierEmitter.EmitResourceBarrier(dx12CommandBuffer, barrier);
+            Dx12BarrierEmitter.EmitBarrier(dx12CommandBuffer, barrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12BarrierEmitter.EmitResourceBarriers(dx12CommandBuffer, barriers.Span);
+            Dx12BarrierEmitter.EmitBarriers(dx12CommandBuffer, barriers);
         }
 
         public override void PushDebugGroup(string name)
@@ -1088,16 +1099,16 @@ namespace Infinity.Graphics
 #endif
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12BarrierEmitter.EmitResourceBarrier(dx12CommandBuffer, barrier);
+            Dx12BarrierEmitter.EmitBarrier(dx12CommandBuffer, barrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12BarrierEmitter.EmitResourceBarriers(dx12CommandBuffer, barriers.Span);
+            Dx12BarrierEmitter.EmitBarriers(dx12CommandBuffer, barriers);
         }
 
         public override void PushDebugGroup(string name)
@@ -1240,16 +1251,16 @@ namespace Infinity.Graphics
 #endif
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12BarrierEmitter.EmitResourceBarrier(dx12CommandBuffer, barrier);
+            Dx12BarrierEmitter.EmitBarrier(dx12CommandBuffer, barrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12BarrierEmitter.EmitResourceBarriers(dx12CommandBuffer, barriers.Span);
+            Dx12BarrierEmitter.EmitBarriers(dx12CommandBuffer, barriers);
         }
 
         public override void PushDebugGroup(string name)
@@ -1874,7 +1885,7 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             if (m_UseNativeRenderPass && m_IsNativeRenderPassActive)
@@ -1882,10 +1893,10 @@ namespace Infinity.Graphics
                 dx12CommandBuffer.NativeCommandList.EndRenderPass();
                 m_IsNativeRenderPassActive = false;
             }
-            Dx12BarrierEmitter.EmitResourceBarrier(dx12CommandBuffer, barrier);
+            Dx12BarrierEmitter.EmitBarrier(dx12CommandBuffer, barrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             if (m_UseNativeRenderPass && m_IsNativeRenderPassActive)
@@ -1893,7 +1904,7 @@ namespace Infinity.Graphics
                 dx12CommandBuffer.NativeCommandList.EndRenderPass();
                 m_IsNativeRenderPassActive = false;
             }
-            Dx12BarrierEmitter.EmitResourceBarriers(dx12CommandBuffer, barriers.Span);
+            Dx12BarrierEmitter.EmitBarriers(dx12CommandBuffer, barriers);
         }
 
         public override void NextSubPass()
@@ -2178,16 +2189,16 @@ namespace Infinity.Graphics
 #endif
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12BarrierEmitter.EmitResourceBarrier(dx12CommandBuffer, barrier);
+            Dx12BarrierEmitter.EmitBarrier(dx12CommandBuffer, barrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12BarrierEmitter.EmitResourceBarriers(dx12CommandBuffer, barriers.Span);
+            Dx12BarrierEmitter.EmitBarriers(dx12CommandBuffer, barriers);
         }
 
         public override void PushDebugGroup(string name)
@@ -2321,16 +2332,15 @@ namespace Infinity.Graphics
             throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
             throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
             throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
         }
-
         public override void PushDebugGroup(string name)
         {
             throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");

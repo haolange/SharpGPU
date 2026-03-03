@@ -554,29 +554,146 @@ namespace Infinity.Graphics
             }
         }
 
-        public static VkPipelineStageFlags ConvertToVkPipelineStage(in ERHIPipelineStage stage)
+        private static VkPipelineStageFlags GetSync1QueueDefaultStages(in ERHIPipelineType queuePipeline)
         {
-            switch (stage)
+            switch (queuePipeline)
             {
-                case ERHIPipelineStage.Common:
+                case ERHIPipelineType.Transfer:
+                    return VkPipelineStageFlags.Transfer;
+                case ERHIPipelineType.Compute:
+                    return VkPipelineStageFlags.ComputeShader | VkPipelineStageFlags.Transfer;
+                case ERHIPipelineType.Graphics:
                     return VkPipelineStageFlags.AllCommands;
-                case ERHIPipelineStage.Vertex:
-                    return VkPipelineStageFlags.VertexShader;
-                case ERHIPipelineStage.Fragment:
-                    return VkPipelineStageFlags.FragmentShader;
-                case ERHIPipelineStage.Compute:
-                    return VkPipelineStageFlags.ComputeShader;
-                case ERHIPipelineStage.Task:
-                    return VkPipelineStageFlags.TaskShaderEXT;
-                case ERHIPipelineStage.Mesh:
-                    return VkPipelineStageFlags.MeshShaderEXT;
-                case ERHIPipelineStage.RayTracing:
-                    return VkPipelineStageFlags.RayTracingShaderKHR;
-                case ERHIPipelineStage.MachineLearning:
-                    return VkPipelineStageFlags.ComputeShader;
                 default:
                     return VkPipelineStageFlags.AllCommands;
             }
+        }
+
+        private static VkPipelineStageFlags2 GetSync2QueueDefaultStages(in ERHIPipelineType queuePipeline)
+        {
+            switch (queuePipeline)
+            {
+                case ERHIPipelineType.Transfer:
+                    return VkPipelineStageFlags2.AllTransfer;
+                case ERHIPipelineType.Compute:
+                    return VkPipelineStageFlags2.ComputeShader | VkPipelineStageFlags2.AllTransfer;
+                case ERHIPipelineType.Graphics:
+                    return VkPipelineStageFlags2.AllCommands;
+                default:
+                    return VkPipelineStageFlags2.AllCommands;
+            }
+        }
+
+        public static VkPipelineStageFlags ConvertToVkPipelineStage(in ERHISyncStageMask stages, in ERHIPipelineType queuePipeline)
+        {
+            if (stages == ERHISyncStageMask.None)
+            {
+                return GetSync1QueueDefaultStages(queuePipeline);
+            }
+
+            VkPipelineStageFlags result = 0;
+            if ((stages & ERHISyncStageMask.Transfer) != 0) result |= VkPipelineStageFlags.Transfer;
+            if ((stages & ERHISyncStageMask.Indirect) != 0) result |= VkPipelineStageFlags.DrawIndirect;
+            if ((stages & ERHISyncStageMask.IndexInput) != 0) result |= VkPipelineStageFlags.VertexInput;
+            if ((stages & ERHISyncStageMask.VertexInput) != 0) result |= VkPipelineStageFlags.VertexInput;
+            if ((stages & ERHISyncStageMask.Vertex) != 0) result |= VkPipelineStageFlags.VertexShader;
+            if ((stages & ERHISyncStageMask.Fragment) != 0) result |= VkPipelineStageFlags.FragmentShader;
+            if ((stages & ERHISyncStageMask.Compute) != 0) result |= VkPipelineStageFlags.ComputeShader;
+            if ((stages & ERHISyncStageMask.MachineLearning) != 0) result |= VkPipelineStageFlags.ComputeShader;
+            if ((stages & ERHISyncStageMask.Task) != 0) result |= VkPipelineStageFlags.TaskShaderEXT;
+            if ((stages & ERHISyncStageMask.Mesh) != 0) result |= VkPipelineStageFlags.MeshShaderEXT;
+            if ((stages & ERHISyncStageMask.RayTracing) != 0) result |= VkPipelineStageFlags.RayTracingShaderKHR;
+            if ((stages & ERHISyncStageMask.AccelStructBuild) != 0) result |= VkPipelineStageFlags.AccelerationStructureBuildKHR;
+            if ((stages & ERHISyncStageMask.AccelStructCopy) != 0)
+            {
+                // TODO: sync1 cannot represent dedicated AS-copy stage; conservatively include transfer/build.
+                result |= VkPipelineStageFlags.Transfer | VkPipelineStageFlags.AccelerationStructureBuildKHR;
+            }
+
+            if (result == 0)
+            {
+                return GetSync1QueueDefaultStages(queuePipeline);
+            }
+
+            return result;
+        }
+
+        public static VkPipelineStageFlags2 ConvertToVkPipelineStage2(in ERHISyncStageMask stages, in ERHIPipelineType queuePipeline)
+        {
+            if (stages == ERHISyncStageMask.None)
+            {
+                return GetSync2QueueDefaultStages(queuePipeline);
+            }
+
+            VkPipelineStageFlags2 result = VkPipelineStageFlags2.None;
+            if ((stages & ERHISyncStageMask.Transfer) != 0) result |= VkPipelineStageFlags2.AllTransfer;
+            if ((stages & ERHISyncStageMask.Indirect) != 0) result |= VkPipelineStageFlags2.DrawIndirect;
+            if ((stages & ERHISyncStageMask.IndexInput) != 0) result |= VkPipelineStageFlags2.IndexInput;
+            if ((stages & ERHISyncStageMask.VertexInput) != 0) result |= VkPipelineStageFlags2.VertexAttributeInput;
+            if ((stages & ERHISyncStageMask.Vertex) != 0) result |= VkPipelineStageFlags2.VertexShader;
+            if ((stages & ERHISyncStageMask.Fragment) != 0) result |= VkPipelineStageFlags2.FragmentShader;
+            if ((stages & ERHISyncStageMask.Compute) != 0) result |= VkPipelineStageFlags2.ComputeShader;
+            if ((stages & ERHISyncStageMask.MachineLearning) != 0) result |= VkPipelineStageFlags2.ComputeShader;
+            if ((stages & ERHISyncStageMask.Task) != 0) result |= VkPipelineStageFlags2.TaskShaderEXT;
+            if ((stages & ERHISyncStageMask.Mesh) != 0) result |= VkPipelineStageFlags2.MeshShaderEXT;
+            if ((stages & ERHISyncStageMask.RayTracing) != 0) result |= VkPipelineStageFlags2.RayTracingShaderKHR;
+            if ((stages & ERHISyncStageMask.AccelStructBuild) != 0) result |= VkPipelineStageFlags2.AccelerationStructureBuildKHR;
+            if ((stages & ERHISyncStageMask.AccelStructCopy) != 0) result |= VkPipelineStageFlags2.AccelerationStructureCopyKHR;
+
+            if (result == VkPipelineStageFlags2.None)
+            {
+                return GetSync2QueueDefaultStages(queuePipeline);
+            }
+
+            return result;
+        }
+
+        public static VkAccessFlags ConvertToVkAccessFlags(in ERHIAccessMask accessMask)
+        {
+            VkAccessFlags result = 0;
+            if ((accessMask & ERHIAccessMask.IndirectCommandRead) != 0) result |= VkAccessFlags.IndirectCommandRead;
+            if ((accessMask & ERHIAccessMask.IndexRead) != 0) result |= VkAccessFlags.IndexRead;
+            if ((accessMask & ERHIAccessMask.VertexRead) != 0) result |= VkAccessFlags.VertexAttributeRead;
+            if ((accessMask & ERHIAccessMask.ConstantRead) != 0) result |= VkAccessFlags.UniformRead;
+            if ((accessMask & ERHIAccessMask.ShaderRead) != 0) result |= VkAccessFlags.ShaderRead;
+            if ((accessMask & ERHIAccessMask.ShaderWrite) != 0) result |= VkAccessFlags.ShaderWrite;
+            if ((accessMask & ERHIAccessMask.RenderTargetRead) != 0) result |= VkAccessFlags.ColorAttachmentRead;
+            if ((accessMask & ERHIAccessMask.RenderTargetWrite) != 0) result |= VkAccessFlags.ColorAttachmentWrite;
+            if ((accessMask & ERHIAccessMask.DepthStencilRead) != 0) result |= VkAccessFlags.DepthStencilAttachmentRead;
+            if ((accessMask & ERHIAccessMask.DepthStencilWrite) != 0) result |= VkAccessFlags.DepthStencilAttachmentWrite;
+            if ((accessMask & ERHIAccessMask.TransferRead) != 0) result |= VkAccessFlags.TransferRead;
+            if ((accessMask & ERHIAccessMask.TransferWrite) != 0) result |= VkAccessFlags.TransferWrite;
+            if ((accessMask & ERHIAccessMask.ResolveRead) != 0) result |= VkAccessFlags.TransferRead;
+            if ((accessMask & ERHIAccessMask.ResolveWrite) != 0) result |= VkAccessFlags.TransferWrite;
+            if ((accessMask & ERHIAccessMask.ShadingRateRead) != 0) result |= VkAccessFlags.FragmentShadingRateAttachmentReadKHR;
+            if ((accessMask & ERHIAccessMask.AccelStructRead) != 0) result |= VkAccessFlags.AccelerationStructureReadKHR;
+            if ((accessMask & ERHIAccessMask.AccelStructWrite) != 0) result |= VkAccessFlags.AccelerationStructureWriteKHR;
+            if ((accessMask & ERHIAccessMask.Present) != 0) result |= VkAccessFlags.MemoryRead;
+            return result;
+        }
+
+        public static VkAccessFlags2 ConvertToVkAccessFlags2(in ERHIAccessMask accessMask)
+        {
+            VkAccessFlags2 result = VkAccessFlags2.None;
+            if ((accessMask & ERHIAccessMask.IndirectCommandRead) != 0) result |= VkAccessFlags2.IndirectCommandRead;
+            if ((accessMask & ERHIAccessMask.IndexRead) != 0) result |= VkAccessFlags2.IndexRead;
+            if ((accessMask & ERHIAccessMask.VertexRead) != 0) result |= VkAccessFlags2.VertexAttributeRead;
+            if ((accessMask & ERHIAccessMask.ConstantRead) != 0) result |= VkAccessFlags2.UniformRead;
+            if ((accessMask & ERHIAccessMask.ShaderRead) != 0) result |= VkAccessFlags2.ShaderRead;
+            if ((accessMask & ERHIAccessMask.ShaderWrite) != 0) result |= VkAccessFlags2.ShaderWrite;
+            if ((accessMask & ERHIAccessMask.RenderTargetRead) != 0) result |= VkAccessFlags2.ColorAttachmentRead;
+            if ((accessMask & ERHIAccessMask.RenderTargetWrite) != 0) result |= VkAccessFlags2.ColorAttachmentWrite;
+            if ((accessMask & ERHIAccessMask.DepthStencilRead) != 0) result |= VkAccessFlags2.DepthStencilAttachmentRead;
+            if ((accessMask & ERHIAccessMask.DepthStencilWrite) != 0) result |= VkAccessFlags2.DepthStencilAttachmentWrite;
+            if ((accessMask & ERHIAccessMask.TransferRead) != 0) result |= VkAccessFlags2.TransferRead;
+            if ((accessMask & ERHIAccessMask.TransferWrite) != 0) result |= VkAccessFlags2.TransferWrite;
+            if ((accessMask & ERHIAccessMask.ResolveRead) != 0) result |= VkAccessFlags2.TransferRead;
+            if ((accessMask & ERHIAccessMask.ResolveWrite) != 0) result |= VkAccessFlags2.TransferWrite;
+            if ((accessMask & ERHIAccessMask.ShadingRateRead) != 0) result |= VkAccessFlags2.FragmentShadingRateAttachmentReadKHR;
+            if ((accessMask & ERHIAccessMask.AccelStructRead) != 0) result |= VkAccessFlags2.AccelerationStructureReadKHR;
+            if ((accessMask & ERHIAccessMask.AccelStructWrite) != 0) result |= VkAccessFlags2.AccelerationStructureWriteKHR;
+            if ((accessMask & ERHIAccessMask.Present) != 0) result |= VkAccessFlags2.MemoryRead;
+            return result;
         }
 
         public static VkAccessFlags ConvertToVkBufferAccessFlag(in ERHIBufferState state)
@@ -651,6 +768,58 @@ namespace Infinity.Graphics
                 return VkImageLayout.TransferDstOptimal;
 
             return VkImageLayout.Undefined;
+        }
+
+        public static VkImageLayout ConvertToVkImageLayout(in ERHITextureLayout layout)
+        {
+            switch (layout)
+            {
+                case ERHITextureLayout.Present:
+                    return VkImageLayout.PresentSrcKHR;
+                case ERHITextureLayout.RenderTarget:
+                    return VkImageLayout.ColorAttachmentOptimal;
+                case ERHITextureLayout.DepthStencilWrite:
+                    return VkImageLayout.DepthStencilAttachmentOptimal;
+                case ERHITextureLayout.DepthStencilReadOnly:
+                    return VkImageLayout.DepthStencilReadOnlyOptimal;
+                case ERHITextureLayout.General:
+                    return VkImageLayout.General;
+                case ERHITextureLayout.ShaderReadOnly:
+                    return VkImageLayout.ShaderReadOnlyOptimal;
+                case ERHITextureLayout.CopySource:
+                    return VkImageLayout.TransferSrcOptimal;
+                case ERHITextureLayout.CopyDestination:
+                    return VkImageLayout.TransferDstOptimal;
+                case ERHITextureLayout.ResolveSource:
+                    return VkImageLayout.TransferSrcOptimal;
+                case ERHITextureLayout.ResolveDestination:
+                    return VkImageLayout.TransferDstOptimal;
+                case ERHITextureLayout.ShadingRateSurface:
+                    return VkImageLayout.FragmentShadingRateAttachmentOptimalKHR;
+                case ERHITextureLayout.Undefined:
+                default:
+                    return VkImageLayout.Undefined;
+            }
+        }
+
+        public static VkImageAspectFlags ConvertToVkImageAspect(in ERHITextureAspectMask aspectMask, in ERHIPixelFormat format)
+        {
+            if (aspectMask == ERHITextureAspectMask.None)
+            {
+                return GetVkImageAspect(format);
+            }
+
+            VkImageAspectFlags result = 0;
+            if ((aspectMask & ERHITextureAspectMask.Color) != 0) result |= VkImageAspectFlags.Color;
+            if ((aspectMask & ERHITextureAspectMask.Depth) != 0) result |= VkImageAspectFlags.Depth;
+            if ((aspectMask & ERHITextureAspectMask.Stencil) != 0) result |= VkImageAspectFlags.Stencil;
+
+            if (result == 0)
+            {
+                return GetVkImageAspect(format);
+            }
+
+            return result;
         }
 
         public static VkFilter ConvertToVkFilter(in ERHIFilterMode filter)
@@ -1063,4 +1232,3 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8600, CS8602, CA1416
 }
-

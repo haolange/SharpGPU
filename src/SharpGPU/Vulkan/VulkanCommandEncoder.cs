@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -9,6 +10,377 @@ using Viewport = Infinity.Mathmatics.Viewport;
 namespace Infinity.Graphics
 {
 #pragma warning disable CS0414, CS8600, CS8601, CS8602, CS8604, CS8618
+
+    internal static unsafe class VulkanBarrierEmitter
+    {
+        private sealed class Sync1Bucket
+        {
+            internal VkPipelineStageFlags SrcStages;
+            internal VkPipelineStageFlags DstStages;
+            internal readonly List<VkMemoryBarrier> MemoryBarriers = new List<VkMemoryBarrier>(4);
+            internal readonly List<VkBufferMemoryBarrier> BufferBarriers = new List<VkBufferMemoryBarrier>(8);
+            internal readonly List<VkImageMemoryBarrier> ImageBarriers = new List<VkImageMemoryBarrier>(8);
+        }
+
+        internal readonly struct Sync1BucketPlan
+        {
+            internal readonly VkPipelineStageFlags SrcStages;
+            internal readonly VkPipelineStageFlags DstStages;
+            internal readonly int BarrierCount;
+
+            internal Sync1BucketPlan(VkPipelineStageFlags srcStages, VkPipelineStageFlags dstStages, int barrierCount)
+            {
+                SrcStages = srcStages;
+                DstStages = dstStages;
+                BarrierCount = barrierCount;
+            }
+        }
+
+        internal static void EmitBarrier(VulkanCommandBuffer commandBuffer, in RHIBarrier barrier)
+        {
+            ReadOnlySpan<RHIBarrier> singleBarrier = MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in barrier), 1);
+            EmitBarriers(commandBuffer, singleBarrier);
+        }
+
+        internal static void EmitBarriers(VulkanCommandBuffer commandBuffer, ReadOnlySpan<RHIBarrier> barriers)
+        {
+            if (barriers.Length == 0)
+            {
+                return;
+            }
+
+            VulkanCommandQueue queue = commandBuffer.CommandQueue as VulkanCommandQueue
+                ?? throw new InvalidOperationException("Vulkan barrier emitter requires a Vulkan command queue.");
+            if (queue.VulkanDevice.UseSynchronization2)
+            {
+                EmitBarriersSync2(commandBuffer, barriers, queue.VulkanDevice);
+                return;
+            }
+
+            EmitBarriersSync1(commandBuffer, barriers, queue.PipelineType);
+        }
+
+        internal static Sync1BucketPlan[] PlanSync1BucketsForTesting(ERHIPipelineType queuePipeline, RHIBarrier[] barriers)
+        {
+            List<Sync1BucketPlan> buckets = new List<Sync1BucketPlan>(4);
+            for (int i = 0; i < barriers.Length; ++i)
+            {
+                if (!TryGetSync1StagePair(barriers[i], queuePipeline, out VkPipelineStageFlags srcStages, out VkPipelineStageFlags dstStages))
+                {
+                    continue;
+                }
+
+                bool merged = false;
+                for (int bucketIndex = 0; bucketIndex < buckets.Count; ++bucketIndex)
+                {
+                    Sync1BucketPlan bucket = buckets[bucketIndex];
+                    if (bucket.SrcStages == srcStages && bucket.DstStages == dstStages)
+                    {
+                        buckets[bucketIndex] = new Sync1BucketPlan(bucket.SrcStages, bucket.DstStages, bucket.BarrierCount + 1);
+                        merged = true;
+                        break;
+                    }
+                }
+
+                if (!merged)
+                {
+                    buckets.Add(new Sync1BucketPlan(srcStages, dstStages, 1));
+                }
+            }
+
+            return buckets.ToArray();
+        }
+
+        private static void EmitBarriersSync2(VulkanCommandBuffer commandBuffer, ReadOnlySpan<RHIBarrier> barriers, VulkanDevice device)
+        {
+            ERHIPipelineType queuePipeline = commandBuffer.CommandQueue.PipelineType;
+            List<VkMemoryBarrier2> memoryBarriers = new List<VkMemoryBarrier2>(4);
+            List<VkBufferMemoryBarrier2> bufferBarriers = new List<VkBufferMemoryBarrier2>(8);
+            List<VkImageMemoryBarrier2> imageBarriers = new List<VkImageMemoryBarrier2>(8);
+
+            for (int i = 0; i < barriers.Length; ++i)
+            {
+                switch (barriers[i].Kind)
+                {
+                    case ERHIBarrierKind.Global:
+                    {
+                        RHIGlobalBarrier globalBarrier = barriers[i].GlobalBarrier;
+                        memoryBarriers.Add(new VkMemoryBarrier2
+                        {
+                            sType = VkStructureType.MemoryBarrier2,
+                            srcStageMask = VulkanUtility.ConvertToVkPipelineStage2(globalBarrier.SyncBefore, queuePipeline),
+                            srcAccessMask = VulkanUtility.ConvertToVkAccessFlags2(globalBarrier.AccessBefore),
+                            dstStageMask = VulkanUtility.ConvertToVkPipelineStage2(globalBarrier.SyncAfter, queuePipeline),
+                            dstAccessMask = VulkanUtility.ConvertToVkAccessFlags2(globalBarrier.AccessAfter)
+                        });
+                        break;
+                    }
+
+                    case ERHIBarrierKind.Buffer:
+                    {
+                        RHIBufferBarrier bufferBarrier = barriers[i].BufferBarrier;
+                        VulkanBuffer vkBuffer = bufferBarrier.Resource as VulkanBuffer;
+                        if (vkBuffer == null)
+                        {
+                            throw new InvalidOperationException($"Vulkan buffer barrier resource is null at index {i}.");
+                        }
+
+                        bufferBarriers.Add(new VkBufferMemoryBarrier2
+                        {
+                            sType = VkStructureType.BufferMemoryBarrier2,
+                            srcStageMask = VulkanUtility.ConvertToVkPipelineStage2(bufferBarrier.SyncBefore, queuePipeline),
+                            srcAccessMask = VulkanUtility.ConvertToVkAccessFlags2(bufferBarrier.AccessBefore),
+                            dstStageMask = VulkanUtility.ConvertToVkPipelineStage2(bufferBarrier.SyncAfter, queuePipeline),
+                            dstAccessMask = VulkanUtility.ConvertToVkAccessFlags2(bufferBarrier.AccessAfter),
+                            srcQueueFamilyIndex = unchecked((uint)(-1)),
+                            dstQueueFamilyIndex = unchecked((uint)(-1)),
+                            buffer = vkBuffer.NativeBuffer,
+                            offset = bufferBarrier.Range.Offset,
+                            size = bufferBarrier.Range.Size == 0 ? RHIBufferRange.WholeSize : bufferBarrier.Range.Size
+                        });
+                        break;
+                    }
+
+                    case ERHIBarrierKind.Texture:
+                    {
+                        RHITextureBarrier textureBarrier = barriers[i].TextureBarrier;
+                        VulkanTexture vkTexture = textureBarrier.Resource as VulkanTexture;
+                        if (vkTexture == null)
+                        {
+                            throw new InvalidOperationException($"Vulkan texture barrier resource is null at index {i}.");
+                        }
+
+                        ResolveTextureLayouts(vkTexture, textureBarrier.LayoutBefore, textureBarrier.LayoutAfter, out VkImageLayout oldLayout, out VkImageLayout newLayout);
+                        imageBarriers.Add(new VkImageMemoryBarrier2
+                        {
+                            sType = VkStructureType.ImageMemoryBarrier2,
+                            srcStageMask = VulkanUtility.ConvertToVkPipelineStage2(textureBarrier.SyncBefore, queuePipeline),
+                            srcAccessMask = VulkanUtility.ConvertToVkAccessFlags2(textureBarrier.AccessBefore),
+                            dstStageMask = VulkanUtility.ConvertToVkPipelineStage2(textureBarrier.SyncAfter, queuePipeline),
+                            dstAccessMask = VulkanUtility.ConvertToVkAccessFlags2(textureBarrier.AccessAfter),
+                            oldLayout = oldLayout,
+                            newLayout = newLayout,
+                            srcQueueFamilyIndex = unchecked((uint)(-1)),
+                            dstQueueFamilyIndex = unchecked((uint)(-1)),
+                            image = vkTexture.NativeImage,
+                            subresourceRange = ConvertToVkSubresourceRange(textureBarrier.SubresourceRange, vkTexture.Descriptor.Format)
+                        });
+                        vkTexture.CurrentLayout = newLayout;
+                        break;
+                    }
+
+                    default:
+                        throw new InvalidOperationException($"Unsupported Vulkan barrier kind {barriers[i].Kind}.");
+                }
+            }
+
+            VkMemoryBarrier2[] memoryArray = memoryBarriers.Count == 0 ? Array.Empty<VkMemoryBarrier2>() : memoryBarriers.ToArray();
+            VkBufferMemoryBarrier2[] bufferArray = bufferBarriers.Count == 0 ? Array.Empty<VkBufferMemoryBarrier2>() : bufferBarriers.ToArray();
+            VkImageMemoryBarrier2[] imageArray = imageBarriers.Count == 0 ? Array.Empty<VkImageMemoryBarrier2>() : imageBarriers.ToArray();
+
+            fixed (VkMemoryBarrier2* memoryPtr = memoryArray)
+            fixed (VkBufferMemoryBarrier2* bufferPtr = bufferArray)
+            fixed (VkImageMemoryBarrier2* imagePtr = imageArray)
+            {
+                VkDependencyInfo dependencyInfo = new VkDependencyInfo
+                {
+                    sType = VkStructureType.DependencyInfo,
+                    memoryBarrierCount = (uint)memoryArray.Length,
+                    pMemoryBarriers = memoryPtr,
+                    bufferMemoryBarrierCount = (uint)bufferArray.Length,
+                    pBufferMemoryBarriers = bufferPtr,
+                    imageMemoryBarrierCount = (uint)imageArray.Length,
+                    pImageMemoryBarriers = imagePtr
+                };
+
+                if (device.UseSynchronization2KhrCommand)
+                {
+                    VulkanNative.vkCmdPipelineBarrier2KHR(commandBuffer.NativeCommandBuffer, &dependencyInfo);
+                }
+                else
+                {
+                    VulkanNative.vkCmdPipelineBarrier2(commandBuffer.NativeCommandBuffer, &dependencyInfo);
+                }
+            }
+        }
+
+        private static void EmitBarriersSync1(VulkanCommandBuffer commandBuffer, ReadOnlySpan<RHIBarrier> barriers, ERHIPipelineType queuePipeline)
+        {
+            List<Sync1Bucket> buckets = new List<Sync1Bucket>(4);
+
+            for (int i = 0; i < barriers.Length; ++i)
+            {
+                if (!TryGetSync1StagePair(barriers[i], queuePipeline, out VkPipelineStageFlags srcStages, out VkPipelineStageFlags dstStages))
+                {
+                    continue;
+                }
+
+                Sync1Bucket bucket = GetOrAddSync1Bucket(buckets, srcStages, dstStages);
+                switch (barriers[i].Kind)
+                {
+                    case ERHIBarrierKind.Global:
+                    {
+                        RHIGlobalBarrier globalBarrier = barriers[i].GlobalBarrier;
+                        bucket.MemoryBarriers.Add(new VkMemoryBarrier
+                        {
+                            sType = VkStructureType.MemoryBarrier,
+                            srcAccessMask = VulkanUtility.ConvertToVkAccessFlags(globalBarrier.AccessBefore),
+                            dstAccessMask = VulkanUtility.ConvertToVkAccessFlags(globalBarrier.AccessAfter)
+                        });
+                        break;
+                    }
+
+                    case ERHIBarrierKind.Buffer:
+                    {
+                        RHIBufferBarrier bufferBarrier = barriers[i].BufferBarrier;
+                        VulkanBuffer vkBuffer = bufferBarrier.Resource as VulkanBuffer;
+                        if (vkBuffer == null)
+                        {
+                            throw new InvalidOperationException($"Vulkan buffer barrier resource is null at index {i}.");
+                        }
+
+                        bucket.BufferBarriers.Add(new VkBufferMemoryBarrier
+                        {
+                            sType = VkStructureType.BufferMemoryBarrier,
+                            srcAccessMask = VulkanUtility.ConvertToVkAccessFlags(bufferBarrier.AccessBefore),
+                            dstAccessMask = VulkanUtility.ConvertToVkAccessFlags(bufferBarrier.AccessAfter),
+                            srcQueueFamilyIndex = unchecked((uint)(-1)),
+                            dstQueueFamilyIndex = unchecked((uint)(-1)),
+                            buffer = vkBuffer.NativeBuffer,
+                            offset = bufferBarrier.Range.Offset,
+                            size = bufferBarrier.Range.Size == 0 ? RHIBufferRange.WholeSize : bufferBarrier.Range.Size
+                        });
+                        break;
+                    }
+
+                    case ERHIBarrierKind.Texture:
+                    {
+                        RHITextureBarrier textureBarrier = barriers[i].TextureBarrier;
+                        VulkanTexture vkTexture = textureBarrier.Resource as VulkanTexture;
+                        if (vkTexture == null)
+                        {
+                            throw new InvalidOperationException($"Vulkan texture barrier resource is null at index {i}.");
+                        }
+
+                        ResolveTextureLayouts(vkTexture, textureBarrier.LayoutBefore, textureBarrier.LayoutAfter, out VkImageLayout oldLayout, out VkImageLayout newLayout);
+                        bucket.ImageBarriers.Add(new VkImageMemoryBarrier
+                        {
+                            sType = VkStructureType.ImageMemoryBarrier,
+                            srcAccessMask = VulkanUtility.ConvertToVkAccessFlags(textureBarrier.AccessBefore),
+                            dstAccessMask = VulkanUtility.ConvertToVkAccessFlags(textureBarrier.AccessAfter),
+                            oldLayout = oldLayout,
+                            newLayout = newLayout,
+                            srcQueueFamilyIndex = unchecked((uint)(-1)),
+                            dstQueueFamilyIndex = unchecked((uint)(-1)),
+                            image = vkTexture.NativeImage,
+                            subresourceRange = ConvertToVkSubresourceRange(textureBarrier.SubresourceRange, vkTexture.Descriptor.Format)
+                        });
+                        vkTexture.CurrentLayout = newLayout;
+                        break;
+                    }
+                }
+            }
+
+            for (int i = 0; i < buckets.Count; ++i)
+            {
+                Sync1Bucket bucket = buckets[i];
+                if (bucket.MemoryBarriers.Count == 0 && bucket.BufferBarriers.Count == 0 && bucket.ImageBarriers.Count == 0)
+                {
+                    continue;
+                }
+
+                VkMemoryBarrier[] memoryArray = bucket.MemoryBarriers.Count == 0 ? Array.Empty<VkMemoryBarrier>() : bucket.MemoryBarriers.ToArray();
+                VkBufferMemoryBarrier[] bufferArray = bucket.BufferBarriers.Count == 0 ? Array.Empty<VkBufferMemoryBarrier>() : bucket.BufferBarriers.ToArray();
+                VkImageMemoryBarrier[] imageArray = bucket.ImageBarriers.Count == 0 ? Array.Empty<VkImageMemoryBarrier>() : bucket.ImageBarriers.ToArray();
+
+                fixed (VkMemoryBarrier* memoryPtr = memoryArray)
+                fixed (VkBufferMemoryBarrier* bufferPtr = bufferArray)
+                fixed (VkImageMemoryBarrier* imagePtr = imageArray)
+                {
+                    VulkanNative.vkCmdPipelineBarrier(
+                        commandBuffer.NativeCommandBuffer,
+                        bucket.SrcStages,
+                        bucket.DstStages,
+                        0,
+                        (uint)memoryArray.Length,
+                        memoryPtr,
+                        (uint)bufferArray.Length,
+                        bufferPtr,
+                        (uint)imageArray.Length,
+                        imagePtr);
+                }
+            }
+        }
+
+        private static Sync1Bucket GetOrAddSync1Bucket(List<Sync1Bucket> buckets, VkPipelineStageFlags srcStages, VkPipelineStageFlags dstStages)
+        {
+            for (int i = 0; i < buckets.Count; ++i)
+            {
+                if (buckets[i].SrcStages == srcStages && buckets[i].DstStages == dstStages)
+                {
+                    return buckets[i];
+                }
+            }
+
+            Sync1Bucket bucket = new Sync1Bucket
+            {
+                SrcStages = srcStages,
+                DstStages = dstStages
+            };
+            buckets.Add(bucket);
+            return bucket;
+        }
+
+        private static bool TryGetSync1StagePair(in RHIBarrier barrier, ERHIPipelineType queuePipeline, out VkPipelineStageFlags srcStages, out VkPipelineStageFlags dstStages)
+        {
+            switch (barrier.Kind)
+            {
+                case ERHIBarrierKind.Global:
+                    srcStages = VulkanUtility.ConvertToVkPipelineStage(barrier.GlobalBarrier.SyncBefore, queuePipeline);
+                    dstStages = VulkanUtility.ConvertToVkPipelineStage(barrier.GlobalBarrier.SyncAfter, queuePipeline);
+                    return true;
+                case ERHIBarrierKind.Buffer:
+                    srcStages = VulkanUtility.ConvertToVkPipelineStage(barrier.BufferBarrier.SyncBefore, queuePipeline);
+                    dstStages = VulkanUtility.ConvertToVkPipelineStage(barrier.BufferBarrier.SyncAfter, queuePipeline);
+                    return true;
+                case ERHIBarrierKind.Texture:
+                    srcStages = VulkanUtility.ConvertToVkPipelineStage(barrier.TextureBarrier.SyncBefore, queuePipeline);
+                    dstStages = VulkanUtility.ConvertToVkPipelineStage(barrier.TextureBarrier.SyncAfter, queuePipeline);
+                    return true;
+                default:
+                    srcStages = 0;
+                    dstStages = 0;
+                    return false;
+            }
+        }
+
+        private static void ResolveTextureLayouts(VulkanTexture vkTexture, ERHITextureLayout layoutBefore, ERHITextureLayout layoutAfter, out VkImageLayout oldLayout, out VkImageLayout newLayout)
+        {
+            oldLayout = VulkanUtility.ConvertToVkImageLayout(layoutBefore);
+            if (oldLayout == VkImageLayout.Undefined)
+            {
+                oldLayout = vkTexture.CurrentLayout;
+            }
+
+            newLayout = VulkanUtility.ConvertToVkImageLayout(layoutAfter);
+            if (newLayout == VkImageLayout.Undefined)
+            {
+                newLayout = oldLayout;
+            }
+        }
+
+        private static VkImageSubresourceRange ConvertToVkSubresourceRange(in RHITextureSubresourceRange range, ERHIPixelFormat format)
+        {
+            return new VkImageSubresourceRange
+            {
+                aspectMask = VulkanUtility.ConvertToVkImageAspect(range.AspectMask, format),
+                baseMipLevel = range.BaseMipLevel,
+                levelCount = range.MipLevelCount == RHITextureSubresourceRange.All ? unchecked((uint)(-1)) : range.MipLevelCount,
+                baseArrayLayer = range.BaseArrayLayer,
+                layerCount = range.ArrayLayerCount == RHITextureSubresourceRange.All ? unchecked((uint)(-1)) : range.ArrayLayerCount
+            };
+        }
+    }
 
     // ========== Transfer Encoder ==========
     internal unsafe class VulkanTransferEncoder : RHITransferEncoder
@@ -32,91 +404,14 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-
-            switch (barrier.ResourceBarrierType)
-            {
-                case ERHIResourceBarrierType.Triansition:
-                    if (barrier.ResourceType == ERHIResourceType.Buffer)
-                    {
-                        VulkanBuffer vkBuffer = barrier.BufferBarrierInfo.Handle as VulkanBuffer;
-                        VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
-                        {
-                            sType = VkStructureType.BufferMemoryBarrier,
-                            srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.SrcState),
-                            dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.DstState),
-                            buffer = vkBuffer.NativeBuffer,
-                            offset = 0,
-                            size = unchecked((ulong)(-1)),
-                        };
-                        VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                            VkPipelineStageFlags.AllCommands,
-                            VkPipelineStageFlags.AllCommands,
-                            0, 0, null, 1, &bufferBarrier, 0, null);
-                    }
-                    else
-                    {
-                        VulkanTexture vkTexture = barrier.TextureBarrierInfo.Handle as VulkanTexture;
-                        VkImageLayout oldLayout = vkTexture.CurrentLayout;
-                        VkImageLayout newLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.DstState);
-                        if (newLayout == VkImageLayout.Undefined)
-                        {
-                            newLayout = oldLayout;
-                        }
-
-                        VkImageMemoryBarrier imageBarrier = new VkImageMemoryBarrier()
-                        {
-                            sType = VkStructureType.ImageMemoryBarrier,
-                            srcAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.SrcState),
-                            dstAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.DstState),
-                            oldLayout = oldLayout,
-                            newLayout = newLayout,
-                            srcQueueFamilyIndex = unchecked((uint)(-1)),
-                            dstQueueFamilyIndex = unchecked((uint)(-1)),
-                            image = vkTexture.NativeImage,
-                            subresourceRange = new VkImageSubresourceRange()
-                            {
-                                aspectMask = VulkanUtility.GetVkImageAspect(vkTexture.Descriptor.Format),
-                                baseMipLevel = 0,
-                                levelCount = unchecked((uint)(-1)),
-                                baseArrayLayer = 0,
-                                layerCount = unchecked((uint)(-1)),
-                            },
-                        };
-                        VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                            VkPipelineStageFlags.AllCommands,
-                            VkPipelineStageFlags.AllCommands,
-                            0, 0, null, 0, null, 1, &imageBarrier);
-
-                        vkTexture.CurrentLayout = newLayout;
-                    }
-                    break;
-
-                case ERHIResourceBarrierType.UAV:
-                {
-                    VkMemoryBarrier memBarrier = new VkMemoryBarrier()
-                    {
-                        sType = VkStructureType.MemoryBarrier,
-                        srcAccessMask = VkAccessFlags.ShaderWrite,
-                        dstAccessMask = VkAccessFlags.ShaderRead | VkAccessFlags.ShaderWrite,
-                    };
-                    VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                        VkPipelineStageFlags.AllCommands,
-                        VkPipelineStageFlags.AllCommands,
-                        0, 1, &memBarrier, 0, null, 0, null);
-                    break;
-                }
-            }
+            VulkanBarrierEmitter.EmitBarrier((VulkanCommandBuffer)m_CommandBuffer!, barrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            for (int i = 0; i < barriers.Length; ++i)
-            {
-                ResourceBarrier(barriers.Span[i]);
-            }
+            VulkanBarrierEmitter.EmitBarriers((VulkanCommandBuffer)m_CommandBuffer!, barriers);
         }
 
         public override void PushDebugGroup(string name)
@@ -284,85 +579,14 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-
-            if (barrier.ResourceBarrierType == ERHIResourceBarrierType.Triansition)
-            {
-                if (barrier.ResourceType == ERHIResourceType.Buffer)
-                {
-                    VulkanBuffer vkBuffer = barrier.BufferBarrierInfo.Handle as VulkanBuffer;
-                    VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
-                    {
-                        sType = VkStructureType.BufferMemoryBarrier,
-                        srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.SrcState),
-                        dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.DstState),
-                        buffer = vkBuffer.NativeBuffer,
-                        offset = 0,
-                        size = unchecked((ulong)(-1)),
-                    };
-                    VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                        VkPipelineStageFlags.ComputeShader,
-                        VkPipelineStageFlags.ComputeShader,
-                        0, 0, null, 1, &bufferBarrier, 0, null);
-                }
-                else
-                {
-                    VulkanTexture vkTexture = barrier.TextureBarrierInfo.Handle as VulkanTexture;
-                    VkImageLayout oldLayout = vkTexture.CurrentLayout;
-                    VkImageLayout newLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.DstState);
-                    if (newLayout == VkImageLayout.Undefined)
-                    {
-                        newLayout = oldLayout;
-                    }
-
-                    VkImageMemoryBarrier imageBarrier = new VkImageMemoryBarrier()
-                    {
-                        sType = VkStructureType.ImageMemoryBarrier,
-                        srcAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.SrcState),
-                        dstAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.DstState),
-                        oldLayout = oldLayout,
-                        newLayout = newLayout,
-                        srcQueueFamilyIndex = unchecked((uint)(-1)),
-                        dstQueueFamilyIndex = unchecked((uint)(-1)),
-                        image = vkTexture.NativeImage,
-                        subresourceRange = new VkImageSubresourceRange()
-                        {
-                            aspectMask = VulkanUtility.GetVkImageAspect(vkTexture.Descriptor.Format),
-                            baseMipLevel = 0,
-                            levelCount = unchecked((uint)(-1)),
-                            baseArrayLayer = 0,
-                            layerCount = unchecked((uint)(-1)),
-                        },
-                    };
-                    VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                        VkPipelineStageFlags.ComputeShader,
-                        VkPipelineStageFlags.ComputeShader,
-                        0, 0, null, 0, null, 1, &imageBarrier);
-
-                    vkTexture.CurrentLayout = newLayout;
-                }
-            }
-            else
-            {
-                VkMemoryBarrier memBarrier = new VkMemoryBarrier()
-                {
-                    sType = VkStructureType.MemoryBarrier,
-                    srcAccessMask = VkAccessFlags.ShaderWrite,
-                    dstAccessMask = VkAccessFlags.ShaderRead | VkAccessFlags.ShaderWrite,
-                };
-                VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                    VkPipelineStageFlags.ComputeShader,
-                    VkPipelineStageFlags.ComputeShader,
-                    0, 1, &memBarrier, 0, null, 0, null);
-            }
+            VulkanBarrierEmitter.EmitBarrier((VulkanCommandBuffer)m_CommandBuffer!, barrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            for (int i = 0; i < barriers.Length; ++i)
-                ResourceBarrier(barriers.Span[i]);
+            VulkanBarrierEmitter.EmitBarriers((VulkanCommandBuffer)m_CommandBuffer!, barriers);
         }
 
         public override void PushDebugGroup(string name)
@@ -675,59 +899,10 @@ namespace Infinity.Graphics
             m_ActiveDepthAttachment = null;
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
             EndRenderingIfNeeded();
-
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-
-            if (barrier.ResourceBarrierType == ERHIResourceBarrierType.Triansition)
-            {
-                if (barrier.ResourceType == ERHIResourceType.Texture)
-                {
-                    VulkanTexture vkTexture = barrier.TextureBarrierInfo.Handle as VulkanTexture;
-                    VkImageLayout oldLayout = vkTexture.CurrentLayout;
-                    VkImageLayout newLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.DstState);
-                    if (newLayout == VkImageLayout.Undefined)
-                    {
-                        newLayout = oldLayout;
-                    }
-
-                    VkImageMemoryBarrier imageBarrier = new VkImageMemoryBarrier()
-                    {
-                        sType = VkStructureType.ImageMemoryBarrier,
-                        srcAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.SrcState),
-                        dstAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.DstState),
-                        oldLayout = oldLayout,
-                        newLayout = newLayout,
-                        srcQueueFamilyIndex = unchecked((uint)(-1)),
-                        dstQueueFamilyIndex = unchecked((uint)(-1)),
-                        image = vkTexture.NativeImage,
-                        subresourceRange = new VkImageSubresourceRange()
-                        {
-                            aspectMask = VulkanUtility.GetVkImageAspect(vkTexture.Descriptor.Format),
-                            baseMipLevel = 0,
-                            levelCount = unchecked((uint)(-1)),
-                            baseArrayLayer = 0,
-                            layerCount = unchecked((uint)(-1)),
-                        },
-                    };
-
-                    VulkanNative.vkCmdPipelineBarrier(
-                        vkCmdBuf.NativeCommandBuffer,
-                        VkPipelineStageFlags.AllCommands,
-                        VkPipelineStageFlags.AllCommands,
-                        0,
-                        0,
-                        null,
-                        0,
-                        null,
-                        1,
-                        &imageBarrier);
-
-                    vkTexture.CurrentLayout = newLayout;
-                }
-            }
+            VulkanBarrierEmitter.EmitBarrier((VulkanCommandBuffer)m_CommandBuffer!, barrier);
 
             if (!m_HasIssuedDraw)
             {
@@ -735,10 +910,15 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            for (int i = 0; i < barriers.Length; ++i)
-                ResourceBarrier(barriers.Span[i]);
+            EndRenderingIfNeeded();
+            VulkanBarrierEmitter.EmitBarriers((VulkanCommandBuffer)m_CommandBuffer!, barriers);
+
+            if (!m_HasIssuedDraw)
+            {
+                BeginRenderingIfNeeded();
+            }
         }
 
         public override void PushDebugGroup(string name)
@@ -1039,72 +1219,14 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-
-            if (barrier.ResourceBarrierType == ERHIResourceBarrierType.Triansition)
-            {
-                if (barrier.ResourceType == ERHIResourceType.Buffer)
-                {
-                    VulkanBuffer vkBuffer = barrier.BufferBarrierInfo.Handle as VulkanBuffer;
-                    VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
-                    {
-                        sType = VkStructureType.BufferMemoryBarrier,
-                        srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.SrcState),
-                        dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.DstState),
-                        buffer = vkBuffer.NativeBuffer,
-                        offset = 0,
-                        size = unchecked((ulong)(-1)),
-                    };
-                    VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                        VkPipelineStageFlags.RayTracingShaderKHR,
-                        VkPipelineStageFlags.RayTracingShaderKHR,
-                        0, 0, null, 1, &bufferBarrier, 0, null);
-                }
-                else if (barrier.ResourceType == ERHIResourceType.Texture)
-                {
-                    VulkanTexture vkTexture = barrier.TextureBarrierInfo.Handle as VulkanTexture;
-                    VkImageLayout oldLayout = vkTexture.CurrentLayout;
-                    VkImageLayout newLayout = VulkanUtility.ConvertToVkImageLayout(barrier.TextureBarrierInfo.DstState);
-                    if (newLayout == VkImageLayout.Undefined)
-                    {
-                        newLayout = oldLayout;
-                    }
-
-                    VkImageMemoryBarrier imageBarrier = new VkImageMemoryBarrier()
-                    {
-                        sType = VkStructureType.ImageMemoryBarrier,
-                        srcAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.SrcState),
-                        dstAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(barrier.TextureBarrierInfo.DstState),
-                        oldLayout = oldLayout,
-                        newLayout = newLayout,
-                        srcQueueFamilyIndex = unchecked((uint)(-1)),
-                        dstQueueFamilyIndex = unchecked((uint)(-1)),
-                        image = vkTexture.NativeImage,
-                        subresourceRange = new VkImageSubresourceRange()
-                        {
-                            aspectMask = VulkanUtility.GetVkImageAspect(vkTexture.Descriptor.Format),
-                            baseMipLevel = 0,
-                            levelCount = unchecked((uint)(-1)),
-                            baseArrayLayer = 0,
-                            layerCount = unchecked((uint)(-1)),
-                        },
-                    };
-                    VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                        VkPipelineStageFlags.RayTracingShaderKHR,
-                        VkPipelineStageFlags.RayTracingShaderKHR,
-                        0, 0, null, 0, null, 1, &imageBarrier);
-
-                    vkTexture.CurrentLayout = newLayout;
-                }
-            }
+            VulkanBarrierEmitter.EmitBarrier((VulkanCommandBuffer)m_CommandBuffer!, barrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            for (int i = 0; i < barriers.Length; ++i)
-                ResourceBarrier(barriers.Span[i]);
+            VulkanBarrierEmitter.EmitBarriers((VulkanCommandBuffer)m_CommandBuffer!, barriers);
         }
 
         public override void PushDebugGroup(string name)
@@ -1383,8 +1505,41 @@ namespace Infinity.Graphics
 
         private static void InsertAccelerationStructureBuildBarrier(VulkanCommandBuffer vkCmdBuf)
         {
+            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue
+                ?? throw new InvalidOperationException("Vulkan AS barrier requires a Vulkan command queue.");
+            VulkanDevice device = vkQueue.VulkanDevice;
+
             // Ensure BLAS/TLAS writes are visible to subsequent AS builds and ray tracing shader reads in this command buffer.
-            VkMemoryBarrier memoryBarrier = new VkMemoryBarrier()
+            if (device.UseSynchronization2)
+            {
+                VkMemoryBarrier2 memoryBarrier = new VkMemoryBarrier2()
+                {
+                    sType = VkStructureType.MemoryBarrier2,
+                    srcStageMask = VkPipelineStageFlags2.AccelerationStructureBuildKHR,
+                    srcAccessMask = VkAccessFlags2.AccelerationStructureReadKHR | VkAccessFlags2.AccelerationStructureWriteKHR,
+                    dstStageMask = VkPipelineStageFlags2.AccelerationStructureBuildKHR | VkPipelineStageFlags2.RayTracingShaderKHR,
+                    dstAccessMask = VkAccessFlags2.AccelerationStructureReadKHR | VkAccessFlags2.AccelerationStructureWriteKHR | VkAccessFlags2.ShaderRead,
+                };
+
+                VkDependencyInfo dependencyInfo = new VkDependencyInfo()
+                {
+                    sType = VkStructureType.DependencyInfo,
+                    memoryBarrierCount = 1,
+                    pMemoryBarriers = &memoryBarrier,
+                };
+
+                if (device.UseSynchronization2KhrCommand)
+                {
+                    VulkanNative.vkCmdPipelineBarrier2KHR(vkCmdBuf.NativeCommandBuffer, &dependencyInfo);
+                }
+                else
+                {
+                    VulkanNative.vkCmdPipelineBarrier2(vkCmdBuf.NativeCommandBuffer, &dependencyInfo);
+                }
+                return;
+            }
+
+            VkMemoryBarrier memoryBarrierSync1 = new VkMemoryBarrier()
             {
                 sType = VkStructureType.MemoryBarrier,
                 srcAccessMask = VkAccessFlags.AccelerationStructureReadKHR | VkAccessFlags.AccelerationStructureWriteKHR,
@@ -1397,7 +1552,7 @@ namespace Infinity.Graphics
                 VkPipelineStageFlags.AccelerationStructureBuildKHR | VkPipelineStageFlags.RayTracingShaderKHR,
                 0,
                 1,
-                &memoryBarrier,
+                &memoryBarrierSync1,
                 0,
                 null,
                 0,
@@ -1497,46 +1652,14 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-
-            if (barrier.ResourceBarrierType == ERHIResourceBarrierType.Triansition && barrier.ResourceType == ERHIResourceType.Buffer)
-            {
-                VulkanBuffer vkBuffer = barrier.BufferBarrierInfo.Handle as VulkanBuffer;
-                VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
-                {
-                    sType = VkStructureType.BufferMemoryBarrier,
-                    srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.SrcState),
-                    dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(barrier.BufferBarrierInfo.DstState),
-                    buffer = vkBuffer.NativeBuffer,
-                    offset = 0,
-                    size = unchecked((ulong)(-1)),
-                };
-                VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                    VkPipelineStageFlags.ComputeShader,
-                    VkPipelineStageFlags.ComputeShader,
-                    0, 0, null, 1, &bufferBarrier, 0, null);
-            }
-            else if (barrier.ResourceBarrierType == ERHIResourceBarrierType.UAV)
-            {
-                VkMemoryBarrier memBarrier = new VkMemoryBarrier()
-                {
-                    sType = VkStructureType.MemoryBarrier,
-                    srcAccessMask = VkAccessFlags.ShaderWrite,
-                    dstAccessMask = VkAccessFlags.ShaderRead | VkAccessFlags.ShaderWrite,
-                };
-                VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                    VkPipelineStageFlags.ComputeShader,
-                    VkPipelineStageFlags.ComputeShader,
-                    0, 1, &memBarrier, 0, null, 0, null);
-            }
+            VulkanBarrierEmitter.EmitBarrier((VulkanCommandBuffer)m_CommandBuffer!, barrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            for (int i = 0; i < barriers.Length; ++i)
-                ResourceBarrier(barriers.Span[i]);
+            VulkanBarrierEmitter.EmitBarriers((VulkanCommandBuffer)m_CommandBuffer!, barriers);
         }
 
         public override void PushDebugGroup(string name)
@@ -1638,16 +1761,15 @@ namespace Infinity.Graphics
             throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
             throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
             throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
         }
-
         public override void PushDebugGroup(string name)
         {
             throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");

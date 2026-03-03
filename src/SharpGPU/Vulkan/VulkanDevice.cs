@@ -49,6 +49,8 @@ namespace Infinity.Graphics
         internal int GraphicsQueueFamilyIndex => m_GraphicsQueueFamilyIndex;
         internal int ComputeQueueFamilyIndex => m_ComputeQueueFamilyIndex;
         internal int TransferQueueFamilyIndex => m_TransferQueueFamilyIndex;
+        internal bool UseSynchronization2 => m_UseSynchronization2;
+        internal bool UseSynchronization2KhrCommand => m_UseSynchronization2KhrCommand;
 
         private VulkanInstance m_VulkanInstance;
         private VkDevice m_NativeDevice;
@@ -64,6 +66,8 @@ namespace Infinity.Graphics
         private bool m_RaytracingInlineSupported;
         private bool m_MeshShadingSupported;
         private bool m_VariableRateShadingSupported;
+        private bool m_UseSynchronization2;
+        private bool m_UseSynchronization2KhrCommand;
 
         public VulkanDevice(VulkanInstance instance, VkPhysicalDevice physicalDevice, in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
         {
@@ -282,8 +286,12 @@ namespace Infinity.Graphics
             bool hasRTQuery = availableExtNames.Contains("VK_KHR_ray_query");
             bool hasMeshShader = availableExtNames.Contains("VK_EXT_mesh_shader");
             bool hasFragmentShadingRate = availableExtNames.Contains("VK_KHR_fragment_shading_rate");
+            bool hasSynchronization2Extension = availableExtNames.Contains("VK_KHR_synchronization2");
             VkPhysicalDeviceFeatures supportedCoreFeatures = default;
             VulkanNative.vkGetPhysicalDeviceFeatures(m_PhysicalDevice, &supportedCoreFeatures);
+            VkPhysicalDeviceProperties physicalDeviceProperties = default;
+            VulkanNative.vkGetPhysicalDeviceProperties(m_PhysicalDevice, &physicalDeviceProperties);
+            bool hasVulkan13Core = physicalDeviceProperties.apiVersion.Value >= VulkanUtility.Version(1, 3, 0);
 
             VkPhysicalDeviceRayQueryFeaturesKHR rtQueryFeaturesQuery = new VkPhysicalDeviceRayQueryFeaturesKHR()
             {
@@ -327,12 +335,38 @@ namespace Infinity.Graphics
             };
             VulkanNative.vkGetPhysicalDeviceFeatures2(m_PhysicalDevice, &features2Query);
 
+            bool synchronization2FeatureSupported;
+            if (hasVulkan13Core)
+            {
+                synchronization2FeatureSupported = vulkan13FeaturesQuery.synchronization2;
+            }
+            else if (hasSynchronization2Extension)
+            {
+                VkPhysicalDeviceSynchronization2Features synchronization2FeaturesQuery = new VkPhysicalDeviceSynchronization2Features()
+                {
+                    sType = VkStructureType.PhysicalDeviceSynchronization2Features,
+                };
+                VkPhysicalDeviceFeatures2 synchronization2Features2Query = new VkPhysicalDeviceFeatures2()
+                {
+                    sType = VkStructureType.PhysicalDeviceFeatures2,
+                    pNext = &synchronization2FeaturesQuery,
+                };
+                VulkanNative.vkGetPhysicalDeviceFeatures2(m_PhysicalDevice, &synchronization2Features2Query);
+                synchronization2FeatureSupported = synchronization2FeaturesQuery.synchronization2;
+            }
+            else
+            {
+                synchronization2FeatureSupported = false;
+            }
+
             bool accelFeatureSupported = hasAccelStruct && accelFeaturesQuery.accelerationStructure;
             bool rtPipelineFeatureSupported = hasRTPipeline && rtPipelineFeaturesQuery.rayTracingPipeline;
             bool rtQueryFeatureSupported = hasRTQuery && rtQueryFeaturesQuery.rayQuery;
             bool meshShaderFeatureSupported = hasMeshShader && meshFeaturesQuery.meshShader;
             bool taskShaderFeatureSupported = hasMeshShader && meshFeaturesQuery.taskShader;
             bool fragmentShadingRateFeatureSupported = hasFragmentShadingRate && vrsFeaturesQuery.pipelineFragmentShadingRate;
+            bool useSynchronization2 = synchronization2FeatureSupported;
+            bool useSynchronization2Extension = useSynchronization2 && !hasVulkan13Core && hasSynchronization2Extension;
 
             bool rtSupported = hasAccelStruct && hasRTPipeline && hasDeferredOps && accelFeatureSupported && rtPipelineFeatureSupported;
             bool rtInlineSupported = rtSupported && rtQueryFeatureSupported;
@@ -342,6 +376,11 @@ namespace Infinity.Graphics
             if (hasDynamicRendering)
             {
                 deviceExtensions.Add("VK_KHR_dynamic_rendering");
+            }
+
+            if (useSynchronization2Extension)
+            {
+                deviceExtensions.Add("VK_KHR_synchronization2");
             }
 
             if (rtSupported)
@@ -387,7 +426,7 @@ namespace Infinity.Graphics
             {
                 sType = VkStructureType.PhysicalDeviceVulkan13Features,
                 dynamicRendering = vulkan13FeaturesQuery.dynamicRendering,
-                synchronization2 = vulkan13FeaturesQuery.synchronization2,
+                synchronization2 = hasVulkan13Core && useSynchronization2,
             };
 
             VkPhysicalDeviceVulkan12Features vulkan12Features = new VkPhysicalDeviceVulkan12Features()
@@ -408,6 +447,15 @@ namespace Infinity.Graphics
                 bufferDeviceAddress = vulkan12FeaturesQuery.bufferDeviceAddress,
             };
             pNextChain = &vulkan12Features;
+
+            VkPhysicalDeviceSynchronization2Features synchronization2Features = default;
+            if (useSynchronization2Extension)
+            {
+                synchronization2Features.sType = VkStructureType.PhysicalDeviceSynchronization2Features;
+                synchronization2Features.synchronization2 = true;
+                synchronization2Features.pNext = pNextChain;
+                pNextChain = &synchronization2Features;
+            }
 
             VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeatures = default;
             VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeatures = default;
@@ -487,6 +535,8 @@ namespace Infinity.Graphics
             m_RaytracingInlineSupported = rtInlineSupported;
             m_MeshShadingSupported = meshSupported;
             m_VariableRateShadingSupported = vrsSupported;
+            m_UseSynchronization2 = useSynchronization2;
+            m_UseSynchronization2KhrCommand = useSynchronization2Extension;
 
             // Create command queues
             CreateCommandQueues(actualComputeQueueCount, actualTransferQueueCount, actualGraphicsQueueCount);

@@ -211,10 +211,13 @@ namespace Infinity.Graphics
                         layerCount = 1,
                     },
                 };
-                VulkanNative.vkCmdPipelineBarrier(m_CommandBuffer,
+                EmitImageBarrier(
+                    m_CommandBuffer,
+                    &preCopyBarrier,
                     VkPipelineStageFlags.TopOfPipe,
                     VkPipelineStageFlags.Transfer,
-                    0, 0, null, 0, null, 1, &preCopyBarrier);
+                    VkPipelineStageFlags2.TopOfPipe,
+                    VkPipelineStageFlags2.Transfer);
 
                 // Copy buffer to image
                 VkBufferImageCopy region = new VkBufferImageCopy()
@@ -245,10 +248,13 @@ namespace Infinity.Graphics
                 postCopyBarrier.dstAccessMask = VkAccessFlags.ShaderRead;
                 postCopyBarrier.oldLayout = VkImageLayout.TransferDstOptimal;
                 postCopyBarrier.newLayout = VkImageLayout.ShaderReadOnlyOptimal;
-                VulkanNative.vkCmdPipelineBarrier(m_CommandBuffer,
+                EmitImageBarrier(
+                    m_CommandBuffer,
+                    &postCopyBarrier,
                     VkPipelineStageFlags.Transfer,
                     VkPipelineStageFlags.FragmentShader,
-                    0, 0, null, 0, null, 1, &postCopyBarrier);
+                    VkPipelineStageFlags2.Transfer,
+                    VkPipelineStageFlags2.FragmentShader);
 
                 VulkanNative.vkEndCommandBuffer(m_CommandBuffer);
 
@@ -265,6 +271,76 @@ namespace Infinity.Graphics
 
                 stagingBuffer.Dispose();
             }
+        }
+
+        private void EmitImageBarrier(VkCommandBuffer commandBuffer,
+                                      VkImageMemoryBarrier* sync1Barrier,
+                                      VkPipelineStageFlags sync1SrcStage,
+                                      VkPipelineStageFlags sync1DstStage,
+                                      VkPipelineStageFlags2 sync2SrcStage,
+                                      VkPipelineStageFlags2 sync2DstStage)
+        {
+            if (m_VulkanDevice.UseSynchronization2)
+            {
+                VkImageMemoryBarrier2 sync2Barrier = new VkImageMemoryBarrier2()
+                {
+                    sType = VkStructureType.ImageMemoryBarrier2,
+                    srcStageMask = sync2SrcStage,
+                    srcAccessMask = ConvertToVkAccessFlags2(sync1Barrier->srcAccessMask),
+                    dstStageMask = sync2DstStage,
+                    dstAccessMask = ConvertToVkAccessFlags2(sync1Barrier->dstAccessMask),
+                    oldLayout = sync1Barrier->oldLayout,
+                    newLayout = sync1Barrier->newLayout,
+                    srcQueueFamilyIndex = sync1Barrier->srcQueueFamilyIndex,
+                    dstQueueFamilyIndex = sync1Barrier->dstQueueFamilyIndex,
+                    image = sync1Barrier->image,
+                    subresourceRange = sync1Barrier->subresourceRange,
+                };
+
+                VkDependencyInfo dependencyInfo = new VkDependencyInfo()
+                {
+                    sType = VkStructureType.DependencyInfo,
+                    imageMemoryBarrierCount = 1,
+                    pImageMemoryBarriers = &sync2Barrier,
+                };
+
+                if (m_VulkanDevice.UseSynchronization2KhrCommand)
+                {
+                    VulkanNative.vkCmdPipelineBarrier2KHR(commandBuffer, &dependencyInfo);
+                }
+                else
+                {
+                    VulkanNative.vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+                }
+                return;
+            }
+
+            VulkanNative.vkCmdPipelineBarrier(commandBuffer,
+                sync1SrcStage,
+                sync1DstStage,
+                0, 0, null, 0, null, 1, sync1Barrier);
+        }
+
+        private static VkAccessFlags2 ConvertToVkAccessFlags2(VkAccessFlags accessFlags)
+        {
+            VkAccessFlags2 result = VkAccessFlags2.None;
+            if ((accessFlags & VkAccessFlags.IndirectCommandRead) != 0) result |= VkAccessFlags2.IndirectCommandRead;
+            if ((accessFlags & VkAccessFlags.IndexRead) != 0) result |= VkAccessFlags2.IndexRead;
+            if ((accessFlags & VkAccessFlags.VertexAttributeRead) != 0) result |= VkAccessFlags2.VertexAttributeRead;
+            if ((accessFlags & VkAccessFlags.UniformRead) != 0) result |= VkAccessFlags2.UniformRead;
+            if ((accessFlags & VkAccessFlags.ShaderRead) != 0) result |= VkAccessFlags2.ShaderRead;
+            if ((accessFlags & VkAccessFlags.ShaderWrite) != 0) result |= VkAccessFlags2.ShaderWrite;
+            if ((accessFlags & VkAccessFlags.ColorAttachmentRead) != 0) result |= VkAccessFlags2.ColorAttachmentRead;
+            if ((accessFlags & VkAccessFlags.ColorAttachmentWrite) != 0) result |= VkAccessFlags2.ColorAttachmentWrite;
+            if ((accessFlags & VkAccessFlags.DepthStencilAttachmentRead) != 0) result |= VkAccessFlags2.DepthStencilAttachmentRead;
+            if ((accessFlags & VkAccessFlags.DepthStencilAttachmentWrite) != 0) result |= VkAccessFlags2.DepthStencilAttachmentWrite;
+            if ((accessFlags & VkAccessFlags.TransferRead) != 0) result |= VkAccessFlags2.TransferRead;
+            if ((accessFlags & VkAccessFlags.TransferWrite) != 0) result |= VkAccessFlags2.TransferWrite;
+            if ((accessFlags & VkAccessFlags.AccelerationStructureReadKHR) != 0) result |= VkAccessFlags2.AccelerationStructureReadKHR;
+            if ((accessFlags & VkAccessFlags.AccelerationStructureWriteKHR) != 0) result |= VkAccessFlags2.AccelerationStructureWriteKHR;
+            if ((accessFlags & VkAccessFlags.MemoryRead) != 0) result |= VkAccessFlags2.MemoryRead;
+            if ((accessFlags & VkAccessFlags.MemoryWrite) != 0) result |= VkAccessFlags2.MemoryWrite;
+            return result;
         }
 
         public override void Submit(RHIFence signalFence)
@@ -290,5 +366,4 @@ namespace Infinity.Graphics
     }
 #pragma warning restore CS8600, CS8602, CS8618
 }
-
 

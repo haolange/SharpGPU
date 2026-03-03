@@ -220,6 +220,16 @@ namespace Infinity.Graphics
             GetDeviceApi(commandBuffer).vkCmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount, memoryBarriers, bufferMemoryBarrierCount, bufferMemoryBarriers, imageMemoryBarrierCount, imageMemoryBarriers);
         }
 
+        public static void vkCmdPipelineBarrier2(VkCommandBuffer commandBuffer, VkDependencyInfo* dependencyInfo)
+        {
+            GetDeviceApi(commandBuffer).vkCmdPipelineBarrier2(commandBuffer, dependencyInfo);
+        }
+
+        public static void vkCmdPipelineBarrier2KHR(VkCommandBuffer commandBuffer, VkDependencyInfo* dependencyInfo)
+        {
+            GetDeviceApi(commandBuffer).vkCmdPipelineBarrier2KHR(commandBuffer, dependencyInfo);
+        }
+
         public static void vkCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout, VkShaderStageFlags stageFlags, uint offset, uint size, void* values)
         {
             GetDeviceApi(commandBuffer).vkCmdPushConstants(commandBuffer, layout, stageFlags, offset, size, values);

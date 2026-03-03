@@ -246,8 +246,8 @@ namespace Infinity.Graphics
         protected RHICommandBuffer? m_CommandBuffer;
 
         internal abstract void BeginPass(in RHITransferPassDescriptor descriptor);
-        public abstract void ResourceBarrier(in RHIResourceBarrier barrier);
-        public abstract void ResourceBarriers(in Memory<RHIResourceBarrier> barriers);
+        public abstract void Barrier(in RHIBarrier barrier);
+        public abstract void Barriers(ReadOnlySpan<RHIBarrier> barriers);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void WriteTimestamp(in uint index);
@@ -265,8 +265,8 @@ namespace Infinity.Graphics
         protected RHIComputePipeline? m_CachedPipeline;
 
         internal abstract void BeginPass(in RHIComputePassDescriptor descriptor);
-        public abstract void ResourceBarrier(in RHIResourceBarrier barrier);
-        public abstract void ResourceBarriers(in Memory<RHIResourceBarrier> barriers);
+        public abstract void Barrier(in RHIBarrier barrier);
+        public abstract void Barriers(ReadOnlySpan<RHIBarrier> barriers);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void WriteTimestamp(in uint index);
@@ -287,8 +287,8 @@ namespace Infinity.Graphics
         protected RHIRaytracingPipeline? m_CachedPipeline;
 
         internal abstract void BeginPass(in RHIRayTracingPassDescriptor descriptor);
-        public abstract void ResourceBarrier(in RHIResourceBarrier barrier);
-        public abstract void ResourceBarriers(in Memory<RHIResourceBarrier> barriers);
+        public abstract void Barrier(in RHIBarrier barrier);
+        public abstract void Barriers(ReadOnlySpan<RHIBarrier> barriers);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void WriteTimestamp(in uint index);
@@ -316,8 +316,8 @@ namespace Infinity.Graphics
         protected RHIMLPipeline? m_CachedPipeline;
 
         internal abstract void BeginPass(in RHIMLPassDescriptor descriptor);
-        public abstract void ResourceBarrier(in RHIResourceBarrier barrier);
-        public abstract void ResourceBarriers(in Memory<RHIResourceBarrier> barriers);
+        public abstract void Barrier(in RHIBarrier barrier);
+        public abstract void Barriers(ReadOnlySpan<RHIBarrier> barriers);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void WriteTimestamp(in uint index);
@@ -335,8 +335,8 @@ namespace Infinity.Graphics
         protected RHIRasterPipeline? m_CachedPipeline;
 
         internal abstract void BeginPass(in RHIRasterPassDescriptor descriptor);
-        public abstract void ResourceBarrier(in RHIResourceBarrier barrier);
-        public abstract void ResourceBarriers(in Memory<RHIResourceBarrier> barriers);
+        public abstract void Barrier(in RHIBarrier barrier);
+        public abstract void Barriers(ReadOnlySpan<RHIBarrier> barriers);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void WriteTimestamp(in uint index);
@@ -379,8 +379,8 @@ namespace Infinity.Graphics
         protected RHIWorkGraphPipeline? m_CachedPipeline;
 
         internal abstract void BeginPass(in RHIWorkGraphPassDescriptor descriptor);
-        public abstract void ResourceBarrier(in RHIResourceBarrier barrier);
-        public abstract void ResourceBarriers(in Memory<RHIResourceBarrier> barriers);
+        public abstract void Barrier(in RHIBarrier barrier);
+        public abstract void Barriers(ReadOnlySpan<RHIBarrier> barriers);
         public abstract void PushDebugGroup(string name);
         public abstract void PopDebugGroup();
         public abstract void WriteTimestamp(in uint index);

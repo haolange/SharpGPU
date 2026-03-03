@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Infinity.Mathmatics;
 using SharpMetal.Foundation;
@@ -32,12 +33,21 @@ namespace Infinity.Graphics
 
     internal static class MetalBarrierHelper
     {
+        // TODO: ThirdParty SharpMetal bindings still expose pre-Metal4 barrier APIs.
+        // SharpGPU no longer references them; remove binding symbols after dependency audit.
         private const ulong s_ValidMetal4StageMask = (1UL << 0) | (1UL << 1) | (1UL << 27) | (1UL << 29);
 
-        /// <summary>
-        /// Issues an intra-encoder barrier (producer and consumer are within the same encoder).
-        /// </summary>
-        internal static void ApplyEncoderBarrier(in IntPtr encoderPtr, in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
+        internal struct MetalBarrierBatchPlan
+        {
+            internal ulong IntraAfterStages;
+            internal ulong IntraBeforeStages;
+            internal ulong QueueAfterStages;
+            internal ulong QueueBeforeStages;
+            internal int IntraBarrierCount;
+            internal int QueueBarrierCount;
+        }
+
+        internal static void ApplyEncoderBarrier(in IntPtr encoderPtr, in ulong afterStages, in ulong beforeStages)
         {
             if (encoderPtr == IntPtr.Zero)
             {
@@ -53,10 +63,7 @@ namespace Infinity.Graphics
             encoder4.BarrierAfterEncoderStages(afterStages, beforeStages, MTL4VisibilityOptions.Device);
         }
 
-        /// <summary>
-        /// Issues a cross-encoder barrier (producer is in an earlier encoder on the same queue).
-        /// </summary>
-        internal static void ApplyQueueBarrier(in IntPtr encoderPtr, in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
+        internal static void ApplyQueueBarrier(in IntPtr encoderPtr, in ulong afterStages, in ulong beforeStages)
         {
             if (encoderPtr == IntPtr.Zero)
             {
@@ -77,46 +84,121 @@ namespace Infinity.Graphics
             return stages != 0 && (stages & ~s_ValidMetal4StageMask) == 0;
         }
 
-        internal static MTLRenderStages ConvertToRenderStages(in ulong stages)
+        internal static MetalBarrierBatchPlan PlanBarriers(MetalCommandBuffer commandBuffer, ReadOnlySpan<RHIBarrier> barriers)
         {
-            MTLRenderStages result = 0;
-            if ((stages & (1UL << 0)) != 0)
+            MetalBarrierBatchPlan plan = default;
+            for (int i = 0; i < barriers.Length; ++i)
             {
-                result |= MTLRenderStages.RenderStageVertex;
-            }
-
-            if ((stages & (1UL << 1)) != 0)
-            {
-                // Some Apple GPUs reject fragment-stage memory barriers in render encoders.
-                // Map fragment barriers to vertex stage to preserve ordering without runtime asserts.
-                result |= MTLRenderStages.RenderStageVertex;
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Extracts Metal barrier scope and stage information from an RHIResourceBarrier.
-        /// </summary>
-        internal static void ExtractBarrierInfo(in RHIResourceBarrier barrier, out MTLBarrierScope scope, out ulong afterStages, out ulong beforeStages)
-        {
-            scope = MetalUtility.ConvertToMetalBarrierScope(barrier.ResourceType);
-            afterStages = 0;
-            beforeStages = 0;
-
-            if (barrier.ResourceBarrierType == ERHIResourceBarrierType.Triansition)
-            {
-                if (barrier.ResourceType == ERHIResourceType.Buffer)
+                if (!TryGetStagePair(barriers[i], out ulong afterStages, out ulong beforeStages))
                 {
-                    afterStages = MetalUtility.ConvertToMetal4Stages(barrier.BufferBarrierInfo.SrcStage);
-                    beforeStages = MetalUtility.ConvertToMetal4Stages(barrier.BufferBarrierInfo.DstStage);
+                    continue;
+                }
+
+                if (commandBuffer.IsIntraEncoderBarrier(afterStages))
+                {
+                    plan.IntraAfterStages |= afterStages;
+                    plan.IntraBeforeStages |= beforeStages;
+                    ++plan.IntraBarrierCount;
                 }
                 else
                 {
-                    afterStages = MetalUtility.ConvertToMetal4Stages(barrier.TextureBarrierInfo.SrcStage);
-                    beforeStages = MetalUtility.ConvertToMetal4Stages(barrier.TextureBarrierInfo.DstStage);
+                    plan.QueueAfterStages |= afterStages;
+                    plan.QueueBeforeStages |= beforeStages;
+                    ++plan.QueueBarrierCount;
                 }
             }
+
+            return plan;
+        }
+
+        internal static MetalBarrierBatchPlan PlanBarriersForTesting(ulong seenStages, ReadOnlySpan<RHIBarrier> barriers)
+        {
+            MetalBarrierBatchPlan plan = default;
+            for (int i = 0; i < barriers.Length; ++i)
+            {
+                if (!TryGetStagePair(barriers[i], out ulong afterStages, out ulong beforeStages))
+                {
+                    continue;
+                }
+
+                if (afterStages != 0 && (seenStages & afterStages) != 0)
+                {
+                    plan.IntraAfterStages |= afterStages;
+                    plan.IntraBeforeStages |= beforeStages;
+                    ++plan.IntraBarrierCount;
+                }
+                else
+                {
+                    plan.QueueAfterStages |= afterStages;
+                    plan.QueueBeforeStages |= beforeStages;
+                    ++plan.QueueBarrierCount;
+                }
+            }
+
+            return plan;
+        }
+
+        internal static void ApplyPlan(in IntPtr encoderPtr, in MetalBarrierBatchPlan plan)
+        {
+            if (plan.IntraAfterStages != 0 && plan.IntraBeforeStages != 0)
+            {
+                ApplyEncoderBarrier(encoderPtr, plan.IntraAfterStages, plan.IntraBeforeStages);
+            }
+
+            if (plan.QueueAfterStages != 0 && plan.QueueBeforeStages != 0)
+            {
+                ApplyQueueBarrier(encoderPtr, plan.QueueAfterStages, plan.QueueBeforeStages);
+            }
+        }
+
+        internal static bool TryGetStagePair(in RHIBarrier barrier, out ulong afterStages, out ulong beforeStages)
+        {
+            switch (barrier.Kind)
+            {
+                case ERHIBarrierKind.Global:
+                {
+                    RHIGlobalBarrier globalBarrier = barrier.GlobalBarrier;
+                    afterStages = NormalizeToMetal4Stages(globalBarrier.SyncBefore);
+                    beforeStages = NormalizeToMetal4Stages(globalBarrier.SyncAfter);
+                    break;
+                }
+
+                case ERHIBarrierKind.Buffer:
+                {
+                    RHIBufferBarrier bufferBarrier = barrier.BufferBarrier;
+                    afterStages = NormalizeToMetal4Stages(bufferBarrier.SyncBefore);
+                    beforeStages = NormalizeToMetal4Stages(bufferBarrier.SyncAfter);
+                    break;
+                }
+
+                case ERHIBarrierKind.Texture:
+                {
+                    RHITextureBarrier textureBarrier = barrier.TextureBarrier;
+                    afterStages = NormalizeToMetal4Stages(textureBarrier.SyncBefore);
+                    beforeStages = NormalizeToMetal4Stages(textureBarrier.SyncAfter);
+                    break;
+                }
+
+                default:
+                    afterStages = 0;
+                    beforeStages = 0;
+                    return false;
+            }
+
+            return afterStages != 0 && beforeStages != 0;
+        }
+
+        private static ulong NormalizeToMetal4Stages(in ERHISyncStageMask stages)
+        {
+            ulong result = MetalUtility.ConvertToMetal4Stages(stages) & s_ValidMetal4StageMask;
+            if (result == 0)
+            {
+                // TODO: Metal4 stage mask for Task/Mesh is not validated yet in this backend.
+                // Conservatively widen to all known safe stage bits.
+                result = s_ValidMetal4StageMask;
+            }
+
+            return result;
         }
     }
 
@@ -507,7 +589,7 @@ namespace Infinity.Graphics
 
         public override void CommitRaster(in MTL4RenderCommandEncoder encoder)
         {
-            ulong stages = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Vertex) | MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Fragment);
+            ulong stages = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Vertex | ERHISyncStageMask.Fragment);
 
             if (m_IsMultiSet)
             {
@@ -934,32 +1016,21 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
-            MetalBarrierHelper.ExtractBarrierInfo(barrier, out MTLBarrierScope scope, out ulong afterStages, out ulong beforeStages);
-            if (afterStages == 0)
-            {
-                return;
-            }
-
-            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             IntPtr encoderPtr = m_NativeEncoder4.NativePtr;
-            if (commandBuffer.IsIntraEncoderBarrier(afterStages))
-            {
-                MetalBarrierHelper.ApplyEncoderBarrier(encoderPtr, scope, afterStages, beforeStages);
-                return;
-            }
-
-            MetalBarrierHelper.ApplyQueueBarrier(encoderPtr, scope, afterStages, beforeStages);
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            ReadOnlySpan<RHIBarrier> singleBarrier = MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in barrier), 1);
+            MetalBarrierHelper.MetalBarrierBatchPlan plan = MetalBarrierHelper.PlanBarriers(commandBuffer, singleBarrier);
+            MetalBarrierHelper.ApplyPlan(encoderPtr, plan);
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            Span<RHIResourceBarrier> span = barriers.Span;
-            for (int i = 0; i < span.Length; ++i)
-            {
-                ResourceBarrier(span[i]);
-            }
+            IntPtr encoderPtr = m_NativeEncoder4.NativePtr;
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            MetalBarrierHelper.MetalBarrierBatchPlan plan = MetalBarrierHelper.PlanBarriers(commandBuffer, barriers);
+            MetalBarrierHelper.ApplyPlan(encoderPtr, plan);
         }
 
         public override void PushDebugGroup(string name)
@@ -1004,7 +1075,7 @@ namespace Infinity.Graphics
             TrackResidency(src.NativeBuffer);
             TrackResidency(dst.NativeBuffer);
             m_NativeEncoder4.CopyFromBuffer(src.NativeBuffer, (ulong)srcOffset, dst.NativeBuffer, (ulong)dstOffset, (ulong)size);
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
         }
 
         public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
@@ -1032,7 +1103,7 @@ namespace Infinity.Graphics
                 dst.MipLevel,
                 new MTLOrigin(dst.Origin.x, dst.Origin.y, dst.Origin.z));
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
         }
 
         public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size)
@@ -1060,7 +1131,7 @@ namespace Infinity.Graphics
                 rowPitch,
                 imagePitch);
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
         }
 
         public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
@@ -1085,7 +1156,7 @@ namespace Infinity.Graphics
                 dst.MipLevel,
                 new MTLOrigin(dst.Origin.x, dst.Origin.y, dst.Origin.z));
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
         }
 
         public override void EndPass()
@@ -1156,7 +1227,7 @@ namespace Infinity.Graphics
                 return;
             }
 
-            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute);
+            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.WaitForFence(fence, stage);
         }
@@ -1168,33 +1239,27 @@ namespace Infinity.Graphics
                 return;
             }
 
-            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute);
+            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.UpdateFence(fence, stage);
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
-            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-            MetalBarrierHelper.ExtractBarrierInfo(barrier, out MTLBarrierScope scope, out ulong afterStages, out ulong beforeStages);
-
-            if (commandBuffer.IsIntraEncoderBarrier(afterStages))
-            {
-                MetalBarrierHelper.ApplyEncoderBarrier(m_NativeEncoder4.NativePtr, scope, afterStages, beforeStages);
-            }
-            else if (afterStages != 0)
-            {
-                MetalBarrierHelper.ApplyQueueBarrier(m_NativeEncoder4.NativePtr, scope, afterStages, beforeStages);
-            }
+            ReadOnlySpan<RHIBarrier> singleBarrier = MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in barrier), 1);
+            Barriers(singleBarrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            Span<RHIResourceBarrier> span = barriers.Span;
-            for (int i = 0; i < span.Length; ++i)
+            if (barriers.Length == 0 || m_NativeEncoder4.NativePtr == IntPtr.Zero)
             {
-                ResourceBarrier(span[i]);
+                return;
             }
+
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            MetalBarrierHelper.MetalBarrierBatchPlan plan = MetalBarrierHelper.PlanBarriers(commandBuffer, barriers);
+            MetalBarrierHelper.ApplyPlan(m_NativeEncoder4.NativePtr, plan);
         }
 
         public override void PushDebugGroup(string name)
@@ -1279,7 +1344,7 @@ namespace Infinity.Graphics
             m_BindingBackend?.CommitCompute(m_NativeEncoder4);
             m_NativeEncoder4.DispatchThreadgroups(threadGroupCount, threadsPerGroup);
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
         }
 
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset)
@@ -1294,7 +1359,7 @@ namespace Infinity.Graphics
             m_BindingBackend?.CommitCompute(m_NativeEncoder4);
             m_NativeEncoder4.DispatchThreadgroupsWithIndirectBuffer(indirectBuffer.NativeBuffer.GpuAddress + argsOffset, threadsPerGroup);
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
         }
 
         public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
@@ -1404,28 +1469,22 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
-            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-            MetalBarrierHelper.ExtractBarrierInfo(barrier, out MTLBarrierScope scope, out ulong afterStages, out ulong beforeStages);
-
-            if (commandBuffer.IsIntraEncoderBarrier(afterStages))
-            {
-                MetalBarrierHelper.ApplyEncoderBarrier(m_NativeEncoder4.NativePtr, scope, afterStages, beforeStages);
-            }
-            else if (afterStages != 0)
-            {
-                MetalBarrierHelper.ApplyQueueBarrier(m_NativeEncoder4.NativePtr, scope, afterStages, beforeStages);
-            }
+            ReadOnlySpan<RHIBarrier> singleBarrier = MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in barrier), 1);
+            Barriers(singleBarrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            Span<RHIResourceBarrier> span = barriers.Span;
-            for (int i = 0; i < span.Length; ++i)
+            if (barriers.Length == 0 || m_NativeEncoder4.NativePtr == IntPtr.Zero)
             {
-                ResourceBarrier(span[i]);
+                return;
             }
+
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            MetalBarrierHelper.MetalBarrierBatchPlan plan = MetalBarrierHelper.PlanBarriers(commandBuffer, barriers);
+            MetalBarrierHelper.ApplyPlan(m_NativeEncoder4.NativePtr, plan);
         }
 
         public override void PushDebugGroup(string name)
@@ -1506,7 +1565,7 @@ namespace Infinity.Graphics
                 throw new InvalidOperationException($"MTL4 TLAS build failed in ray-tracing pass. detail={ex.Message}");
             }
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
         }
 
         public override void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct)
@@ -1524,7 +1583,7 @@ namespace Infinity.Graphics
                 throw new InvalidOperationException($"MTL4 BLAS build failed in ray-tracing pass. detail={ex.Message}");
             }
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
         }
 
         public override void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable)
@@ -1554,7 +1613,7 @@ namespace Infinity.Graphics
             m_BindingBackend?.CommitRaytracing(m_NativeEncoder4, table);
             m_NativeEncoder4.DispatchThreadgroups(threadgroupCount, threadsPerGroup);
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.RayTracing));
         }
 
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable)
@@ -1577,7 +1636,7 @@ namespace Infinity.Graphics
             m_BindingBackend?.CommitRaytracing(m_NativeEncoder4, table);
             m_NativeEncoder4.DispatchThreadgroupsWithIndirectBuffer(indirectBuffer.NativeBuffer.GpuAddress + argsOffset, threadsPerGroup);
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.RayTracing));
         }
 
         public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
@@ -1612,7 +1671,7 @@ namespace Infinity.Graphics
                 return;
             }
 
-            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing);
+            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.RayTracing);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.WaitForFence(fence, stage);
         }
@@ -1624,7 +1683,7 @@ namespace Infinity.Graphics
                 return;
             }
 
-            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing);
+            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.RayTracing);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.UpdateFence(fence, stage);
         }
@@ -1740,7 +1799,7 @@ namespace Infinity.Graphics
                 return;
             }
 
-            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Vertex) | MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Fragment);
+            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Vertex | ERHISyncStageMask.Fragment);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.WaitForFence(fence, stage);
         }
@@ -1752,33 +1811,27 @@ namespace Infinity.Graphics
                 return;
             }
 
-            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Vertex) | MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Fragment);
+            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Vertex | ERHISyncStageMask.Fragment);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.UpdateFence(fence, stage);
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
-            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-            MetalBarrierHelper.ExtractBarrierInfo(barrier, out MTLBarrierScope scope, out ulong afterStages, out ulong beforeStages);
-
-            if (commandBuffer.IsIntraEncoderBarrier(afterStages))
-            {
-                MetalBarrierHelper.ApplyEncoderBarrier(m_NativeEncoder4.NativePtr, scope, afterStages, beforeStages);
-            }
-            else if (afterStages != 0)
-            {
-                MetalBarrierHelper.ApplyQueueBarrier(m_NativeEncoder4.NativePtr, scope, afterStages, beforeStages);
-            }
+            ReadOnlySpan<RHIBarrier> singleBarrier = MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in barrier), 1);
+            Barriers(singleBarrier);
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            Span<RHIResourceBarrier> span = barriers.Span;
-            for (int i = 0; i < span.Length; ++i)
+            if (barriers.Length == 0 || m_NativeEncoder4.NativePtr == IntPtr.Zero)
             {
-                ResourceBarrier(span[i]);
+                return;
             }
+
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            MetalBarrierHelper.MetalBarrierBatchPlan plan = MetalBarrierHelper.PlanBarriers(commandBuffer, barriers);
+            MetalBarrierHelper.ApplyPlan(m_NativeEncoder4.NativePtr, plan);
         }
 
         public override void PushDebugGroup(string name)
@@ -2228,7 +2281,7 @@ namespace Infinity.Graphics
         private void MarkRasterStagesSeen()
         {
             ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(
-                MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Vertex) | MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Fragment));
+                MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Vertex | ERHISyncStageMask.Fragment));
         }
     }
 
@@ -2261,35 +2314,22 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
-            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-            MetalBarrierHelper.ExtractBarrierInfo(barrier, out MTLBarrierScope scope, out ulong afterStages, out ulong beforeStages);
+            ReadOnlySpan<RHIBarrier> singleBarrier = MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in barrier), 1);
+            Barriers(singleBarrier);
+        }
 
-            if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
+        {
+            if (barriers.Length == 0 || m_NativeEncoder.NativePtr == IntPtr.Zero)
             {
                 return;
             }
 
-            IntPtr encoderPtr = m_NativeEncoder.NativePtr;
-
-            if (commandBuffer.IsIntraEncoderBarrier(afterStages))
-            {
-                MetalBarrierHelper.ApplyEncoderBarrier(encoderPtr, scope, afterStages, beforeStages);
-            }
-            else if (afterStages != 0)
-            {
-                MetalBarrierHelper.ApplyQueueBarrier(encoderPtr, scope, afterStages, beforeStages);
-            }
-        }
-
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
-        {
-            Span<RHIResourceBarrier> span = barriers.Span;
-            for (int i = 0; i < span.Length; ++i)
-            {
-                ResourceBarrier(span[i]);
-            }
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            MetalBarrierHelper.MetalBarrierBatchPlan plan = MetalBarrierHelper.PlanBarriers(commandBuffer, barriers);
+            MetalBarrierHelper.ApplyPlan(m_NativeEncoder.NativePtr, plan);
         }
 
         public override void PushDebugGroup(string name)
@@ -2392,12 +2432,12 @@ namespace Infinity.Graphics
             throw new NotSupportedException("WorkGraph is not supported on the Metal backend.");
         }
 
-        public override void ResourceBarrier(in RHIResourceBarrier barrier)
+        public override void Barrier(in RHIBarrier barrier)
         {
             throw new NotSupportedException("WorkGraph is not supported on the Metal backend.");
         }
 
-        public override void ResourceBarriers(in Memory<RHIResourceBarrier> barriers)
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
             throw new NotSupportedException("WorkGraph is not supported on the Metal backend.");
         }

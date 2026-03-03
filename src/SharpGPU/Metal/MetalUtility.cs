@@ -853,43 +853,36 @@ namespace Infinity.Graphics
             }
         }
 
-        internal static MTLRenderStages ConvertToMetalRenderStages(in ERHIPipelineStage stage)
+        internal static ulong ConvertToMetal4Stages(in ERHISyncStageMask stages)
         {
-            switch (stage)
+            if (stages == ERHISyncStageMask.None)
             {
-                case ERHIPipelineStage.Vertex:
-                    return MTLRenderStages.RenderStageVertex;
-                case ERHIPipelineStage.Fragment:
-                    return MTLRenderStages.RenderStageFragment;
-                default:
-                    return MTLRenderStages.RenderStageVertex | MTLRenderStages.RenderStageFragment;
+                return 0;
             }
-        }
 
-        internal static MTLBarrierScope ConvertToMetalBarrierScope(in ERHIResourceType type)
-        {
-            return type == ERHIResourceType.Buffer ? MTLBarrierScope.Buffers : MTLBarrierScope.Textures;
-        }
-
-        internal static ulong ConvertToMetal4Stages(in ERHIPipelineStage stage)
-        {
-            switch (stage)
+            ulong result = 0;
+            if ((stages & ERHISyncStageMask.Transfer) != 0) result |= 1UL << 27;
+            if ((stages & ERHISyncStageMask.Indirect) != 0) result |= 1UL << 27;
+            if ((stages & ERHISyncStageMask.IndexInput) != 0) result |= 1UL << 0;
+            if ((stages & ERHISyncStageMask.VertexInput) != 0) result |= 1UL << 0;
+            if ((stages & ERHISyncStageMask.Vertex) != 0) result |= 1UL << 0;
+            if ((stages & ERHISyncStageMask.Fragment) != 0) result |= 1UL << 1;
+            if ((stages & ERHISyncStageMask.Compute) != 0) result |= 1UL << 27;
+            if ((stages & ERHISyncStageMask.MachineLearning) != 0) result |= 1UL << 27;
+            if ((stages & ERHISyncStageMask.Task) != 0)
             {
-                case ERHIPipelineStage.Vertex:
-                    return 1UL << 0;
-                case ERHIPipelineStage.Fragment:
-                    return 1UL << 1;
-                case ERHIPipelineStage.Compute:
-                case ERHIPipelineStage.MachineLearning:
-                    return 1UL << 27;
-                case ERHIPipelineStage.Mesh:
-                    return 1UL << 28;
-                case ERHIPipelineStage.RayTracing:
-                    return 1UL << 29;
-                case ERHIPipelineStage.Common:
-                default:
-                    return 0;
+                // TODO: validate Metal4 task stage bit in backend capability matrix.
+                result |= 1UL << 28;
             }
+            if ((stages & ERHISyncStageMask.Mesh) != 0)
+            {
+                // TODO: validate Metal4 mesh stage bit in backend capability matrix.
+                result |= 1UL << 28;
+            }
+            if ((stages & ERHISyncStageMask.RayTracing) != 0) result |= 1UL << 29;
+            if ((stages & ERHISyncStageMask.AccelStructBuild) != 0) result |= 1UL << 29;
+            if ((stages & ERHISyncStageMask.AccelStructCopy) != 0) result |= 1UL << 29;
+            return result;
         }
 
         internal static MTLSize ConvertToMetalSize(in uint3 value)

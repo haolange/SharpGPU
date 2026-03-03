@@ -80,19 +80,6 @@
         Pending
     }
 
-    public enum ERHIPipelineStage : byte
-    {
-        Common,
-        Vertex,
-        Fragment,
-        Compute,
-        Task,
-        Mesh,
-        RayTracing,
-        MachineLearning,
-        Pending
-    }
-
     public enum ERHIShaderStage
     {
         Vertex = 0x1,
@@ -523,20 +510,6 @@
     {
         VSync,
         Immediately,
-        Pending
-    }
-
-    public enum ERHIResourceBarrierType : byte
-    {
-        UAV,
-        Aliasing,
-        Triansition
-    }
-
-    public enum ERHIResourceType : byte
-    {
-        Buffer,
-        Texture,
         Pending
     }
 
