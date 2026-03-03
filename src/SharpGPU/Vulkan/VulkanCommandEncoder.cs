@@ -1327,6 +1327,7 @@ namespace Infinity.Graphics
             VkAccelerationStructureBuildRangeInfoKHR* pRangeInfo = &rangeInfo;
 
             VulkanNative.vkCmdBuildAccelerationStructuresKHR(vkCmdBuf.NativeCommandBuffer, 1, &buildInfo, &pRangeInfo);
+            InsertAccelerationStructureBuildBarrier(vkCmdBuf);
         }
 
         public override void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct)
@@ -1366,7 +1367,9 @@ namespace Infinity.Graphics
                     geometries[i].geometry.triangles.vertexFormat = VulkanUtility.ConvertToVkAccelerationStructureVertexFormat(triangleGeometry.VertexFormat);
                     geometries[i].geometry.triangles.vertexData.deviceAddress = vertexAddress + triangleGeometry.VertexOffset;
                     geometries[i].geometry.triangles.vertexStride = triangleGeometry.VertexStride;
-                    geometries[i].geometry.triangles.maxVertex = triangleGeometry.VertexCount;
+                    geometries[i].geometry.triangles.maxVertex = triangleGeometry.VertexCount > 0
+                        ? triangleGeometry.VertexCount - 1
+                        : 0;
 
                     if (triangleGeometry.IndexBuffer != null)
                     {
@@ -1475,6 +1478,30 @@ namespace Infinity.Graphics
 
             VkAccelerationStructureBuildRangeInfoKHR* pRangeInfos = rangeInfos;
             VulkanNative.vkCmdBuildAccelerationStructuresKHR(vkCmdBuf.NativeCommandBuffer, 1, &buildInfo, &pRangeInfos);
+            InsertAccelerationStructureBuildBarrier(vkCmdBuf);
+        }
+
+        private static void InsertAccelerationStructureBuildBarrier(VulkanCommandBuffer vkCmdBuf)
+        {
+            // Ensure BLAS/TLAS writes are visible to subsequent AS builds and ray tracing shader reads in this command buffer.
+            VkMemoryBarrier memoryBarrier = new VkMemoryBarrier()
+            {
+                sType = VkStructureType.MemoryBarrier,
+                srcAccessMask = VkAccessFlags.AccelerationStructureReadKHR | VkAccessFlags.AccelerationStructureWriteKHR,
+                dstAccessMask = VkAccessFlags.AccelerationStructureReadKHR | VkAccessFlags.AccelerationStructureWriteKHR | VkAccessFlags.ShaderRead,
+            };
+
+            VulkanNative.vkCmdPipelineBarrier(
+                vkCmdBuf.NativeCommandBuffer,
+                VkPipelineStageFlags.AccelerationStructureBuildKHR,
+                VkPipelineStageFlags.AccelerationStructureBuildKHR | VkPipelineStageFlags.RayTracingShaderKHR,
+                0,
+                1,
+                &memoryBarrier,
+                0,
+                null,
+                0,
+                null);
         }
 
         public override void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable)

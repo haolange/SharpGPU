@@ -111,8 +111,10 @@ namespace Infinity.Graphics
                         m_FragmentParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.Slot, Dx12Utility.GetDx12BindKey(bindInfo.Type)).GetHashCode(), parameter);
                     }
 
-                    if ((bindInfo.Stage & ERHIShaderStage.Compute) == ERHIShaderStage.Compute)
+                    if ((bindInfo.Stage & ERHIShaderStage.Compute) == ERHIShaderStage.Compute
+                        || (bindInfo.Stage & ERHIShaderStage.RayTracing) == ERHIShaderStage.RayTracing)
                     {
+                        // DX12 RT pass uses SetComputeRoot* APIs; map RT-stage descriptors into compute parameter map.
                         m_ComputeParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.Slot, Dx12Utility.GetDx12BindKey(bindInfo.Type)).GetHashCode(), parameter);
                     }
                 }
@@ -181,6 +183,18 @@ namespace Infinity.Graphics
             {
                 //hasValue = m_ComputeParameterMap.TryGetValue(new int2(slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
                 bool hasValue = m_ComputeParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
+                return hasValue ? parameter : null;
+            }
+
+            if ((shaderStage & ERHIShaderStage.RayTracing) == ERHIShaderStage.RayTracing)
+            {
+                bool hasValue = m_ComputeParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
+                if (hasValue)
+                {
+                    return parameter;
+                }
+
+                hasValue = m_AllParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out parameter);
                 return hasValue ? parameter : null;
             }
 

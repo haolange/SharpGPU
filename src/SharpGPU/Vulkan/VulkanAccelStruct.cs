@@ -295,7 +295,9 @@ namespace Infinity.Graphics
                     geometries[i].geometry.triangles.vertexFormat = VulkanUtility.ConvertToVkAccelerationStructureVertexFormat(triangleGeometry.VertexFormat);
                     geometries[i].geometry.triangles.vertexData.deviceAddress = vertexAddress + triangleGeometry.VertexOffset;
                     geometries[i].geometry.triangles.vertexStride = triangleGeometry.VertexStride;
-                    geometries[i].geometry.triangles.maxVertex = triangleGeometry.VertexCount;
+                    geometries[i].geometry.triangles.maxVertex = triangleGeometry.VertexCount > 0
+                        ? triangleGeometry.VertexCount - 1
+                        : 0;
 
                     if (triangleGeometry.IndexBuffer != null)
                     {
