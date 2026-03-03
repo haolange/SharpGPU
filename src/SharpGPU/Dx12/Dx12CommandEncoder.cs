@@ -1142,38 +1142,6 @@ namespace Infinity.Graphics
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
-        public override void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState)
-        {
-            Dx12Buffer dx12Buffer = buffer as Dx12Buffer;
-#if DEBUG
-            Debug.Assert(dx12Buffer != null, "Barrier Buffer is null");
-#endif
-
-            Vortice.Direct3D12.ID3D12Resource nativeResource = dx12Buffer.NativeResource;
-            Vortice.Direct3D12.ResourceStates nativeSrcState = Dx12Utility.ConvertToDx12BufferState(srcState);
-            Vortice.Direct3D12.ResourceStates nativeDstState = Dx12Utility.ConvertToDx12BufferState(dstState);
-            Vortice.Direct3D12.ResourceBarrier nativeResourceBarrier = Dx12ResourceBarrierUtil.InitTransition(nativeResource, nativeSrcState, nativeDstState);
-
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier(1, &nativeResourceBarrier);
-        }
-
-        public override void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState)
-        {
-            Dx12Texture dx12Texture = texture as Dx12Texture;
-#if DEBUG
-            Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-
-            Vortice.Direct3D12.ID3D12Resource  nativeResource = dx12Texture.NativeResource;
-            Vortice.Direct3D12.ResourceStates nativeSrcState = Dx12Utility.ConvertToDx12TextureState(srcState);
-            Vortice.Direct3D12.ResourceStates nativeDstState = Dx12Utility.ConvertToDx12TextureState(dstState);
-            Vortice.Direct3D12.ResourceBarrier nativeResourceBarrier = Dx12ResourceBarrierUtil.InitTransition(nativeResource, nativeSrcState, nativeDstState);
-
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier(1, &nativeResourceBarrier);
-        }
-
         public override void SetPipeline(RHIComputePipeline pipeline)
         {
             m_CachedPipeline = pipeline;
@@ -1324,38 +1292,6 @@ namespace Infinity.Graphics
             Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
             Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
-        }
-
-        public override void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState)
-        {
-            Dx12Buffer dx12Buffer = buffer as Dx12Buffer;
-#if DEBUG
-            Debug.Assert(dx12Buffer != null, "Barrier Buffer is null");
-#endif
-
-            Vortice.Direct3D12.ID3D12Resource nativeResource = dx12Buffer.NativeResource;
-            Vortice.Direct3D12.ResourceStates nativeSrcState = Dx12Utility.ConvertToDx12BufferState(srcState);
-            Vortice.Direct3D12.ResourceStates nativeDstState = Dx12Utility.ConvertToDx12BufferState(dstState);
-            Vortice.Direct3D12.ResourceBarrier nativeResourceBarrier = Dx12ResourceBarrierUtil.InitTransition(nativeResource, nativeSrcState, nativeDstState);
-
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier(1, &nativeResourceBarrier);
-        }
-
-        public override void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState)
-        {
-            Dx12Texture dx12Texture = texture as Dx12Texture;
-#if DEBUG
-            Debug.Assert(texture != null, "Barrier Texture is null");
-#endif
-
-            Vortice.Direct3D12.ID3D12Resource nativeResource = dx12Texture.NativeResource;
-            Vortice.Direct3D12.ResourceStates nativeSrcState = Dx12Utility.ConvertToDx12TextureState(srcState);
-            Vortice.Direct3D12.ResourceStates nativeDstState = Dx12Utility.ConvertToDx12TextureState(dstState);
-            Vortice.Direct3D12.ResourceBarrier nativeResourceBarrier = Dx12ResourceBarrierUtil.InitTransition(nativeResource, nativeSrcState, nativeDstState);
-
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            dx12CommandBuffer.NativeCommandList.ResourceBarrier(1, &nativeResourceBarrier);
         }
 
         public override void SetPipeline(RHIRaytracingPipeline pipeline)

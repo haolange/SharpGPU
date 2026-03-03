@@ -272,8 +272,6 @@ namespace Infinity.Graphics
         public abstract void WriteTimestamp(in uint index);
         public abstract void BeginStatistics(in uint index);
         public abstract void EndStatistics(in uint index);
-        public abstract void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState);
-        public abstract void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState);
         public abstract void SetPipeline(RHIComputePipeline pipeline);
         public abstract void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex);
         public abstract void SetPushConstants(IntPtr data, in uint size, in uint offset = 0);
@@ -296,8 +294,6 @@ namespace Infinity.Graphics
         public abstract void WriteTimestamp(in uint index);
         public abstract void BeginStatistics(in uint index);
         public abstract void EndStatistics(in uint index);
-        public abstract void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState);
-        public abstract void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState);
         public abstract void SetPipeline(RHIRaytracingPipeline pipeline);
         public abstract void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex);
         public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct);

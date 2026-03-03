@@ -1197,11 +1197,6 @@ namespace Infinity.Graphics
             }
         }
 
-        internal void ApplyIntraEncoderBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
-        {
-            MetalBarrierHelper.ApplyEncoderBarrier(m_NativeEncoder4.NativePtr, scope, afterStages, beforeStages);
-        }
-
         public override void PushDebugGroup(string name)
         {
             if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
@@ -1234,16 +1229,6 @@ namespace Infinity.Graphics
 
         public override void EndStatistics(in uint index)
         {
-        }
-
-        public override void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState)
-        {
-            ApplyIntraEncoderBarrier(MTLBarrierScope.Buffers, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
-        }
-
-        public override void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState)
-        {
-            ApplyIntraEncoderBarrier(MTLBarrierScope.Textures, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.Compute));
         }
 
         public override void SetPipeline(RHIComputePipeline pipeline)
@@ -1477,16 +1462,6 @@ namespace Infinity.Graphics
         {
         }
 
-        public override void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState)
-        {
-            ApplyIntraEncoderBarrier(MTLBarrierScope.Buffers, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing));
-        }
-
-        public override void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState)
-        {
-            ApplyIntraEncoderBarrier(MTLBarrierScope.Textures, MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing), MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing));
-        }
-
         public override void SetPipeline(RHIRaytracingPipeline pipeline)
         {
             m_CachedPipeline = pipeline;
@@ -1652,11 +1627,6 @@ namespace Infinity.Graphics
             ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIPipelineStage.RayTracing);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.UpdateFence(fence, stage);
-        }
-
-        internal void ApplyIntraEncoderBarrier(in MTLBarrierScope scope, in ulong afterStages, in ulong beforeStages)
-        {
-            MetalBarrierHelper.ApplyEncoderBarrier(m_NativeEncoder4.NativePtr, scope, afterStages, beforeStages);
         }
 
         protected override void Release()

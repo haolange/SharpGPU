@@ -409,58 +409,6 @@ namespace Infinity.Graphics
             }
         }
 
-        public override void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState)
-        {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanBuffer vkBuffer = buffer as VulkanBuffer;
-
-            VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
-            {
-                sType = VkStructureType.BufferMemoryBarrier,
-                srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(srcState),
-                dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(dstState),
-                buffer = vkBuffer.NativeBuffer,
-                offset = 0,
-                size = unchecked((ulong)(-1)),
-            };
-
-            VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                VkPipelineStageFlags.ComputeShader,
-                VkPipelineStageFlags.ComputeShader,
-                0, 0, null, 1, &bufferBarrier, 0, null);
-        }
-
-        public override void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState)
-        {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanTexture vkTexture = texture as VulkanTexture;
-
-            VkImageMemoryBarrier imageBarrier = new VkImageMemoryBarrier()
-            {
-                sType = VkStructureType.ImageMemoryBarrier,
-                srcAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(srcState),
-                dstAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(dstState),
-                oldLayout = VulkanUtility.ConvertToVkImageLayout(srcState),
-                newLayout = VulkanUtility.ConvertToVkImageLayout(dstState),
-                srcQueueFamilyIndex = unchecked((uint)(-1)),
-                dstQueueFamilyIndex = unchecked((uint)(-1)),
-                image = vkTexture.NativeImage,
-                subresourceRange = new VkImageSubresourceRange()
-                {
-                    aspectMask = VulkanUtility.GetVkImageAspect(vkTexture.Descriptor.Format),
-                    baseMipLevel = 0,
-                    levelCount = unchecked((uint)(-1)),
-                    baseArrayLayer = 0,
-                    layerCount = unchecked((uint)(-1)),
-                },
-            };
-
-            VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                VkPipelineStageFlags.ComputeShader,
-                VkPipelineStageFlags.ComputeShader,
-                0, 0, null, 0, null, 1, &imageBarrier);
-        }
-
         public override void SetPipeline(RHIComputePipeline pipeline)
         {
             m_CachedPipeline = pipeline;
@@ -1201,54 +1149,6 @@ namespace Infinity.Graphics
                 VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery;
                 VulkanNative.vkCmdEndQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index);
             }
-        }
-
-        public override void MemoryBarrier(RHIBuffer buffer, in ERHIBufferState srcState, in ERHIBufferState dstState)
-        {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanBuffer vkBuffer = buffer as VulkanBuffer;
-            VkBufferMemoryBarrier bufferBarrier = new VkBufferMemoryBarrier()
-            {
-                sType = VkStructureType.BufferMemoryBarrier,
-                srcAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(srcState),
-                dstAccessMask = VulkanUtility.ConvertToVkBufferAccessFlag(dstState),
-                buffer = vkBuffer.NativeBuffer,
-                offset = 0,
-                size = unchecked((ulong)(-1)),
-            };
-            VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                VkPipelineStageFlags.RayTracingShaderKHR,
-                VkPipelineStageFlags.RayTracingShaderKHR,
-                0, 0, null, 1, &bufferBarrier, 0, null);
-        }
-
-        public override void MemoryBarrier(RHITexture texture, in ERHITextureState srcState, in ERHITextureState dstState)
-        {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanTexture vkTexture = texture as VulkanTexture;
-            VkImageMemoryBarrier imageBarrier = new VkImageMemoryBarrier()
-            {
-                sType = VkStructureType.ImageMemoryBarrier,
-                srcAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(srcState),
-                dstAccessMask = VulkanUtility.ConvertToVkTextureAccessFlag(dstState),
-                oldLayout = VulkanUtility.ConvertToVkImageLayout(srcState),
-                newLayout = VulkanUtility.ConvertToVkImageLayout(dstState),
-                srcQueueFamilyIndex = unchecked((uint)(-1)),
-                dstQueueFamilyIndex = unchecked((uint)(-1)),
-                image = vkTexture.NativeImage,
-                subresourceRange = new VkImageSubresourceRange()
-                {
-                    aspectMask = VulkanUtility.GetVkImageAspect(vkTexture.Descriptor.Format),
-                    baseMipLevel = 0,
-                    levelCount = unchecked((uint)(-1)),
-                    baseArrayLayer = 0,
-                    layerCount = unchecked((uint)(-1)),
-                },
-            };
-            VulkanNative.vkCmdPipelineBarrier(vkCmdBuf.NativeCommandBuffer,
-                VkPipelineStageFlags.RayTracingShaderKHR,
-                VkPipelineStageFlags.RayTracingShaderKHR,
-                0, 0, null, 0, null, 1, &imageBarrier);
         }
 
         public override void SetPipeline(RHIRaytracingPipeline pipeline)
