@@ -14,9 +14,11 @@ namespace Infinity.Graphics
 #if DEBUG
         private const string PixRuntimeFileName = "WinPixEventRuntime.dll";
         private static readonly object Sync = new();
+        private static readonly object s_EventDepthSync = new();
         private static bool s_RuntimeLoadAttempted;
         private static bool s_RuntimeAvailable;
         private static nint s_RuntimeHandle;
+        private static readonly Dictionary<nint, int> s_EventDepthByCommandList = new();
 
         [DllImport(PixRuntimeFileName, ExactSpelling = true, CallingConvention = CallingConvention.Winapi)]
         private static extern void PIXBeginEventOnCommandList(nint commandList, ulong color, [MarshalAs(UnmanagedType.LPStr)] string formatString);
@@ -28,9 +30,14 @@ namespace Infinity.Graphics
         public static void BeginEvent(nint commandList, string name)
         {
 #if DEBUG
-            if (commandList == 0 || string.IsNullOrWhiteSpace(name))
+            if (commandList == 0)
             {
                 return;
+            }
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                name = "Unnamed";
             }
 
             if (!EnsureRuntimeLoaded())
@@ -38,7 +45,18 @@ namespace Infinity.Graphics
                 return;
             }
 
-            PIXBeginEventOnCommandList(commandList, 0UL, name);
+            try
+            {
+                PIXBeginEventOnCommandList(commandList, 0UL, name);
+                lock (s_EventDepthSync)
+                {
+                    s_EventDepthByCommandList.TryGetValue(commandList, out int depth);
+                    s_EventDepthByCommandList[commandList] = depth + 1;
+                }
+            }
+            catch
+            {
+            }
 #endif
         }
 
@@ -50,7 +68,36 @@ namespace Infinity.Graphics
                 return;
             }
 
-            PIXEndEventOnCommandList(commandList);
+            bool hasEventDepth = false;
+            lock (s_EventDepthSync)
+            {
+                if (s_EventDepthByCommandList.TryGetValue(commandList, out int depth) && depth > 0)
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        s_EventDepthByCommandList.Remove(commandList);
+                    }
+                    else
+                    {
+                        s_EventDepthByCommandList[commandList] = depth;
+                    }
+                    hasEventDepth = true;
+                }
+            }
+
+            if (!hasEventDepth)
+            {
+                return;
+            }
+
+            try
+            {
+                PIXEndEventOnCommandList(commandList);
+            }
+            catch
+            {
+            }
 #endif
         }
 

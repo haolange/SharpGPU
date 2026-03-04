@@ -202,7 +202,11 @@ namespace Infinity.Graphics
             if (waitSemaphore != null)
             {
                 Dx12Semaphore dx12Semaphore = waitSemaphore as Dx12Semaphore;
-                m_NativeCommandQueue.Wait(dx12Semaphore.NativeFence, 1);
+                ulong waitValue = dx12Semaphore.LastSignaledValue;
+                if (waitValue > 0)
+                {
+                    m_NativeCommandQueue.Wait(dx12Semaphore.NativeFence, waitValue);
+                }
             }
 
             if (cmdBuffer != null)
@@ -215,15 +219,15 @@ namespace Infinity.Graphics
             if (signalSemaphore != null)
             {
                 Dx12Semaphore dx12Semaphore = signalSemaphore as Dx12Semaphore;
-                dx12Semaphore.NativeFence.Signal(0);
-                m_NativeCommandQueue.Signal(dx12Semaphore.NativeFence, 1);
+                ulong signalValue = dx12Semaphore.PrepareSignalValue();
+                m_NativeCommandQueue.Signal(dx12Semaphore.NativeFence, signalValue);
             }
 
             if (signalFence != null)
             {
                 Dx12Fence dx12Fence = signalFence as Dx12Fence;
-                //dx12Fence.NativeFence.Signal(0); // dx12Fence.Reset();
-                m_NativeCommandQueue.Signal(dx12Fence.NativeFence, 1);
+                ulong signalValue = dx12Fence.ConsumeSignalValue();
+                m_NativeCommandQueue.Signal(dx12Fence.NativeFence, signalValue);
             }
         }
 
@@ -234,7 +238,11 @@ namespace Infinity.Graphics
                 for (int i = 0; i < waitSemaphores.Length; ++i)
                 {
                     Dx12Semaphore dx12Semaphore = waitSemaphores[i] as Dx12Semaphore;
-                    m_NativeCommandQueue.Wait(dx12Semaphore.NativeFence, 1);
+                    ulong waitValue = dx12Semaphore.LastSignaledValue;
+                    if (waitValue > 0)
+                    {
+                        m_NativeCommandQueue.Wait(dx12Semaphore.NativeFence, waitValue);
+                    }
                 }
             }
 
@@ -250,16 +258,16 @@ namespace Infinity.Graphics
                 for (int i = 0; i < signalSemaphores.Length; ++i)
                 {
                     Dx12Semaphore dx12Semaphore = signalSemaphores[i] as Dx12Semaphore;
-                    dx12Semaphore.NativeFence.Signal(0);
-                    m_NativeCommandQueue.Signal(dx12Semaphore.NativeFence, 1);
+                    ulong signalValue = dx12Semaphore.PrepareSignalValue();
+                    m_NativeCommandQueue.Signal(dx12Semaphore.NativeFence, signalValue);
                 }
             }
 
             if (signalFence != null)
             {
                 Dx12Fence dx12Fence = signalFence as Dx12Fence;
-                //dx12Fence.NativeFence.Signal(0); // dx12Fence.Reset();
-                m_NativeCommandQueue.Signal(dx12Fence.NativeFence, 1);
+                ulong signalValue = dx12Fence.ConsumeSignalValue();
+                m_NativeCommandQueue.Signal(dx12Fence.NativeFence, signalValue);
             }
         }
 
@@ -270,7 +278,11 @@ namespace Infinity.Graphics
                 for (int i = 0; i < waitSemaphores.Length; ++i)
                 {
                     Dx12Semaphore dx12Semaphore = waitSemaphores[i] as Dx12Semaphore;
-                    m_NativeCommandQueue.Wait(dx12Semaphore.NativeFence, 1);
+                    ulong waitValue = dx12Semaphore.LastSignaledValue;
+                    if (waitValue > 0)
+                    {
+                        m_NativeCommandQueue.Wait(dx12Semaphore.NativeFence, waitValue);
+                    }
                 }
             }
 
@@ -290,16 +302,16 @@ namespace Infinity.Graphics
                 for (int i = 0; i < signalSemaphores.Length; ++i)
                 {
                     Dx12Semaphore dx12Semaphore = signalSemaphores[i] as Dx12Semaphore;
-                    dx12Semaphore.NativeFence.Signal(0);
-                    m_NativeCommandQueue.Signal(dx12Semaphore.NativeFence, 1);
+                    ulong signalValue = dx12Semaphore.PrepareSignalValue();
+                    m_NativeCommandQueue.Signal(dx12Semaphore.NativeFence, signalValue);
                 }
             }
 
             if (signalFence != null)
             {
                 Dx12Fence dx12Fence = signalFence as Dx12Fence;
-                //dx12Fence.NativeFence.Signal(0); // dx12Fence.Reset();
-                m_NativeCommandQueue.Signal(dx12Fence.NativeFence, 1);
+                ulong signalValue = dx12Fence.ConsumeSignalValue();
+                m_NativeCommandQueue.Signal(dx12Fence.NativeFence, signalValue);
             }
         }
 

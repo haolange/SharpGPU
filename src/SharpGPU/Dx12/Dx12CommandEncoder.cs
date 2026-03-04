@@ -208,12 +208,23 @@ namespace Infinity.Graphics
                     case ERHIBarrierKind.Buffer:
                     {
                         RHIBufferBarrier bufferBarrier = barrier.BufferBarrier;
+                        Vortice.Direct3D12.BarrierAccess accessBefore = ConvertToBarrierAccess(bufferBarrier.AccessBefore);
+                        Vortice.Direct3D12.BarrierAccess accessAfter = ConvertToBarrierAccess(bufferBarrier.AccessAfter);
+                        Vortice.Direct3D12.BarrierSync syncBefore = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(bufferBarrier.SyncBefore, queuePipeline),
+                            accessBefore,
+                            queuePipeline);
+                        Vortice.Direct3D12.BarrierSync syncAfter = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(bufferBarrier.SyncAfter, queuePipeline),
+                            accessAfter,
+                            queuePipeline);
+
                         (bufferBarriers ??= new List<Vortice.Direct3D12.BufferBarrier>(barriers.Length)).Add(new Vortice.Direct3D12.BufferBarrier
                         {
-                            SyncBefore = ResolveBarrierSync(bufferBarrier.SyncBefore, queuePipeline),
-                            SyncAfter = ResolveBarrierSync(bufferBarrier.SyncAfter, queuePipeline),
-                            AccessBefore = ConvertToBarrierAccess(bufferBarrier.AccessBefore),
-                            AccessAfter = ConvertToBarrierAccess(bufferBarrier.AccessAfter),
+                            SyncBefore = syncBefore,
+                            SyncAfter = syncAfter,
+                            AccessBefore = accessBefore,
+                            AccessAfter = accessAfter,
                             Resource = GetBufferResource(bufferBarrier.Resource, i),
                             Offset = bufferBarrier.Range.Offset,
                             Size = bufferBarrier.Range.Size == 0 ? RHIBufferRange.WholeSize : bufferBarrier.Range.Size
@@ -224,12 +235,23 @@ namespace Infinity.Graphics
                     case ERHIBarrierKind.Texture:
                     {
                         RHITextureBarrier textureBarrier = barrier.TextureBarrier;
+                        Vortice.Direct3D12.BarrierAccess accessBefore = ConvertToBarrierAccess(textureBarrier.AccessBefore);
+                        Vortice.Direct3D12.BarrierAccess accessAfter = ConvertToBarrierAccess(textureBarrier.AccessAfter);
+                        Vortice.Direct3D12.BarrierSync syncBefore = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(textureBarrier.SyncBefore, queuePipeline),
+                            accessBefore,
+                            queuePipeline);
+                        Vortice.Direct3D12.BarrierSync syncAfter = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(textureBarrier.SyncAfter, queuePipeline),
+                            accessAfter,
+                            queuePipeline);
+
                         (textureBarriers ??= new List<Vortice.Direct3D12.TextureBarrier>(barriers.Length)).Add(new Vortice.Direct3D12.TextureBarrier
                         {
-                            SyncBefore = ResolveBarrierSync(textureBarrier.SyncBefore, queuePipeline),
-                            SyncAfter = ResolveBarrierSync(textureBarrier.SyncAfter, queuePipeline),
-                            AccessBefore = ConvertToBarrierAccess(textureBarrier.AccessBefore),
-                            AccessAfter = ConvertToBarrierAccess(textureBarrier.AccessAfter),
+                            SyncBefore = syncBefore,
+                            SyncAfter = syncAfter,
+                            AccessBefore = accessBefore,
+                            AccessAfter = accessAfter,
                             LayoutBefore = ConvertToBarrierLayout(textureBarrier.LayoutBefore, queuePipeline),
                             LayoutAfter = ConvertToBarrierLayout(textureBarrier.LayoutAfter, queuePipeline),
                             Resource = GetTextureResource(textureBarrier.Resource, i),
@@ -368,7 +390,8 @@ namespace Infinity.Graphics
                 return Vortice.Direct3D12.BarrierAccess.NoAccess;
             }
 
-            Vortice.Direct3D12.BarrierAccess access = Vortice.Direct3D12.BarrierAccess.NoAccess;
+            Vortice.Direct3D12.BarrierAccess access = 0;
+            bool hasShaderWrite = (accessMask & ERHIAccessMask.ShaderWrite) != 0;
             if ((accessMask & ERHIAccessMask.TransferRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.CopySource;
             if ((accessMask & ERHIAccessMask.TransferWrite) != 0) access |= Vortice.Direct3D12.BarrierAccess.CopyDestination;
             if ((accessMask & ERHIAccessMask.ResolveRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.ResolveSource;
@@ -377,8 +400,8 @@ namespace Infinity.Graphics
             if ((accessMask & ERHIAccessMask.VertexRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.VertexBuffer;
             if ((accessMask & ERHIAccessMask.ConstantRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.ConstantBuffer;
             if ((accessMask & ERHIAccessMask.IndirectCommandRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.IndirectArgument;
-            if ((accessMask & ERHIAccessMask.ShaderRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
-            if ((accessMask & ERHIAccessMask.ShaderWrite) != 0) access |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
+            if ((accessMask & ERHIAccessMask.ShaderRead) != 0 && !hasShaderWrite) access |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
+            if (hasShaderWrite) access |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
             if ((accessMask & ERHIAccessMask.RenderTargetRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.RenderTarget;
             if ((accessMask & ERHIAccessMask.RenderTargetWrite) != 0) access |= Vortice.Direct3D12.BarrierAccess.RenderTarget;
             if ((accessMask & ERHIAccessMask.DepthStencilRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.DepthStencilRead;
@@ -387,7 +410,7 @@ namespace Infinity.Graphics
             if ((accessMask & ERHIAccessMask.AccelStructRead) != 0) access |= Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureRead;
             if ((accessMask & ERHIAccessMask.AccelStructWrite) != 0) access |= Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureWrite;
             if ((accessMask & ERHIAccessMask.Present) != 0) access |= Vortice.Direct3D12.BarrierAccess.Common;
-            return access;
+            return access == 0 ? Vortice.Direct3D12.BarrierAccess.NoAccess : access;
         }
 
         private static Vortice.Direct3D12.BarrierLayout ConvertToBarrierLayout(in ERHITextureLayout layout, in ERHIPipelineType queuePipeline)
@@ -438,7 +461,7 @@ namespace Infinity.Graphics
                 return Vortice.Direct3D12.ResourceStates.Common;
             }
 
-            Vortice.Direct3D12.ResourceStates result = Vortice.Direct3D12.ResourceStates.Common;
+            Vortice.Direct3D12.ResourceStates result = 0;
             if ((accessMask & ERHIAccessMask.TransferRead) != 0) result |= Vortice.Direct3D12.ResourceStates.CopySource;
             if ((accessMask & ERHIAccessMask.TransferWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.CopyDest;
             if ((accessMask & ERHIAccessMask.IndexRead) != 0) result |= Vortice.Direct3D12.ResourceStates.IndexBuffer;
@@ -450,14 +473,25 @@ namespace Infinity.Graphics
             if ((accessMask & ERHIAccessMask.AccelStructRead) != 0) result |= Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure;
             if ((accessMask & ERHIAccessMask.AccelStructWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure;
             if ((accessMask & ERHIAccessMask.ShadingRateRead) != 0) result |= Vortice.Direct3D12.ResourceStates.ShadingRateSource;
-            return result;
+            return result == 0 ? Vortice.Direct3D12.ResourceStates.Common : result;
         }
 
         private static Vortice.Direct3D12.ResourceStates ConvertToLegacyTextureStates(in ERHITextureLayout layout, in ERHIAccessMask accessMask)
         {
-            Vortice.Direct3D12.ResourceStates result = ConvertTextureLayoutToLegacyState(layout);
-            result |= ConvertTextureAccessToLegacyState(accessMask);
-            return result;
+            Vortice.Direct3D12.ResourceStates layoutState = ConvertTextureLayoutToLegacyState(layout);
+            Vortice.Direct3D12.ResourceStates accessState = ConvertTextureAccessToLegacyState(accessMask);
+
+            if (layoutState == Vortice.Direct3D12.ResourceStates.Common)
+            {
+                return accessState == 0 ? Vortice.Direct3D12.ResourceStates.Common : accessState;
+            }
+
+            if (accessState == 0)
+            {
+                return layoutState;
+            }
+
+            return layoutState | accessState;
         }
 
         private static Vortice.Direct3D12.ResourceStates ConvertTextureLayoutToLegacyState(in ERHITextureLayout layout)
@@ -494,7 +528,7 @@ namespace Infinity.Graphics
 
         private static Vortice.Direct3D12.ResourceStates ConvertTextureAccessToLegacyState(in ERHIAccessMask accessMask)
         {
-            Vortice.Direct3D12.ResourceStates result = Vortice.Direct3D12.ResourceStates.Common;
+            Vortice.Direct3D12.ResourceStates result = 0;
             if ((accessMask & ERHIAccessMask.TransferRead) != 0) result |= Vortice.Direct3D12.ResourceStates.CopySource;
             if ((accessMask & ERHIAccessMask.TransferWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.CopyDest;
             if ((accessMask & ERHIAccessMask.ResolveRead) != 0) result |= Vortice.Direct3D12.ResourceStates.ResolveSource;
@@ -593,6 +627,47 @@ namespace Infinity.Graphics
             }
 
             return sync;
+        }
+
+        private static Vortice.Direct3D12.BarrierSync HarmonizeSyncWithAccess(in Vortice.Direct3D12.BarrierSync sync, in Vortice.Direct3D12.BarrierAccess access, in ERHIPipelineType queuePipeline)
+        {
+            Vortice.Direct3D12.BarrierAccess effectiveAccess = access & ~Vortice.Direct3D12.BarrierAccess.NoAccess;
+            if (effectiveAccess == 0)
+            {
+                return Vortice.Direct3D12.BarrierSync.None;
+            }
+
+            Vortice.Direct3D12.BarrierSync requiredSync = 0;
+            if ((effectiveAccess & (Vortice.Direct3D12.BarrierAccess.CopySource | Vortice.Direct3D12.BarrierAccess.CopyDestination)) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.Copy;
+            if ((effectiveAccess & (Vortice.Direct3D12.BarrierAccess.ResolveSource | Vortice.Direct3D12.BarrierAccess.ResolveDestination)) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.Resolve;
+            if ((effectiveAccess & Vortice.Direct3D12.BarrierAccess.IndexBuffer) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.IndexInput;
+            if ((effectiveAccess & Vortice.Direct3D12.BarrierAccess.VertexBuffer) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.VertexShading | Vortice.Direct3D12.BarrierSync.NonPixelShading;
+            if ((effectiveAccess & (Vortice.Direct3D12.BarrierAccess.ConstantBuffer | Vortice.Direct3D12.BarrierAccess.ShaderResource | Vortice.Direct3D12.BarrierAccess.UnorderedAccess)) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.AllShading;
+            if ((effectiveAccess & Vortice.Direct3D12.BarrierAccess.IndirectArgument) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.ExecuteIndirect;
+            if ((effectiveAccess & Vortice.Direct3D12.BarrierAccess.RenderTarget) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.RenderTarget;
+            if ((effectiveAccess & (Vortice.Direct3D12.BarrierAccess.DepthStencilRead | Vortice.Direct3D12.BarrierAccess.DepthStencilWrite)) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.DepthStencil;
+            if ((effectiveAccess & (Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureRead | Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureWrite)) != 0)
+            {
+                requiredSync |= Vortice.Direct3D12.BarrierSync.Raytracing
+                                | Vortice.Direct3D12.BarrierSync.BuildRaytracingAccelerationStructure
+                                | Vortice.Direct3D12.BarrierSync.CopyRaytracingAccelerationStructure
+                                | Vortice.Direct3D12.BarrierSync.EmitRaytracingAccelerationStructurePostBuildInfo;
+            }
+            if ((effectiveAccess & Vortice.Direct3D12.BarrierAccess.ShadingRateSource) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.PixelShading;
+            if ((effectiveAccess & Vortice.Direct3D12.BarrierAccess.Common) != 0) requiredSync |= GetDefaultQueueSync(queuePipeline);
+
+            if (requiredSync == 0)
+            {
+                return sync;
+            }
+
+            Vortice.Direct3D12.BarrierSync filteredSync = sync & requiredSync;
+            if (filteredSync == 0)
+            {
+                filteredSync = requiredSync;
+            }
+
+            return NormalizeBarrierSyncForQueue(filteredSync, queuePipeline);
         }
 
         private static Vortice.Direct3D12.BarrierSync GetQueueSupportedSyncMask(in ERHIPipelineType queuePipeline)
@@ -752,7 +827,8 @@ namespace Infinity.Graphics
                 return Vortice.Direct3D12.BarrierAccess.NoAccess;
             }
 
-            Vortice.Direct3D12.BarrierAccess result = Vortice.Direct3D12.BarrierAccess.Common;
+            Vortice.Direct3D12.BarrierAccess result = 0;
+            bool hasShaderWrite = (state & ERHIBufferState.UnorderedAccess) != 0 || (state & ERHIBufferState.RasterizerOrdered) != 0;
 
             if ((state & ERHIBufferState.CopyDst) != 0) result |= Vortice.Direct3D12.BarrierAccess.CopyDestination;
             if ((state & ERHIBufferState.CopySrc) != 0) result |= Vortice.Direct3D12.BarrierAccess.CopySource;
@@ -760,7 +836,7 @@ namespace Infinity.Graphics
             if ((state & ERHIBufferState.VertexBuffer) != 0) result |= Vortice.Direct3D12.BarrierAccess.VertexBuffer;
             if ((state & ERHIBufferState.ConstantBuffer) != 0) result |= Vortice.Direct3D12.BarrierAccess.ConstantBuffer;
             if ((state & ERHIBufferState.IndirectArgument) != 0) result |= Vortice.Direct3D12.BarrierAccess.IndirectArgument;
-            if ((state & ERHIBufferState.ShaderResource) != 0) result |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
+            if ((state & ERHIBufferState.ShaderResource) != 0 && !hasShaderWrite) result |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
             if ((state & ERHIBufferState.UnorderedAccess) != 0) result |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
             if ((state & ERHIBufferState.RasterizerOrdered) != 0) result |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
             if ((state & ERHIBufferState.AccelStructRead) != 0) result |= Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureRead;
@@ -768,7 +844,7 @@ namespace Infinity.Graphics
             if ((state & ERHIBufferState.AccelStructBuildInput) != 0) result |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
             if ((state & ERHIBufferState.AccelStructBuildBlast) != 0) result |= Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureWrite;
 
-            return result;
+            return result == 0 ? Vortice.Direct3D12.BarrierAccess.NoAccess : result;
         }
 
         private static Vortice.Direct3D12.BarrierAccess ConvertToBarrierAccess(in ERHITextureState state)
@@ -778,7 +854,8 @@ namespace Infinity.Graphics
                 return Vortice.Direct3D12.BarrierAccess.NoAccess;
             }
 
-            Vortice.Direct3D12.BarrierAccess result = Vortice.Direct3D12.BarrierAccess.Common;
+            Vortice.Direct3D12.BarrierAccess result = 0;
+            bool hasShaderWrite = (state & ERHITextureState.UnorderedAccess) != 0 || (state & ERHITextureState.RasterizerOrdered) != 0;
 
             if ((state & ERHITextureState.CopyDst) != 0) result |= Vortice.Direct3D12.BarrierAccess.CopyDestination;
             if ((state & ERHITextureState.CopySrc) != 0) result |= Vortice.Direct3D12.BarrierAccess.CopySource;
@@ -787,12 +864,12 @@ namespace Infinity.Graphics
             if ((state & ERHITextureState.DepthRead) != 0) result |= Vortice.Direct3D12.BarrierAccess.DepthStencilRead;
             if ((state & ERHITextureState.DepthWrite) != 0) result |= Vortice.Direct3D12.BarrierAccess.DepthStencilWrite;
             if ((state & ERHITextureState.RenderTarget) != 0) result |= Vortice.Direct3D12.BarrierAccess.RenderTarget;
-            if ((state & ERHITextureState.ShaderResource) != 0) result |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
+            if ((state & ERHITextureState.ShaderResource) != 0 && !hasShaderWrite) result |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
             if ((state & ERHITextureState.UnorderedAccess) != 0) result |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
             if ((state & ERHITextureState.RasterizerOrdered) != 0) result |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
             if ((state & ERHITextureState.ShadingRateSurface) != 0) result |= Vortice.Direct3D12.BarrierAccess.ShadingRateSource;
 
-            return result;
+            return result == 0 ? Vortice.Direct3D12.BarrierAccess.NoAccess : result;
         }
 
         private static Vortice.Direct3D12.BarrierLayout ConvertToBarrierLayout(in ERHITextureState state, in ERHIPipelineType queuePipeline)

@@ -34,7 +34,19 @@ namespace Infinity.Graphics
         public Dx12CommandBuffer(Dx12CommandQueue commandQueue)
         {
             m_CommandQueue = commandQueue;
+            InitializeNativeObjects();
+            m_TransferEncoder = new Dx12TransferEncoder(this);
+            m_ComputeEncoder = new Dx12ComputeEncoder(this);
+            m_RasterEncoder = new Dx12RasterEncoder(this);
+            m_RaytracingEncoder = new Dx12RaytracingEncoder(this);
+            m_MLEncoder = new Dx12MLEncoder(this);
+            m_WorkGraphEncoder = new Dx12WorkGraphEncoder(this);
+        }
 
+        private void InitializeNativeObjects()
+        {
+            Debug.Assert(m_CommandQueue != null, "CommandQueue is null.");
+            Dx12CommandQueue commandQueue = m_CommandQueue as Dx12CommandQueue;
             Vortice.Direct3D12.ID3D12CommandAllocator commandAllocator;
             SharpGen.Runtime.Result hResult = commandQueue.Dx12Device.NativeDevice.CreateCommandAllocator(
                 Dx12Utility.ConvertToDx12QueueType(commandQueue.PipelineType),
@@ -65,20 +77,23 @@ namespace Infinity.Graphics
             m_NativeCommandList = commandList;
             // D3D12 command lists are created in the recording state; close once so the first Begin() can Reset safely.
             m_NativeCommandList.Close();
-
-            m_TransferEncoder = new Dx12TransferEncoder(this);
-            m_ComputeEncoder = new Dx12ComputeEncoder(this);
-            m_RasterEncoder = new Dx12RasterEncoder(this);
-            m_RaytracingEncoder = new Dx12RaytracingEncoder(this);
-            m_MLEncoder = new Dx12MLEncoder(this);
-            m_WorkGraphEncoder = new Dx12WorkGraphEncoder(this);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void Begin(string name)
         {
-            m_NativeCommandAllocator.Reset();
-            m_NativeCommandList.Reset(m_NativeCommandAllocator, null);
+            try
+            {
+                m_NativeCommandAllocator.Reset();
+                m_NativeCommandList.Reset(m_NativeCommandAllocator, null);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    "Dx12CommandBuffer.Begin failed to reset command allocator/list. " +
+                    "The allocator is likely still in flight on GPU, or submission/fence sequencing is invalid.",
+                    ex);
+            }
 
 #if DEBUG
             Dx12PixEventMarker.BeginEvent((nint)m_NativeCommandList, name);
