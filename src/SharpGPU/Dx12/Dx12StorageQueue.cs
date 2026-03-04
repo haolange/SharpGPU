@@ -209,18 +209,18 @@ namespace Infinity.Graphics
             if (TryProbeRuntimeLibrary(DirectStorageRuntimeCore, out resolvedPath, out nint coreHandle))
             {
                 NativeLibrary.Free(coreHandle);
-                Debug.WriteLine($"[Dx12StorageQueue] DirectStorage runtime found (via ThirdParty resolver): '{resolvedPath ?? DirectStorageRuntimeCore}'");
+                System.Diagnostics.Debug.WriteLine($"[Dx12StorageQueue] DirectStorage runtime found (via ThirdParty resolver): '{resolvedPath ?? DirectStorageRuntimeCore}'");
                 return true;
             }
 
             if (TryProbeRuntimeLibrary(DirectStorageRuntime, out resolvedPath, out nint runtimeHandle))
             {
                 NativeLibrary.Free(runtimeHandle);
-                Debug.WriteLine($"[Dx12StorageQueue] DirectStorage runtime found (via ThirdParty resolver): '{resolvedPath ?? DirectStorageRuntime}'");
+                System.Diagnostics.Debug.WriteLine($"[Dx12StorageQueue] DirectStorage runtime found (via ThirdParty resolver): '{resolvedPath ?? DirectStorageRuntime}'");
                 return true;
             }
 
-            Debug.WriteLine($"[Dx12StorageQueue] DirectStorage runtime not found via ThirdParty resolver.");
+            System.Diagnostics.Debug.WriteLine($"[Dx12StorageQueue] DirectStorage runtime not found via ThirdParty resolver.");
             return false;
         }
 

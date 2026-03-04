@@ -160,12 +160,93 @@ internal static class ThirdPartyNativeLibraryResolver
         List<string> candidateList = new();
         foreach (string root in EnumerateThirdPartyRoots())
         {
-            string modernRoot = Path.Combine(root, "ThirdParty", profile.Vendor, profile.Library, osFolder, archFolder, nativeFileName);
-            candidateList.Add(modernRoot);
+            foreach (string candidate in EnumerateCandidateLibraryPaths(root, profile, osFolder, archFolder, nativeFileName))
+            {
+                candidateList.Add(candidate);
+            }
         }
 
         candidates = candidateList;
         return true;
+    }
+
+    private static IEnumerable<string> EnumerateCandidateLibraryPaths(string root, ThirdPartyNativeLibraryProfile profile, string osFolder, string archFolder, string nativeFileName)
+    {
+        string normalizedRoot = TryResolveDirectoryExplicitPath(root);
+        if (string.IsNullOrWhiteSpace(normalizedRoot))
+        {
+            yield break;
+        }
+
+        string rootName = Path.GetFileName(normalizedRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        string vendor = profile.Vendor;
+
+        string normalizedVendorRoot;
+        if (rootName.Equals("ThirdParty", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedVendorRoot = Path.Combine(normalizedRoot, vendor);
+        }
+        else if (rootName.Equals("Binaries", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedVendorRoot = Path.Combine(normalizedRoot, "ThirdParty", vendor);
+        }
+        else if (rootName.Equals(vendor, StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedVendorRoot = normalizedRoot;
+        }
+        else if (!rootName.Equals("Binaries", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedVendorRoot = Path.Combine(normalizedRoot, "ThirdParty", vendor);
+        }
+        else
+        {
+            normalizedVendorRoot = Path.Combine(normalizedRoot, vendor);
+        }
+
+        HashSet<string> emitted = new(StringComparer.OrdinalIgnoreCase);
+        static string? TryNormalize(string candidate)
+        {
+            return string.IsNullOrWhiteSpace(candidate) ? null : candidate;
+        }
+
+        string? rootCandidate1 = TryNormalize(Path.Combine(normalizedRoot, "ThirdParty", vendor));
+        if (!string.IsNullOrWhiteSpace(rootCandidate1))
+        {
+            string candidate = Path.Combine(rootCandidate1, profile.Library, osFolder, archFolder, nativeFileName);
+            if (emitted.Add(candidate))
+            {
+                yield return candidate;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedVendorRoot))
+        {
+            string candidate = Path.Combine(normalizedVendorRoot, profile.Library, osFolder, archFolder, nativeFileName);
+            if (emitted.Add(candidate))
+            {
+                yield return candidate;
+            }
+        }
+
+        string? rootCandidate3 = TryNormalize(Path.Combine(normalizedRoot, vendor, "ThirdParty"));
+        if (!string.IsNullOrWhiteSpace(rootCandidate3))
+        {
+            string candidate = Path.Combine(rootCandidate3, profile.Library, osFolder, archFolder, nativeFileName);
+            if (emitted.Add(candidate))
+            {
+                yield return candidate;
+            }
+        }
+
+        // Fallback for historical copy layouts where library directory is nested one level deeper.
+        string? rootCandidate4 = TryNormalize(Path.Combine(normalizedRoot, vendor, "ThirdParty", profile.Library, osFolder, archFolder, nativeFileName));
+        if (!string.IsNullOrWhiteSpace(rootCandidate4))
+        {
+            if (emitted.Add(rootCandidate4))
+            {
+                yield return rootCandidate4;
+            }
+        }
     }
 
     private static IEnumerable<string> EnumerateThirdPartyRoots()
