@@ -50,6 +50,7 @@ namespace Infinity.Graphics
             m_Dx12Device = device;
             m_PendingRequests = new List<Action>();
 
+            ThirdPartyNativeLibraryResolver.EnsureResolverRegistered(typeof(DirectStorage).Assembly);
             m_DirectStorageRuntimeAvailable = ProbeDirectStorageRuntime();
             if (m_DirectStorageRuntimeAvailable)
             {
@@ -203,18 +204,41 @@ namespace Infinity.Graphics
 
         private static bool ProbeDirectStorageRuntime()
         {
-            if (NativeLibrary.TryLoad(DirectStorageRuntimeCore, out nint coreHandle))
+            string? resolvedPath = null;
+
+            if (TryProbeRuntimeLibrary(DirectStorageRuntimeCore, out resolvedPath, out nint coreHandle))
             {
                 NativeLibrary.Free(coreHandle);
+                Debug.WriteLine($"[Dx12StorageQueue] DirectStorage runtime found (via ThirdParty resolver): '{resolvedPath ?? DirectStorageRuntimeCore}'");
                 return true;
             }
 
-            if (NativeLibrary.TryLoad(DirectStorageRuntime, out nint runtimeHandle))
+            if (TryProbeRuntimeLibrary(DirectStorageRuntime, out resolvedPath, out nint runtimeHandle))
             {
                 NativeLibrary.Free(runtimeHandle);
+                Debug.WriteLine($"[Dx12StorageQueue] DirectStorage runtime found (via ThirdParty resolver): '{resolvedPath ?? DirectStorageRuntime}'");
                 return true;
             }
 
+            Debug.WriteLine($"[Dx12StorageQueue] DirectStorage runtime not found via shared resolver; no fallback path configured.");
+            return false;
+        }
+
+        private static bool TryProbeRuntimeLibrary(string libraryName, out string? resolvedPath, out nint handle)
+        {
+            if (ThirdPartyNativeLibraryResolver.TryResolve(libraryName, out handle, out resolvedPath))
+            {
+                return true;
+            }
+
+            if (NativeLibrary.TryLoad(libraryName, out handle))
+            {
+                resolvedPath = libraryName;
+                Debug.WriteLine($"[Dx12StorageQueue] DirectStorage runtime found (default loader): '{libraryName}'");
+                return true;
+            }
+
+            resolvedPath = null;
             return false;
         }
 

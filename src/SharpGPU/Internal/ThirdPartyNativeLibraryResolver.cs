@@ -1,0 +1,371 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
+
+namespace Infinity.Graphics;
+
+internal readonly struct ThirdPartyNativeLibraryProfile
+{
+    public readonly string Vendor;
+    public readonly string Library;
+    public readonly string WindowsFileName;
+    public readonly string LinuxFileName;
+    public readonly string MacFileName;
+
+    public ThirdPartyNativeLibraryProfile(string vendor, string library, string? windowsFileName, string? linuxFileName, string? macFileName)
+    {
+        Vendor = vendor;
+        Library = library;
+        WindowsFileName = windowsFileName ?? string.Empty;
+        LinuxFileName = linuxFileName ?? string.Empty;
+        MacFileName = macFileName ?? string.Empty;
+    }
+}
+
+internal static class ThirdPartyNativeLibraryResolver
+{
+    public const string ThirdPartyRootEnvironmentVariableName = "INFINITY_THIRDPARTY_NATIVE_ROOT";
+    private const string VendorMicrosoft = "Microsoft";
+    private static readonly object Sync = new();
+    private static readonly HashSet<Assembly> RegisteredAssemblies = new();
+
+    private static readonly Dictionary<string, ThirdPartyNativeLibraryProfile> LibraryProfiles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["dxcompiler"] = new(VendorMicrosoft, "DXC", "dxcompiler.dll", "libdxcompiler.so", "libdxcompiler.dylib"),
+        ["dxil"] = new(VendorMicrosoft, "DXC", "dxil.dll", string.Empty, string.Empty),
+        ["dstoragecore"] = new(VendorMicrosoft, "DirectStorage", "dstoragecore.dll", string.Empty, string.Empty),
+        ["dstorage"] = new(VendorMicrosoft, "DirectStorage", "dstorage.dll", string.Empty, string.Empty),
+        ["winpixeventruntime"] = new(VendorMicrosoft, "PIX", "WinPixEventRuntime.dll", string.Empty, string.Empty),
+    };
+
+    public static void EnsureResolverRegistered(Assembly assembly)
+    {
+        if (assembly == null)
+        {
+            return;
+        }
+
+        lock (Sync)
+        {
+            if (RegisteredAssemblies.Contains(assembly))
+            {
+                return;
+            }
+
+            try
+            {
+                NativeLibrary.SetDllImportResolver(assembly, ResolveLibraryImport);
+            }
+            catch (InvalidOperationException)
+            {
+                // If resolver was already set by another initialization path, continue.
+            }
+
+            RegisteredAssemblies.Add(assembly);
+        }
+    }
+
+    public static IEnumerable<string> EnumerateCandidates(string libraryName)
+    {
+        if (!TryEnumerateCandidates(libraryName, out IEnumerable<string> candidates))
+        {
+            return Array.Empty<string>();
+        }
+
+        return candidates;
+    }
+
+    public static bool TryResolve(string libraryName, out nint handle, out string? resolvedPath)
+    {
+        handle = 0;
+        resolvedPath = null;
+
+        if (!TryEnumerateCandidates(libraryName, out IEnumerable<string> candidates))
+        {
+            return false;
+        }
+
+        List<string> candidateList = new();
+        foreach (string candidate in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                candidateList.Add(candidate);
+            }
+        }
+
+        string normalized = NormalizeLibraryName(libraryName);
+        Debug.WriteLine($"[ThirdPartyNativeLibraryResolver] candidates for '{normalized}': {string.Join(", ", candidateList)}");
+
+        foreach (string candidate in candidateList)
+        {
+            if (NativeLibrary.TryLoad(candidate, out handle))
+            {
+                resolvedPath = candidate;
+                bool fromThirdParty = candidate.Contains($"{Path.DirectorySeparatorChar}ThirdParty{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                    || candidate.Contains($"{Path.AltDirectorySeparatorChar}ThirdParty{Path.AltDirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
+                Debug.WriteLine($"[ThirdPartyNativeLibraryResolver] loaded '{normalized}' from '{candidate}' (fromThirdParty={fromThirdParty})");
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static nint ResolveLibraryImport(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+    {
+        if (TryResolve(libraryName, out nint handle, out _))
+        {
+            return handle;
+        }
+
+        return 0;
+    }
+
+    private static bool TryEnumerateCandidates(string libraryName, out IEnumerable<string> candidates)
+    {
+        candidates = Array.Empty<string>();
+        string normalized = NormalizeLibraryName(libraryName);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        if (!LibraryProfiles.TryGetValue(normalized, out ThirdPartyNativeLibraryProfile profile))
+        {
+            return false;
+        }
+
+        string? osFolder = ResolveBuildOsFolder();
+        if (string.IsNullOrWhiteSpace(osFolder))
+        {
+            return false;
+        }
+
+        string archFolder = ResolveBuildArchFolder();
+        if (string.IsNullOrWhiteSpace(archFolder))
+        {
+            return false;
+        }
+
+        string? nativeFileName = ResolveLibraryFileName(profile, osFolder);
+        if (string.IsNullOrWhiteSpace(nativeFileName))
+        {
+            return false;
+        }
+
+        string? runtimeRid = ResolveRuntimeRid();
+        List<string> candidateList = new();
+        foreach (string root in EnumerateThirdPartyRoots())
+        {
+            string modernRoot = Path.Combine(root, "ThirdParty", profile.Vendor, profile.Library, osFolder, archFolder, nativeFileName);
+            candidateList.Add(modernRoot);
+
+            string legacyRoot = Path.Combine(root, "ThirdParty", profile.Library, osFolder, archFolder, nativeFileName);
+            candidateList.Add(legacyRoot);
+
+            if (string.Equals(profile.Library, "DXC", StringComparison.OrdinalIgnoreCase))
+            {
+                // Historically, libdxil was not always co-located as "thirdparty-style" layout.
+                candidateList.Add(Path.Combine(root, "ThirdParty", profile.Library, osFolder, "native", nativeFileName));
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(runtimeRid))
+        {
+            foreach (string root in EnumerateSearchRoots())
+            {
+                candidateList.Add(Path.Combine(root, "runtimes", runtimeRid, "native", nativeFileName));
+            }
+        }
+
+        candidates = candidateList;
+        return true;
+    }
+
+    private static IEnumerable<string> EnumerateThirdPartyRoots()
+    {
+        string? explicitRoot = Environment.GetEnvironmentVariable(ThirdPartyRootEnvironmentVariableName);
+        if (!string.IsNullOrWhiteSpace(explicitRoot))
+        {
+            foreach (string? fallback in explicitRoot.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (string.IsNullOrWhiteSpace(fallback))
+                {
+                    continue;
+                }
+
+                string candidate = TryResolveDirectoryExplicitPath(fallback);
+                if (!string.IsNullOrWhiteSpace(candidate))
+                {
+                    yield return candidate;
+                }
+            }
+        }
+
+        foreach (string root in SearchRepositoryRoots())
+        {
+            yield return root;
+        }
+    }
+
+    private static string TryResolveDirectoryExplicitPath(string candidateRoot)
+    {
+        if (string.IsNullOrWhiteSpace(candidateRoot))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            string normalized = Path.GetFullPath(candidateRoot);
+            if (Directory.Exists(normalized))
+            {
+                return normalized;
+            }
+        }
+        catch
+        {
+        }
+
+        return string.Empty;
+    }
+
+    private static IEnumerable<string> SearchRepositoryRoots()
+    {
+        HashSet<string> emitted = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string start in EnumerateSearchRoots())
+        {
+            DirectoryInfo? current = new(start);
+            for (int i = 0; i < 16 && current != null; i++)
+            {
+                string candidate = Path.Combine(current.FullName, "Binaries");
+                if (Directory.Exists(candidate))
+                {
+                    string root = current.FullName;
+                    if (emitted.Add(root))
+                    {
+                        yield return root;
+                    }
+                }
+
+                current = current.Parent;
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateSearchRoots()
+    {
+        string? baseDirectory = AppContext.BaseDirectory;
+        if (!string.IsNullOrWhiteSpace(baseDirectory))
+        {
+            yield return baseDirectory;
+        }
+
+        string cwd = Directory.GetCurrentDirectory();
+        if (!string.IsNullOrWhiteSpace(cwd))
+        {
+            yield return cwd;
+        }
+    }
+
+    private static string ResolveLibraryFileName(ThirdPartyNativeLibraryProfile profile, string osFolder)
+    {
+        return osFolder switch
+        {
+            "Win" => profile.WindowsFileName,
+            "Linux" => profile.LinuxFileName,
+            "macOS" => profile.MacFileName,
+            _ => string.Empty,
+        };
+    }
+
+    private static string ResolveBuildOsFolder()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return "Win";
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return "Linux";
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return "macOS";
+        }
+
+        return string.Empty;
+    }
+
+    private static string ResolveBuildArchFolder()
+    {
+        if (RuntimeInformation.ProcessArchitecture == Architecture.X64)
+        {
+            return "AMD64";
+        }
+
+        if (RuntimeInformation.ProcessArchitecture == Architecture.Arm64)
+        {
+            return "ARM64";
+        }
+
+        return string.Empty;
+    }
+
+    private static string ResolveRuntimeRid()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.X64 => "win-x64",
+                Architecture.Arm64 => "win-arm64",
+                _ => string.Empty,
+            };
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.X64 => "linux-x64",
+                Architecture.Arm64 => "linux-arm64",
+                _ => string.Empty,
+            };
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.X64 => "osx-x64",
+                Architecture.Arm64 => "osx-arm64",
+                _ => string.Empty,
+            };
+        }
+
+        return string.Empty;
+    }
+
+    private static string NormalizeLibraryName(string? libraryName)
+    {
+        if (string.IsNullOrWhiteSpace(libraryName))
+        {
+            return string.Empty;
+        }
+
+        string fileName = Path.GetFileNameWithoutExtension(libraryName.Trim());
+        if (fileName.StartsWith("lib", StringComparison.OrdinalIgnoreCase))
+        {
+            fileName = fileName.Substring(3);
+        }
+
+        return fileName;
+    }
+}

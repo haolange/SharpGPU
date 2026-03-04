@@ -2,10 +2,8 @@ using System;
 using Vortice.Direct3D12;
 using Vortice.DXGI;
 using Vortice.Direct3D;
-using System.Collections.Generic;
-using System.IO;
-using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 
 namespace Infinity.Graphics
 {
@@ -112,68 +110,26 @@ namespace Infinity.Graphics
                 }
 
                 s_RuntimeLoadAttempted = true;
-                foreach (string candidate in EnumerateRuntimeCandidates())
-                {
-                    if (!File.Exists(candidate))
-                    {
-                        continue;
-                    }
+                ThirdPartyNativeLibraryResolver.EnsureResolverRegistered(typeof(Dx12PixEventMarker).Assembly);
 
-                    if (NativeLibrary.TryLoad(candidate, out s_RuntimeHandle))
-                    {
-                        s_RuntimeAvailable = true;
-                        return true;
-                    }
+                if (ThirdPartyNativeLibraryResolver.TryResolve(PixRuntimeFileName, out s_RuntimeHandle, out string? runtimePath))
+                {
+                    s_RuntimeAvailable = true;
+                    Debug.WriteLine($"[Dx12PixEventMarker] PIX runtime loaded from '{runtimePath ?? PixRuntimeFileName}'");
+                    return true;
                 }
+
+                Debug.WriteLine("[Dx12PixEventMarker] ThirdParty resolver unavailable for PIX runtime, fallback to default loader.");
 
                 if (NativeLibrary.TryLoad(PixRuntimeFileName, out s_RuntimeHandle))
                 {
                     s_RuntimeAvailable = true;
+                    Debug.WriteLine($"[Dx12PixEventMarker] PIX runtime loaded from default loader: '{PixRuntimeFileName}'");
                     return true;
                 }
 
                 return false;
             }
-        }
-
-        private static IEnumerable<string> EnumerateRuntimeCandidates()
-        {
-            string baseDir = AppContext.BaseDirectory;
-            string assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? baseDir;
-            string? archFolder = RuntimeInformation.ProcessArchitecture switch
-            {
-                Architecture.X64 => "AMD64",
-                Architecture.Arm64 => "ARM64",
-                _ => null,
-            };
-
-            if (!OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(archFolder))
-            {
-                yield break;
-            }
-
-            HashSet<string> visitedRoots = new(StringComparer.OrdinalIgnoreCase);
-            foreach (string start in new[] { baseDir, assemblyDir, Directory.GetCurrentDirectory() })
-            {
-                if (string.IsNullOrWhiteSpace(start))
-                {
-                    continue;
-                }
-
-                DirectoryInfo? current = new(start);
-                int depth = 0;
-                while (current != null && depth < 16)
-                {
-                    if (visitedRoots.Add(current.FullName))
-                    {
-                        yield return Path.Combine(current.FullName, "Binaries", "ThirdParty", "PIX", "Win", archFolder, PixRuntimeFileName);
-                    }
-
-                    current = current.Parent;
-                    depth++;
-                }
-            }
-
         }
 #endif
     }
