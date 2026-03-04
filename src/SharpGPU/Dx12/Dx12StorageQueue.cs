@@ -220,7 +220,7 @@ namespace Infinity.Graphics
                 return true;
             }
 
-            Debug.WriteLine($"[Dx12StorageQueue] DirectStorage runtime not found via shared resolver; no fallback path configured.");
+            Debug.WriteLine($"[Dx12StorageQueue] DirectStorage runtime not found via ThirdParty resolver.");
             return false;
         }
 
@@ -228,13 +228,6 @@ namespace Infinity.Graphics
         {
             if (ThirdPartyNativeLibraryResolver.TryResolve(libraryName, out handle, out resolvedPath))
             {
-                return true;
-            }
-
-            if (NativeLibrary.TryLoad(libraryName, out handle))
-            {
-                resolvedPath = libraryName;
-                Debug.WriteLine($"[Dx12StorageQueue] DirectStorage runtime found (default loader): '{libraryName}'");
                 return true;
             }
 

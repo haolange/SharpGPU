@@ -119,15 +119,6 @@ namespace Infinity.Graphics
                     return true;
                 }
 
-                Debug.WriteLine("[Dx12PixEventMarker] ThirdParty resolver unavailable for PIX runtime, fallback to default loader.");
-
-                if (NativeLibrary.TryLoad(PixRuntimeFileName, out s_RuntimeHandle))
-                {
-                    s_RuntimeAvailable = true;
-                    Debug.WriteLine($"[Dx12PixEventMarker] PIX runtime loaded from default loader: '{PixRuntimeFileName}'");
-                    return true;
-                }
-
                 return false;
             }
         }

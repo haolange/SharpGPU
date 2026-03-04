@@ -157,29 +157,11 @@ internal static class ThirdPartyNativeLibraryResolver
             return false;
         }
 
-        string? runtimeRid = ResolveRuntimeRid();
         List<string> candidateList = new();
         foreach (string root in EnumerateThirdPartyRoots())
         {
             string modernRoot = Path.Combine(root, "ThirdParty", profile.Vendor, profile.Library, osFolder, archFolder, nativeFileName);
             candidateList.Add(modernRoot);
-
-            string legacyRoot = Path.Combine(root, "ThirdParty", profile.Library, osFolder, archFolder, nativeFileName);
-            candidateList.Add(legacyRoot);
-
-            if (string.Equals(profile.Library, "DXC", StringComparison.OrdinalIgnoreCase))
-            {
-                // Historically, libdxil was not always co-located as "thirdparty-style" layout.
-                candidateList.Add(Path.Combine(root, "ThirdParty", profile.Library, osFolder, "native", nativeFileName));
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(runtimeRid))
-        {
-            foreach (string root in EnumerateSearchRoots())
-            {
-                candidateList.Add(Path.Combine(root, "runtimes", runtimeRid, "native", nativeFileName));
-            }
         }
 
         candidates = candidateList;
@@ -313,41 +295,6 @@ internal static class ThirdPartyNativeLibraryResolver
         if (RuntimeInformation.ProcessArchitecture == Architecture.Arm64)
         {
             return "ARM64";
-        }
-
-        return string.Empty;
-    }
-
-    private static string ResolveRuntimeRid()
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return RuntimeInformation.ProcessArchitecture switch
-            {
-                Architecture.X64 => "win-x64",
-                Architecture.Arm64 => "win-arm64",
-                _ => string.Empty,
-            };
-        }
-
-        if (OperatingSystem.IsLinux())
-        {
-            return RuntimeInformation.ProcessArchitecture switch
-            {
-                Architecture.X64 => "linux-x64",
-                Architecture.Arm64 => "linux-arm64",
-                _ => string.Empty,
-            };
-        }
-
-        if (OperatingSystem.IsMacOS())
-        {
-            return RuntimeInformation.ProcessArchitecture switch
-            {
-                Architecture.X64 => "osx-x64",
-                Architecture.Arm64 => "osx-arm64",
-                _ => string.Empty,
-            };
         }
 
         return string.Empty;
