@@ -160,11 +160,15 @@ internal static class ThirdPartyNativeLibraryResolver
         }
 
         List<string> candidateList = new();
+        HashSet<string> emitted = new(StringComparer.OrdinalIgnoreCase);
         foreach (string root in EnumerateThirdPartyRoots())
         {
             foreach (string candidate in EnumerateCandidateLibraryPaths(root, profile, osFolder, archFolder, nativeFileName))
             {
-                candidateList.Add(candidate);
+                if (emitted.Add(candidate))
+                {
+                    candidateList.Add(candidate);
+                }
             }
         }
 
@@ -211,6 +215,19 @@ internal static class ThirdPartyNativeLibraryResolver
             return string.IsNullOrWhiteSpace(candidate) ? null : candidate;
         }
 
+        if (!rootName.Equals("Binaries", StringComparison.OrdinalIgnoreCase))
+        {
+            string? rootCandidate0 = TryNormalize(Path.Combine(normalizedRoot, "Binaries", "ThirdParty", vendor));
+            if (!string.IsNullOrWhiteSpace(rootCandidate0))
+            {
+                string candidate = Path.Combine(rootCandidate0, profile.Library, osFolder, archFolder, nativeFileName);
+                if (emitted.Add(candidate))
+                {
+                    yield return candidate;
+                }
+            }
+        }
+
         string? rootCandidate1 = TryNormalize(Path.Combine(normalizedRoot, "ThirdParty", vendor));
         if (!string.IsNullOrWhiteSpace(rootCandidate1))
         {
@@ -253,27 +270,67 @@ internal static class ThirdPartyNativeLibraryResolver
 
     private static IEnumerable<string> EnumerateThirdPartyRoots()
     {
-        string? explicitRoot = Environment.GetEnvironmentVariable(ThirdPartyRootEnvironmentVariableName);
-        if (!string.IsNullOrWhiteSpace(explicitRoot))
-        {
-            foreach (string? fallback in explicitRoot.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (string.IsNullOrWhiteSpace(fallback))
-                {
-                    continue;
-                }
+        HashSet<string> emitted = new(StringComparer.OrdinalIgnoreCase);
+        List<string> repositoryRoots = new();
 
-                string candidate = TryResolveDirectoryExplicitPath(fallback);
-                if (!string.IsNullOrWhiteSpace(candidate))
-                {
-                    yield return candidate;
-                }
+        foreach (string explicitRoot in EnumerateExplicitThirdPartyRoots())
+        {
+            if (emitted.Add(explicitRoot))
+            {
+                yield return explicitRoot;
             }
         }
 
         foreach (string root in SearchRepositoryRoots())
         {
-            yield return root;
+            if (emitted.Add(root))
+            {
+                repositoryRoots.Add(root);
+                yield return root;
+            }
+        }
+
+        foreach (string binariesRoot in EnumerateBinariesRoots(repositoryRoots))
+        {
+            if (emitted.Add(binariesRoot))
+            {
+                yield return binariesRoot;
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateExplicitThirdPartyRoots()
+    {
+        string? explicitRoot = Environment.GetEnvironmentVariable(ThirdPartyRootEnvironmentVariableName);
+        if (string.IsNullOrWhiteSpace(explicitRoot))
+        {
+            yield break;
+        }
+
+        foreach (string? root in explicitRoot.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (string.IsNullOrWhiteSpace(root))
+            {
+                continue;
+            }
+
+            string candidate = TryResolveDirectoryExplicitPath(root);
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                yield return candidate;
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateBinariesRoots(IEnumerable<string> repositoryRoots)
+    {
+        foreach (string repositoryRoot in repositoryRoots)
+        {
+            string binariesRoot = TryResolveDirectoryExplicitPath(Path.Combine(repositoryRoot, "Binaries"));
+            if (!string.IsNullOrWhiteSpace(binariesRoot))
+            {
+                yield return binariesRoot;
+            }
         }
     }
 

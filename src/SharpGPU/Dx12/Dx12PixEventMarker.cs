@@ -120,6 +120,13 @@ namespace Infinity.Graphics
                     return true;
                 }
 
+                string candidateList = string.Join(", ", ThirdPartyNativeLibraryResolver.EnumerateCandidates(PixRuntimeFileName));
+                if (string.IsNullOrWhiteSpace(candidateList))
+                {
+                    candidateList = "(none)";
+                }
+
+                Debug.WriteLine($"[Dx12PixEventMarker] PIX runtime unavailable, markers disabled. Candidates: {candidateList}");
                 return false;
             }
         }

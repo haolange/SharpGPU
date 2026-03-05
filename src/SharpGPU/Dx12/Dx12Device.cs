@@ -819,7 +819,6 @@ namespace Infinity.Graphics
 
         private bool ProbeDirectMLSupport()
         {
-            ThirdPartyNativeLibraryResolver.EnsureResolverRegistered(typeof(Vortice.DirectML.DML).Assembly);
             if (!ThirdPartyNativeLibraryResolver.TryResolve("DirectML.dll", out _, out _))
             {
                 return false;
