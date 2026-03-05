@@ -819,6 +819,12 @@ namespace Infinity.Graphics
 
         private bool ProbeDirectMLSupport()
         {
+            ThirdPartyNativeLibraryResolver.EnsureResolverRegistered(typeof(Vortice.DirectML.DML).Assembly);
+            if (!ThirdPartyNativeLibraryResolver.TryResolve("DirectML.dll", out _, out _))
+            {
+                return false;
+            }
+
             Vortice.DirectML.IDMLDevice directMLDevice = null;
             SharpGen.Runtime.Result hResult = Vortice.DirectML.DML.DMLCreateDevice((Vortice.Direct3D12.ID3D12Device)m_NativeDevice,
                                                                    Vortice.DirectML.CreateDeviceFlags.None,

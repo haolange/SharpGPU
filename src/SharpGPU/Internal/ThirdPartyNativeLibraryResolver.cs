@@ -36,6 +36,8 @@ internal static class ThirdPartyNativeLibraryResolver
     {
         ["dxcompiler"] = new(VendorMicrosoft, "DXC", "dxcompiler.dll", "libdxcompiler.so", "libdxcompiler.dylib"),
         ["dxil"] = new(VendorMicrosoft, "DXC", "dxil.dll", string.Empty, string.Empty),
+        ["directml"] = new(VendorMicrosoft, "DirectML", "DirectML.dll", string.Empty, string.Empty),
+        ["directml.debug"] = new(VendorMicrosoft, "DirectML", "DirectML.Debug.dll", string.Empty, string.Empty),
         ["dstoragecore"] = new(VendorMicrosoft, "DirectStorage", "dstoragecore.dll", string.Empty, string.Empty),
         ["dstorage"] = new(VendorMicrosoft, "DirectStorage", "dstorage.dll", string.Empty, string.Empty),
         ["winpixeventruntime"] = new(VendorMicrosoft, "PIX", "WinPixEventRuntime.dll", string.Empty, string.Empty),

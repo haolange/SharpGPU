@@ -52,7 +52,7 @@
 		<PackageReference Include="NUnit" Version="3.13.3" />
 		<PackageReference Include="SharpGen.Runtime" Version="2.4.2-beta" />
 		<PackageReference Include="Vortice.Direct3D12" Version="3.8.2" />
-		<PackageReference Include="Vortice.DirectML" Version="3.8.2" />
+		<PackageReference Include="Vortice.DirectML" Version="3.8.2" GeneratePathProperty="true" />
 		<PackageReference Include="Vortice.DirectStorage" Version="3.8.2" />
 		<PackageReference Include="Vortice.DXGI" Version="3.8.2" />
 		<PackageReference Include="Vortice.Pix.Native" Version="1.0.1" />
