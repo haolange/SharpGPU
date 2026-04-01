@@ -108,7 +108,7 @@ namespace Infinity.Graphics
 
         public override RHIHeap CreateHeap(in RHIHeapDescription descriptor)
         {
-            return new MetalHeap(descriptor);
+            return new MetalHeap(this, descriptor);
         }
 
         public override RHIBuffer CreateBuffer(in RHIBufferDescriptor descriptor)
@@ -184,6 +184,11 @@ namespace Infinity.Graphics
         public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
         {
             return new MetalMLPipeline(this, descriptor);
+        }
+
+        public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
+        {
+            return new MetalMLBindingSet(this, descriptor);
         }
 
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)

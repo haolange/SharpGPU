@@ -2250,6 +2250,8 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12MLEncoder : RHIMLEncoder
     {
+        private static readonly RHIBufferRange s_WholeBufferRange = RHIBufferRange.Whole();
+
 #if DEBUG
         private bool m_PipelineSet;
 #endif
@@ -2305,82 +2307,73 @@ namespace Infinity.Graphics
 #if DEBUG
             m_PipelineSet = true;
 #endif
-            m_CachedPipeline = pipeline;
-
-            // ML pipeline uses compute shader bridge: bind the internal compute pipeline
-            if (pipeline is not Dx12MLPipeline dx12MLPipeline)
-            {
-                throw new InvalidOperationException($"Dx12MLEncoder expects {nameof(Dx12MLPipeline)} but got {pipeline?.GetType().Name ?? "<null>"}.");
-            }
-
-            if (dx12MLPipeline.ComputePipeline != null)
-            {
-                Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-                dx12CommandBuffer.NativeCommandList.SetPipelineState(dx12MLPipeline.ComputePipeline.NativePipelineState);
-            }
+            m_CachedPipeline = pipeline as Dx12MLPipeline
+                ?? throw new InvalidOperationException($"Dx12MLEncoder expects {nameof(Dx12MLPipeline)} but got {pipeline?.GetType().Name ?? "<null>"}.");
         }
 
-        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
+        public override void SetBindingSet(RHIMLBindingSet bindingSet)
         {
-            // Bind resource table descriptors to compute root signature slots
-            if (resourceTable is not Dx12ArgumentTable dx12ArgumentTable)
+            if (bindingSet is not Dx12MLBindingSet dx12BindingSet)
             {
-                throw new InvalidOperationException($"Dx12MLEncoder expects {nameof(Dx12ArgumentTable)} but got {resourceTable?.GetType().Name ?? "<null>"}.");
+                throw new InvalidOperationException($"Dx12MLEncoder expects {nameof(Dx12MLBindingSet)} but got {bindingSet?.GetType().Name ?? "<null>"}.");
             }
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
 
-            for (int i = 0; i < dx12ArgumentTable.NativeGpuDescriptorHandles.Length; ++i)
-            {
-                dx12CommandBuffer.NativeCommandList.SetComputeRootDescriptorTable(tableIndex + (uint)i, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
-            }
+            m_CachedBindingSet = dx12BindingSet;
         }
 
-        public override void SetInputTensor(RHITensor tensor, in uint index)
-        {
-#if DEBUG
-            Debug.Assert(m_PipelineSet, "Dx12MLEncoder: SetPipeline must be called before SetInputTensor.");
-#endif
-            if (tensor is not Dx12Tensor dx12Tensor || dx12Tensor.BackingBuffer == null)
-            {
-                throw new InvalidOperationException($"Dx12MLEncoder expects {nameof(Dx12Tensor)} with valid backing buffer.");
-            }
-
-            Dx12Buffer dx12Buffer = dx12Tensor.BackingBuffer;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-            // Bind tensor backing buffer as SRV via root descriptor
-            dx12CommandBuffer.NativeCommandList.SetComputeRootShaderResourceView(index, dx12Buffer.NativeResource.GPUVirtualAddress);
-        }
-
-        public override void SetOutputTensor(RHITensor tensor, in uint index)
-        {
-#if DEBUG
-            Debug.Assert(m_PipelineSet, "Dx12MLEncoder: SetPipeline must be called before SetOutputTensor.");
-#endif
-            if (tensor is not Dx12Tensor dx12Tensor || dx12Tensor.BackingBuffer == null)
-            {
-                throw new InvalidOperationException($"Dx12MLEncoder expects {nameof(Dx12Tensor)} with valid backing buffer.");
-            }
-
-            Dx12Buffer dx12Buffer = dx12Tensor.BackingBuffer;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-            // Bind tensor backing buffer as UAV via root descriptor
-            dx12CommandBuffer.NativeCommandList.SetComputeRootUnorderedAccessView(index, dx12Buffer.NativeResource.GPUVirtualAddress);
-        }
-
-        public override void Dispatch(RHIHeap intermediatesHeap)
+        public override void Dispatch()
         {
 #if DEBUG
             Debug.Assert(m_PipelineSet, "Dx12MLEncoder: SetPipeline must be called before Dispatch.");
 #endif
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            if (m_CachedPipeline is not Dx12MLPipeline dx12Pipeline)
+            {
+                throw new InvalidOperationException("Dx12MLEncoder: SetPipeline must be called before Dispatch.");
+            }
 
-            // Dispatch compute shader serving as ML kernel
-            // Workgroup count derived from intermediates heap size
-            Dx12MLPipeline dx12MLPipeline = m_CachedPipeline as Dx12MLPipeline;
-            uint workgroupCount = (uint)Math.Max(1, (long)dx12MLPipeline.IntermediatesHeapSize / 256);
-            dx12CommandBuffer.NativeCommandList.Dispatch(workgroupCount, 1, 1);
+            if (m_CachedBindingSet is not Dx12MLBindingSet dx12BindingSet)
+            {
+                throw new InvalidOperationException("Dx12MLEncoder: SetBindingSet must be called before Dispatch.");
+            }
+
+            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12Device dx12Device = ((Dx12CommandQueue)dx12CommandBuffer.CommandQueue).Dx12Device;
+
+            if (!dx12BindingSet.InternalResourcesPrepared)
+            {
+                TransitionBoundResourcesToMachineLearning(dx12CommandBuffer, dx12BindingSet);
+                dx12BindingSet.MarkInternalResourcesPrepared();
+            }
+            else
+            {
+                EmitMachineLearningUavBarriers(
+                    dx12CommandBuffer,
+                    dx12BindingSet.IntermediateBuffer,
+                    dx12BindingSet.PersistentBuffer,
+                    dx12BindingSet.TemporaryBuffer);
+            }
+
+            if (!dx12BindingSet.IsInitialized)
+            {
+                dx12BindingSet.PrepareForInitialization();
+                dx12Device.DirectMLCommandRecorder.RecordDispatch(dx12CommandBuffer.NativeCommandList, dx12Pipeline.OperatorInitializer, dx12BindingSet.InitializerBindingTable);
+                EmitMachineLearningUavBarriers(dx12CommandBuffer, dx12BindingSet.PersistentBuffer, dx12BindingSet.TemporaryBuffer);
+                dx12BindingSet.MarkInitialized();
+            }
+
+            for (int stageIndex = 0; stageIndex < dx12Pipeline.StageCount; ++stageIndex)
+            {
+                dx12BindingSet.PrepareForExecution(stageIndex);
+                dx12Device.DirectMLCommandRecorder.RecordDispatch(dx12CommandBuffer.NativeCommandList, dx12Pipeline.GetCompiledOperator(stageIndex), dx12BindingSet.GetExecutionBindingTable(stageIndex));
+                if (stageIndex + 1 < dx12Pipeline.StageCount)
+                {
+                    EmitMachineLearningUavBarriers(
+                        dx12CommandBuffer,
+                        dx12BindingSet.IntermediateBuffer,
+                        dx12BindingSet.PersistentBuffer,
+                        dx12BindingSet.TemporaryBuffer);
+                }
+            }
         }
 
         public override void EndPass()
@@ -2389,11 +2382,81 @@ namespace Infinity.Graphics
             PopDebugGroup();
 #endif
             m_CachedPipeline = null;
+            m_CachedBindingSet = null;
         }
 
         protected override void Release()
         {
 
+        }
+
+        private static void TransitionBoundResourcesToMachineLearning(Dx12CommandBuffer commandBuffer, Dx12MLBindingSet bindingSet)
+        {
+            int barrierCount = (bindingSet.TemporaryBuffer != null ? 1 : 0)
+                + (bindingSet.PersistentBuffer != null ? 1 : 0)
+                + 1;
+            RHIBarrier[] barriers = new RHIBarrier[barrierCount];
+            int index = 0;
+
+            if (bindingSet.TemporaryBuffer != null)
+            {
+                barriers[index++] = CreateMachineLearningBufferBarrier(bindingSet.TemporaryBuffer);
+            }
+
+            if (bindingSet.PersistentBuffer != null)
+            {
+                barriers[index++] = CreateMachineLearningBufferBarrier(bindingSet.PersistentBuffer);
+            }
+
+            barriers[index++] = CreateMachineLearningBufferBarrier(bindingSet.IntermediateBuffer);
+            Dx12BarrierEmitter.EmitBarriers(commandBuffer, barriers);
+        }
+
+        private static RHIBarrier CreateMachineLearningBufferBarrier(RHIBuffer buffer)
+        {
+            return RHIBarrier.Buffer(
+                buffer,
+                s_WholeBufferRange,
+                ERHISyncStageMask.None,
+                ERHISyncStageMask.MachineLearning,
+                ERHIAccessMask.None,
+                ERHIAccessMask.ShaderWrite);
+        }
+
+        private static void EmitMachineLearningUavBarriers(Dx12CommandBuffer commandBuffer, params Dx12Buffer?[] buffers)
+        {
+            if (buffers.Length == 0)
+            {
+                return;
+            }
+
+            int barrierCount = 0;
+            for (int i = 0; i < buffers.Length; ++i)
+            {
+                if (buffers[i] != null)
+                {
+                    ++barrierCount;
+                }
+            }
+
+            if (barrierCount == 0)
+            {
+                return;
+            }
+
+            Vortice.Direct3D12.ResourceBarrier[] barriers = new Vortice.Direct3D12.ResourceBarrier[barrierCount];
+            int index = 0;
+            for (int i = 0; i < buffers.Length; ++i)
+            {
+                if (buffers[i] == null)
+                {
+                    continue;
+                }
+
+                barriers[index++] = Vortice.Direct3D12.ResourceBarrier.BarrierUnorderedAccessView(buffers[i]!.NativeResource);
+            }
+
+            ((Vortice.Direct3D12.ID3D12GraphicsCommandList)commandBuffer.NativeCommandList).ResourceBarrier(barriers);
         }
     }
 #pragma warning restore CS0414, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416

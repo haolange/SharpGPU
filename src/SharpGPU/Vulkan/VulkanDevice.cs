@@ -817,6 +817,11 @@ namespace Infinity.Graphics
             return new VulkanMLPipeline(this, descriptor);
         }
 
+        public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
+        {
+            return new VulkanMLBindingSet(descriptor);
+        }
+
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
         {
             return new VulkanTensor(this, descriptor);

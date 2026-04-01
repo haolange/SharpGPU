@@ -314,6 +314,7 @@ namespace Infinity.Graphics
     {
         protected RHICommandBuffer? m_CommandBuffer;
         protected RHIMLPipeline? m_CachedPipeline;
+        protected RHIMLBindingSet? m_CachedBindingSet;
 
         internal abstract void BeginPass(in RHIMLPassDescriptor descriptor);
         public abstract void Barrier(in RHIBarrier barrier);
@@ -322,10 +323,8 @@ namespace Infinity.Graphics
         public abstract void PopDebugGroup();
         public abstract void WriteTimestamp(in uint index);
         public abstract void SetPipeline(RHIMLPipeline pipeline);
-        public abstract void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex);
-        public abstract void SetInputTensor(RHITensor tensor, in uint index);
-        public abstract void SetOutputTensor(RHITensor tensor, in uint index);
-        public abstract void Dispatch(RHIHeap intermediatesHeap);
+        public abstract void SetBindingSet(RHIMLBindingSet bindingSet);
+        public abstract void Dispatch();
         public abstract void EndPass();
     }
 

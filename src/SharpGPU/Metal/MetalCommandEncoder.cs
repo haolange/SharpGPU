@@ -2358,49 +2358,34 @@ namespace Infinity.Graphics
 
         public override void SetPipeline(RHIMLPipeline pipeline)
         {
-            m_CachedPipeline = pipeline;
-            MetalMLPipeline metalPipeline = (MetalMLPipeline)pipeline;
+            m_CachedPipeline = pipeline as MetalMLPipeline
+                ?? throw new InvalidOperationException($"Metal ML encoder expects {nameof(MetalMLPipeline)} but got {pipeline?.GetType().Name ?? "<null>"}.");
+            MetalMLPipeline metalPipeline = (MetalMLPipeline)m_CachedPipeline;
             if (metalPipeline.NativePipelineState.NativePtr != IntPtr.Zero)
             {
                 m_NativeEncoder.SetPipelineState(metalPipeline.NativePipelineState);
             }
         }
 
-        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
+        public override void SetBindingSet(RHIMLBindingSet bindingSet)
         {
-            MetalArgumentTable metalArgumentTable = (MetalArgumentTable)resourceTable;
-
-            // The ML encoder binds resource tables through the MTL4 argument table mechanism.
-            // Create an argument table from the resource table layout and populate it.
-            MetalArgumentTableLayout layout = metalArgumentTable.ArgumentTableLayout;
-
-            MTL4ArgumentTableDescriptor argTableDesc = MTL4ArgumentTableDescriptor.New();
-            NSError argError = default;
-            MTL4ArgumentTable argumentTable = m_MetalDevice.NativeDevice.NewArgumentTable(argTableDesc, ref argError);
-            ObjectiveCRuntime.Release(argTableDesc);
-
-            if (argumentTable.NativePtr != IntPtr.Zero)
+            MetalMLBindingSet metalBindingSet = bindingSet as MetalMLBindingSet
+                ?? throw new InvalidOperationException($"Metal ML encoder expects {nameof(MetalMLBindingSet)} but got {bindingSet?.GetType().Name ?? "<null>"}.");
+            m_CachedBindingSet = metalBindingSet;
+            if (metalBindingSet.NativeArgumentTable.NativePtr != IntPtr.Zero)
             {
-                m_NativeEncoder.SetArgumentTable(argumentTable);
+                m_NativeEncoder.SetArgumentTable(metalBindingSet.NativeArgumentTable);
             }
         }
 
-        public override void SetInputTensor(RHITensor tensor, in uint index)
+        public override void Dispatch()
         {
-            _ = tensor;
-            _ = index;
-        }
+            if (m_CachedBindingSet is not MetalMLBindingSet metalBindingSet)
+            {
+                throw new InvalidOperationException("Metal ML encoder requires a bound ML binding set before Dispatch.");
+            }
 
-        public override void SetOutputTensor(RHITensor tensor, in uint index)
-        {
-            _ = tensor;
-            _ = index;
-        }
-
-        public override void Dispatch(RHIHeap intermediatesHeap)
-        {
-            _ = intermediatesHeap;
-            m_NativeEncoder.DispatchNetworkWithIntermediatesHeap(default);
+            m_NativeEncoder.DispatchNetworkWithIntermediatesHeap(metalBindingSet.NativeIntermediatesHeap);
         }
 
         public override void EndPass()
@@ -2412,6 +2397,7 @@ namespace Infinity.Graphics
                 m_NativeEncoder = default;
             }
             m_CachedPipeline = null;
+            m_CachedBindingSet = null;
         }
 
         protected override void Release()

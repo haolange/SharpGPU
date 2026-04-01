@@ -681,12 +681,19 @@ namespace Infinity.Graphics
     internal class MetalMLPipeline : RHIMLPipeline
     {
         internal MTL4MachineLearningPipelineState NativePipelineState => m_NativePipelineState;
+        internal MetalMLProgram Program => m_Program;
+        internal ulong ReflectionBindingCount => m_ReflectionBindingCount;
 
         private MTL4MachineLearningPipelineState m_NativePipelineState;
+        private readonly MetalMLProgram m_Program;
+        private ulong m_ReflectionBindingCount;
 
         public MetalMLPipeline(MetalDevice device, in RHIMLPipelineDescriptor descriptor)
         {
             m_Descriptor = descriptor;
+            m_Program = descriptor.Program as MetalMLProgram
+                ?? throw new InvalidOperationException("Metal ML pipeline requires a MetalMLProgram.");
+            m_BindingInfos = m_Program.BindingInfos;
 
             if (!device.SupportsMetal4)
             {
@@ -695,7 +702,7 @@ namespace Infinity.Graphics
                     "The current device does not support Metal 4.");
             }
 
-            MetalFunction mlFunction = (MetalFunction)descriptor.Function;
+            MetalFunction mlFunction = m_Program.Function;
 
             // ── Create MTL4Compiler ──
             NSError compilerError = default;
@@ -724,6 +731,19 @@ namespace Infinity.Graphics
             {
                 mlDesc.Label = new NSString(descriptor.Name);
             }
+
+            for (int i = 0; i < m_BindingInfos.Length; ++i)
+            {
+                ref readonly RHIMLTensorBindingInfo bindingInfo = ref m_BindingInfos[i];
+                if (bindingInfo.Kind != ERHIMLTensorBindingKind.Input)
+                {
+                    continue;
+                }
+
+                NSArray dimensionsArray = CreateDimensionsArray(bindingInfo.Descriptor.Dimensions.Span);
+                mlDesc.SetInputDimensions(dimensionsArray.NativePtr, bindingInfo.Index);
+                ReleaseNSArray(dimensionsArray);
+            }
             ObjectiveCRuntime.Release(funcDesc);
 
             // ── Create pipeline state ──
@@ -741,7 +761,32 @@ namespace Infinity.Graphics
                     $"MetalMLPipeline: failed to create MTL4MachineLearningPipelineState '{descriptor.Name}' — {errorText}");
             }
 
-            m_IntermediatesHeapSize = m_NativePipelineState.IntermediatesHeapSize;
+            MTL4MachineLearningPipelineReflection reflection = m_NativePipelineState.Reflection;
+            if (reflection.NativePtr != IntPtr.Zero)
+            {
+                NSArray reflectionBindings = reflection.Bindings;
+                if (reflectionBindings.NativePtr != IntPtr.Zero)
+                {
+                    m_ReflectionBindingCount = reflectionBindings.Count;
+                }
+            }
+
+            for (int i = 0; i < m_BindingInfos.Length; ++i)
+            {
+                ref readonly RHIMLTensorBindingInfo bindingInfo = ref m_BindingInfos[i];
+                switch (bindingInfo.Kind)
+                {
+                    case ERHIMLTensorBindingKind.Input:
+                        ++m_InputCount;
+                        break;
+                    case ERHIMLTensorBindingKind.Output:
+                        ++m_OutputCount;
+                        break;
+                }
+            }
+
+            m_TemporaryResourceSize = m_NativePipelineState.IntermediatesHeapSize;
+            m_PersistentResourceSize = 0;
         }
 
         protected override void Release()
@@ -751,6 +796,41 @@ namespace Infinity.Graphics
                 ObjectiveCRuntime.Release(m_NativePipelineState);
                 m_NativePipelineState = default;
             }
+        }
+
+        private static NSArray CreateDimensionsArray(ReadOnlySpan<uint> values)
+        {
+            if (values.Length == 0)
+            {
+                return default;
+            }
+
+            IntPtr[] pointers = new IntPtr[values.Length];
+            for (int i = 0; i < values.Length; ++i)
+            {
+                pointers[i] = NSNumber.Number(values[i]).NativePtr;
+            }
+
+            return MetalArrayHelper.CreateNSArrayFromPointers(pointers);
+        }
+
+        private static void ReleaseNSArray(in NSArray array)
+        {
+            if (array.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            for (ulong i = 0; i < array.Count; ++i)
+            {
+                IntPtr objectPtr = array.Object(i);
+                if (objectPtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(objectPtr);
+                }
+            }
+
+            ObjectiveCRuntime.Release(array.NativePtr);
         }
     }
 }

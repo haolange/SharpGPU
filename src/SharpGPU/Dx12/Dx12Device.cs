@@ -212,6 +212,28 @@ namespace Infinity.Graphics
                 return m_DispatchComputeIndirectSignature;
             }
         }
+        internal Vortice.DirectML.IDMLDevice DirectMLDevice
+        {
+            get
+            {
+                return m_DirectMLDevice ?? throw new InvalidOperationException("DirectML device is unavailable on this DX12 device.");
+            }
+        }
+        internal Vortice.DirectML.IDMLDevice1? DirectMLDevice1
+        {
+            get
+            {
+                return m_DirectMLDevice1;
+            }
+        }
+        internal Vortice.DirectML.IDMLCommandRecorder DirectMLCommandRecorder
+        {
+            get
+            {
+                return m_DirectMLCommandRecorder ?? throw new InvalidOperationException("DirectML command recorder is unavailable on this DX12 device.");
+            }
+        }
+        internal bool SupportsDirectML => m_DirectMLDevice != null && m_DirectMLCommandRecorder != null;
         internal bool IsEnhancedBarriersSupported
         {
             get
@@ -241,6 +263,9 @@ namespace Infinity.Graphics
         private Vortice.Direct3D12.ID3D12CommandSignature m_DispatchRayIndirectSignature;
         private Vortice.Direct3D12.ID3D12CommandSignature m_DispatchMeshIndirectSignature;
         private Vortice.Direct3D12.ID3D12CommandSignature m_DispatchComputeIndirectSignature;
+        private Vortice.DirectML.IDMLDevice? m_DirectMLDevice;
+        private Vortice.DirectML.IDMLDevice1? m_DirectMLDevice1;
+        private Vortice.DirectML.IDMLCommandRecorder? m_DirectMLCommandRecorder;
 
         public Dx12Device(Dx12Instance instance, in Vortice.DXGI.IDXGIAdapter1 adapter, in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
         {
@@ -255,6 +280,7 @@ namespace Infinity.Graphics
             m_DeviceId.IntValue = adapterDesc.DeviceId;
 
             CreateDevice();
+            CreateDirectMLObjects();
             CheckFeatureSupport();
             CreateCommandQueues(computeQueueCount, transferQueueCount, graphicsQueueCount);
             CreateDescriptorHeaps();
@@ -396,6 +422,11 @@ namespace Infinity.Graphics
         public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
         {
             return new Dx12MLPipeline(this, descriptor);
+        }
+
+        public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
+        {
+            return new Dx12MLBindingSet(this, descriptor);
         }
 
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
@@ -602,7 +633,7 @@ namespace Infinity.Graphics
             bool isHiddenSurfaceRemovalSupported = false;
             bool isBarycentricCoordSupported = false;
             bool isProgrammableSamplePositionSupported = false;
-            bool isMLSupported = ProbeDirectMLSupport();
+            bool isMLSupported = SupportsDirectML;
             ERHIMatrixMajorons matrixMajorons = ERHIMatrixMajorons.RowMajor;
             ERHIDepthValueRange depthValueRange = ERHIDepthValueRange.ZeroToOne;
             ERHIMultiviewStrategy multiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
@@ -817,25 +848,35 @@ namespace Infinity.Graphics
                                               isNativeRenderPassSupported);
         }
 
-        private bool ProbeDirectMLSupport()
+        private void CreateDirectMLObjects()
         {
             if (!ThirdPartyNativeLibraryResolver.TryResolve("DirectML.dll", out _, out _))
             {
-                return false;
+                return;
             }
 
-            Vortice.DirectML.IDMLDevice directMLDevice = null;
-            SharpGen.Runtime.Result hResult = Vortice.DirectML.DML.DMLCreateDevice((Vortice.Direct3D12.ID3D12Device)m_NativeDevice,
-                                                                   Vortice.DirectML.CreateDeviceFlags.None,
-                                                                   out directMLDevice);
+            Vortice.DirectML.IDMLDevice? directMLDevice = null;
+            Vortice.DirectML.IDMLDevice1? directMLDevice1 = null;
+            Vortice.DirectML.IDMLCommandRecorder? commandRecorder = null;
 
-            if (hResult.Success && directMLDevice != null)
+            try
             {
-                directMLDevice.Release();
-                return true;
+                directMLDevice = Vortice.DirectML.DML.DMLCreateDevice((Vortice.Direct3D12.ID3D12Device)m_NativeDevice, Vortice.DirectML.CreateDeviceFlags.None);
+                directMLDevice1 = directMLDevice.QueryInterfaceOrNull<Vortice.DirectML.IDMLDevice1>();
+                commandRecorder = directMLDevice.CreateCommandRecorder();
+                m_DirectMLDevice = directMLDevice;
+                m_DirectMLDevice1 = directMLDevice1;
+                m_DirectMLCommandRecorder = commandRecorder;
             }
-
-            return false;
+            catch
+            {
+                commandRecorder?.Release();
+                directMLDevice1?.Release();
+                directMLDevice?.Release();
+                m_DirectMLDevice = null;
+                m_DirectMLDevice1 = null;
+                m_DirectMLCommandRecorder = null;
+            }
         }
 
         private void CreateDescriptorHeaps()
@@ -977,6 +1018,24 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
+            if (m_DirectMLCommandRecorder != null)
+            {
+                m_DirectMLCommandRecorder.Release();
+                m_DirectMLCommandRecorder = null;
+            }
+
+            if (m_DirectMLDevice1 != null)
+            {
+                m_DirectMLDevice1.Release();
+                m_DirectMLDevice1 = null;
+            }
+
+            if (m_DirectMLDevice != null)
+            {
+                m_DirectMLDevice.Release();
+                m_DirectMLDevice = null;
+            }
+
             m_DescriptorHeapDSV.Dispose();
             m_DescriptorHeapHeapRTV.Dispose();
             m_DescriptorHeapSampler.Dispose();

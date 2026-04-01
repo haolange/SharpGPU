@@ -935,64 +935,127 @@ namespace Infinity.Graphics
 
     internal unsafe class Dx12MLPipeline : RHIMLPipeline
     {
-        // DirectML integration: the ML pipeline wraps an Vortice.DirectML.IDMLCompiledOperator
-        // obtained by compiling the DXIL compute shader payload via DirectML.
-        // When DirectML is unavailable, falls back to a compute pipeline bridge.
         internal string Name => m_Name;
-        internal RHIFunction Function => m_Function;
-        internal Dx12ComputePipeline? ComputePipeline => m_ComputePipeline;
+        internal Dx12MLProgram Program => m_Program;
+        internal int StageCount => m_CompiledOperators.Length;
+        internal Vortice.DirectML.IDMLOperatorInitializer OperatorInitializer => m_OperatorInitializer ?? throw new InvalidOperationException("DX12 ML operator initializer is unavailable.");
+        internal Vortice.DirectML.BindingProperties InitializerBindingProperties => m_InitializerBindingProperties;
+        internal uint RequiredDescriptorCount => m_RequiredDescriptorCount;
+        internal ulong ProgramIntermediateTensorSize => m_ProgramIntermediateTensorSize;
 
         private readonly string m_Name;
         private readonly Dx12Device m_Dx12Device;
-        private readonly RHIFunction m_Function;
-        private readonly RHIMLTensorDescriptor[] m_InputTensors;
-        private Dx12ComputePipeline? m_ComputePipeline;
+        private readonly Dx12MLProgram m_Program;
+        private Vortice.DirectML.IDMLOperator[] m_NativeOperators;
+        private Vortice.DirectML.IDMLCompiledOperator[] m_CompiledOperators;
+        private Vortice.DirectML.IDMLOperatorInitializer? m_OperatorInitializer;
+        private Vortice.DirectML.BindingProperties[] m_CompiledBindingProperties;
+        private ulong[] m_PersistentResourceOffsets;
+        private Vortice.DirectML.BindingProperties m_InitializerBindingProperties;
+        private uint m_RequiredDescriptorCount;
+        private ulong m_ProgramIntermediateTensorSize;
 
         public Dx12MLPipeline(Dx12Device device, in RHIMLPipelineDescriptor descriptor)
         {
             m_Descriptor = descriptor;
             m_Dx12Device = device;
             m_Name = descriptor.Name;
-            m_Function = descriptor.Function;
-            m_InputTensors = descriptor.InputTensors.ToArray();
+            m_Program = descriptor.Program as Dx12MLProgram
+                ?? throw new InvalidOperationException("DX12 ML pipeline requires a Dx12MLProgram.");
+            m_Program.ValidateDeviceSupport(device);
+            m_BindingInfos = m_Program.BindingInfos;
 
-            // Estimate intermediates heap size from input tensor dimensions
-            ulong intermediatesSize = 0;
-            for (int i = 0; i < m_InputTensors.Length; ++i)
+            for (int i = 0; i < m_BindingInfos.Length; ++i)
             {
-                ulong tensorSize = 1;
-                Span<uint> dims = m_InputTensors[i].Dimensions.Span;
-                for (int d = 0; d < dims.Length; ++d)
+                ref readonly RHIMLTensorBindingInfo bindingInfo = ref m_BindingInfos[i];
+                switch (bindingInfo.Kind)
                 {
-                    tensorSize *= dims[d];
+                    case ERHIMLTensorBindingKind.Input:
+                        ++m_InputCount;
+                        break;
+                    case ERHIMLTensorBindingKind.Output:
+                        ++m_OutputCount;
+                        break;
                 }
-                tensorSize *= GetElementSize(m_InputTensors[i].DataType);
-                intermediatesSize += tensorSize;
             }
-            m_IntermediatesHeapSize = intermediatesSize;
+
+            try
+            {
+                Vortice.DirectML.OperatorDescription[] operatorDescriptions = m_Program.CreateOperatorDescriptions();
+                m_NativeOperators = new Vortice.DirectML.IDMLOperator[operatorDescriptions.Length];
+                m_CompiledOperators = new Vortice.DirectML.IDMLCompiledOperator[operatorDescriptions.Length];
+                m_CompiledBindingProperties = new Vortice.DirectML.BindingProperties[operatorDescriptions.Length];
+                m_PersistentResourceOffsets = new ulong[operatorDescriptions.Length];
+
+                for (int i = 0; i < operatorDescriptions.Length; ++i)
+                {
+                    m_NativeOperators[i] = device.DirectMLDevice.CreateOperator(operatorDescriptions[i]);
+                    m_CompiledOperators[i] = device.DirectMLDevice.CompileOperator(m_NativeOperators[i], Vortice.DirectML.ExecutionFlags.None);
+                    m_CompiledBindingProperties[i] = m_CompiledOperators[i].GetBindingProperties();
+                    m_RequiredDescriptorCount = Math.Max(m_RequiredDescriptorCount, m_CompiledBindingProperties[i].RequiredDescriptorCount);
+                    m_TemporaryResourceSize = Math.Max(m_TemporaryResourceSize, m_CompiledBindingProperties[i].TemporaryResourceSize);
+                    m_PersistentResourceOffsets[i] = m_PersistentResourceSize;
+                    m_PersistentResourceSize += m_CompiledBindingProperties[i].PersistentResourceSize;
+                }
+
+                m_OperatorInitializer = device.DirectMLDevice.CreateOperatorInitializer(m_CompiledOperators);
+                m_InitializerBindingProperties = m_OperatorInitializer.GetBindingProperties();
+                m_RequiredDescriptorCount = Math.Max(m_RequiredDescriptorCount, m_InitializerBindingProperties.RequiredDescriptorCount);
+                m_TemporaryResourceSize = Math.Max(m_TemporaryResourceSize, m_InitializerBindingProperties.TemporaryResourceSize);
+                m_ProgramIntermediateTensorSize = RHIMLHelpers.CalculateMinimumByteLength(m_Program.IntermediateTensorDescriptor);
+            }
+            catch
+            {
+                Release();
+                throw;
+            }
         }
 
-        private static ulong GetElementSize(ERHIMLDataType dataType)
+        internal Vortice.DirectML.IDMLCompiledOperator GetCompiledOperator(int stageIndex)
         {
-            return dataType switch
-            {
-                ERHIMLDataType.Float32 => 4,
-                ERHIMLDataType.Float16 => 2,
-                ERHIMLDataType.BFloat16 => 2,
-                ERHIMLDataType.Int32 => 4,
-                ERHIMLDataType.Int16 => 2,
-                ERHIMLDataType.Int8 => 1,
-                ERHIMLDataType.UInt32 => 4,
-                ERHIMLDataType.UInt16 => 2,
-                ERHIMLDataType.UInt8 => 1,
-                _ => 4,
-            };
+            return m_CompiledOperators[stageIndex];
+        }
+
+        internal ulong GetPersistentResourceOffset(int stageIndex)
+        {
+            return m_PersistentResourceOffsets[stageIndex];
+        }
+
+        internal ulong GetPersistentResourceSize(int stageIndex)
+        {
+            return m_CompiledBindingProperties[stageIndex].PersistentResourceSize;
+        }
+
+        internal uint GetRequiredDescriptorCount(int stageIndex)
+        {
+            return m_CompiledBindingProperties[stageIndex].RequiredDescriptorCount;
         }
 
         protected override void Release()
         {
-            m_ComputePipeline?.Dispose();
-            m_ComputePipeline = null;
+            if (m_OperatorInitializer != null)
+            {
+                m_OperatorInitializer.Release();
+                m_OperatorInitializer = null;
+            }
+
+            if (m_CompiledOperators != null)
+            {
+                for (int i = 0; i < m_CompiledOperators.Length; ++i)
+                {
+                    m_CompiledOperators[i]?.Release();
+                }
+                m_CompiledOperators = Array.Empty<Vortice.DirectML.IDMLCompiledOperator>();
+            }
+
+            if (m_NativeOperators != null)
+            {
+                for (int i = 0; i < m_NativeOperators.Length; ++i)
+                {
+                    m_NativeOperators[i]?.Release();
+                }
+                m_NativeOperators = Array.Empty<Vortice.DirectML.IDMLOperator>();
+            }
         }
     }
 }

@@ -1630,14 +1630,10 @@ namespace Infinity.Graphics
     internal unsafe class VulkanMLEncoder : RHIMLEncoder
     {
         private RHIMLPassDescriptor m_PassDescriptor;
-        private VulkanTensor?[] m_InputTensors;
-        private VulkanTensor?[] m_OutputTensors;
 
         public VulkanMLEncoder(VulkanCommandBuffer cmdBuffer)
         {
             m_CommandBuffer = cmdBuffer;
-            m_InputTensors = new VulkanTensor?[8];
-            m_OutputTensors = new VulkanTensor?[8];
         }
 
         internal override void BeginPass(in RHIMLPassDescriptor descriptor)
@@ -1688,43 +1684,23 @@ namespace Infinity.Graphics
 
         public override void SetPipeline(RHIMLPipeline pipeline)
         {
-            m_CachedPipeline = pipeline;
+            m_CachedPipeline = pipeline as VulkanMLPipeline
+                ?? throw new InvalidOperationException($"Vulkan ML encoder expects {nameof(VulkanMLPipeline)} but got {pipeline?.GetType().Name ?? "<null>"}.");
         }
 
-        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
+        public override void SetBindingSet(RHIMLBindingSet bindingSet)
         {
-            // Resource tables for the compute bridge pipeline are bound here if the ML pipeline
-            // has been compiled to a compute pipeline with descriptor sets.
+            m_CachedBindingSet = bindingSet as VulkanMLBindingSet
+                ?? throw new InvalidOperationException($"Vulkan ML encoder expects {nameof(VulkanMLBindingSet)} but got {bindingSet?.GetType().Name ?? "<null>"}.");
         }
 
-        public override void SetInputTensor(RHITensor tensor, in uint index)
+        public override void Dispatch()
         {
-            if (tensor is not VulkanTensor vkTensor)
+            if (m_CachedBindingSet is null)
             {
-                throw new InvalidOperationException($"VulkanMLEncoder expects {nameof(VulkanTensor)} but got {tensor?.GetType().Name ?? "<null>"}.");
+                throw new InvalidOperationException("Vulkan ML encoder requires a bound ML binding set before Dispatch.");
             }
 
-            if (index < m_InputTensors.Length)
-            {
-                m_InputTensors[index] = vkTensor;
-            }
-        }
-
-        public override void SetOutputTensor(RHITensor tensor, in uint index)
-        {
-            if (tensor is not VulkanTensor vkTensor)
-            {
-                throw new InvalidOperationException($"VulkanMLEncoder expects {nameof(VulkanTensor)} but got {tensor?.GetType().Name ?? "<null>"}.");
-            }
-
-            if (index < m_OutputTensors.Length)
-            {
-                m_OutputTensors[index] = vkTensor;
-            }
-        }
-
-        public override void Dispatch(RHIHeap intermediatesHeap)
-        {
             // Vulkan does not have native ML inference.
             // The compute bridge approach dispatches a pre-compiled compute shader
             // that implements the neural network layers. This is a no-op placeholder
@@ -1741,6 +1717,8 @@ namespace Infinity.Graphics
 #if DEBUG
             PopDebugGroup();
 #endif
+            m_CachedPipeline = null;
+            m_CachedBindingSet = null;
         }
 
         protected override void Release() { }

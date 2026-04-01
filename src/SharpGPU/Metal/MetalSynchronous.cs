@@ -341,12 +341,38 @@ namespace Infinity.Graphics
 
     internal sealed class MetalHeap : RHIHeap
     {
-        internal MetalHeap(in RHIHeapDescription descriptor)
+        internal SharpMetal.Metal.MTLHeap NativeHeap => m_NativeHeap;
+
+        private readonly MetalDevice m_MetalDevice;
+        private SharpMetal.Metal.MTLHeap m_NativeHeap;
+
+        internal MetalHeap(MetalDevice device, in RHIHeapDescription descriptor)
         {
+            m_MetalDevice = device;
+
+            MTLHeapDescriptor nativeDescriptor = MTLHeapDescriptor.New();
+            nativeDescriptor.Size = descriptor.Size;
+            nativeDescriptor.Type = MTLHeapType.Placement;
+            nativeDescriptor.ResourceOptions = MetalUtility.ConvertToMetalResourceOptions(descriptor.StorageMode);
+            nativeDescriptor.StorageMode = (MTLStorageMode)(((ulong)nativeDescriptor.ResourceOptions >> 4) & 0xF);
+            nativeDescriptor.CpuCacheMode = (MTLCPUCacheMode)((ulong)nativeDescriptor.ResourceOptions & 0xF);
+
+            m_NativeHeap = device.NativeDevice.NewHeap(nativeDescriptor);
+            ObjectiveCRuntime.Release(nativeDescriptor.NativePtr);
+
+            if (m_NativeHeap.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to create MTLHeap.");
+            }
         }
 
         protected override void Release()
         {
+            if (m_NativeHeap.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_NativeHeap);
+                m_NativeHeap = default;
+            }
         }
     }
 }

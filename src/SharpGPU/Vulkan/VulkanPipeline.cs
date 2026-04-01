@@ -709,41 +709,32 @@ namespace Infinity.Graphics
 
         private readonly string m_Name;
         private readonly VulkanDevice m_VulkanDevice;
+        private readonly VulkanMLProgram? m_Program;
 
         public VulkanMLPipeline(VulkanDevice device, in RHIMLPipelineDescriptor descriptor)
         {
             m_Descriptor = descriptor;
             m_VulkanDevice = device;
             m_Name = descriptor.Name;
+            m_Program = descriptor.Program as VulkanMLProgram;
+            m_BindingInfos = m_Program?.BindingInfos ?? Array.Empty<RHIMLTensorBindingInfo>();
 
-            // Vulkan does not have native ML pipeline support.
-            // Estimate intermediates heap size from input tensor dimensions
-            // so that the RHI abstraction reports consistent sizes across backends.
-            ulong intermediatesSize = 0;
-            for (int i = 0; i < descriptor.InputTensors.Length; ++i)
+            for (int i = 0; i < m_BindingInfos.Length; ++i)
             {
-                ref readonly RHIMLTensorDescriptor td = ref descriptor.InputTensors.Span[i];
-                ulong tensorSize = 1;
-                Span<uint> dims = td.Dimensions.Span;
-                for (int d = 0; d < dims.Length; ++d)
+                ref readonly RHIMLTensorBindingInfo bindingInfo = ref m_BindingInfos[i];
+                switch (bindingInfo.Kind)
                 {
-                    tensorSize *= dims[d];
+                    case ERHIMLTensorBindingKind.Input:
+                        ++m_InputCount;
+                        break;
+                    case ERHIMLTensorBindingKind.Output:
+                        ++m_OutputCount;
+                        break;
                 }
-                tensorSize *= GetElementSize(td.DataType);
-                intermediatesSize += tensorSize;
             }
-            m_IntermediatesHeapSize = intermediatesSize;
-        }
 
-        private static ulong GetElementSize(ERHIMLDataType dataType)
-        {
-            return dataType switch
-            {
-                ERHIMLDataType.Float32 or ERHIMLDataType.Int32 or ERHIMLDataType.UInt32 => 4,
-                ERHIMLDataType.Float16 or ERHIMLDataType.BFloat16 or ERHIMLDataType.Int16 or ERHIMLDataType.UInt16 => 2,
-                ERHIMLDataType.Int8 or ERHIMLDataType.UInt8 => 1,
-                _ => 4,
-            };
+            m_TemporaryResourceSize = 0;
+            m_PersistentResourceSize = 0;
         }
 
         protected override void Release()

@@ -10,6 +10,8 @@ namespace Infinity.Graphics
         public ERHIStorageMode StorageMode;
         public Memory<uint> Dimensions;
         public Memory<uint>? Strides;
+        public RHIBuffer? BackingBuffer;
+        public ulong BackingBufferOffset;
     }
 
     public abstract class RHITensor : Disposal

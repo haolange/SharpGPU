@@ -8,29 +8,46 @@ namespace Infinity.Graphics
     {
         public VkBuffer NativeBuffer => m_NativeBuffer;
         public VkDeviceMemory NativeMemory => m_NativeMemory;
+        internal ulong ByteLength => m_ByteLength;
+        internal ulong BackingBufferOffset => m_BackingBufferOffset;
 
         private VulkanDevice m_VulkanDevice;
         private VkBuffer m_NativeBuffer;
         private VkDeviceMemory m_NativeMemory;
+        private readonly ulong m_ByteLength;
+        private readonly ulong m_BackingBufferOffset;
+        private readonly bool m_OwnsBackingBuffer;
 
         public VulkanTensor(VulkanDevice device, in RHIMLTensorDescriptor descriptor)
         {
             m_VulkanDevice = device;
             m_Descriptor = descriptor;
+            m_BackingBufferOffset = descriptor.BackingBufferOffset;
+            m_ByteLength = RHIMLHelpers.CalculateMinimumByteLength(descriptor);
 
-            // Calculate tensor size
-            ulong elementSize = GetElementSize(descriptor.DataType);
-            ulong totalElements = 1;
-            for (int i = 0; i < descriptor.Dimensions.Length; ++i)
+            if (descriptor.BackingBuffer != null)
             {
-                totalElements *= descriptor.Dimensions.Span[i];
+                VulkanBuffer backingBuffer = descriptor.BackingBuffer as VulkanBuffer
+                    ?? throw new InvalidOperationException($"Vulkan tensor requires a {nameof(VulkanBuffer)} backing buffer when BackingBuffer is supplied.");
+
+                ulong backingByteLength = checked((ulong)backingBuffer.Descriptor.ByteSize);
+                if (m_BackingBufferOffset + m_ByteLength > backingByteLength)
+                {
+                    throw new InvalidOperationException($"Vulkan tensor range [{m_BackingBufferOffset}, {m_BackingBufferOffset + m_ByteLength}) exceeds backing buffer size {backingByteLength}.");
+                }
+
+                m_NativeBuffer = backingBuffer.NativeBuffer;
+                m_NativeMemory = backingBuffer.NativeMemory;
+                m_OwnsBackingBuffer = false;
+                return;
             }
-            ulong bufferSize = totalElements * elementSize;
+
+            m_OwnsBackingBuffer = true;
 
             VkBufferCreateInfo bufferInfo = new VkBufferCreateInfo()
             {
                 sType = VkStructureType.BufferCreateInfo,
-                size = bufferSize,
+                size = m_ByteLength,
                 usage = VkBufferUsageFlags.StorageBuffer | VkBufferUsageFlags.TransferSrc | VkBufferUsageFlags.TransferDst,
                 sharingMode = VkSharingMode.Exclusive,
             };
@@ -61,29 +78,13 @@ namespace Infinity.Graphics
             VulkanUtility.CheckErrors(VulkanNative.vkBindBufferMemory(device.NativeDevice, m_NativeBuffer, m_NativeMemory, 0));
         }
 
-        private static ulong GetElementSize(ERHIMLDataType dataType)
-        {
-            switch (dataType)
-            {
-                case ERHIMLDataType.Float32:
-                case ERHIMLDataType.Int32:
-                case ERHIMLDataType.UInt32:
-                    return 4;
-                case ERHIMLDataType.Float16:
-                case ERHIMLDataType.BFloat16:
-                case ERHIMLDataType.Int16:
-                case ERHIMLDataType.UInt16:
-                    return 2;
-                case ERHIMLDataType.Int8:
-                case ERHIMLDataType.UInt8:
-                    return 1;
-                default:
-                    return 4;
-            }
-        }
-
         protected override void Release()
         {
+            if (!m_OwnsBackingBuffer)
+            {
+                return;
+            }
+
             VulkanNative.vkDestroyBuffer(m_VulkanDevice.NativeDevice, m_NativeBuffer, null);
             VulkanNative.vkFreeMemory(m_VulkanDevice.NativeDevice, m_NativeMemory, null);
         }

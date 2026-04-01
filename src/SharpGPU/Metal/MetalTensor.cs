@@ -1,5 +1,6 @@
 using System;
 using Infinity.Core;
+using SharpMetal.Foundation;
 using SharpMetal.Metal;
 using SharpMetal.ObjectiveCCore;
 
@@ -8,21 +9,91 @@ namespace Infinity.Graphics
     internal class MetalTensor : RHITensor
     {
         internal MTLTensor NativeTensor => m_NativeTensor;
+        internal ulong BackingBufferOffset => m_BackingBufferOffset;
+        internal ulong ByteLength => m_ByteLength;
+        internal MetalBuffer? BackingBuffer => m_BackingBuffer;
 
         private MTLTensor m_NativeTensor;
+        private MetalBuffer? m_BackingBuffer;
+        private readonly ulong m_BackingBufferOffset;
+        private readonly ulong m_ByteLength;
 
         public MetalTensor(MetalDevice device, in RHIMLTensorDescriptor descriptor)
         {
             m_Descriptor = descriptor;
+            m_BackingBufferOffset = descriptor.BackingBufferOffset;
+            m_ByteLength = RHIMLHelpers.CalculateMinimumByteLength(descriptor);
 
             MTLTensorDescriptor nativeDescriptor = MTLTensorDescriptor.New();
             nativeDescriptor.DataType = ConvertDataType(descriptor.DataType);
             nativeDescriptor.Usage = ConvertTensorUsage(descriptor.UsageFlag);
             nativeDescriptor.ResourceOptions = ConvertStorageMode(descriptor.StorageMode);
+            nativeDescriptor.Dimensions = CreateDimensionsArray(descriptor.Dimensions.Span);
+            if (RHIMLHelpers.HasExplicitStrides(descriptor))
+            {
+                nativeDescriptor.Strides = CreateDimensionsArray(descriptor.Strides.Value.Span);
+            }
 
-            m_NativeTensor = device.NativeDevice.NewTensor(nativeDescriptor);
+            if (descriptor.BackingBuffer != null)
+            {
+                m_BackingBuffer = descriptor.BackingBuffer as MetalBuffer
+                    ?? throw new InvalidOperationException($"Metal tensor requires a {nameof(MetalBuffer)} backing buffer when BackingBuffer is supplied.");
 
+                NSError tensorError = default;
+                m_NativeTensor = m_BackingBuffer.NativeBuffer.NewTensor(nativeDescriptor, descriptor.BackingBufferOffset, ref tensorError);
+                if (m_NativeTensor.NativePtr == IntPtr.Zero)
+                {
+                    string errorText = tensorError.NativePtr != IntPtr.Zero ? tensorError.LocalizedDescription.ToString() : "unknown error";
+                    throw new InvalidOperationException($"Failed to create buffer-backed MTLTensor: {errorText}");
+                }
+            }
+            else
+            {
+                m_NativeTensor = device.NativeDevice.NewTensor(nativeDescriptor);
+                if (m_NativeTensor.NativePtr == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("Failed to create MTLTensor.");
+                }
+            }
+
+            ReleaseNSArray(nativeDescriptor.Dimensions);
+            ReleaseNSArray(nativeDescriptor.Strides);
             ObjectiveCRuntime.Release(nativeDescriptor);
+        }
+
+        private static NSArray CreateDimensionsArray(ReadOnlySpan<uint> values)
+        {
+            if (values.Length == 0)
+            {
+                return default;
+            }
+
+            IntPtr[] pointers = new IntPtr[values.Length];
+            for (int i = 0; i < values.Length; ++i)
+            {
+                pointers[i] = NSNumber.Number(values[i]).NativePtr;
+            }
+
+            return MetalArrayHelper.CreateNSArrayFromPointers(pointers);
+        }
+
+        private static void ReleaseNSArray(in NSArray array)
+        {
+            if (array.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            for (ulong i = 0; i < array.Count; ++i)
+            {
+                IntPtr objectPtr = array.Object(i);
+                if (objectPtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(objectPtr);
+                }
+            }
+
+            ObjectiveCRuntime.Release(array.NativePtr);
         }
 
         private static MTLDataType ConvertDataType(in ERHIMLDataType dataType)
@@ -73,6 +144,8 @@ namespace Infinity.Graphics
                 ObjectiveCRuntime.Release(m_NativeTensor);
                 m_NativeTensor = default;
             }
+
+            m_BackingBuffer = null;
         }
     }
 }
