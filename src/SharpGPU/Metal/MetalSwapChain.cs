@@ -9,6 +9,15 @@ namespace Infinity.Graphics
 {
     internal sealed class MetalSwapChain : RHISwapChain
     {
+        private static readonly ObjectiveCClass s_NSWindowClass = new("NSWindow");
+        private static readonly ObjectiveCClass s_NSViewClass = new("NSView");
+        private static readonly ObjectiveCClass s_UIWindowClass = new("UIWindow");
+        private static readonly ObjectiveCClass s_UIViewClass = new("UIView");
+        private static readonly IntPtr s_ContentViewSelector = new Selector("contentView");
+        private static readonly IntPtr s_IsKindOfClassSelector = new Selector("isKindOfClass:");
+        private static readonly IntPtr s_RootViewControllerSelector = new Selector("rootViewController");
+        private static readonly IntPtr s_ViewSelector = new Selector("view");
+
         public override int BackTextureIndex => m_BackTextureIndex;
 
         private readonly MetalDevice m_MetalDevice;
@@ -89,13 +98,67 @@ namespace Infinity.Graphics
                 throw new InvalidOperationException("SwapChain surface pointer is null.");
             }
 
-            NSWindow window = new NSWindow(surface);
-            NSView contentView = window.ContentView;
-            contentView.WantsLayer = true;
-            contentView.Layer = m_Layer;
+            if (ResolveContentView(surface) is NSView appKitView)
+            {
+                appKitView.WantsLayer = true;
+                appKitView.Layer = m_Layer;
+                m_Layer.Frame = appKitView.Frame;
+                return;
+            }
 
-            CGRect frame = contentView.Frame;
-            m_Layer.Frame = frame;
+            IntPtr uiKitView = ResolveUIKitView(surface);
+            IntPtr baseLayer = ObjectiveCRuntime.IntPtr_objc_msgSend(uiKitView, new Selector("layer"));
+            if (baseLayer == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("UIView layer pointer is null while attaching CAMetalLayer.");
+            }
+
+            ObjectiveCRuntime.objc_msgSend(baseLayer, new Selector("addSublayer:"), m_Layer.NativePtr);
+        }
+
+        private static NSView? ResolveContentView(IntPtr surface)
+        {
+            if (IsObjectOfClass(surface, s_NSViewClass))
+            {
+                return new NSView(surface);
+            }
+
+            if (IsObjectOfClass(surface, s_NSWindowClass))
+            {
+                NSWindow window = new NSWindow(surface);
+                return window.ContentView;
+            }
+
+            return null;
+        }
+
+        private static IntPtr ResolveUIKitView(IntPtr surface)
+        {
+            if (IsObjectOfClass(surface, s_UIViewClass))
+            {
+                return surface;
+            }
+
+            if (IsObjectOfClass(surface, s_UIWindowClass))
+            {
+                IntPtr rootViewController = ObjectiveCRuntime.IntPtr_objc_msgSend(surface, s_RootViewControllerSelector);
+                IntPtr rootView = rootViewController != IntPtr.Zero
+                    ? ObjectiveCRuntime.IntPtr_objc_msgSend(rootViewController, s_ViewSelector)
+                    : IntPtr.Zero;
+                if (rootView != IntPtr.Zero)
+                {
+                    return rootView;
+                }
+            }
+
+            throw new InvalidOperationException("Metal swapchain expected NSWindow/NSView/UIWindow/UIView surface handle.");
+        }
+
+        private static bool IsObjectOfClass(IntPtr objectPtr, ObjectiveCClass cls)
+        {
+            return objectPtr != IntPtr.Zero &&
+                cls.NativePtr != IntPtr.Zero &&
+                ObjectiveCRuntime.bool_objc_msgSend(objectPtr, s_IsKindOfClassSelector, cls.NativePtr);
         }
 
         private void ClearFrameState()

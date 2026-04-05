@@ -246,11 +246,18 @@ namespace Infinity.Graphics
             }
 
             VkDeviceQueueCreateInfo* queueCreateInfos = stackalloc VkDeviceQueueCreateInfo[familyCount];
+            int totalRequestedQueues = 0;
+            foreach (int familyIndex in uniqueFamilies)
+            {
+                totalRequestedQueues += (int)familyQueueCounts[familyIndex];
+            }
+            float* queuePriorities = stackalloc float[Math.Max(totalRequestedQueues, 1)];
             int idx = 0;
+            int priorityOffset = 0;
             foreach (int familyIndex in uniqueFamilies)
             {
                 uint count = familyQueueCounts[familyIndex];
-                float* priorities = stackalloc float[(int)count];
+                float* priorities = queuePriorities + priorityOffset;
                 for (int p = 0; p < count; ++p)
                     priorities[p] = 1.0f;
 
@@ -262,6 +269,7 @@ namespace Infinity.Graphics
                     pQueuePriorities = priorities,
                 };
                 idx++;
+                priorityOffset += (int)count;
             }
 
             // Enumerate available device extensions

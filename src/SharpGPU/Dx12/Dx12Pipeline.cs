@@ -656,7 +656,6 @@ namespace Infinity.Graphics
             {
                 case ERHIPrimitiveType.Mesh:
                     throw new NotSupportedException("TODO(UNVERIFIED): DX12 mesh pipeline path must be migrated to Vortice pipeline-state-stream API.");
-                    break;
 
                 case ERHIPrimitiveType.Vertex:
                     if (!descriptor.PrimitiveAssembler.VertexAssembler.HasValue)

@@ -115,7 +115,7 @@ namespace Infinity.Graphics
                 VulkanNative.vkMapMemory(m_VulkanDevice.NativeDevice, stagingBuffer.NativeMemory, 0, (ulong)request.FileSize, 0, &data);
                 byte[] fileData = new byte[request.FileSize];
                 fs.Seek((long)request.FileOffset, SeekOrigin.Begin);
-                fs.Read(fileData, 0, (int)request.FileSize);
+                fs.ReadExactly(fileData, 0, (int)request.FileSize);
                 Marshal.Copy(fileData, 0, new IntPtr(data), (int)request.FileSize);
                 VulkanNative.vkUnmapMemory(m_VulkanDevice.NativeDevice, stagingBuffer.NativeMemory);
 

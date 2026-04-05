@@ -6,8 +6,9 @@
 		<AssemblyName>SharpGPU</AssemblyName>
 		<RootNamespace>SharpGPU</RootNamespace>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-		<IntermediateOutputPath>../../../Intermediate/Graphics/SharpGPU/$(Platform)/$(Configuration)/</IntermediateOutputPath>
 		<Nullable>enable</Nullable>
+		<!-- Native-backend interop layers intentionally use pointer-heavy patterns and nullable sentinels. -->
+		<NoWarn>$(NoWarn);CS0162;CS8500;CS8600;CS8601;CS8603;CS8604;CS8618;CS8625;CS8629;CS9191</NoWarn>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -49,19 +50,19 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="NUnit" Version="3.13.3" />
+		<PackageReference Include="NUnit" Version="4.5.1" />
 		<PackageReference Include="SharpGen.Runtime" Version="2.4.2-beta" />
-		<PackageReference Include="Vortice.Direct3D12" Version="3.8.2" />
-		<PackageReference Include="Vortice.DirectML" Version="3.8.2" GeneratePathProperty="true" />
-		<PackageReference Include="Vortice.DirectStorage" Version="3.8.2" />
-		<PackageReference Include="Vortice.DXGI" Version="3.8.2" />
+		<PackageReference Include="Vortice.Direct3D12" Version="3.8.3" />
+		<PackageReference Include="Vortice.DirectML" Version="3.8.3" GeneratePathProperty="true" />
+		<PackageReference Include="Vortice.DirectStorage" Version="3.8.3" />
+		<PackageReference Include="Vortice.DXGI" Version="3.8.3" />
 		<PackageReference Include="Vortice.Pix.Native" Version="1.0.1" />
 		<PackageReference Include="Vortice.Vulkan" Version="3.2.1" />
 	</ItemGroup>
 
 	<ItemGroup>
 	  <ProjectReference Include="..\..\Core\Infinity.Core.csproj" />
-	  <ProjectReference Include="..\..\ThirdParty\Apple\SharpMetal\SharpMetal.csproj" />
+	  <ProjectReference Include="..\..\..\ThirdParty\Apple\SharpMetal\SharpMetal.csproj" />
 	</ItemGroup>
 
 </Project>
