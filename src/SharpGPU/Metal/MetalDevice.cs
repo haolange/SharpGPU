@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using Infinity.Collections;
 using SharpMetal.Foundation;
@@ -221,6 +222,61 @@ namespace Infinity.Graphics
             return new MetalRasterIndirectCommandBuffer(this, descriptor);
         }
 
+        public override bool TryToggleGpuCapture(string savedPath, string reason)
+        {
+            MetalCommandQueue? graphicsQueue = GetCommandQueue(ERHIPipelineType.Graphics, 0) as MetalCommandQueue;
+            if (graphicsQueue == null || graphicsQueue.NativeQueue4.NativePtr == IntPtr.Zero)
+            {
+                Console.WriteLine("[MetalDevice] Capture skipped: graphics queue unavailable.");
+                return false;
+            }
+
+            MTLCaptureManager manager = MTLCaptureManager.SharedCaptureManager();
+            if (manager.NativePtr == IntPtr.Zero)
+            {
+                Console.WriteLine("[MetalDevice] Capture skipped: MTLCaptureManager unavailable.");
+                return false;
+            }
+
+            if (manager.IsCapturing)
+            {
+                manager.StopCapture();
+                Console.WriteLine("[MetalDevice] Metal capture stopped.");
+                return true;
+            }
+
+            string captureDir = Path.Combine(savedPath, "Captures", "GPU");
+            Directory.CreateDirectory(captureDir);
+            string timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            string outputPath = Path.Combine(captureDir, $"metal-{timestamp}-{SanitizeFileName(reason)}.gputrace");
+
+            MTLCaptureDescriptor descriptor = MTLCaptureDescriptor.New();
+            NSError error = default;
+            try
+            {
+                descriptor.CaptureObject = graphicsQueue.NativeQueue4.NativePtr;
+                descriptor.Destination = MTLCaptureDestination.GPUTraceDocument;
+                descriptor.OutputURL = NSURL.FileURLWithPath(new NSString(outputPath));
+                bool started = manager.StartCapture(descriptor, ref error);
+                if (!started)
+                {
+                    string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
+                    Console.WriteLine($"[MetalDevice] Metal capture start failed: {errorText}");
+                    return false;
+                }
+
+                Console.WriteLine($"[MetalDevice] Metal capture started: {outputPath}");
+                return true;
+            }
+            finally
+            {
+                if (descriptor.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(descriptor.NativePtr);
+                }
+            }
+        }
+
         private void BuildLimitAndFeature()
         {
             int maxTextureSize = 16384;
@@ -401,6 +457,23 @@ namespace Infinity.Graphics
         internal uint AllocateTextureViewIndex()
         {
             return (uint)Interlocked.Increment(ref m_NextTextureViewIndex) - 1;
+        }
+
+        private static string SanitizeFileName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "manual";
+            }
+
+            string sanitized = value;
+            char[] invalidChars = Path.GetInvalidFileNameChars();
+            for (int i = 0; i < invalidChars.Length; ++i)
+            {
+                sanitized = sanitized.Replace(invalidChars[i], '-');
+            }
+
+            return string.IsNullOrWhiteSpace(sanitized) ? "manual" : sanitized;
         }
 
         private void CreateTextureViewPool()

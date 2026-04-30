@@ -16,6 +16,7 @@ namespace Infinity.Graphics
                                                 m_NativeMtl4CommandAllocator.NativePtr != IntPtr.Zero &&
                                                 m_Mtl4CompletionEvent.NativePtr != IntPtr.Zero;
 
+        internal MTL4CommandQueue NativeQueue4 => m_NativeQueue4;
         internal MTL4CommandAllocator NativeMtl4CommandAllocator => m_NativeMtl4CommandAllocator;
         internal bool HasResidencySet => m_ResidencySet.NativePtr != IntPtr.Zero;
 

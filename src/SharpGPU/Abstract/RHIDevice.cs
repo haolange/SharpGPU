@@ -213,5 +213,10 @@ namespace Infinity.Graphics
         public abstract RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor);
         public abstract RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor);
         public abstract RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor);
+
+        public virtual bool TryToggleGpuCapture(string savedPath, string reason)
+        {
+            return false;
+        }
     }
 }
