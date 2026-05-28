@@ -30,13 +30,8 @@ namespace Infinity.Graphics
 
         public override void Resize(in uint2 extent)
         {
-            for (int i = 0; i < m_Textures.Length; ++i)
-            {
-                if (m_Textures[i] != null)
-                {
-                    m_Textures[i].NativeResource.Release();
-                }
-            }
+            ReleaseBackBufferTextures();
+
             Vortice.DXGI.SwapChainDescription desc = m_NativeSwapChain.Description;
             SharpGen.Runtime.Result hResult = m_NativeSwapChain.ResizeBuffers(m_Descriptor.Count, extent.x, extent.y, desc.BufferDescription.Format/*Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(m_Descriptor.Format))*/, desc.Flags/*Vortice.DXGI.SwapChainFlags.AllowModeSwitch*/);
 #if DEBUG
@@ -139,8 +134,19 @@ namespace Infinity.Graphics
             }
         }
 
+        private void ReleaseBackBufferTextures()
+        {
+            for (int i = 0; i < m_Textures.Length; ++i)
+            {
+                m_Textures[i]?.Dispose();
+                m_Textures[i] = null!;
+            }
+        }
+
         protected override void Release()
         {
+            ReleaseBackBufferTextures();
+
             if (m_NativeSwapChain3 != null)
             {
                 m_NativeSwapChain3.Release();
