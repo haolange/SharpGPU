@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Diagnostics;
+using System.Collections.Generic;
 using System.Threading;
 using System.Runtime.InteropServices;
 using SharpShader.HLSLCrossCompiler;
@@ -264,15 +265,20 @@ public sealed class Dx12WorkGraphConformanceTests
 
     private static void ResetTrace()
     {
-        string path = ArtifactPath.Resolve("workgraph-smoke-trace.txt");
+        string path = ResolveTracePath();
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, string.Empty);
     }
 
     private static void TraceStep(string step)
     {
-        string path = ArtifactPath.Resolve("workgraph-smoke-trace.txt");
+        string path = ResolveTracePath();
         File.AppendAllText(path, $"{DateTimeOffset.Now:O} {step}{Environment.NewLine}");
+    }
+
+    private static string ResolveTracePath()
+    {
+        return Path.Combine(Path.GetTempPath(), "SharpGPU", "workgraph-smoke-trace.txt");
     }
 
     private ShaderCompileResult CompileWorkGraphShader(RHIDevice selectedDevice, SharpGPUFeatureReport[] reports)
@@ -393,8 +399,42 @@ public sealed class Dx12WorkGraphConformanceTests
     {
         string path = ArtifactPath.Resolve("feature-report-win-x64.json");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, JsonSerializer.Serialize(reports, JsonOptions.Indented));
+        List<SharpGPUFeatureReport> mergedReports = new();
+        if (File.Exists(path))
+        {
+            try
+            {
+                mergedReports.AddRange(ReadExistingReportBackends(path).Where(report => report.Backend != ERHIBackend.DirectX12.ToString()));
+            }
+            catch (JsonException)
+            {
+                mergedReports.Clear();
+            }
+        }
+
+        mergedReports.AddRange(reports);
+        SharpGPUFeatureReportDocument document = new(SharpGPUEnvironmentReport.Capture(), mergedReports);
+        File.WriteAllText(path, JsonSerializer.Serialize(document, JsonOptions.Indented));
         m_Output.WriteLine(path);
+    }
+
+    private static IEnumerable<SharpGPUFeatureReport> ReadExistingReportBackends(string path)
+    {
+        string json = File.ReadAllText(path);
+        try
+        {
+            SharpGPUFeatureReportDocument? document = JsonSerializer.Deserialize<SharpGPUFeatureReportDocument>(json);
+            if (document?.Backends != null)
+            {
+                return document.Backends;
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        SharpGPUFeatureReport[]? legacyReports = JsonSerializer.Deserialize<SharpGPUFeatureReport[]>(json);
+        return legacyReports ?? Array.Empty<SharpGPUFeatureReport>();
     }
 
     private static string BuildDiagnostic(SharpGPUFeatureReport[] reports, RHIDevice selectedDevice)

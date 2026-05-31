@@ -1,0 +1,50 @@
+[
+  {
+    "Name": "dx12_workload_bindless_heavy_record_real",
+    "Mode": "workload",
+    "Backend": "dx12",
+    "Submit": "none",
+    "Status": "passed",
+    "Iterations": 10000,
+    "MeanMicroseconds": 1700.6957600000003,
+    "P50Microseconds": 1989.2,
+    "P95Microseconds": 2351.6,
+    "P99Microseconds": 2420.9,
+    "MaxMicroseconds": 3081,
+    "AllocatedBytes": 0,
+    "Adapter": "NVIDIA GeForce RTX 5090",
+    "SkipReason": null
+  },
+  {
+    "Name": "dx12_workload_upload_heavy_record_real",
+    "Mode": "workload",
+    "Backend": "dx12",
+    "Submit": "none",
+    "Status": "passed",
+    "Iterations": 10000,
+    "MeanMicroseconds": 28.533,
+    "P50Microseconds": 28.5,
+    "P95Microseconds": 33.8,
+    "P99Microseconds": 57,
+    "MaxMicroseconds": 262.9,
+    "AllocatedBytes": 0,
+    "Adapter": "NVIDIA GeForce RTX 5090",
+    "SkipReason": null
+  },
+  {
+    "Name": "dx12_workload_workgraph_heavy_record_real",
+    "Mode": "workload",
+    "Backend": "dx12",
+    "Submit": "none",
+    "Status": "passed",
+    "Iterations": 10000,
+    "MeanMicroseconds": 153.9522,
+    "P50Microseconds": 151.5,
+    "P95Microseconds": 162.6,
+    "P99Microseconds": 192.9,
+    "MaxMicroseconds": 431.5,
+    "AllocatedBytes": 0,
+    "Adapter": "NVIDIA GeForce RTX 5090",
+    "SkipReason": null
+  }
+]

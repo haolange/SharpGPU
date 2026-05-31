@@ -223,6 +223,11 @@ namespace SharpGPU
 
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
         {
+            if (!SupportsMetalML)
+            {
+                throw new NotSupportedException(m_MetalMLUnavailableReason ?? "Metal ML tensors are not supported on this device.");
+            }
+
             return new MetalTensor(this, descriptor);
         }
 

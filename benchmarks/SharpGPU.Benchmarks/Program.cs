@@ -70,6 +70,9 @@ namespace SharpGPU.Benchmarks
                 new("dx12_argument_table_update_real", "backend", "dx12", "none", CreateDx12ArgumentTableUpdate),
                 new("dx12_timestamp_write_resolve_encode_real", "backend", "dx12", "none", CreateDx12TimestampEncode),
                 new("dx12_workgraph_set_dispatch_encode_real", "backend", "dx12", "none", CreateDx12WorkGraphEncode),
+                new("dx12_workload_bindless_heavy_record_real", "workload", "dx12", "none", CreateDx12WorkloadBindlessHeavyRecord),
+                new("dx12_workload_upload_heavy_record_real", "workload", "dx12", "none", CreateDx12WorkloadUploadHeavyRecord),
+                new("dx12_workload_workgraph_heavy_record_real", "workload", "dx12", "none", CreateDx12WorkloadWorkGraphHeavyRecord),
                 new("dx12_empty_submit_fence_real", "submit", "dx12", "wait", CreateDx12EmptySubmitFence),
             };
         }
@@ -432,13 +435,171 @@ namespace SharpGPU.Benchmarks
                 AdapterName = context.Device.Name,
                 Body = () =>
                 {
-                    capturedFixture.CommandBuffer.Begin("bench.workgraph");
-                    RHIWorkGraphEncoder encoder = capturedFixture.CommandBuffer.BeginWorkGraphPass(capturedFixture.PassDescriptor);
+                    RHICommandBuffer commandBuffer = capturedFixture.NextCommandBuffer();
+                    commandBuffer.Begin("bench.workgraph");
+                    RHIWorkGraphEncoder encoder = commandBuffer.BeginWorkGraphPass(capturedFixture.PassDescriptor);
                     encoder.SetPipeline(capturedFixture.Pipeline);
                     encoder.SetBackingMemory(capturedFixture.BackingMemory, 0, (ulong)capturedFixture.BackingMemorySize);
                     encoder.DispatchGraph("WorkNode", 1, WorkGraphEncodeFixture.InputRecordStride, capturedFixture.InputRecordBuffer);
-                    capturedFixture.CommandBuffer.EndWorkGraphPass();
-                    capturedFixture.CommandBuffer.End();
+                    commandBuffer.EndWorkGraphPass();
+                    commandBuffer.End();
+                },
+                Cleanup = () =>
+                {
+                    capturedFixture.Dispose();
+                    context.Dispose();
+                },
+            };
+        }
+
+        private static PreparedBenchmark CreateDx12WorkloadBindlessHeavyRecord(Options options)
+        {
+            if (!Dx12BenchmarkContext.TryCreate(options, out Dx12BenchmarkContext? context, out string skipReason))
+            {
+                return PreparedBenchmark.Skipped(skipReason);
+            }
+
+            const int BindlessCount = 1024;
+            RHIArgumentTableLayout layout = context.Device.CreateArgumentTableLayout(new RHIArgumentTableLayoutDescriptor
+            {
+                Index = 0,
+                Elements = new[]
+                {
+                    new RHIArgumentTableLayoutElement
+                    {
+                        Slot = 0,
+                        Count = BindlessCount,
+                        Type = ERHIBindType.StorageBuffer,
+                        Stage = ERHIShaderStage.Compute,
+                    },
+                },
+            });
+            RHIBuffer buffer = CreateGpuBuffer(context.Device, 4096, ERHIBufferUsage.UnorderedAccess);
+            RHIBufferView view = buffer.CreateBufferView(new RHIBufferViewDescriptor
+            {
+                Count = 1024,
+                Offset = 0,
+                Stride = sizeof(uint),
+                ViewType = ERHIBufferViewType.UnorderedAccess,
+            });
+            RHIArgumentTableElement element = new() { BufferView = view };
+            RHIArgumentTable table = context.Device.CreateArgumentTable(new RHIArgumentTableDescriptor
+            {
+                Layout = layout,
+                Elements = new[] { element },
+            });
+
+            return new PreparedBenchmark
+            {
+                AdapterName = context.Device.Name,
+                Body = () =>
+                {
+                    for (int i = 0; i < BindlessCount; ++i)
+                    {
+                        table.SetBindElement(element, ERHIBindType.StorageBuffer, 0, i);
+                    }
+                },
+                Cleanup = () =>
+                {
+                    table.Dispose();
+                    view.Dispose();
+                    buffer.Dispose();
+                    layout.Dispose();
+                    context.Dispose();
+                },
+            };
+        }
+
+        private static PreparedBenchmark CreateDx12WorkloadUploadHeavyRecord(Options options)
+        {
+            if (!Dx12BenchmarkContext.TryCreate(options, out Dx12BenchmarkContext? context, out string skipReason))
+            {
+                return PreparedBenchmark.Skipped(skipReason);
+            }
+
+            const int CopyCount = 128;
+            const int CopyBytes = 256;
+            RHICommandBuffer commandBuffer = context.CommandQueue.CreateCommandBuffer();
+            RHITransferPassDescriptor descriptor = new() { Name = "bench.workload.upload" };
+            RHIBuffer[] sources = new RHIBuffer[CopyCount];
+            RHIBuffer[] destinations = new RHIBuffer[CopyCount];
+
+            for (int i = 0; i < CopyCount; ++i)
+            {
+                sources[i] = CreateUploadBuffer(context.Device, CopyBytes);
+                destinations[i] = CreateGpuBuffer(context.Device, CopyBytes, ERHIBufferUsage.CopyDst | ERHIBufferUsage.CopySrc);
+            }
+
+            return new PreparedBenchmark
+            {
+                AdapterName = context.Device.Name,
+                Body = () =>
+                {
+                    commandBuffer.Begin("bench.workload.upload");
+                    RHITransferEncoder encoder = commandBuffer.BeginTransferPass(descriptor);
+                    for (int i = 0; i < CopyCount; ++i)
+                    {
+                        encoder.CopyBufferToBuffer(sources[i], 0, destinations[i], 0, CopyBytes);
+                    }
+                    commandBuffer.EndTransferPass();
+                    commandBuffer.End();
+                },
+                Cleanup = () =>
+                {
+                    for (int i = 0; i < CopyCount; ++i)
+                    {
+                        destinations[i]?.Dispose();
+                        sources[i]?.Dispose();
+                    }
+                    commandBuffer.Dispose();
+                    context.Dispose();
+                },
+            };
+        }
+
+        private static PreparedBenchmark CreateDx12WorkloadWorkGraphHeavyRecord(Options options)
+        {
+            if (!Dx12BenchmarkContext.TryCreate(options, out Dx12BenchmarkContext? context, out string skipReason))
+            {
+                return PreparedBenchmark.Skipped(skipReason);
+            }
+
+            if (context.Device.Feature?.IsWorkgraphSupported != true)
+            {
+                string reason = $"DX12 WorkGraph is not supported by adapter '{context.Device.Name}'.";
+                context.Dispose();
+                return PreparedBenchmark.Skipped(reason);
+            }
+
+            const int DispatchCount = 64;
+            WorkGraphEncodeFixture? fixture = null;
+            try
+            {
+                fixture = WorkGraphEncodeFixture.Create(context);
+            }
+            catch (Exception ex) when (ex is ShaderCompilerException or NotSupportedException or InvalidOperationException)
+            {
+                context.Dispose();
+                return PreparedBenchmark.Skipped($"DX12 WorkGraph setup failed: {ex.Message}");
+            }
+
+            WorkGraphEncodeFixture capturedFixture = fixture;
+            return new PreparedBenchmark
+            {
+                AdapterName = context.Device.Name,
+                Body = () =>
+                {
+                    RHICommandBuffer commandBuffer = capturedFixture.NextCommandBuffer();
+                    commandBuffer.Begin("bench.workload.workgraph");
+                    RHIWorkGraphEncoder encoder = commandBuffer.BeginWorkGraphPass(capturedFixture.PassDescriptor);
+                    encoder.SetPipeline(capturedFixture.Pipeline);
+                    encoder.SetBackingMemory(capturedFixture.BackingMemory, 0, (ulong)capturedFixture.BackingMemorySize);
+                    for (int i = 0; i < DispatchCount; ++i)
+                    {
+                        encoder.DispatchGraph("WorkNode", 1, WorkGraphEncodeFixture.InputRecordStride, capturedFixture.InputRecordBuffer);
+                    }
+                    commandBuffer.EndWorkGraphPass();
+                    commandBuffer.End();
                 },
                 Cleanup = () =>
                 {
@@ -632,6 +793,7 @@ namespace SharpGPU.Benchmarks
             public string? CsvPath { get; private init; }
             public string? JsonPath { get; private init; }
             public string? BaselinePath { get; private init; }
+            public string? Filter { get; private init; }
             public bool FailOnRegression { get; private init; }
 
             public static Options Parse(string[] args)
@@ -646,6 +808,7 @@ namespace SharpGPU.Benchmarks
                     CsvPath = ParseString(args, "--csv"),
                     JsonPath = ParseString(args, "--json"),
                     BaselinePath = ParseString(args, "--baseline"),
+                    Filter = ParseString(args, "--filter"),
                     FailOnRegression = HasFlag(args, "--fail-on-regression"),
                 };
             }
@@ -662,6 +825,12 @@ namespace SharpGPU.Benchmarks
                     && !string.Equals(Backend, "all", StringComparison.OrdinalIgnoreCase)
                     && !string.Equals(benchmarkCase.Backend, "none", StringComparison.OrdinalIgnoreCase)
                     && !string.Equals(Backend, benchmarkCase.Backend, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                if (!string.IsNullOrWhiteSpace(Filter)
+                    && !benchmarkCase.Name.Contains(Filter, StringComparison.OrdinalIgnoreCase))
                 {
                     return false;
                 }
@@ -920,8 +1089,9 @@ namespace SharpGPU.Benchmarks
         private sealed class WorkGraphEncodeFixture : IDisposable
         {
             public const int InputRecordStride = 16;
+            private const int CommandBufferPoolSize = 64;
 
-            public RHICommandBuffer CommandBuffer { get; }
+            public RHICommandBuffer[] CommandBuffers { get; }
             public RHIPipelineLayout PipelineLayout { get; }
             public RHIFunctionLibrary FunctionLibrary { get; }
             public RHIWorkGraphPipeline Pipeline { get; }
@@ -929,9 +1099,10 @@ namespace SharpGPU.Benchmarks
             public RHIBuffer InputRecordBuffer { get; }
             public int BackingMemorySize { get; }
             public RHIWorkGraphPassDescriptor PassDescriptor { get; } = new() { Name = "bench.workgraph" };
+            private int m_CommandBufferIndex;
 
             private WorkGraphEncodeFixture(
-                RHICommandBuffer commandBuffer,
+                RHICommandBuffer[] commandBuffers,
                 RHIPipelineLayout pipelineLayout,
                 RHIFunctionLibrary functionLibrary,
                 RHIWorkGraphPipeline pipeline,
@@ -939,13 +1110,19 @@ namespace SharpGPU.Benchmarks
                 RHIBuffer inputRecordBuffer,
                 int backingMemorySize)
             {
-                CommandBuffer = commandBuffer;
+                CommandBuffers = commandBuffers;
                 PipelineLayout = pipelineLayout;
                 FunctionLibrary = functionLibrary;
                 Pipeline = pipeline;
                 BackingMemory = backingMemory;
                 InputRecordBuffer = inputRecordBuffer;
                 BackingMemorySize = backingMemorySize;
+            }
+
+            public RHICommandBuffer NextCommandBuffer()
+            {
+                int index = unchecked(m_CommandBufferIndex++);
+                return CommandBuffers[index & (CommandBufferPoolSize - 1)];
             }
 
             public static WorkGraphEncodeFixture Create(Dx12BenchmarkContext context)
@@ -969,8 +1146,14 @@ namespace SharpGPU.Benchmarks
                 RHIBuffer backingMemory = CreateGpuBuffer(context.Device, backingMemorySize, ERHIBufferUsage.UnorderedAccess);
                 RHIBuffer inputRecordBuffer = CreateUploadBuffer(context.Device, InputRecordStride);
                 WriteInputRecord(inputRecordBuffer);
+                RHICommandBuffer[] commandBuffers = new RHICommandBuffer[CommandBufferPoolSize];
+                for (int i = 0; i < commandBuffers.Length; ++i)
+                {
+                    commandBuffers[i] = context.CommandQueue.CreateCommandBuffer();
+                }
+
                 return new WorkGraphEncodeFixture(
-                    context.CommandQueue.CreateCommandBuffer(),
+                    commandBuffers,
                     pipelineLayout,
                     functionLibrary,
                     pipeline,
@@ -986,7 +1169,10 @@ namespace SharpGPU.Benchmarks
                 Pipeline.Dispose();
                 FunctionLibrary.Dispose();
                 PipelineLayout.Dispose();
-                CommandBuffer.Dispose();
+                foreach (RHICommandBuffer commandBuffer in CommandBuffers)
+                {
+                    commandBuffer.Dispose();
+                }
             }
 
             private static byte[] CompileWorkGraphShader()

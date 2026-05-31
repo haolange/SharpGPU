@@ -96,45 +96,69 @@ namespace SharpGPU
                 return;
             }
 
-            // CPU fallback path (behavior kept consistent with existing implementation).
+            // CPU fallback path for conformance and machines without DirectStorage runtime.
             m_PendingRequests.Add(() =>
             {
                 if (!m_FilePathByHandle.TryGetValue((nint)capturedRequest.FileHandle.NativeHandle, out string? absPath))
                 {
-                    return;
+                    throw new NotSupportedException("DX12 StorageQueue buffer request cannot resolve the source file handle.");
                 }
 
-                byte[] tempBuffer = new byte[capturedRequest.FileSize];
+                Dx12Buffer dx12Buffer = capturedRequest.DestinationBuffer as Dx12Buffer;
+                if (dx12Buffer == null)
+                {
+                    throw new NotSupportedException("DX12 StorageQueue CPU fallback requires a DX12 destination buffer.");
+                }
+
+                if (dx12Buffer.Descriptor.StorageMode == ERHIStorageMode.GPULocal)
+                {
+                    throw new NotSupportedException("DX12 StorageQueue CPU fallback requires a mappable destination buffer; GPULocal uploads require DirectStorage.");
+                }
+
+                if (capturedRequest.FileOffset > long.MaxValue || capturedRequest.FileSize > int.MaxValue || capturedRequest.DestinationOffset > int.MaxValue)
+                {
+                    throw new NotSupportedException("DX12 StorageQueue CPU fallback supports requests up to Int32-sized file/destination offsets and Int64-sized file offsets.");
+                }
+
+                ulong destinationEnd;
+                try
+                {
+                    destinationEnd = checked(capturedRequest.DestinationOffset + capturedRequest.FileSize);
+                }
+                catch (OverflowException ex)
+                {
+                    throw new NotSupportedException("DX12 StorageQueue CPU fallback request destination range overflowed.", ex);
+                }
+
+                if (destinationEnd > (ulong)dx12Buffer.Descriptor.ByteSize)
+                {
+                    throw new NotSupportedException("DX12 StorageQueue CPU fallback request exceeds the destination buffer size.");
+                }
+
+                int fileSize = checked((int)capturedRequest.FileSize);
+                byte[] tempBuffer = new byte[fileSize];
                 using FileStream fileStream = File.OpenRead(absPath);
                 fileStream.Seek((long)capturedRequest.FileOffset, SeekOrigin.Begin);
-                _ = fileStream.Read(tempBuffer, 0, tempBuffer.Length);
+                fileStream.ReadExactly(tempBuffer, 0, tempBuffer.Length);
 
-                // TODO(UNVERIFIED): Upload fallback data to destination buffer through a copy queue path.
+                IntPtr mapped = dx12Buffer.Map(0, 0);
+                Marshal.Copy(tempBuffer, 0, IntPtr.Add(mapped, checked((int)capturedRequest.DestinationOffset)), tempBuffer.Length);
+                dx12Buffer.UnMap(
+                    checked((uint)capturedRequest.DestinationOffset),
+                    checked((uint)destinationEnd));
             });
         }
 
         public override void RequestTexture(in RHIStorageTextureRequest request)
         {
-            RHIStorageTextureRequest capturedRequest = request;
-            if (TryEnqueueDirectStorageTexture(in capturedRequest))
+            if (TryEnqueueDirectStorageTexture(in request))
             {
                 return;
             }
 
-            // CPU fallback path (behavior kept consistent with existing implementation).
-            m_PendingRequests.Add(() =>
+            m_PendingRequests.Add(static () =>
             {
-                if (!m_FilePathByHandle.TryGetValue((nint)capturedRequest.FileHandle.NativeHandle, out string? absPath))
-                {
-                    return;
-                }
-
-                byte[] tempBuffer = new byte[capturedRequest.FileSize];
-                using FileStream fileStream = File.OpenRead(absPath);
-                fileStream.Seek((long)capturedRequest.FileOffset, SeekOrigin.Begin);
-                _ = fileStream.Read(tempBuffer, 0, tempBuffer.Length);
-
-                // TODO(UNVERIFIED): Upload fallback data to destination texture through a copy queue path.
+                throw new NotSupportedException("DX12 StorageQueue CPU fallback for texture requests is not implemented; DirectStorage runtime is required.");
             });
         }
 
@@ -290,6 +314,11 @@ namespace SharpGPU
 
             Dx12Buffer dx12Buffer = request.DestinationBuffer as Dx12Buffer;
             if (dx12Buffer == null || dx12Buffer.NativeResource == null)
+            {
+                return false;
+            }
+
+            if (dx12Buffer.Descriptor.StorageMode != ERHIStorageMode.GPULocal)
             {
                 return false;
             }

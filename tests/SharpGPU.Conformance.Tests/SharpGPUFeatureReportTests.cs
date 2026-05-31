@@ -165,6 +165,23 @@ internal sealed record SharpGPUEnvironmentReport(
 {
     public static SharpGPUEnvironmentReport Capture()
     {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return new SharpGPUEnvironmentReport(
+                RuntimeInformation.RuntimeIdentifier,
+                RuntimeInformation.OSDescription,
+                RuntimeInformation.OSArchitecture.ToString(),
+                RuntimeInformation.ProcessArchitecture.ToString(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+        }
+
         CommandResult swVersProduct = RunCommand("sw_vers", "-productVersion");
         CommandResult swVersBuild = RunCommand("sw_vers", "-buildVersion");
         CommandResult gpuReport = RunCommand("system_profiler", "SPDisplaysDataType");

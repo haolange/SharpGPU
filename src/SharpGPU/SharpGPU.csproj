@@ -5,6 +5,22 @@
 		<Platforms>x64;ARM64</Platforms>
 		<AssemblyName>SharpGPU</AssemblyName>
 		<RootNamespace>SharpGPU</RootNamespace>
+		<PackageId>SharpGPU</PackageId>
+		<VersionPrefix>0.1.0</VersionPrefix>
+		<VersionSuffix>preview.1</VersionSuffix>
+		<Authors>InfinityBrowser Contributors</Authors>
+		<Company>InfinityBrowser Contributors</Company>
+		<Description>Low-level multi-backend GPU HAL for DirectX 12, Vulkan, and Metal-oriented runtime work.</Description>
+		<PackageTags>gpu;graphics;directx12;vulkan;metal;hal;workgraph</PackageTags>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/haolange/InfinityBrowser</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/haolange/InfinityBrowser</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 		<Nullable>enable</Nullable>
 		<!-- Native-backend interop layers intentionally use pointer-heavy patterns and nullable sentinels. -->
@@ -75,6 +91,10 @@
 	<ItemGroup>
 	  <ProjectReference Include="..\..\..\ThirdParty\Apple\SharpMetal\SharpMetal.csproj" />
 	  <ProjectReference Include="..\..\..\ThirdParty\Vortice.Windows\src\Vortice.Direct3D12\Vortice.Direct3D12.csproj" Condition="'$(InfinityBuildOS)' == 'Win'" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="..\..\..\..\..\docs\SharpGPU\PackageReadme.md" Pack="true" PackagePath="README.md" />
 	</ItemGroup>
 
 </Project>

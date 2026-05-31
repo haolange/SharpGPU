@@ -393,6 +393,11 @@ namespace SharpGPU
 
         public override RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor)
         {
+            if (Feature?.IsRaytracingSupported != true)
+            {
+                throw new NotSupportedException("DX12 raytracing is not supported by this adapter/driver.");
+            }
+
             return new Dx12RaytracingPipeline(this, descriptor);
         }
 
@@ -423,16 +428,31 @@ namespace SharpGPU
 
         public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
         {
+            if (Feature?.IsMLSupported != true)
+            {
+                throw new NotSupportedException("DX12 ML is not supported by this adapter/driver.");
+            }
+
             return new Dx12MLPipeline(this, descriptor);
         }
 
         public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
         {
+            if (Feature?.IsMLSupported != true)
+            {
+                throw new NotSupportedException("DX12 ML is not supported by this adapter/driver.");
+            }
+
             return new Dx12MLBindingSet(this, descriptor);
         }
 
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
         {
+            if (Feature?.IsMLSupported != true)
+            {
+                throw new NotSupportedException("DX12 ML tensors are not supported by this adapter/driver.");
+            }
+
             return new Dx12Tensor(this, descriptor);
         }
 
@@ -825,7 +845,9 @@ namespace SharpGPU
             switch (featureOptions7.MeshShaderTier)
             {
                 case Vortice.Direct3D12.MeshShaderTier.Tier1:
-                    isMeshShadingSupported = true;
+                    // The public flag must only turn true once the native mesh pipeline path is
+                    // implemented and covered by conformance; the current create path throws.
+                    isMeshShadingSupported = false;
                     break;
 
                 case Vortice.Direct3D12.MeshShaderTier.NotSupported:
