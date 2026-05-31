@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Sdk Name="SharpGenTools.Sdk" Version="$(SharpGenVersion)" />
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <Description>DirectML bindings</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <Authors>Aaron Sun, Amer Koleci</Authors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="build\Vortice.DirectML.props" PackagePath="build\Vortice.DirectML.props" />
+    <Content Include="runtimes\win-arm\native\DirectML.Debug.dll" PackagePath="runtimes\win-arm\DirectML.Debug.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\win-arm\native\DirectML.dll" PackagePath="runtimes\win-arm\DirectML.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\win-arm64\native\DirectML.Debug.dll" PackagePath="runtimes\win-arm64\DirectML.Debug.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\win-arm64\native\DirectML.dll" PackagePath="runtimes\win-arm64\DirectML.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\win-x64\native\DirectML.Debug.dll" PackagePath="runtimes\win-x64\DirectML.Debug.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\win-x64\native\DirectML.dll" PackagePath="runtimes\win-x64\DirectML.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\win-x86\native\DirectML.Debug.dll" PackagePath="runtimes\win-x86\DirectML.Debug.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\win-x86\native\DirectML.dll" PackagePath="runtimes\win-x86\DirectML.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\LICENSE.txt" PackagePath="runtimes\LICENSE.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <SharpGenMapping Include="Mappings.xml" />
+    <SharpGenExternalDocs Include="Documentation.xml" />
+
+    <Using Include="System.Diagnostics.CodeAnalysis" />
+    <Using Include="System.Runtime.InteropServices" />
+    <Using Include="SharpGen.Runtime" />
+    <ProjectReference Include="..\Vortice.DirectX\Vortice.DirectX.csproj" />
+    <ProjectReference Include="..\Vortice.DXGI\Vortice.DXGI.csproj" />
+    <ProjectReference Include="..\Vortice.Direct3D12\Vortice.Direct3D12.csproj" />
+  </ItemGroup>
+
+</Project>

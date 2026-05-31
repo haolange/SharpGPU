@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Sdk Name="SharpGenTools.Sdk" Version="$(SharpGenVersion)" />
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <Description>DirectStorage bindings</Description>
+    <RootNamespace>Vortice.DirectStorage</RootNamespace>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="build\net461\Vortice.DirectStorage.props" PackagePath="build\net461\Vortice.DirectStorage.props" />
+    <Content Include="runtimes\win-arm\native\dstoragecore.dll" PackagePath="runtimes\win-arm\native\dstoragecore.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\win-arm\native\dstorage.dll" PackagePath="runtimes\win-arm\native\dstorage.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\win-arm64\native\dstoragecore.dll" PackagePath="runtimes\win-arm64\native\dstoragecore.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\win-arm64\native\dstorage.dll" PackagePath="runtimes\win-arm64\native\dstorage.dll" CopyToOutputDirectory="PreserveNewest"/>
+    <Content Include="runtimes\win-x64\native\dstorage.dll" PackagePath="runtimes\win-x64\native\dstorage.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\win-x86\native\dstorage.dll" PackagePath="runtimes\win-x86\native\dstorage.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\win-x64\native\dstoragecore.dll" PackagePath="runtimes\win-x64\native\dstoragecore.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="runtimes\win-x86\native\dstoragecore.dll" PackagePath="runtimes\win-x86\native\dstoragecore.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="LICENSE.txt" PackagePath="LICENSE.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="System.Diagnostics.CodeAnalysis" />
+    <Using Include="System.Runtime.InteropServices" />
+    <Using Include="SharpGen.Runtime" />
+
+    <SharpGenMapping Include="Mappings.xml" />
+    <ProjectReference Include="..\Vortice.Direct3D12\Vortice.Direct3D12.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,1361 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config id="vortice-direct3d12" xmlns="urn:SharpGen.Config">
+  <namespace>Vortice.Direct3D12</namespace>
+  <depends>Vortice.DXGI</depends>
+
+  <sdk name="StdLib" />
+  <sdk name="WindowsSdk" version="10.0.26100.0" />
+  <include-dir override="true">$(THIS_CONFIG_PATH)/../native/include/directx</include-dir>
+
+  <include file="d3d12.h" namespace="Vortice.Direct3D12" attach="true"/>
+  <!--<include file="d3d12compatibility.h" namespace="Vortice.Direct3D12" attach="true"/>-->
+
+  <include file="d3d12shader.h" namespace="Vortice.Direct3D12.Shader" attach="true" />
+  <include file="d3d12sdklayers.h" namespace="Vortice.Direct3D12.Debug" attach="true" />
+  <include file="d3d12video.h" namespace="Vortice.Direct3D12.Video" attach="true" />
+
+  <extension>
+    <create class="D3D12" visibility="public static" />
+    <create class="ResultCode" visibility="public static" />
+    <const from-macro="D3D12_ERROR_(.*)" cpp-type="int" name="$1" class="Vortice.Direct3D12.ResultCode" result="true" />
+    <define struct="Vortice.Direct3D12.CpuDescriptorHandle" sizeof="8" />
+    <define struct="Vortice.Direct3D12.RaytracingInstanceDescription" sizeof="64" />
+
+    <define enum="Vortice.Direct3D12.Shader" sizeof="1" />
+
+    <create class="ShaderComponentMapping" visibility="public static" />
+    <const from-macro="D3D12_SHADER_COMPONENT_MAPPING_(.*)" type="int" cpp-type="int" name="$1" class="Vortice.Direct3D12.ShaderComponentMapping" visibility="public const"></const>
+    <const from-macro="D3D12_PREVIEW_SDK_VERSION" class="Vortice.Direct3D12.D3D12" type="int" name="PreviewSdkVersion" />
+    <const from-guid="CLSID_D3D12Debug" class="Vortice.Direct3D12.D3D12" type="System.Guid" name="D3D12DebugClsId">new System.Guid("$1")</const>
+    <const from-guid="CLSID_D3D12Tools" class="Vortice.Direct3D12.D3D12" type="System.Guid" name="D3D12ToolsClsId">new System.Guid("$1")</const>
+    <const from-guid="CLSID_D3D12DeviceRemovedExtendedData" class="Vortice.Direct3D12.D3D12" type="System.Guid" name="D3D12DeviceRemovedExtendedDataClsId">new System.Guid("$1")</const>
+    <const from-guid="CLSID_D3D12SDKConfiguration" class="Vortice.Direct3D12.D3D12" type="System.Guid" name="D3D12SDKConfigurationClsId">new System.Guid("$1")</const>
+    <const from-guid="CLSID_D3D12DeviceFactory" class="Vortice.Direct3D12.D3D12" type="System.Guid" name="D3D12DeviceFactoryClsId">new System.Guid("$1")</const>
+    <const from-guid="CLSID_D3D12DSRDeviceFactory" class="Vortice.Direct3D12.D3D12" type="System.Guid" name="D3D12DSRDeviceFactory">new System.Guid("$1")</const>
+
+    <const from-guid="D3D12ExperimentalShaderModels" class="Vortice.Direct3D12.D3D12" type="System.Guid" name="D3D12ExperimentalShaderModels">new System.Guid("$1")</const>
+    <const from-guid="D3D12TiledResourceTier4" class="Vortice.Direct3D12.D3D12" type="System.Guid" name="D3D12TiledResourceTier4">new System.Guid("$1")</const>
+    <const from-guid="D3D12GPUUploadHeapsOnUnsupportedOS" class="Vortice.Direct3D12.D3D12" type="System.Guid" name="D3D12GPUUploadHeapsOnUnsupportedOS">new System.Guid("$1")</const>
+  </extension>
+
+  <bindings>
+    <bind from="UINT" to="System.UInt32" override="true" />
+    <bind from="UINT32" to="System.UInt32" override="true" />
+
+    <bind from="VORTICE_INT4" to="Vortice.Mathematics.Int4" />
+    <bind from="VORTICE_COLOR4" to="Vortice.Mathematics.Color4" />
+    <bind from="D3D12_BOX" to="Vortice.Mathematics.Box"/>
+    <bind from="D3D12_VIEWPORT" to="Vortice.Mathematics.Viewport"/>
+    <bind from="D3D12_CPU_DESCRIPTOR_HANDLE" to="Vortice.Direct3D12.CpuDescriptorHandle" />
+    <bind from="D3D12_REGISTER_COMPONENT_MASK_FLAG" to="Vortice.Direct3D12.Shader.RegisterComponentMaskFlags" />
+    <bind from="VORTICE_MATRIX3X4" to="Vortice.Mathematics.Matrix3x4" />
+    <bind from="D3D12_RAYTRACING_INSTANCE_DESC" to="Vortice.Direct3D12.RaytracingInstanceDescription" />
+  </bindings>
+
+  <naming>
+    <short name="DESCRIPTOR">Descriptor</short>
+    <short name="DESCRIPTORS">Descriptors</short>
+    <short name="DESCRIPTION">Description</short>
+    <short name="DESC">Description</short>
+    <short name="TOPLEFT">TopLeft</short>
+    <short name="UINT32">UInt32</short>
+    <short name="UINT64">UInt64</short>
+    <short name="IUNKNOWN">IUnknown</short>
+    <short name="RECTANGLE">Rectangle</short>
+    <short name="RECTS">Rectangles</short>
+    <short name="RECT">Rectangle</short>
+    <short name="POINT">Point</short>
+    <short name="POINTS">Points</short>
+    <short name="TRIANGLE">Triangle</short>
+    <short name="TRIANGLES">Triangles</short>
+    <short name="LIST">List</short>
+    <short name="LISTS">Lists</short>
+    <short name="ADJACENCY">Adjacency</short>
+    <short name="ADJ">Adjacency</short>
+    <short name="STRIP">Strip</short>
+    <short name="SRV">ShaderResourceView</short>
+    <short name="DSV">DepthStencilView</short>
+    <short name="RTV">RenderTargetView</short>
+    <short name="UAVS">UnorderedAccessViews</short>
+    <short name="UAV">UnorderedAccessView</short>
+    <short name="TEXTURE">Texture</short>
+    <short name="TEXTURES">Textures</short>
+    <short name="TEXT">Text</short>
+    <short name="CUBE">Cube</short>
+    <short name="TEX">Texture</short>
+    <short name="1D">1D</short>
+    <short name="2D">2D</short>
+    <short name="3D">3D</short>
+    <short name="MS">Multisampled</short>
+    <short name="RW">RW</short>
+    <short name="ARRAYSIZE">ArraySize</short>
+    <short name="ARRAYSLICE">ArraySlice</short>
+    <short name="ARRAYS">Arrays</short>
+    <short name="ARRAY">Array</short>
+    <short name="BUFFERS">Buffers</short>
+    <short name="BUFFER">Buffer</short>
+    <short name="BUFFEREX">BufferExtended</short>
+    <short name="CBV">ConstantBufferView</short>
+    <short name="CBUFFER">ConstantBuffer</short>
+    <short name="TBUFFER">TextureBuffer</short>
+    <short name="VDOV">VideoDecoderOutputView</short>
+    <short name="VPIV">VideoProcessorInputView</short>
+    <short name="VPOV">VideoProcessorOutputView</short>
+    <short name="SUBRESOURCE">Subresource</short>
+    <short name="SUBRESOURCES">Subresources</short>
+    <short name="FOOTPRINT">FootPrint</short>
+    <short name="IA">InputAssembler</short>
+    <short name="SRC">Source</short>
+    <short name="DST">Destination</short>
+    <short name="DEST">Destination</short>
+    <short name="INV">Inverse</short>
+    <short name="INVALID">Invalid</short>
+    <short name="INVERT">Invert</short>
+    <short name="INVERTED">Inverted</short>
+    <short name="INCR">Increment</short>
+    <short name="DECR">Decrement</short>
+    <short name="SAT">Saturate</short>
+    <short name="ANYHIT">AnyHit</short>
+    <short name="INVOCATION">Invocation</short>
+    <short name="POSTBUILD">PostBuild</short>
+    <!-- D3D12_MESSAGE_ID -->
+    <short name="CREATESHADERRESOURCEVIEW">CreateShaderResourceView</short>
+    <short name="UNRECOGNIZEDFORMAT">UnrecognizedFormat</short>
+    <short name="INVALIDVIDEOPLANESLICE">InvalidVideoPlaneSlice</short>
+    <short name="CREATERENDERTARGETVIEW">CreateRenderTargetView</short>
+    <short name="CREATEUNORDEREDACCESSVIEW">CreateUnorderedAccessView</short>
+    <short name="CREATECOMMANDLIST">CreateCommandList</short>
+    <short name="CREATEVERTEXSHADER">CreateVertexShader</short>
+    <short name="EXECUTECOMMANDLISTS">ExecuteCommandLists</short>
+    <short name="WRONGSWAPCHAINBUFFERREFERENCE">WrongSwapChainBufferReference</short>
+    <short name="SETRENDERTARGETS">SetRenderTargets</short>
+    <short name="INVALIDNUMRENDERTARGETS">InvalidNumRenderTargets</short>
+    <short name="CREATESHAREDRESOURCE">CreateSharedResource</short>
+    <short name="ATOMICCOPYBUFFER">AtomicCopyBuffer</short>
+    <short name="ACQUIREHANDLEFORCAPTURE">AcquireHandleForCapture</short>
+    <short name="INVALIDARRAY">InvalidArray</short>
+    <short name="INVALIDBIND">InvalidBind</short>
+    <short name="INVALIDTYPE">InvalidType</short>
+    <short name="NULLPARAM">NullParam</short>
+    <short name="INVALIDMAPTYPE">InvalidMapType</short>
+    <short name="NOTMAPPED">NotMapped</short>
+    <short name="OUTOFRANGE">OutOfRange</short>
+    <short name="BLENDSTATE">BlendState</short>
+    <short name="CREATEBLENDSTATE">CreateBlendState</short>
+    <short name="COMMANDLIST">CommandList</short>
+    <short name="GETDESC">GetDescription</short>
+    <short name="ALREADYMAPPED">AlreadyMapped</short>
+    <short name="DEVICEREMOVED">DeviceRemoved</short>
+    <short name="INVALIDFLAGS">InvalidFlags</short>
+    <short name="CREATEDEPTHSTENCILSTATE">CreateDepthStencilState</short>
+    <short name="DEPTHSTENCILSTATE">DepthStencilState</short>
+    <short name="INVALIDBACKFACE">InvalidBackFace</short>
+    <short name="STENCILFAILOP">StencilFailOp</short>
+    <short name="STENCILFUNC">StencilFunc</short>
+    <short name="CHECKCRYPTOSESSIONSTATUS">CheckCryptoSessionStatus</short>
+    <short name="CHECKFEATURESUPPORT">CheckFeatureSupport</short>
+    <short name="CHECKFORMATSUPPORT">CheckFormatSupport</short>
+    <short name="CHECKMULTISAMPLEQUALITYLEVELS">CheckMultisampleQualityLevels</short>
+    <short name="CHECKVIDEODECODERDOWNSAMPLING">CheckVideoDecoderDownsampling</short>
+    <short name="INVALIDCOLORSPACE">InvalidColorSpace</short>
+    <short name="ZEROWIDTHHEIGHT">ZeroWidthHeight</short>
+    <short name="CHECKVIDEOPROCESSORFORMATCONVERSION">CheckVideoProcessorFormatConversion</short>
+    <short name="CLEARDEPTHSTENCILVIEW">ClearDepthStencilView</short>
+    <short name="DENORMFLUSH">DenormFlush</short>
+    <short name="READONLY">ReadOnly</short>
+    <short name="INVALIDDEPTH">InvalidDepth</short>
+    <short name="MISMATCHINGCLEARVALUE">MismatchingClearValue</short>
+    <short name="CLEARRENDERTARGETVIEW">ClearRenderTargetView</short>
+    <short name="CLEARUNORDEREDACCESSVIEW">ClearUnorderedAccessView</short>
+    <short name="CREATECOMMANDLIST1">CreateCommandList1</short>
+    <short name="GS">GeometryState</short>
+    <short name="OM">OutputMerger</short>
+    <short name="OUTOF">OutOf</short>
+    <short name="BOUNDS">Bounds</short>
+    <short name="CHECKCOUNTER">CheckCounter</short>
+    <short name="WELLKNOWN">WellKnown</short>
+    <short name="CREATECOUNTER">CreateCounter</short>
+    <short name="NONEXCLUSIVE">NonExclusive</short>
+    <short name="SHADERRESOURCEVIEW">ShaderResourceView</short>
+    <short name="COPYBUFFERREGION">CopyBufferRegion</short>
+    <short name="COPYFLAGS">CopyFlags</short>
+    <short name="DSTRANGEOUTOFBOUNDS">DestionationRangeOutOfBounds</short>
+    <short name="INVALIDCOPYFLAGS">InvalidCopyFlags</short>
+    <short name="INVALIDSRCRESOURCEDIMENSION">InvalidSourceResourceDimension</short>
+    <short name="INVALIDDSTRESOURCEDIMENSION">InvalidDestionationResourceDimension</short>
+    <short name="NULLSRC">NullSource</short>
+    <short name="NULLDST">NullDestination</short>
+    <short name="SRCRANGEOUTOFBOUNDS">SourceRangeOutOfBounds</short>
+    <short name="INVALIDLAYOUT">InvalidLayout</short>
+    <short name="COPYRESOURCE">CopyResource</short>
+    <short name="INVALIDDESTINATIONSTATE">InvalidDestinationState</short>
+    <short name="INVALIDDSTRESOURCE">InvalidDestinationResource</short>
+    <short name="INVALIDSOURCE">InvalidSource</short>
+    <short name="INVALIDSOURCESTATE">InvalidSourceState</short>
+    <short name="INVALIDSRCRESOURCE">InvalidSourceResource</short>
+    <short name="COPYSTRUCTURECOUNT">CopyStructureCount</short>
+    <short name="INVALIDOFFSET">InvalidOffset</short>
+    <short name="LARGEOFFSET">LargeOffset</short>
+    <short name="COPYSUBRESOURCEREGION">CopySubresourceRegion</short>
+    <short name="EMPTYSOURCEBOX">EmptySourceBox</short>
+    <short name="COPYTEXTUREREGION">CopyTextureRegion</short>
+    <short name="COPYTILES">CopyTiles</short>
+    <short name="COPYTILEMAPPINGS">CopyTileMappings</short>
+    <short name="INVALIDBLENDOP">InvalidBlendOp</short>
+    <short name="INVALIDBLENDOPALPHA">InvalidBlendOpAlpha</short>
+    <short name="INVALIDDESTBLEND">InvalidDestionationBlend</short>
+    <short name="INVALIDDESTBLENDALPHA">InvalidDestionationBlendAlpha</short>
+    <short name="INVALIDLOGICOPS">InvalidLogicOps</short>
+    <short name="INVALIDRENDERTARGETWRITEMASK">InvalidRenderTargetWriteMask</short>
+    <short name="INVALIDSRCBLEND">InvalidSourceBlend</short>
+    <short name="INVALIDSRCBLENDALPHA">InvalidSourceBlendAlpha</short>
+    <short name="NULLDESC">NullDescription</short>
+    <short name="AUTHENTICATEDCHANNEL">AuthenticatedChannel</short>
+    <short name="CREATEBUFFER">CreateBuffer</short>
+    <short name="INVALIDSTRUCTURESTRIDE">InvalidStructureStride</short>
+    <short name="INVALIDUSAGE">InvalidUsage</short>
+    <short name="INVALIDRESOURCE">InvalidResource</short>
+    <short name="COMMANDALLOCATOR">CommandAllocator</short>
+    <short name="WRITETOSUBRESOURCE">WriteToSubresource</short>
+    <short name="MAKERESIDENT">MakeResident</short>
+    <short name="INVALIDOBJECT">InvalidObject</short>
+    <short name="INVALIDARG">InvalidArg</short>
+    <short name="INVALIDDATAPOINTER">InvalidDataPointer</short>
+    <short name="INVALIDHEAP">InvalidHeap</short>
+    <short name="INVALIDRANGE">InvalidRange</short>
+    <short name="INVALIDPRIORITY">InvalidPriority</short>
+    <short name="NULLRANGE">NullRange</short>
+    <short name="NULLOBJECTARRAY">NullObjectArray</short>
+    <short name="TILEDRESOURCEBARRIER">TiledResourceBarrier</short>
+    <short name="OFFERRELEASE">OfferRelease</short>
+    <short name="OFFERRESOURCES">OfferResources</short>
+    <short name="OPENEXISTINGHEAP">OpenExistingHeap</short>
+    <short name="INVALIDADDRESS">InvalidAddress</short>
+    <short name="INVALIDHANDLE">InvalidHandle</short>
+    <short name="INVALIDVIEW">InvalidView</short>
+    <short name="INVALIDSIZE">InvalidSize</short>
+    <short name="INVALIDBOX">InvalidBox</short>
+    <short name="INVALIDARGS">InvalidArgs</short>
+    <short name="INVALIDSUBRESOURCE">InvalidSubresource</short>
+    <short name="OMSETRENDERTARGETS">OutputMergerSetRenderTargets</short>
+    <short name="NOTENOUGHMEMORY">NotEnoughMemory</short>
+    <short name="READFROMSUBRESOURCE">ReadFromSubResource</short>
+    <short name="EMPTYBOX">EmptyBox</short>
+    <short name="REFLECTSHAREDPROPERTIES">ReflectSharedProperties</short>
+    <short name="SAMPLEPOSITIONS">SamplePositions</short>
+    <short name="SETSAMPLEPOSITIONS">SetSamplePositions</short>
+    <short name="RECORDTIME">RecordTime</short>
+    <short name="ASSUMEDFROMCLEAR">AssumedFromClear</short>
+    <short name="ASSUMEDFROMFIRSTUSE">AssumedFromFirstUse</short>
+    <short name="UPDATESUBRESOURCE">UpdateSubresource</short>
+    <short name="EMPTYDESTBOX">EmptyDestinationBox</short>
+    <short name="STOREPIPELINE">StorePipeline</short>
+    <short name="NONAME">NoName</short>
+    <short name="DUPLICATENAME">DuplicateName</short>
+    <short name="SETPRIVATEDATA">SetPrivateData</short>
+    <short name="CHANGINGPARAMS">ChangingParams</short>
+    <short name="INVALIDFREEDATA">InvalidFreeData</short>
+    <short name="INVALIDIUNKNOWN">InvalidIUnknown</short>
+    <short name="SETRESIDENCYPRIORITY">SetResidencyPriority</short>
+    <short name="INVALIDDSTCOORDINATES">InvalidDestinationCoordinates</short>
+    <short name="INVALIDDSTDIMENSIONS">InvalidDestinationDimensions</short>
+    <short name="INVALIDDSTFORMAT">InvalidDestinationFormat</short>
+    <short name="INVALIDDSTOFFSET">InvalidDestinationOffset</short>
+    <short name="INVALIDDSTPLACEMENT">InvalidDestinationPlacement</short>
+    <short name="INVALIDDSTROWPITCH">InvalidDestinationRowPitch</short>
+    <short name="INVALIDDSTSUBRESOURCE">InvalidDestinationSubresource</short>
+    <short name="INVALIDSRCBOX">InvalidSourceBox</short>
+    <short name="INVALIDSRCDIMENSIONS">InvalidSourceDimensions</short>
+    <short name="INVALIDDSTDSPLACEDFOOTPRINTFORMAT">InvalidDestinationDisplacedFootPrintFormat</short>
+    <short name="INVALIDSRCDSPLACEDFOOTPRINTFORMAT">InvalidSourceDisplacedFootPrintFormat</short>
+    <short name="INVALIDSRCFORMAT">InvalidSourceFormat</short>
+    <short name="INVALIDSRCOFFSET">InvalidSourceOffset</short>
+    <short name="INVALIDSRCPLACEMENT">InvalidSourcePlacement</short>
+    <short name="INVALIDSRCROWPITCH">InvalidSourceRowPitch</short>
+    <short name="INVALIDSRCSUBRESOURCE">InvalidSourceSubresource</short>
+    <short name="INVALIDCALL">InvalidCall</short>
+    <short name="SRCREGIONOUTOFBOUNDS">SourceRegionOutOfBounds</short>
+    <short name="UNRECOGNIZEDDSTFORMAT">UnrecognizedDestinationFormat</short>
+    <short name="UNRECOGNIZEDDSTTYPE">UnrecognizedDestinationType</short>
+    <short name="UNRECOGNIZEDSRCFORMAT">UnrecognizedSourceFormat</short>
+    <short name="UNRECOGNIZEDSRCTYPE">UnrecognizedSourceType</short>
+    <short name="CREATECOMMANDSIGNATURE">CreateCommandSignature</short>
+    <short name="CREATECOMPUTESHADER">CreateComputeShader</short>
+    <short name="CREATECOMPUTEPIPELINESTATE">CreateComputePipelineState</short>
+    <short name="COMMANDSIGNATURE">CommandSignature</short>
+    <short name="INVALIDCLASSLINKAGE">InvalidClassLinkage</short>
+    <short name="INVALIDSHADERBYTECODE">InvalidShaderBytecode</short>
+    <short name="CREATEDEPTHSTENCILVIEW">CreateDepthStencilView</short>
+    <short name="CREATEDEVICE">CreateDevice</short>
+    <short name="CREATEDOMAINSHADER">CreateDomainShader</short>
+    <short name="INVALIDSHADERTYPE">InvalidShaderType</short>
+    <short name="CREATEGEOMETRYSHADER">CreateGeometryShader</short>
+    <short name="CREATEGEOMETRYSHADERWITHSTREAMOUTPUT">CreateGeometryShaderWithStreamOutput</short>
+    <short name="CREATEGRAPHICSPIPELINESTATE">CreateGraphicsPipelineState</short>
+    <short name="DEPTHSTENCILVIEW">DepthStencilView</short>
+    <short name="CREATEHEAP">CreateHeap</short>
+    <short name="INVALIDALIGNMENT">InvalidAlignment</short>
+    <short name="CREATEHULLSHADER">CreateHullShader</short>
+    <short name="IMAGECOMMANDLIST">ImageCommandList</short>
+    <short name="CREATEINPUTLAYOUT">CreateInputLayout</short>
+    <short name="INCOMPATIBLEFORMAT">IncompatibleFormat</short>
+    <short name="INVALIDFORMAT">InvalidFormat</short>
+    <short name="INVALIDSLOT">InvalidSlot</short>
+    <short name="INVALIDINPUTSLOTCLASS">InvalidInputSlotClass</short>
+    <short name="INVALIDSLOTCLASSCHANGE">InvalidInputClassChange</short>
+    <short name="INVALIDSTEPRATECHANGE">InvalidStepRateChange</short>
+    <short name="DUPLICATESEMANTIC">DuplicateSemantic</short>
+    <short name="NULLSEMANTIC">NullSemantic</short>
+    <short name="STEPRATESLOTCLASSMISMATCH">StepRateSlotClassMissmatch</short>
+    <short name="TOOMANYELEMENTS">TooManyElements</short>
+    <short name="UNPARSEABLEINPUTSIGNATURE">UnparseableInputSignature</short>
+    <short name="MONITOREDFENCE">MonitoredFence</short>
+    <short name="PIPELINESTATE">PipelineState</short>
+    <short name="CREATEPIPELINESTATE">CreatePipelineState</short>
+    <short name="CREATEPIXELSHADER">CreatePixelShader</short>
+    <short name="CREATEPLACEDRESOURCEONBUFFER">CreatePlacedResourceOnBuffer</short>
+    <short name="CREATEQUERY">CreateQuery</short>
+    <short name="CREATERASTERIZERSTATE">CreateRasterizerState</short>
+    <short name="CONSERVATIVERASTERMODE">ConvervativeRasterMode</short>
+    <short name="KEYEDMUTEX">KeyedMutex</short>
+    <short name="WRONGSTATE">WrongState</short>
+    <short name="POINTER">Pointer</short>
+    <short name="POINTERS">Pointers</short>
+    <short name="NOPERSPECTIVE">NoPerspective</short>
+    <short name="POINTLIST">PointList</short>
+    <short name="LINELIST">LineList</short>
+    <short name="LINESTRIP">LineStrip</short>
+    <short name="TRIANGLELIST">TriangleList</short>
+    <short name="COMPUTESHADER">ComputeShader</short>
+    <short name="DEPTHSTENCIL">DepthStencil</short>
+    <short name="DEPTHSTENCILVIEW">DepthStencilView</short>
+    <short name="DOMAINSHADER">DomainShader</short>
+    <short name="GEOMETRYSHADER">GeometryShader</short>
+    <short name="HULLSHADER">HullShader</short>
+    <short name="MIN8FLOAT">Min8Float</short>
+    <short name="MIN10FLOAT">Min10Float</short>
+    <short name="MIN16FLOAT">Min16Float</short>
+    <short name="MIN12INT">Min12Int</short>
+    <short name="MIN16INT">Min16Int</short>
+    <short name="MIN16UINT">Min16UInt</short>
+    <short name="PIXELFRAGMENT">PixelFragment</short>
+    <short name="PIXELSHADER">PixelShader</short>
+    <short name="RENDERTARGETVIEW">RenderTargetView</short>
+    <short name="SAMPLER1D">Sampler1D</short>
+    <short name="SAMPLER2D">Sampler2D</short>
+    <short name="SAMPLER3D">Sampler3D</short>
+    <short name="SAMPLERCUBE">SamplerCube</short>
+    <short name="VERTEXFRAGMENT">VertexFragment</short>
+    <short name="VERTEXSHADER">VertexShader</short>
+    <short name="SUBOBJECT">SubObject</short>
+    <short name="WRITEBUFFERIMMEDIATE">WriteBufferImmediate</short>
+    <short name="GETPRIVATEDATA">GetPrivateData</short>
+    <short name="MOREDATA">MoreData</short>
+    <short name="MISSINGELEMENT">MissingElement</short>
+    <short name="INVALIDNUMENTRIES">InvalidNumEntries</short>
+    <short name="INVALIDPLANESLICE">InvalidPlaneSlice</short>
+    <short name="OUTPUTSTREAMSTRIDEUNUSED">OutputOutputStreamStrideUnused</short>
+    <short name="OUTPUTSLOT0EXPECTED">OutputSlot0Expected</short>
+    <short name="INVALIDOUTPUTSLOT">InvalidOutputSlot</short>
+    <short name="INVALIDCOMPONENTCOUNT">InvalidComponentCount</short>
+    <short name="ONLYONEELEMENTPERSLOT">OnlyOneElementPerSlot</short>
+    <short name="INVALIDCULLMODE">InvalidCullMode</short>
+    <short name="INVALIDSLOPESCALEDDEPTHBIAS">InvalidSlopeScaledDepthBias</short>
+    <short name="INVALIDDEPTHBIASCLAMP">InvalidDepthBiasClamp</short>
+    <short name="GETCOPYABLEFOOTPRINTS">GetCopyableFootprints</short>
+    <short name="VIDEOENCODERHEAP">VideoEncoderHeap</short>
+    <short name="VIDEOENCODER">VideoEncoder</short>
+    <short name="INVALIDDEPTHWRITEMASK">InvalidDepthWriteMask</short>
+    <short name="BLENDOPALPHA">BlendOpAlpha</short>
+    <short name="BLENDOP">BlendOp</short>
+    <short name="SHADERCACHESESSION">ShaderCacheSession</short>
+    <short name="ALREADYPRESENT">AlreadyPresent</short>
+    <short name="STOREVALUE">StoreValue</short>
+    <short name="HASHCOLLISION">HashCollision</short>
+    <short name="INVALIDGAPDEFINITION">InvalidGapDefinition</short>
+    <short name="INVALIDSTARTCOMPONENTANDCOMPONENTCOUNT">InvalidStartComponentAndComponentCount</short>
+    <short name="INVALIDOUTPUTSTREAMSTRIDE">InvalidOutputStreamStride</short>
+    <short name="REPEATEDOUTPUT">RepeatedOutput</short>
+    <short name="MISSINGSEMANTIC">MissingSemantic</short>
+    <short name="CANTHAVEONLYGAPS">CantHaveOnlyGaps</short>
+    <short name="MASKMISMATCH">MaskMismatch</short>
+    <short name="DECLTOOCOMPLEX">DeclTooComplex</short>
+    <short name="MISSINGOUTPUTSIGNATURE">MissingOutputSignature</short>
+    <short name="INVALIDFILLMODE">InvalidFillMode</short>
+    <short name="INVALIDFRONTFACESTENCILFAILOP">InvalidFrontFaceStencilFailOp</short>
+    <short name="INVALIDFRONTFACESTENCILZFAILOP">InvalidFrontFaceStencilZFailOp</short>
+    <short name="INVALIDFRONTFACESTENCILPASSOP">InvalidFrontFaceStencilPassOp</short>
+    <short name="INVALIDFRONTFACESTENCILFUNC">InvalidFrontFaceStencilFunc</short>
+    <short name="INVALIDBACKFACESTENCILFAILOP">InvalidBackFaceStencilFailOp</short>
+    <short name="INVALIDBACKFACESTENCILZFAILOP">InvalidBackFaceStencilZFailOp</short>
+    <short name="INVALIDBACKFACESTENCILPASSOP">InvalidBackFaceStencilPassOp</short>
+    <short name="INVALIDBACKFACESTENCILFUNC">InvalidBackFaceStencilFunc</short>
+    <short name="UNEXPECTEDENTRIES">UnexpectedEntries</short>
+    <short name="UNEXPECTEDSTRIDES">UnexpectedStrides</short>
+    <short name="INVALIDNUMSTRIDES">InvalidNumStrides</short>
+    <short name="DOUBLEFLOATOPSNOTSUPPORTED">DoubleFloatOpsNotSupported</short>
+    <short name="INVALIDFORCEDSAMPLECOUNT">InvalidForcedSampleCount</short>
+    <short name="DOUBLEEXTENSIONSNOTSUPPORTED">DoubleExtensionsNotSupported</short>
+    <short name="NOTSUPPORTED">NotSupported</short>
+    <short name="EMPTYRECT">EmptyRect</short>
+    <short name="CLEARVIEW">ClearView</short>
+    <short name="UPDATETILEMAPPINGS">UpdateTileMappings</short>
+    <short name="ROOTSIGNATURE">RootSignature</short>
+    <short name="QUERYHEAP">QueryHeap</short>
+    <short name="COMMANDQUEUE">CommandQueue</short>
+    <short name="INVALIDMISCFLAGS">InvalidMiscFlags</short>
+    <short name="UNRECOGNIZEDMISCFLAGS">UnrecognizedMiscFlags</short>
+    <short name="UNRECOGNIZEDHEAPTYPE">UnrecognizedHeapType</short>
+    <short name="UNRECOGNIZEDCPUPAGEPROPERTIES">UnrecognizedCpuPageProperties</short>
+    <short name="UNRECOGNIZEDMEMORYPOOL">UnrecognizedMemoryPool</short>
+    <short name="CREATERESOURCEANDHEAP">CreateResourceAndHeap</short>
+    <short name="NULLHEAPPROPERTIES">NullHeapProperties</short>
+    <short name="UNRECOGNIZEDHEAPMISCFLAGS">UnrecognizedHeapMiscFlags</short>
+    <short name="GETCUSTOMHEAPPROPERTIES">GetCustomHeapProperties</short>
+    <short name="REGISTERINDEX">RegisterIndex</short>
+    <short name="COMPONENTTYPE">ComponentType</short>
+    <short name="REGISTERMASK">RegisterMask</short>
+    <short name="SYSTEMVALUE">SystemValue</short>
+    <short name="NEVERWRITTEN">NeverWritten</short>
+    <short name="ALWAYSREADS">AlwaysReads</short>
+    <short name="MINPRECISION">MinPrecision</short>
+    <short name="SEMANTICNAME">SemanticName</short>
+    <short name="VS">VertexShader</short>
+    <short name="PS">PixelShader</short>
+    <short name="CS">ComputeShader</short>
+    <short name="HS">HullShader</short>
+    <short name="DS">DomainShader</short>
+    <short name="NULLRESOURCEPROPERTIES">NullResourceProperties</short>
+    <short name="NULLHEAP">NullHeap</short>
+    <short name="GETRESOURCEALLOCATIONINFO">GetResourceAllocationInfo</short>
+    <short name="INVALIDRDESCS">InvalidRDescs</short>
+    <short name="CREATERESOURCE">CreateResource</short>
+    <short name="UNRECOGNIZEDDIMENSIONALITY">UnrecognizedDimensionality</short>
+    <short name="UNRECOGNIZEDLAYOUT">UnrecognizedLayout</short>
+    <short name="INVALIDMIPLEVELS">InvalidMipLevels</short>
+    <short name="INVALIDSAMPLEDESC">InvalidSampleDesc</short>
+    <short name="INVALIDCLEARVALUE">InvalidClearValue</short>
+    <short name="UNRECOGNIZEDCLEARVALUEFORMAT">UnrecognizedClearValueFormat</short>
+    <short name="CLEARVALUEDENORMFLUSH">ClearValueDenormFlush</short>
+    <short name="GETGPUVIRTUALADDRESS">GetGpuVirtualAddress</short>
+    <short name="BUNDLENOTSUPPORTED">BundleNotSupported</short>
+    <short name="OPENCOMMANDLIST">OpenCommandList</short>
+    <short name="FAILEDCOMMANDLIST">FailedCommandList</short>
+    <short name="FORMATMISMATCH">FormatMismatch</short>
+    <short name="RESOLVESUBRESOURCE">ResolveSubresource</short>
+    <short name="CACHEDBLOBADAPTERMISMATCH">CachedBlobAdapterMismatch</short>
+    <short name="CACHEDBLOBDRIVERVERSIONMISMATCH">CachedBlobDriverVersionMismatch</short>
+    <short name="CACHEDBLOBDESCMISMATCH">CachedBlobDescMismatch</short>
+    <short name="CACHEDBLOBIGNORED">CachedBlobIgnored</short>
+    <short name="GETHEAPPROPERTIES">GetHeapProperties</short>
+    <short name="CREATEPIPELINELIBRARY">CreatePipelineLibrary</short>
+    <short name="INVALIDLIBRARYBLOB">InvalidLibraryBlob</short>
+    <short name="DRIVERVERSIONMISMATCH">DriverVersionMismatch</short>
+    <short name="PIPELINELIBRARY">PipelineLibrary</short>
+    <short name="ADAPTERVERSIONMISMATCH">AdapterVersionMismatch</short>
+    <short name="LOADPIPELINE">LoadPipeline</short>
+    <short name="NAMENOTFOUND">NameNotFound</short>
+    <short name="SETEVENTONMULTIPLEFENCECOMPLETION">SetEventOnMultipleFenceCompletion</short>
+    <short name="VIDEODECODECOMMANDLIST">VideoDecodeCommandList</short>
+    <short name="VIDEODECODESTREAM">VideoDecodeStream</short>
+    <short name="VIDEODECODER">VideoDecoder</short>
+    <short name="SETDEPTHBOUNDS">SetDepthBounds</short>
+    <short name="VIDEODECODECOMMANDQUEUE">VideoDecodeCommandQueue</short>
+    <short name="VIDEOPROCESSCOMMANDLIST">VideoProcessCommandList</short>
+    <short name="VIDEOPROCESSCOMMANDQUEUE">VideoProcessCommandQueue</short>
+    <short name="VIDEOPROCESSOR">VideoProcessor</short>
+    <short name="VIDEOPROCESSSTREAM">VideoProcessStream</short>
+    <short name="RSSETSHADING">RSSetShading</short>
+    <short name="NONZERO">NonZero</short>
+    <short name="CREATEMESHSHADER">CreateMeshShader</short>
+    <short name="CREATEMESHSHADERWITHSTREAMOUTPUT">CreateMeshShaderWithStreamOutput</short>
+    <short name="OUTPUTEXCEEDSMAXSIZE">OutputExceedsMaxSize</short>
+    <short name="GROUPSHAREDEXCEEDSMAXSIZE">GroupSharedExceedsMaxSize</short>
+    <short name="MISMATCHEDASMSPAYLOADSIZE">MismatchedAmplificationShaderMeshShaderPayloadSize</short>
+    <short name="CREATEAMPLIFICATIONSHADER">CreateAmplificationShader</short>
+    <short name="CREATESHADERCACHESESSION">CreateShaderCacheSession</short>
+    <short name="SHADERCACHECONTROL">ShaderCacheControl</short>
+    <short name="DEVELOPERMODE">DeveloperMode</short>
+    <short name="STATEALREADYSET">StateAlreadySet</short>
+    <short name="IGNOREDFLAG">IgnoredFlag</short>
+    <short name="FINDVALUE">FindValue</short>
+    <short name="NOTFOUND">NotFound</short>
+    <short name="DIRECTSR">DirectSR</short>
+    <short name="SUPERRES">SuperRes</short>
+  </naming>
+
+  <mapping>
+    <map enum="D3D(\d+)(.*)" name-tmp="$2" />
+    <map enum-item="D3D12_RESOURCE_BINDING_TIER_(.*)" name="Tier$1"/>
+    <map enum-item="D3D12_VIEW_INSTANCING_TIER(.*)" name-tmp="Tier$1"/>
+    <map enum-item="D3D12_CONSERVATIVE_RASTERIZATION_TIER(.*)" name-tmp="Tier$1"/>
+    <map enum-item="D3D12_CROSS_NODE_SHARING_TIER(.*)" name-tmp="Tier$1"/>
+    <map enum-item="D3D12_RESOURCE_HEAP_TIER(.*)" name-tmp="Tier$1"/>
+    <map enum-item="D3D12_TILED_RESOURCES_TIER(.*)" name-tmp="Tier$1"/>
+    <map enum-item="D3D12_INDEX_BUFFER_STRIP_CUT_(VALUE_0x.*)" name-tmp="$1"/>
+    <map enum-item="D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS" name="Constant32Bits"/>
+    <map enum="D3D_ROOT_SIGNATURE_VERSION" name="RootSignatureVersion"/>
+    <map enum-item="D3D_ROOT_SIGNATURE_VERSION(.*)" name-tmp="Version$1"/>
+    <map enum-item="D3D12_SHADER_MIN_PRECISION_SUPPORT_(\d*)_BIT" name-tmp="Bit$1"/>
+    <map enum-item="D3D12_DSV_FLAG(.*)" name-tmp="$1"/>
+    <map enum-item="D3D12_PROGRAMMABLE_SAMPLE_POSITIONS_TIER_(.*)" name-tmp="Tier$1"/>
+    <map enum-item="D3D12_VIDEO_DECODE_TIER_(.*)" name="Tier$1"/>
+    <map enum-item="D3D12_MESH_SHADER_TIER_(.*)" name="Tier$1"/>
+    <map enum-item="D3D12_SAMPLER_FEEDBACK_TIER_(.*)" name="Tier$1"/>
+    <map enum-item="D3D12_WORK_GRAPHS_TIER_(.*)" name="Tier$1"/>
+    <map enum-item="D3D12_EXECUTE_INDIRECT_TIER_(.*)" name="Tier$1"/>
+
+    <map enum-item="D3D12_TEXTURE_LAYOUT_64KB_UNDEFINED_SWIZZLE" name="UndefinedSwizzle64kb"/>
+    <map enum-item="D3D12_TEXTURE_LAYOUT_64KB_STANDARD_SWIZZLE" name="StandardSwizzle64kb"/>
+
+    <map enum="D3D12_SHADER_COMPONENT_MAPPING" name="ShaderComponentMappingSource"/>
+
+    <!-- D3D12_AXIS_SHADING_RATE -->
+    <map enum-item="D3D12_AXIS_SHADING_RATE_1X" name="Rate1x"/>
+    <map enum-item="D3D12_AXIS_SHADING_RATE_2X" name="Rate2x"/>
+    <map enum-item="D3D12_AXIS_SHADING_RATE_4X" name="Rate4x"/>
+    <map enum-item="D3D12_DRED_VERSION_1_0" name="Version1_0"/>
+    <map enum-item="D3D12_DRED_VERSION_1_1" name="Version1_1"/>
+    <map enum-item="D3D12_DRED_VERSION_1_2" name="Version1_2"/>
+    <map enum-item="D3D12_DRED_VERSION_1_3" name="Version1_3"/>
+
+    <!-- D3D12_SHADING_RATE -->
+    <map enum-item="D3D12_SHADING_RATE_1X1" name="Rate1x1"/>
+    <map enum-item="D3D12_SHADING_RATE_1X2" name="Rate1x2"/>
+    <map enum-item="D3D12_SHADING_RATE_2X1" name="Rate2x1"/>
+    <map enum-item="D3D12_SHADING_RATE_2X2" name="Rate2x2"/>
+    <map enum-item="D3D12_SHADING_RATE_2X4" name="Rate2x4"/>
+    <map enum-item="D3D12_SHADING_RATE_4X2" name="Rate4x2"/>
+    <map enum-item="D3D12_SHADING_RATE_4X4" name="Rate4x4"/>
+
+    <!-- D3D12_VARIABLE_SHADING_RATE_TIER -->
+    <map enum-item="D3D12_VARIABLE_SHADING_RATE_TIER_1" name="Tier1"/>
+    <map enum-item="D3D12_VARIABLE_SHADING_RATE_TIER_2" name="Tier2"/>
+
+    <map enum="D3D12_FORMAT_SUPPORT1" flags="true"/>
+    <map enum="D3D12_FORMAT_SUPPORT2" flags="true"/>
+
+    <!-- D3D_SHADER_MODEL -->
+    <map enum="D3D_SHADER_MODEL" name="ShaderModel"/>
+    <map enum-item="D3D_SHADER_MODEL_5_1" name="Model5_1" />
+    <map enum-item="D3D_SHADER_MODEL_6_0" name="Model6_0" />
+    <map enum-item="D3D_SHADER_MODEL_6_1" name="Model6_1" />
+    <map enum-item="D3D_SHADER_MODEL_6_2" name="Model6_2" />
+    <map enum-item="D3D_SHADER_MODEL_6_3" name="Model6_3" />
+    <map enum-item="D3D_SHADER_MODEL_6_4" name="Model6_4" />
+    <map enum-item="D3D_SHADER_MODEL_6_5" name="Model6_5" />
+    <map enum-item="D3D_SHADER_MODEL_6_6" name="Model6_6" />
+    <map enum-item="D3D_SHADER_MODEL_6_7" name="Model6_7" />
+    <map enum-item="D3D_SHADER_MODEL_6_8" name="Model6_8" />
+    <map enum-item="D3D_SHADER_MODEL_6_9" name="Model6_9" />
+
+    <map enum-item="D3D12_WAVE_MMA_TIER_1_0" name="Tier1_0"/>
+
+    <map enum="D3D12_RLDO_FLAGS" name="ReportLiveDeviceObjectFlags" />
+    <map enum-item="D3D12_HEAP_SERIALIZATION_TIER_(.*)" name="Tier$1"/>
+    <map enum-item="D3D12_SHARED_RESOURCE_COMPATIBILITY_TIER_(.*)" name="Tier$1"/>
+    <map enum-item="D3D12_RENDER_PASS_TIER_(.*)" name="Tier$1"/>
+    <map enum-item="D3D12_RAYTRACING_TIER_(.*)" name="Tier$1"/>
+    <map enum="D3D12_GPU_BASED_VALIDATION_FLAGS" flags="false"/>
+    <map enum-item="D3D12_(.*)_DESCRIPTOR_HEAP$" name-tmp="$1"/>
+    <map enum-item="D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES" name="Count"/>
+
+    <map enum-item="D3D12_RAYTRACING_TIER_NOT_SUPPORTED" name="NotSupported"/>
+    <map enum-item="D3D12_MESH_SHADER_TIER_NOT_SUPPORTED" name="NotSupported"/>
+    <map enum-item="D3D12_SAMPLER_FEEDBACK_TIER_NOT_SUPPORTED" name="NotSupported"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS" name="Options"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS1" name="Options1"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS2" name="Options2"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS3" name="Options3"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS4" name="Options4"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS5" name="Options5"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS6" name="Options6"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS7" name="Options7"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS8" name="Options8"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS9" name="Options9"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS10" name="Options10"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS11" name="Options11"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS12" name="Options12"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS13" name="Options13"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS14" name="Options14"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS15" name="Options15"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS16" name="Options16"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS17" name="Options17"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS18" name="Options18"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS19" name="Options19"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS20" name="Options20"/>
+    <map enum-item="D3D12_FEATURE_D3D12_OPTIONS21" name="Options21"/>
+
+    <map enum="D3D12_BLEND_OP" name="BlendOperation" />
+    <map enum="D3D12_COMPARISON_FUNC" name="ComparisonFunction" />
+    <map enum="D3D12_STENCIL_OP" name="StencilOperation" />
+    <map enum="D3D12_COLOR_WRITE_ENABLE" name="ColorWriteEnable" type="byte" flags="true" />
+    <map enum-item="D3D12_COLOR_WRITE_ENABLE(.*)" name-tmp="$1" />
+
+    <map enum-item="D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_8X8" name="Size8x8"/>
+    <map enum-item="D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_16X16" name="Size16x16"/>
+    <map enum-item="D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_FLAG_8X8" name="Size8x8"/>
+    <map enum-item="D3D12_VIDEO_MOTION_ESTIMATOR_SEARCH_BLOCK_SIZE_FLAG_16X16" name="Size16x16"/>
+
+    <map enum-item="D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK_UINT" name="OpaqueBlackUInt" />
+    <map enum-item="D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE_UINT" name="OpaqueWhiteUInt" />
+
+    <!-- structs -->
+    <map struct="D3D(\d+)(.*)" name-tmp="$2" />
+    <!--<map interface="ID3D1[0-3](.+)" name-tmp="$1" />-->
+
+    <map field=".*::(.*)Desc([0-9]*)W?" name="$1Description$2" />
+    <map method=".*::(.*)Desc([0-9]*)W?" name="$1Description$2" />
+
+    <remove struct="D3D12_MEMCPY_DEST"/>
+
+    <map enum="D3D12_MULTISAMPLE_QUALITY_LEVEL_FLAGS" name="MultisampleQualityLevelFlags" flags="true"/>
+    <map enum-item="D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE" name="None"/>
+    <map enum-item="D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_TILED_RESOURCE" name="TiledResource"/>
+
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_VS" name="VertexShader"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PS" name="PixelShader"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DS" name="DomainShader"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_HS" name="HullShader"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_GS" name="GeometryShader"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_CS" name="ComputeShader"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_STREAM_OUTPUT" name="StreamOutput"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_BLEND" name="Blend"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_MASK" name="SampleMask"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RASTERIZER" name="Rasterizer"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL" name="DepthStencil"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_INPUT_LAYOUT" name="InputLayout"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_IB_STRIP_CUT_VALUE" name="IndexBufferStripCutValue"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_PRIMITIVE_TOPOLOGY" name="PrimitiveTopology"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS" name="RenderTargetFormats"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL_FORMAT" name="DepthStencilFormat"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_DESC" name="SampleDescription"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_NODE_MASK" name="NodeMask"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_CACHED_PSO" name="CachedPipelineStateObject"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_FLAGS" name="Flags"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL1" name="DepthStencil1"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_VIEW_INSTANCING" name="ViewInstancing"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_AS" name="AmplificationShader"/>
+    <map enum-item="D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_MS" name="MeshShader"/>
+
+    <map enum-item="D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES" name="DenyRenderTargetDepthStencilTextures"/>
+    <map enum-item="D3D12_HEAP_FLAG_DENY_NON_RT_DS_TEXTURES" name="DenyNonRenderTargetDepthStencilTextures"/>
+    <map enum-item="D3D12_HEAP_FLAG_ALLOW_ONLY_NON_RT_DS_TEXTURES" name="AllowOnlyNonRenderTargetDepthStencilTextures"/>
+    <map enum-item="D3D12_HEAP_FLAG_ALLOW_ONLY_RT_DS_TEXTURES" name="AllowOnlyRenderTargetDepthStencilTextures"/>
+
+    <map enum-item="D3D12_INDIRECT_ARGUMENT_TYPE_INCREMENTING_CONSTANT" name="IncrementingConstant"/>
+
+    <!--Remove all fields for D3D12_RESOURCE_BARRIER_DESC as the union with pointers cannot be mapped safely in x86/x64 with C# explicit layout-->
+    <remove field="D3D12_SUBRESOURCE_DATA::.*" />
+    <remove field="D3D12_RESOURCE_BARRIER::.*"/>
+    <remove field="D3D12_ROOT_PARAMETER::.*"/>
+    <remove field="D3D12_ROOT_PARAMETER1::.*" />
+    <remove field="D3D12_TEXTURE_COPY_LOCATION::.*" />
+    <remove field="D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS::.*" />
+    <remove field="D3D12_VERSIONED_DEVICE_REMOVED_EXTENDED_DATA::.*"/>
+
+
+    <map field="D3D12_RESOURCE_TRANSITION_BARRIER::pResource" name="ResourcePointer" type="void" visibility="private"/>
+    <map field="D3D12_RESOURCE_ALIASING_BARRIER::pResourceBefore" name="ResourceBeforePointer" type="void" visibility="private"/>
+    <map field="D3D12_RESOURCE_ALIASING_BARRIER::pResourceAfter" name="ResourceAfterPointer" type="void" visibility="private"/>
+    <map field="D3D12_RESOURCE_TRANSITION_BARRIER::pResource" name="ResourcePointer" type="void" visibility="private"/>
+    <map field="D3D12_RESOURCE_UAV_BARRIER::pResource" name="ResourcePointer" type="void" />
+
+    <map field="D3D12_NODE_MASK::NodeMask" name="Mask" />
+    <map field="D3D12_SAMPLE_MASK::SampleMask" name="Mask" />
+    <map field="D3D12_DESCRIPTOR_HEAP_DESC::NumDescriptors" name="DescriptorCount"/>
+    <map field="D3D12_DEPTH_STENCIL_FORMAT::DepthStencilFormat" name="Format"/>
+
+    <map struct="D3D12_INFO_QUEUE_FILTER" name="InfoQueueFilter" native="true" struct-to-class="true" marshal="true" />
+
+    <map method="ID3D12InfoQueue::GetMessageW" name="GetMessage" />
+    <map method="ID3D12InfoQueue::GetMessageW?" visibility="internal"/>
+    <map param="ID3D12InfoQueue::GetMessageW?::pMessage" type="void" attribute="in"/>
+    <map method="ID3D12InfoQueue::GetStorageFilter" visibility="internal"/>
+    <map param="ID3D12InfoQueue::GetStorageFilter::pFilter" type="void" attribute="in"/>
+    <map method="ID3D12InfoQueue::GetRetrievalFilter" visibility="internal"/>
+    <map param="ID3D12InfoQueue::GetRetrievalFilter::pFilter" type="void" attribute="in"/>
+
+    <map method="ID3D12InfoQueue1::RegisterMessageCallback" visibility="private"/>
+    <map param="ID3D12InfoQueue1::RegisterMessageCallback::pCallbackCookie" attribute="out" return="false" />
+
+    <map method="ID3D12InfoQueue1::UnregisterMessageCallback" visibility="private" />
+
+    <map enum-item="D3D12_MESSAGE_ID_(.*)" name-tmp="$1" />
+    <remove enum-item="D3D12_MESSAGE_ID_D3D12_MESSAGES_END" />
+    <map struct="D3D12_MESSAGE" marshal="true" new="false" marshalto="true" />
+    <map field="D3D12_MESSAGE::pDescription" name="Description" visibility="public"/>
+    <map field="D3D12_MESSAGE::DescriptionByteLength" visibility="internal"/>
+
+    <map struct="D3D12_INFO_QUEUE_FILTER_DESC" name="InfoQueueFilterDescription" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_INFO_QUEUE_FILTER_DESC::.*"/>
+
+    <map struct="D3D12_ROOT_DESCRIPTOR_TABLE" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_ROOT_DESCRIPTOR_TABLE::.*"/>
+
+    <map struct="D3D12_ROOT_DESCRIPTOR_TABLE1" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_ROOT_DESCRIPTOR_TABLE1::.*"/>
+
+    <map struct="D3D12_ROOT_SIGNATURE_DESC" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_ROOT_SIGNATURE_DESC::.*"/>
+
+    <map struct="D3D12_ROOT_SIGNATURE_DESC1" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_ROOT_SIGNATURE_DESC1::.*"/>
+
+    <map struct="D3D12_ROOT_SIGNATURE_DESC2" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_ROOT_SIGNATURE_DESC2::.*"/>
+
+    <map struct="D3D12_VERSIONED_ROOT_SIGNATURE_DESC" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_VERSIONED_ROOT_SIGNATURE_DESC::.*"/>
+
+    <map struct="D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS" struct-to-class="true" marshal="true" />
+    <map field="D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC::DestAccelerationStructureData" name="DestinationAccelerationStructureData" />
+
+    <map field="D3D12_CLEAR_VALUE::Color" type="VORTICE_COLOR4" array="" override-native-type="true" />
+
+    <map struct="D3D12_DEPTH_STENCILOP_DESC" name="DepthStencilOperationDescription" />
+    <map struct="D3D12_DEPTH_STENCILOP_DESC1" name="DepthStencilOperationDescription1" />
+
+    <map struct="D3D12_SHADER_BYTECODE" name="ShaderBytecode" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_SHADER_BYTECODE::.*"/>
+
+    <map struct="D3D12_INPUT_ELEMENT_DESC" marshalto="true"/>
+    <map field="D3D12_INPUT_ELEMENT_DESC::InputSlot" name="Slot" />
+    <map field="D3D12_INPUT_ELEMENT_DESC::InputSlotClass" name="Classification" />
+
+    <map struct="D3D12_INPUT_LAYOUT_DESC" name="InputLayoutDescription" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_INPUT_LAYOUT_DESC::.*"/>
+
+    <map struct="D3D12_SO_DECLARATION_ENTRY" name="StreamOutputElement" marshalto="true" />
+
+    <map struct="D3D12_STREAM_OUTPUT_DESC" name="StreamOutputDescription" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_STREAM_OUTPUT_DESC::.*"/>
+
+    <map struct="D3D12_GRAPHICS_PIPELINE_STATE_DESC" name="GraphicsPipelineStateDescription" native="true" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_GRAPHICS_PIPELINE_STATE_DESC::.*"/>
+
+    <map struct="D3D12_COMPUTE_PIPELINE_STATE_DESC" name="ComputePipelineStateDescription" native="true" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_COMPUTE_PIPELINE_STATE_DESC::.*"/>
+
+    <map struct="D3D12_BLEND_DESC" name="BlendDescription" marshal="false" />
+    <remove field="D3D12_BLEND_DESC::.*"/>
+
+    <map struct="D3D12_STATE_SUBOBJECT" name="StateSubObject" native="true" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_STATE_SUBOBJECT::.*"/>
+
+    <map struct="D3D12_STATE_OBJECT_DESC" name="StateObjectDescription" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_STATE_OBJECT_DESC::.*"/>
+
+    <map struct="D3D12_DXIL_LIBRARY_DESC" name="DxilLibraryDescription" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_DXIL_LIBRARY_DESC::.*"/>
+
+    <map struct="D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION" name="SubObjectToExportsAssociation" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION::.*"/>
+
+    <map struct="D3D12_DXIL_SUBOBJECT_TO_EXPORTS_ASSOCIATION" name="DxilSubObjectToExportsAssociation" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_DXIL_SUBOBJECT_TO_EXPORTS_ASSOCIATION::.*"/>
+
+    <map struct="D3D12_EXISTING_COLLECTION_DESC" name="ExistingCollectionDescription" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_EXISTING_COLLECTION_DESC::.*"/>
+
+    <map struct="D3D12_VIEW_INSTANCING_DESC" name="ViewInstancingDescription" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_VIEW_INSTANCING_DESC::.*"/>
+
+    <!-- D3D12_RENDER_TARGET_BLEND_DESC struct -->
+    <map field="D3D12_RENDER_TARGET_BLEND_DESC::BlendEnable" name="BlendEnable" />
+    <map field="D3D12_RENDER_TARGET_BLEND_DESC::LogicOpEnable" name="LogicOpEnable"/>
+    <map field="D3D12_RENDER_TARGET_BLEND_DESC::SrcBlend" name="SourceBlend" />
+    <map field="D3D12_RENDER_TARGET_BLEND_DESC::DestBlend" name="DestinationBlend" />
+    <map field="D3D12_RENDER_TARGET_BLEND_DESC::BlendOp" name="BlendOperation" />
+    <map field="D3D12_RENDER_TARGET_BLEND_DESC::SrcBlendAlpha" name="SourceBlendAlpha" />
+    <map field="D3D12_RENDER_TARGET_BLEND_DESC::DestBlendAlpha" name="DestinationBlendAlpha" />
+    <map field="D3D12_RENDER_TARGET_BLEND_DESC::BlendOpAlpha" name="BlendOperationAlpha" />
+    <map field="D3D12_RENDER_TARGET_BLEND_DESC::RenderTargetWriteMask" type="D3D12_COLOR_WRITE_ENABLE" />
+
+    <!-- D3D12_SAMPLER_DESC struct -->
+    <map struct="D3D12_SAMPLER_DESC" pack="4"/>
+    <map field="D3D12_SAMPLER_DESC::ComparisonFunc" name="ComparisonFunction" />
+    <map field="D3D12_SAMPLER_DESC::BorderColor" type="VORTICE_COLOR4" override-native-type="true" array="0" />
+    <map field="D3D12_STATIC_SAMPLER_DESC::ComparisonFunc" name="ComparisonFunction" />
+    <map field="D3D12_STATIC_SAMPLER_DESC1::ComparisonFunc" name="ComparisonFunction" />
+
+    <!-- Inner argument description structs have no name, so we specify it manually -->
+    <map struct="D3D12_INDIRECT_ARGUMENT_DESC_INNER_0_INNER_0" name="VertexBufferArgument"/>
+    <map struct="D3D12_INDIRECT_ARGUMENT_DESC_INNER_0_INNER_1" name="ConstantArgument"/>
+    <map struct="D3D12_INDIRECT_ARGUMENT_DESC_INNER_0_INNER_2" name="ConstantBufferArgument"/>
+    <map struct="D3D12_INDIRECT_ARGUMENT_DESC_INNER_0_INNER_3" name="ShaderResourceViewArgument"/>
+    <map struct="D3D12_INDIRECT_ARGUMENT_DESC_INNER_0_INNER_4" name="UnorderedAccessViewArgument"/>
+    <move struct="D3D12_INDIRECT_ARGUMENT_DESC_INNER_(.*)" to="D3D12_INDIRECT_ARGUMENT_DESC"/>
+
+    <map struct="D3D12_COMMAND_SIGNATURE_DESC" name="CommandSignatureDescription" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_COMMAND_SIGNATURE_DESC::.*"/>
+
+    <map enum="D3D12_STATE_SUBOBJECT_TYPE" name="StateSubObjectType" />
+
+    <map struct="D3D12_BOX" visibility="internal"/>
+    <map struct="D3D12_DISCARD_REGION" visibility="internal"/>
+
+    <map field="D3D12_CACHED_PIPELINE_STATE::CachedBlobSizeInBytes" name="CachedBlobSizeInBytes" />
+
+    <map struct="D3D12_RT_FORMAT_ARRAY" visibility="internal" marshal="true" />
+    <map field="D3D12_RT_FORMAT_ARRAY::RTFormats" name="Formats" />
+    <remove field="D3D12_RT_FORMAT_ARRAY::.*"/>
+
+    <map enum="D3D12_RAYTRACING_INSTANCE_FLAGS" name="RaytracingInstanceFlags" type="byte" />
+
+    <map struct="D3D12_RENDER_PASS_RENDER_TARGET_DESC" name="RenderPassRenderTargetDescription" native="true" marshal="true" />
+    <map struct="D3D12_RENDER_PASS_ENDING_ACCESS" name="RenderPassEndingAccess" native="true" marshal="true" />
+
+    <map struct="D3D12_RENDER_PASS_ENDING_ACCESS_RESOLVE_PARAMETERS" name="RenderPassEndingAccessResolveParameters" native="true" struct-to-class="true" marshal="true" marshalto="false" />
+    <remove field="D3D12_RENDER_PASS_ENDING_ACCESS_RESOLVE_PARAMETERS::.*"/>
+
+    <map struct="D3D12_BARRIER_GROUP" name="BarrierGroup" native="true" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_BARRIER_GROUP::.*"/>
+
+    <!-- DRED -->
+    <map struct="D3D12_AUTO_BREADCRUMB_NODE" name="AutoBreadcrumbNode" native="true" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_AUTO_BREADCRUMB_NODE::.*"/>
+
+    <map struct="D3D12_AUTO_BREADCRUMB_NODE1" name="AutoBreadcrumbNode1" native="true" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_AUTO_BREADCRUMB_NODE1::.*"/>
+
+    <map struct="D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT" name="DredAutoBreadcrumbsOutput" native="true" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT::.*"/>
+
+    <map struct="D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1" name="DredAutoBreadcrumbsOutput1" native="true" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1::.*"/>
+
+    <map struct="D3D12_DRED_ALLOCATION_NODE" name="DredAllocationNode" native="true" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_DRED_ALLOCATION_NODE::.*"/>
+
+    <map struct="D3D12_DRED_ALLOCATION_NODE1" name="DredAllocationNode1" native="true" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_DRED_ALLOCATION_NODE1::.*"/>
+
+    <map struct="D3D12_DRED_PAGE_FAULT_OUTPUT" name="DredPageFaultOutput" native="true" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_DRED_PAGE_FAULT_OUTPUT::.*"/>
+
+    <map struct="D3D12_DRED_PAGE_FAULT_OUTPUT1" name="DredPageFaultOutput1" native="true" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_DRED_PAGE_FAULT_OUTPUT1::.*"/>
+
+    <!-- ID3D12Object methods -->
+    <map method="ID3D12Object::GetPrivateData" visibility="public" hresult="true" check="false"/>
+    <map param="ID3D12Object::GetPrivateData::pData" type="void" keep-pointers="true"/>
+    <map method="ID3D12Object::SetPrivateData" visibility="public" hresult="true" check="false"/>
+    <map param="ID3D12Object::SetPrivateData::pData" type="void" keep-pointers="true"/>
+    <map method="ID3D12Object::SetName" property="false" visibility="private"/>
+
+    <!-- ID3D12DeviceChild methods -->
+    <map method="ID3D12DeviceChild::GetDevice" visibility="private" hresult="true" check="false"/>
+
+    <!-- ID3D12Resource methods -->
+    <map method="ID3D12Resource::GetHeapProperties" hresult="true" check="false"/>
+    <map method="ID3D12Resource::WriteToSubresource" hresult="true" check="false"/>
+    <map method="ID3D12Resource::ReadFromSubresource" hresult="true" check="false"/>
+
+    <map method="ID3D12Resource::Map" hresult="true" check="false"/>
+    <map param="ID3D12Resource::Unmap::pWrittenRange" default="null"/>
+    <!--<map param="ID3D12Resource::Map::ppData" attribute="out" return="true"/>-->
+    <map param="ID3D12Resource::Map::pReadRange" default="null"/>
+    <map param="ID3D12Resource::Map::ppData" default="null" type="void" keep-pointers="true" />
+    <map param="ID3D12Resource::ReadFromSubresource::pDstData" attribute="in value"/>
+    <map param="ID3D12Resource::ReadFromSubresource::pSrcBox" default="null"/>
+
+    <map method="ID3D12Resource::OMSetBlendState" custom-vtbl="true" visibility="private"/>
+
+    <!-- ID3D12Resource1 methods -->
+    <map method="ID3D12Resource1::GetProtectedResourceSession" visibility="private" hresult="true" check="false"/>
+
+    <!-- ID3D12ProtectedSession methods -->
+    <map method="ID3D12ProtectedSession::GetStatusFence" visibility="private" hresult="true" check="false"/>
+
+    <!-- ID3D12Device methods -->
+    <map method="ID3D12Device::GetAdapterLuid" custom-vtbl="true" visibility="private" property="false" />
+
+    <map method="ID3D12Device::CheckFeatureSupport" visibility="internal" check="false"/>
+    <map param="ID3D12Device::CheckFeatureSupport::pFeatureSupportData" type="void" keep-pointers="true"/>
+    <map method="ID3D12Device::GetDeviceRemovedReason" check="false"/>
+
+    <map method="ID3D12Device::CopyDescriptors" visibility="private"/>
+    <map param="ID3D12Device::CopyDescriptors::pDestDescriptorRangeStarts" type="void" keep-pointers="true"/>
+    <map param="ID3D12Device::CopyDescriptors::pDestDescriptorRangeSizes" type="void" keep-pointers="true"/>
+    <map param="ID3D12Device::CopyDescriptors::pSrcDescriptorRangeStarts" type="void" keep-pointers="true"/>
+    <map param="ID3D12Device::CopyDescriptors::pSrcDescriptorRangeSizes" type="void" keep-pointers="true"/>
+
+    <map method="ID3D12Device::CreateCommittedResource" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreateCommittedResource::ppvResource" attribute="out" />
+
+    <map method="ID3D12Device::CreateCommandQueue" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreateCommandQueue::ppCommandQueue" attribute="out"/>
+
+    <map method="ID3D12Device::CreateDescriptorHeap" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreateDescriptorHeap::ppvHeap" attribute="out" />
+
+    <map method="ID3D12Device::CreateCommandAllocator" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreateCommandAllocator::ppCommandAllocator" attribute="out" />
+
+    <map method="ID3D12Device::CreateCommandList" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreateCommandList::ppCommandList" attribute="out" />
+
+    <map method="ID3D12Device::CreateFence" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreateFence::ppFence" attribute="out" />
+
+    <map method="ID3D12Device::CreateHeap" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreateHeap::pDesc" attribute="in value"/>
+    <map param="ID3D12Device::CreateHeap::ppvHeap" attribute="out" />
+
+    <map method="ID3D12Device::CreateRootSignature" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreateRootSignature::ppvRootSignature" attribute="out" />
+
+    <map method="ID3D12Device::CreateCommandSignature" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreateCommandSignature::ppvCommandSignature" attribute="out" />
+
+    <map method="ID3D12Device::CreateComputePipelineState" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreateComputePipelineState::ppPipelineState" attribute="out" />
+
+    <map method="ID3D12Device::CreateGraphicsPipelineState" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreateGraphicsPipelineState::ppPipelineState" attribute="out" />
+
+    <map method="ID3D12Device::CreateQueryHeap" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreateQueryHeap::ppvHeap" attribute="out" />
+
+    <map method="ID3D12Device::CreatePlacedResource" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreatePlacedResource::ppvResource" attribute="out" />
+
+    <map method="ID3D12Device::CreateReservedResource" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device::CreateReservedResource::ppvResource" attribute="out" />
+
+    <map method="ID3D12Device::CreateSharedHandle" visibility="private" name="CreateSharedHandlePrivate"/>
+    <map param="ID3D12Device::CreateSharedHandle::pHandle" attribute="out" return="true"/>
+
+    <map method="ID3D12Device::CreateSampler" visibility="public"/>
+    <map method="ID3D12Device::SetStablePowerState" property="false" />
+
+    <map method="ID3D12Device::GetCopyableFootprints" visibility="internal"/>
+    <map param="ID3D12Device::GetCopyableFootprints::pResourceDesc" attribute="in value"/>
+    <map param="ID3D12Device::GetCopyableFootprints::pLayouts" type="void" keep-pointers="true"/>
+    <map param="ID3D12Device::GetCopyableFootprints::pNumRows" type="void" keep-pointers="true"/>
+    <map param="ID3D12Device::GetCopyableFootprints::pRowSizeInBytes" type="void" keep-pointers="true"/>
+    <map param="ID3D12Device::GetCopyableFootprints::pTotalBytes" return="false"/>
+
+    <map method="ID3D12Device::OpenSharedHandle" visibility="private" hresult="true" check="false"/>
+    <map method="ID3D12Device::OpenSharedHandleByName" visibility="private" hresult="true" check="false"/>
+    <map method="ID3D12Device::Evict" visibility="private"/>
+    <map method="ID3D12Device::MakeResident" visibility="private"/>
+    <map method="ID3D12Device::GetResourceAllocationInfo" visibility="private"/>
+
+    <!-- ID3D12Device1 methods -->
+    <map method="ID3D12Device1::CreatePipelineLibrary" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device1::CreatePipelineLibrary::pLibraryBlob" type="void" keep-pointers="true"/>
+    <map param="ID3D12Device1::CreatePipelineLibrary::ppPipelineLibrary" attribute="out" />
+
+    <!-- ID3D12Device2 methods -->
+    <map method="ID3D12Device2::CreatePipelineState" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device2::CreatePipelineState::ppPipelineState" attribute="out" />
+
+    <!-- ID3D12Device3 methods -->
+    <map method="ID3D12Device3::EnqueueMakeResident" visibility="private" hresult="true" check="false"/>
+    <map method="ID3D12Device3::OpenExistingHeapFromAddress" visibility="private" hresult="true" check="false"/>
+    <map method="ID3D12Device3::OpenExistingHeapFromFileMapping" visibility="private" hresult="true" check="false"/>
+
+    <!-- ID3D12Device4 methods -->
+    <map method="ID3D12Device4::CreateCommandList1" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device4::CreateCommandList1::ppCommandList" attribute="out" />
+
+    <map method="ID3D12Device4::CreateCommittedResource1" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device4::CreateCommittedResource1::ppvResource" attribute="out" />
+
+    <map method="ID3D12Device4::CreateHeap1" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device4::CreateHeap1::ppvHeap" attribute="out" />
+
+    <map method="ID3D12Device4::CreateProtectedResourceSession" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device4::CreateProtectedResourceSession::ppSession" attribute="out" />
+
+    <map method="ID3D12Device4::CreateReservedResource1" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device4::CreateReservedResource1::ppvResource" attribute="out" />
+
+    <!-- ID3D12Device5 methods -->
+    <map method="ID3D12Device5::CreateMetaCommand" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device5::CreateMetaCommand::ppMetaCommand" attribute="out" />
+
+    <map method="ID3D12Device5::CreateStateObject" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device5::CreateStateObject::ppStateObject" attribute="out" />
+    <map param="ID3D12Device5::GetRaytracingAccelerationStructurePrebuildInfo::pInfo" attribute="out" return="true"/>
+
+    <!-- ID3D12Device6 methods -->
+    <map param="ID3D12Device6::SetBackgroundProcessingMode::pbFurtherMeasurementsDesired" attribute="out" return="true"/>
+
+    <!-- ID3D12Device7 methods -->
+    <map method="ID3D12Device7::AddToStateObject" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device7::AddToStateObject::ppNewStateObject" attribute="out" />
+
+    <map method="ID3D12Device7::CreateProtectedResourceSession1" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device7::CreateProtectedResourceSession1::ppSession" attribute="out" />
+
+    <!-- ID3D12Device8 -->
+    <map method="ID3D12Device8::CreateCommittedResource2" visibility="private" hresult="true" check="false" />
+    <map method="ID3D12Device8::CreatePlacedResource1" visibility="private" hresult="true" check="false" />
+
+    <!-- ID3D12Device9 -->
+    <map method="ID3D12Device9::CreateCommandQueue1" visibility="private" hresult="true" check="false" />
+    <map method="ID3D12Device9::CreateShaderCacheSession" visibility="private" hresult="true" check="false" />
+
+    <!-- ID3D12Device10 -->
+    <map method="ID3D12Device10::CreateCommittedResource3" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device10::CreateCommittedResource3::pCastableFormats" type="void" keep-pointers="true"/>
+
+    <map method="ID3D12Device10::CreatePlacedResource2" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device10::CreatePlacedResource2::pCastableFormats" type="void" keep-pointers="true"/>
+
+    <map method="ID3D12Device10::CreateReservedResource2" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12Device10::CreateReservedResource2::pCastableFormats" type="void" keep-pointers="true"/>
+
+    <!-- ID3D12SDKConfiguration methods -->
+    <map method="ID3D12SDKConfiguration::SetSDKVersion" hresult="true" check="false"/>
+
+    <!-- ID3D12SDKConfiguration1 methods -->
+    <map method="ID3D12SDKConfiguration1::CreateDeviceFactory" visibility="private" hresult="true" check="false"/>
+
+    <!-- ID3D12Debug1 -->
+    <map method="ID3D12Debug1::SetEnableGPUBasedValidation" property="false" />
+    <map method="ID3D12Debug1::SetEnableSynchronizedCommandQueueValidation" property="false" />
+
+    <!-- ID3D12Debug2 -->
+    <map method="ID3D12Debug2::SetGPUBasedValidationFlags" property="false" />
+
+    <!-- ID3D12Debug3 -->
+    <map method="ID3D12Debug3::SetEnableGPUBasedValidation" property="false" />
+    <map method="ID3D12Debug3::SetEnableSynchronizedCommandQueueValidation" property="false" />
+    <map method="ID3D12Debug3::SetGPUBasedValidationFlags" property="false" />
+
+    <!-- ID3D12DebugCommandList1 -->
+    <map method="ID3D12DebugCommandList1::.*" property="false" hresult="true" check="false" />
+    <map method="ID3D12DebugCommandList1::GetDebugParameter" visibility="internal" hresult="true" check="false" />
+    <map param="ID3D12DebugCommandList1::GetDebugParameter::pData" type="void" keep-pointers="true"/>
+    <map method="ID3D12DebugCommandList1::SetDebugParameter" visibility="internal" hresult="true" check="false" />
+    <map param="ID3D12DebugCommandList1::SetDebugParameter::pData" type="void" keep-pointers="true"/>
+
+    <!-- ID3D12DebugCommandList2 -->
+    <map method="ID3D12DebugCommandList2::.*" property="false" hresult="true" check="false" />
+    <map method="ID3D12DebugCommandList2::GetDebugParameter" visibility="internal" hresult="true" check="false" />
+    <map param="ID3D12DebugCommandList2::GetDebugParameter::pData" type="void" keep-pointers="true"/>
+    <map method="ID3D12DebugCommandList2::SetDebugParameter" visibility="internal" hresult="true" check="false" />
+    <map param="ID3D12DebugCommandList2::SetDebugParameter::pData" type="void" keep-pointers="true"/>
+
+    <!-- ID3D12CommandQueue -->
+    <map method="ID3D12CommandQueue::.*" property="false" hresult="true" check="false" />
+    <map method="ID3D12CommandQueue::ExecuteCommandLists" visibility="private"/>
+    <map param="ID3D12CommandQueue::ExecuteCommandLists::ppCommandLists" type="void" keep-pointers="true"/>
+    <map method="ID3D12CommandQueue::BeginEvent" visibility="private"/>
+    <map method="ID3D12CommandQueue::SetMarker" visibility="private"/>
+
+    <map method="ID3D12CommandQueue::UpdateTileMappings" visibility="private" hresult="true" check="false"/>
+    <map param="ID3D12CommandQueue::UpdateTileMappings::pResourceRegionStartCoordinates" type="void" keep-pointers="true"/>
+    <map param="ID3D12CommandQueue::UpdateTileMappings::pResourceRegionSizes" type="void" keep-pointers="true"/>
+    <map param="ID3D12CommandQueue::UpdateTileMappings::pRangeFlags" type="void" keep-pointers="true"/>
+    <map param="ID3D12CommandQueue::UpdateTileMappings::pHeapRangeStartOffsets" type="void" keep-pointers="true"/>
+    <map param="ID3D12CommandQueue::UpdateTileMappings::pRangeTileCounts" type="void" keep-pointers="true"/>
+
+    <map method="ID3D12Fence::SetEventOnCompletion" hresult="true" check="false" />
+
+    <!-- ID3D12GraphicsCommandList -->
+    <map param="ID3D12GraphicsCommandList::ResourceBarrier::pBarriers" type="void" keep-pointers="true"/>
+    <map method="ID3D12GraphicsCommandList::ResourceBarrier" visibility="private"/>
+
+    <map param="ID3D12GraphicsCommandList::SetDescriptorHeaps::ppDescriptorHeaps" type="void" keep-pointers="true"/>
+    <map method="ID3D12GraphicsCommandList::SetDescriptorHeaps" visibility="private"/>
+
+    <map method="ID3D12GraphicsCommandList::SetPipelineState" property="false"/>
+    <map method="ID3D12GraphicsCommandList::SetComputeRootSignature" property="false"/>
+    <map method="ID3D12GraphicsCommandList::SetGraphicsRootSignature" property="false"/>
+    <map method="ID3D12GraphicsCommandList::BeginEvent" visibility="private"/>
+    <map method="ID3D12GraphicsCommandList::SetMarker" visibility="private"/>
+    <map param="ID3D12GraphicsCommandList::ClearRenderTargetView::ColorRGBA" type="VORTICE_COLOR4" override-native-type="true"/>
+    <map param="ID3D12GraphicsCommandList::ClearRenderTargetView::pRects" type="void" keep-pointers="true"/>
+    <map method="ID3D12GraphicsCommandList::ClearRenderTargetView" visibility="private"/>
+
+    <map param="ID3D12GraphicsCommandList::ClearDepthStencilView::pRects" type="void" keep-pointers="true"/>
+    <map method="ID3D12GraphicsCommandList::ClearDepthStencilView" visibility="private"/>
+
+    <map method="ID3D12GraphicsCommandList::RSSetViewports" visibility="internal"/>
+    <map param="ID3D12GraphicsCommandList::RSSetViewports::pViewports" type="void" keep-pointers="true"/>
+    <map method="ID3D12GraphicsCommandList::RSSetScissorRects" visibility="internal"/>
+    <map param="ID3D12GraphicsCommandList::RSSetScissorRects::pRects" type="void" keep-pointers="true"/>
+    <map method="ID3D12GraphicsCommandList::IASetVertexBuffers" visibility="private" />
+    <map param="ID3D12GraphicsCommandList::IASetVertexBuffers::pViews" type="void" keep-pointers="true"/>
+
+    <map method="ID3D12GraphicsCommandList::IASetIndexBuffer" visibility="private" />
+    <map param="ID3D12GraphicsCommandList::IASetIndexBuffer::pView" type="void" keep-pointers="true"/>
+
+    <map method="ID3D12GraphicsCommandList::ClearUnorderedAccessViewFloat" visibility="private" />
+    <map param="ID3D12GraphicsCommandList::ClearUnorderedAccessViewFloat::Values" type="void" keep-pointers="true"/>
+    <map param="ID3D12GraphicsCommandList::ClearUnorderedAccessViewFloat::pRects" attribute="in buffer optional" default="null" />
+    <map method="ID3D12GraphicsCommandList::ClearUnorderedAccessViewUint" visibility="private" />
+    <map param="ID3D12GraphicsCommandList::ClearUnorderedAccessViewUint::Values" type="void" keep-pointers="true"/>
+    <map param="ID3D12GraphicsCommandList::ClearUnorderedAccessViewUint::pRects" attribute="in buffer optional" default="null" />
+
+    <map method="ID3D12GraphicsCommandList::OMSetRenderTargets" visibility="private"/>
+    <map param="ID3D12GraphicsCommandList::OMSetRenderTargets::pRenderTargetDescriptors" type="void" keep-pointers="true"/>
+
+    <map method="ID3D12GraphicsCommandList::OMSetBlendFactor" visibility="private" />
+    <map param="ID3D12GraphicsCommandList::OMSetBlendFactor::BlendFactor" attribute="in" type="void" keep-pointers="true"/>
+
+    <map method="ID3D12GraphicsCommandList::CopyTextureRegion" visibility="private" name="CopyTextureRegion_" />
+    <map method="ID3D12GraphicsCommandList::DiscardResource" visibility="private" />
+
+    <map param="ID3D12GraphicsCommandList::SetComputeRoot32BitConstants::pSrcData" type="void" keep-pointers="true"/>
+    <map param="ID3D12GraphicsCommandList::SetGraphicsRoot32BitConstants::pSrcData" type="void" keep-pointers="true"/>
+
+    <!-- ID3D12GraphicsCommandList1 -->
+    <map method="ID3D12GraphicsCommandList1::ResolveSubresourceRegion" visibility="private" name="ResolveSubresourceRegion_"/>
+    <map method="ID3D12GraphicsCommandList1::SetViewInstanceMask" property="false"/>
+
+    <!-- ID3D12GraphicsCommandList2 -->
+    <map method="ID3D12GraphicsCommandList2::WriteBufferImmediate" visibility="private" name="WriteBufferImmediate_"/>
+
+    <!-- ID3D12GraphicsCommandList3 -->
+    <map method="ID3D12GraphicsCommandList3::SetProtectedResourceSession" property="false"/>
+
+    <!-- ID3D12GraphicsCommandList4 -->
+    <map method="ID3D12GraphicsCommandList4::BuildRaytracingAccelerationStructure" visibility="private"/>
+    <map param="ID3D12GraphicsCommandList4::DispatchRays::pDesc" attribute="in value"/>
+    <map method="ID3D12GraphicsCommandList4::InitializeMetaCommand" visibility="private"/>
+    <map method="ID3D12GraphicsCommandList4::ExecuteMetaCommand" visibility="private"/>
+    <map method="ID3D12GraphicsCommandList4::SetPipelineState1" property="false" />
+
+    <map method="ID3D12GraphicsCommandList4::BeginRenderPass" visibility="private"/>
+    <map param="ID3D12GraphicsCommandList4::BeginRenderPass::pRenderTargets" type="void" keep-pointers="true"/>
+
+    <!-- ID3D12GraphicsCommandList7 -->
+    <map param="ID3D12GraphicsCommandList7::Barrier::pBarrierGroups" type="void" keep-pointers="true"/>
+    <map method="ID3D12GraphicsCommandList7::Barrier" visibility="private"/>
+
+    <!-- ID3D12DeviceConfiguration -->
+    <map method="ID3D12DeviceConfiguration::SerializeVersionedRootSignature" hresult="true" check="false"/>
+    <map method="ID3D12DeviceConfiguration::CreateVersionedRootSignatureDeserializer" visibility="private" hresult="true" check="false"/>
+    <map param="ID3D12DeviceConfiguration::CreateVersionedRootSignatureDeserializer::pBlob" type="void" keep-pointers="true"/>
+
+    <!-- ID3D12DeviceFactory -->
+    <map method="ID3D12DeviceFactory::InitializeFromGlobalState" hresult="true" check="false"/>
+    <map method="ID3D12DeviceFactory::ApplyToGlobalState" hresult="true" check="false"/>
+    <map method="ID3D12DeviceFactory::GetConfigurationInterface" visibility="private" hresult="true" check="false"/>
+    <map method="ID3D12DeviceFactory::CreateDevice" visibility="private" hresult="true" check="false"/>
+    <map param="ID3D12DeviceFactory::CreateDevice::adapter" type="void" attribute="in"/>
+    <map method="ID3D12DeviceFactory::EnableExperimentalFeatures" visibility="private" hresult="true" check="false"/>
+    <map param="ID3D12DeviceFactory::EnableExperimentalFeatures::pIIDs" type="void" keep-pointers="true"/>
+    <map param="ID3D12DeviceFactory::EnableExperimentalFeatures::pConfigurationStructs" type="void" keep-pointers="true"/>
+    <map param="ID3D12DeviceFactory::EnableExperimentalFeatures::pConfigurationStructSizes" type="void" keep-pointers="true"/>
+
+    <!-- ID3D12DSRDeviceFactory -->
+    <map method="ID3D12DSRDeviceFactory::CreateDSRDevice" visibility="private" hresult="true" check="false"/>
+
+    <!-- ID3D12DescriptorHeap -->
+    <map method="ID3D12DescriptorHeap::GetCPUDescriptorHandleForHeapStart" property="false" custom-vtbl="true" visibility="private" />
+    <map method="ID3D12DescriptorHeap::GetGPUDescriptorHandleForHeapStart" property="false" custom-vtbl="true" visibility="private" />
+    <remove method="ID3D12DescriptorHeap::GetCPUDescriptorHandleForHeapStart" />
+    <remove method="ID3D12DescriptorHeap::GetGPUDescriptorHandleForHeapStart" />
+
+    <!-- ID3D12PipelineLibrary methods -->
+    <map method="ID3D12PipelineLibrary::LoadComputePipeline" visibility="private"/>
+    <map param="ID3D12PipelineLibrary::LoadComputePipeline::ppPipelineState" attribute="out" type="ID3D12PipelineState" return="true"/>
+
+    <map method="ID3D12PipelineLibrary::LoadGraphicsPipeline" visibility="private"/>
+    <map param="ID3D12PipelineLibrary::LoadGraphicsPipeline::ppPipelineState" attribute="out" type="ID3D12PipelineState" return="true"/>
+
+    <!-- ID3D12PipelineLibrary1 methods -->
+    <map method="ID3D12PipelineLibrary1::LoadPipeline" visibility="private"/>
+    <map param="ID3D12PipelineLibrary1::LoadPipeline::ppPipelineState" attribute="out" type="ID3D12PipelineState" return="true"/>
+
+    <!-- ID3D12DeviceRemovedExtendedData1 -->
+    <map method="ID3D12DeviceRemovedExtendedData::GetAutoBreadcrumbsOutput" hresult="true" check="false" property="false" />
+    <map method="ID3D12DeviceRemovedExtendedData::GetPageFaultAllocationOutput" hresult="true" check="false" property="false" />
+
+    <!-- ID3D12DeviceRemovedExtendedData1 -->
+    <map method="ID3D12DeviceRemovedExtendedData1::GetAutoBreadcrumbsOutput1" hresult="true" check="false" property="false" />
+    <map method="ID3D12DeviceRemovedExtendedData1::GetPageFaultAllocationOutput1" hresult="true" check="false" property="false" />
+
+    <!-- ID3D12VersionedRootSignatureDeserializer methods -->
+    <map method="ID3D12VersionedRootSignatureDeserializer::GetRootSignatureDescAtVersion" name="GetRootSignatureDescAtVersion_" visibility="private"/>
+
+    <map function="D3D12.*" dll='"d3d12.dll"' group="Vortice.Direct3D12.D3D12" visibility="internal" hresult="true" check="false"/>
+    <map param="D3D12EnableExperimentalFeatures::pIIDs" type="void" keep-pointers="true"/>
+    <map param="D3D12EnableExperimentalFeatures::pConfigurationStructSizes" type="void" keep-pointers="true"/>
+
+    <map param="D3D12CreateDevice::pAdapter" type="void" attribute="in"/>
+
+    <map function="D3D12CreateVersionedRootSignatureDeserializer" hresult="true" check="false"/>
+    <map param="D3D12CreateVersionedRootSignatureDeserializer::pSrcData" type="void" keep-pointers="true"/>
+    <map function="D3D12CreateVersionedRootSignatureDeserializerFromSubobjectInLibrary" hresult="true" check="false"/>
+    <map param="D3D12CreateVersionedRootSignatureDeserializerFromSubobjectInLibrary::pSrcData" type="void" keep-pointers="true"/>
+
+    <map method="ID3D12CommandList::GetType" name="GetCommandListType" />
+
+    <map field="D3D12_GPU_DESCRIPTOR_HANDLE::ptr" name="Ptr"/>
+
+    <map field="D3D12_GLOBAL_ROOT_SIGNATURE::pGlobalRootSignature" name="RootSignature"/>
+    <map field="D3D12_LOCAL_ROOT_SIGNATURE::pLocalRootSignature" name="RootSignature"/>
+
+    <map field="D3D12_PIPELINE_STATE_STREAM_DESC::pPipelineStateSubobjectStream" name="SubObjectStream"/>
+
+    <!-- D3D12_RENDER_TARGET_BLEND_DESC struct -->
+    <map field="D3D12_DEVICE_CONFIGURATION_DESC::GpuBasedValidationFlags" type="D3D12_GPU_BASED_VALIDATION_FLAGS" />
+
+    <map struct="D3D12_SHADER_NODE" name="ShaderNode" native="true" marshal="true" />
+    <remove field="D3D12_SHADER_NODE::.*"/>
+    <map struct="D3D12_DISPATCH_GRAPH_DESC" name="DispatchGraphDescription" native="true" marshal="true" />
+    <remove field="D3D12_DISPATCH_GRAPH_DESC::.*"/>
+
+    <!-- d3d12shader -->
+    <map enum-item="D3D12_SHVER_(.*)" name-tmp="$1"/>
+
+    <map struct="D3D12_SHADER_BUFFER_DESC" name="ConstantBufferDescription" />
+    <map field="D3D12_SHADER_BUFFER_DESC::uFlags" name="Flags" type="D3D_SHADER_CBUFFER_FLAGS" />
+    <map field="D3D12_SHADER_BUFFER_DESC::Variables" name="VariableCount" />
+
+    <map struct="D3D12_SHADER_INPUT_BIND_DESC" name="InputBindingDescription" />
+    <map field="D3D12_SHADER_INPUT_BIND_DESC::uFlags" name="Flags" type="D3D_SHADER_INPUT_FLAGS" />
+    <map field="D3D12_SHADER_DESC::c([A-Z].*)" name="$1" />
+    <map field="D3D12_SHADER_DESC::cGS(.*)" name="GeometryShader$1" />
+    <map field="D3D12_SHADER_DESC::GS(.*)" name="GeometryShader$1" />
+    <map field="D3D12_SHADER_DESC::HS(.*)" name="HullShader$1" />
+    <map field="D3D12_SHADER_DESC::DclCount" name="DeclarationCount" />
+    <map field="D3D12_SHADER_DESC::DefCount" name="DefineCount" />
+    <!--<map field="D3D12_SHADER_DESC::Flags" type="D3DCOMPILE_SHADER_FLAGS" />-->
+
+    <map struct="D3D12_SIGNATURE_PARAMETER_DESC" name="ShaderParameterDescription" />
+    <map field="D3D12_SIGNATURE_PARAMETER_DESC::ReadWriteMask" type="D3D12_REGISTER_COMPONENT_MASK_FLAG" />
+    <map field="D3D12_SIGNATURE_PARAMETER_DESC::Mask" name="UsageMask" type="D3D12_REGISTER_COMPONENT_MASK_FLAG" />
+    <map field="D3D12_SHADER_TYPE_DESC::Columns" name="ColumnCount" />
+    <map field="D3D12_SHADER_TYPE_DESC::Elements" name="ElementCount" />
+    <map field="D3D12_SHADER_TYPE_DESC::Members" name="MemberCount" />
+    <map field="D3D12_SHADER_TYPE_DESC::Rows" name="RowCount" />
+    <map field="D3D12_SHADER_VARIABLE_DESC::uFlags" name="Flags" type="D3D_SHADER_VARIABLE_FLAGS" />
+
+    <map method="ID3D12ShaderReflection::GetDesc" name="GetDescription" persist="true" />
+    <map param="ID3D12ShaderReflection::GetInputParameterDesc::pDesc" attribute="out" return="true"/>
+    <map param="ID3D12ShaderReflection::GetOutputParameterDesc::pDesc" attribute="out" return="true"/>
+    <map param="ID3D12ShaderReflection::GetResourceBindingDesc::pDesc" attribute="out" return="true"/>
+    <map param="ID3D12ShaderReflection::GetResourceBindingDescByName::pDesc" attribute="out" return="true"/>
+    <map param="ID3D12ShaderReflection::GetPatchConstantParameterDesc::pDesc" attribute="out" return="true"/>
+
+    <map param="ID3D12FunctionReflection::GetResourceBindingDesc::pDesc" attribute="out" return="true"/>
+    <map param="ID3D12FunctionReflection::GetResourceBindingDescByName::pDesc" attribute="out" return="true"/>
+    <map method="ID3D12ShaderReflectionVariable::GetType" name="GetVariableType" />
+    <map param="ID3D12ShaderReflectionConstantBuffer::GetDesc::pDesc" attribute="out" />
+
+    <!-- Video -->
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_FLAG_0_ALL_LUMA_CHROMA_SLICE_BLOCK_EDGES_ALWAYS_FILTERED" name="AllLumaChromaSliceBlockEdgesAlwaysFiltered"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_FLAG_1_DISABLE_ALL_SLICE_BLOCK_EDGES" name="DisableAllSliceBlockEdges"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_FLAG_2_DISABLE_SLICE_BOUNDARIES_BLOCKS" name="DisableSliceBoundariesBlocks"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_FLAG_3_USE_TWO_STAGE_DEBLOCKING" name="UseTwoStageDeblocking"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_FLAG_4_DISABLE_CHROMA_BLOCK_EDGES" name="DisableChromaBlockEdges"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_FLAG_5_DISABLE_CHROMA_BLOCK_EDGES_AND_LUMA_BOUNDARIES" name="DisableChromaBlockEdgesAndLumaBoundaries"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_FLAG_6_DISABLE_CHROMA_BLOCK_EDGES_AND_USE_LUMA_TWO_STAGE_DEBLOCKING" name="DisableChromaBlockEdgesAndUseLumaTwoStageDeblocking"/>
+
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_0_ALL_LUMA_CHROMA_SLICE_BLOCK_EDGES_ALWAYS_FILTERED" name="AllLumaChromaSliceBlockEdgesAlwaysFiltered"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_1_DISABLE_ALL_SLICE_BLOCK_EDGES" name="DisableAllSliceBlockEdges"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_2_DISABLE_SLICE_BOUNDARIES_BLOCKS" name="DisableSliceBoundariesBlocks"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_3_USE_TWO_STAGE_DEBLOCKING" name="UseTwoStageDeblocking"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_4_DISABLE_CHROMA_BLOCK_EDGES" name="DisableChromaBlockEdges"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_5_DISABLE_CHROMA_BLOCK_EDGES_AND_LUMA_BOUNDARIES" name="DisableChromaBlockEdgesAndLumaBoundaries"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_H264_SLICES_DEBLOCKING_MODE_6_DISABLE_CHROMA_BLOCK_EDGES_AND_USE_LUMA_TWO_STAGE_DEBLOCKING" name="DisableChromaBlockEdgesAndUseLumaTwoStageDeblocking"/>
+
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_HEVC_CUSIZE_(.*)" name="Size$1"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_HEVC_TUSIZE_(.*)" name="Size$1"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_LEVELS_H264_(.*)" name="Level$1"/>
+    <map enum-item="D3D12_VIDEO_ENCODER_LEVELS_HEVC_(.*)" name="Level$1"/>
+
+    <remove field="D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS::.*"/>
+    <remove field="D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS1::.*"/>
+    <remove field="D3D12_VIDEO_PROCESS_OUTPUT_STREAM_ARGUMENTS::.*"/>
+    <remove field="D3D12_VIDEO_DECODE_OUTPUT_STREAM_ARGUMENTS1::.*"/>
+    <remove field="D3D12_VIDEO_ENCODER_PROFILE_DESC::.*"/>
+    <!-- TODO: Until we map -->
+    <remove field="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION_SUPPORT::.*"/>
+    <remove field="D3D12_VIDEO_ENCODER_RATE_CONTROL_CONFIGURATION_PARAMS::.*"/>
+    <remove field="D3D12_VIDEO_ENCODER_CODEC_CONFIGURATION::.*"/>
+    <remove field="D3D12_VIDEO_ENCODER_SEQUENCE_GOP_STRUCTURE::.*"/>
+    <remove field="D3D12_VIDEO_ENCODER_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA::.*"/>
+    <remove field="D3D12_VIDEO_ENCODER_LEVEL_SETTING::.*"/>
+    <remove field="D3D12_VIDEO_ENCODER_PICTURE_CONTROL_CODEC_DATA::.*"/>
+    <remove field="D3D12_VIDEO_ENCODER_CODEC_PICTURE_CONTROL_SUPPORT::.*"/>
+
+    <map field="D3D12_VIDEO_DECODE_OUTPUT_HISTOGRAM::pBuffer" name="Buffer" />
+    <map field="D3D12_VIDEO_PROCESS_INPUT_STREAM::pTexture2D" name="Texture2D" />
+
+    <map struct="D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS" name="VideoProcessInputStreamArguments" native="true" marshal="true" />
+    <map struct="D3D12_VIDEO_PROCESS_INPUT_STREAM_ARGUMENTS1" name="VideoProcessInputStreamArguments1" native="true" marshal="true" />
+    <map struct="D3D12_VIDEO_PROCESS_OUTPUT_STREAM_ARGUMENTS" name="VideoProcessOutputStreamArguments" native="true" marshal="true" />
+    <map struct="D3D12_VIDEO_DECODE_OUTPUT_STREAM_ARGUMENTS1" name="VideoDecodeOutputStreamArguments1" struct-to-class="true" marshal="true" />
+    <map struct="D3D12_VIDEO_ENCODER_PROFILE_DESC" name="VideoEncoderProfileDescription" native="true" marshal="true" />
+
+    <map struct="D3D12_VIDEO_ENCODER_AV1_SEGMENT_DATA" name="VideoEncoderAv1SegmentData" marshal="false" />
+    <remove field="D3D12_VIDEO_ENCODER_AV1_SEGMENT_DATA::.*"/>
+
+    <map struct="D3D12_VIDEO_ENCODER_AV1_REFERENCE_PICTURE_WARPED_MOTION_INFO" name="VideoEncoderAv1ReferencePictureWarpedMotionInfo" marshal="false" />
+    <remove field="D3D12_VIDEO_ENCODER_AV1_REFERENCE_PICTURE_WARPED_MOTION_INFO::.*"/>
+
+    <map struct="D3D12_VIDEO_ENCODER_AV1_CODEC_CONFIGURATION_SUPPORT" name="VideoEncoderAV1CodecConfigurationSupport" native="true" struct-to-class="true" marshal="true" />
+    <remove field="D3D12_VIDEO_ENCODER_AV1_CODEC_CONFIGURATION_SUPPORT::.*"/>
+
+    <map param="ID3D12VideoDecodeCommandList::ResourceBarrier::pBarriers" type="void" keep-pointers="true"/>
+    <map method="ID3D12VideoDecodeCommandList::ResourceBarrier" visibility="private"/>
+    <map method="ID3D12VideoDecodeCommandList::DiscardResource" visibility="private" />
+    <map method="ID3D12VideoDecodeCommandList::BeginEvent" visibility="private"/>
+    <map method="ID3D12VideoDecodeCommandList::SetMarker" visibility="private"/>
+
+    <map param="ID3D12VideoEncodeCommandList::ResourceBarrier::pBarriers" type="void" keep-pointers="true"/>
+    <map method="ID3D12VideoEncodeCommandList::ResourceBarrier" visibility="private"/>
+    <map method="ID3D12VideoEncodeCommandList::DiscardResource" visibility="private" />
+    <map method="ID3D12VideoEncodeCommandList::BeginEvent" visibility="private"/>
+    <map method="ID3D12VideoEncodeCommandList::SetMarker" visibility="private"/>
+
+    <map param="ID3D12VideoProcessCommandList::ResourceBarrier::pBarriers" type="void" keep-pointers="true"/>
+    <map method="ID3D12VideoProcessCommandList::ResourceBarrier" visibility="private"/>
+    <map method="ID3D12VideoProcessCommandList::DiscardResource" visibility="private" />
+    <map method="ID3D12VideoProcessCommandList::BeginEvent" visibility="private"/>
+    <map method="ID3D12VideoProcessCommandList::SetMarker" visibility="private"/>
+
+    <!-- ID3D12VideoDevice methods -->
+    <map method="ID3D12VideoDevice::CheckFeatureSupport" visibility="internal" hresult="true" check="false" />
+    <map param="ID3D12VideoDevice::CheckFeatureSupport::pFeatureSupportData" type="void" keep-pointers="true"/>
+    <map method="ID3D12VideoDevice::CreateVideoDecoder" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12VideoDevice::CreateVideoDecoder::ppVideoDecoder" attribute="out" />
+    <map method="ID3D12VideoDevice::CreateVideoDecoderHeap" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12VideoDevice::CreateVideoDecoderHeap::ppVideoDecoderHeap" attribute="out" />
+    <map method="ID3D12VideoDevice::CreateVideoProcessor" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12VideoDevice::CreateVideoProcessor::ppVideoProcessor" attribute="out" />
+
+    <!-- ID3D12VideoDevice1 methods -->
+    <map method="ID3D12VideoDevice1::CreateVideoMotionEstimator" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12VideoDevice1::CreateVideoMotionEstimator::ppVideoMotionEstimator" attribute="out" />
+    <map method="ID3D12VideoDevice1::CreateVideoMotionVectorHeap" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12VideoDevice1::CreateVideoMotionVectorHeap::ppVideoMotionVectorHeap" attribute="out" />
+
+    <!-- ID3D12VideoDevice2 methods -->
+    <map method="ID3D12VideoDevice2::CreateVideoDecoder1" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12VideoDevice2::CreateVideoDecoder1::ppVideoDecoder" attribute="out" />
+    <map method="ID3D12VideoDevice2::CreateVideoDecoderHeap1" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12VideoDevice2::CreateVideoDecoderHeap1::ppVideoDecoderHeap" attribute="out" />
+    <map method="ID3D12VideoDevice2::CreateVideoExtensionCommand" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12VideoDevice2::CreateVideoExtensionCommand::ppVideoExtensionCommand" attribute="out" />
+    <map method="ID3D12VideoDevice2::CreateVideoProcessor1" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12VideoDevice2::CreateVideoProcessor1::ppVideoProcessor" attribute="out" />
+
+    <map method="ID3D12VideoDevice2::ExecuteExtensionCommand" hresult="true" check="false" />
+
+    <map method="ID3D12VideoDecoder1::GetProtectedResourceSession" visibility="private" hresult="true" check="false"/>
+    <map method="ID3D12VideoDecoderHeap1::GetProtectedResourceSession" visibility="private" hresult="true" check="false"/>
+
+    <map method="ID3D12VideoProcessor::GetNodeMask" property="false" />
+    <map method="ID3D12VideoProcessor::GetNumInputStreamDescs" name="GetNumInputStreamDescriptions" property="false" />
+    <map method="ID3D12VideoProcessor::GetOutputStreamDesc" name="GetOutputStreamDescription" property="false" />
+    <map method="ID3D12VideoProcessor::GetInputStreamDescs" name="GetInputStreamDescriptions" visibility="private" hresult="true" check="false" />
+    <map param="ID3D12VideoProcessor::GetInputStreamDescs::pInputStreamDescs" type="void" />
+
+    <map method="ID3D12VideoProcessor1::GetProtectedResourceSession" visibility="private" hresult="true" check="false"/>
+
+    <map method="ID3D12VideoExtensionCommand::GetProtectedResourceSession" visibility="private" hresult="true" check="false"/>
+    <map method="ID3D12VideoMotionEstimator::GetProtectedResourceSession" visibility="private" hresult="true" check="false"/>
+    <map method="ID3D12VideoMotionVectorHeap::GetProtectedResourceSession" visibility="private" hresult="true" check="false"/>
+  </mapping>
+</config>

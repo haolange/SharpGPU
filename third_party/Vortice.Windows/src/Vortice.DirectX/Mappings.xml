@@ -1,0 +1,466 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config id="vortice-directx" xmlns="urn:SharpGen.Config">
+  <namespace>Vortice</namespace>
+  <depends>SharpGen.Runtime.COM</depends>
+
+  <sdk name="WindowsSdk" version="10.0.26100.0" />
+  <sdk name="StdLib" />
+  <include-dir override="true">$(THIS_CONFIG_PATH)/../native/include/directx</include-dir>
+
+  <include-prolog>
+    // Use unicode
+    #define UNICODE
+
+    // for SAL annotations
+    #define _PREFAST_
+
+    // To force GUID to be declared
+    #define INITGUID
+
+    #define _ALLOW_KEYWORD_MACROS
+
+    // Wrap all declspec for code-gen
+    #define __declspec(x) __attribute__((annotate(#x)))
+  </include-prolog>
+
+  <include file="winerror.h" namespace="Vortice.Win32" />
+  <include file="d3dcommon.h" namespace="Vortice.Direct3D" attach="true" />
+  <include file="dxcore_interface.h" namespace="Vortice.DXCore" attach="true" />
+  <include file="dxcore.h" namespace="Vortice.DXCore" attach="true" />
+  <include file="dxgiformat.h" namespace="Vortice.DXGI" attach="true" />
+  <include file="dxgicommon.h" namespace="Vortice.DXGI" attach="true" />
+  <include file="dxgitype.h" namespace="Vortice.DXGI" attach="true" />
+
+  <include file="dcommon.h" namespace="Vortice.DCommon" attach="true" />
+  <include file="Devpropdef.h" namespace="Vortice.Win32" attach="true" />
+  
+  <!-- Multimedia -->
+
+  <include file="hidusage.h" namespace="Vortice.Multimedia"  attach="true">
+    <post>
+      // Additionnals HID_USAGE_PAGES*
+      #define HID_USAGE_PAGE_MEDICAL  0x40
+      #define HID_USAGE_PAGE_MONITOR_PAGE0 0x80
+      #define HID_USAGE_PAGE_MONITOR_PAGE1 0x81
+      #define HID_USAGE_PAGE_MONITOR_PAGE2 0x82
+      #define HID_USAGE_PAGE_MONITOR_PAGE3 0x83
+      #define HID_USAGE_PAGE_POWER_PAGE0 0x84
+      #define HID_USAGE_PAGE_POWER_PAGE1 0x85
+      #define HID_USAGE_PAGE_POWER_PAGE2 0x86
+      #define HID_USAGE_PAGE_POWER_PAGE3 0x87
+      #define HID_USAGE_PAGE_BARCODE 0x8C
+      #define HID_USAGE_PAGE_SCALE 0x8D
+      #define HID_USAGE_PAGE_MSR 0x8E
+
+      // The Usage typedef doesn't exist when compiling for STORE_APP so we define it here
+      #define USAGE USHORT
+    </post>
+  </include>
+
+  <!-- Include mmreg.h before audiodefs.h in order to avoid redefinition problem -->
+  <include file="mmreg.h" namespace="Vortice.Multimedia"  attach="true">
+    <pre>
+      #define NOMMIDS           1
+      #define NONEWWAVE         1
+      #define NONEWRIFF         1
+      #define NOJPEGDIB         1
+      #define NONEWIC           1
+      #define NOBITMAP          1
+      #define WAVE_FORMAT_PCM   1
+    </pre>
+  </include>
+
+  <include file="audiosessiontypes.h" namespace="Vortice.Multimedia"  attach="true" />
+
+  <include file="d3d12.h" namespace="Vortice.Direct3D12">
+    <attach>D3D12_RESOURCE_STATES</attach>
+  </include>
+
+  <include file="objidl.h" namespace="Vortice.Win32">
+    <attach>IPersistStream</attach>
+  </include>
+
+  <extension>
+    <define struct="Vortice.RawRect" sizeof="16" />
+    <define struct="Vortice.RawRectF" sizeof="16" />
+
+    <!-- System.Numerics types -->
+    <define struct="System.Numerics.Vector2" sizeof="8" />
+    <define struct="System.Numerics.Vector3" sizeof="12" />
+    <define struct="System.Numerics.Vector4" sizeof="16" />
+    <define struct="System.Numerics.Quaternion" sizeof="16" />
+    <define struct="System.Numerics.Matrix3x2" sizeof="24" />
+    <define struct="System.Numerics.Matrix4x4" sizeof="64" />
+    <define struct="System.Numerics.Plane" sizeof="16" />
+
+    <!-- Vortice.Mathematics types -->
+    <define struct="Vortice.Mathematics.Int2" sizeof="8" />
+    <define struct="Vortice.Mathematics.Int3" sizeof="12" />
+    <define struct="Vortice.Mathematics.Int4" sizeof="16" />
+    <define struct="Vortice.Mathematics.UInt2 " sizeof="8" />
+    <define struct="Vortice.Mathematics.UInt3" sizeof="12" />
+    <define struct="Vortice.Mathematics.UInt4" sizeof="16" />
+    <define struct="Vortice.Mathematics.Double2" sizeof="16" />
+    <define struct="Vortice.Mathematics.Size" sizeof="8" />
+    <define struct="Vortice.Mathematics.SizeI" sizeof="8" />
+    <define struct="Vortice.Mathematics.Rect" sizeof="16" />
+    <define struct="Vortice.Mathematics.RectI" sizeof="16" />
+    
+    <define struct="Vortice.Mathematics.Color3" sizeof="12" />
+    <define struct="Vortice.Mathematics.Color4" sizeof="16" />
+    <define struct="Vortice.Mathematics.Int3" sizeof="12" />
+    <define struct="Vortice.Mathematics.Int4" sizeof="16" />
+    <define struct="Vortice.Mathematics.Viewport" sizeof="24" />
+    <define struct="Vortice.Mathematics.Box" sizeof="24" />
+    <define struct="Vortice.Mathematics.Matrix3x3" sizeof="36" />
+    <define struct="Vortice.Mathematics.Matrix3x4" sizeof="48" />
+    <define struct="Vortice.Mathematics.Matrix4x3" sizeof="48" />
+    <define struct="Vortice.Mathematics.Matrix5x4" sizeof="80" />
+
+    <define struct="Vortice.Luid" sizeof="8" />
+    <define struct="Vortice.Win32.NativeMessage" sizeof="28" />
+    <define struct="Vortice.Win32.BitmapInfoHeader" sizeof="40"/>
+    <define struct="Vortice.Win32.ByHandleFileInformation" sizeof="52"/>
+    
+    <const from-guid="WKPDID_D3DDebugObjectName" class="Vortice.CommonGuid" type="System.Guid" name="DebugObjectName">new System.Guid("$1")</const>
+    <const from-guid="WKPDID_D3DDebugObjectNameW" class="Vortice.CommonGuid" type="System.Guid" name="DebugObjectNameW">new System.Guid("$1")</const>
+    <create class="CommonGuid" visibility="public" />
+
+    <create class="Vortice.DXCore.DXCore" visibility="public static" />
+
+    <create-cpp enum="VORTICE_ERRORCODE" macro="ERROR_(.*)" />
+
+    <!-- Multimedia -->
+    <define struct="Vortice.Multimedia.WaveFormat" sizeof="18" marshal="true" />
+    <define struct="Vortice.Multimedia.WaveFormatExtensible" sizeof="18" marshal="true" custom-new="true"/>
+
+    <!-- audiosessiontypes.h -->
+    <create-cpp enum="AUDCLNT_STREAMFLAGS" macro="AUDCLNT_STREAMFLAGS_.*" />
+    <create-cpp enum="AUDCLNT_SESSIONFLAGS" macro="AUDCLNT_SESSIONFLAGS_.*" />
+
+    <create-cpp enum="SPEAKER_FLAGS" macro="SPEAKER_.*" />
+    <create-cpp enum="HID_USAGE_PAGE" macro="HID_USAGE_PAGE_.*" />
+    <create-cpp enum="HID_USAGE_ID" macro="HID_USAGE_[^P].*" />
+    <!--<create-cpp enum="WAVE_FORMAT_ENCODING" macro="WAVE_FORMAT_(.*)" />-->
+
+    <!-- Devpropdef.h -->
+    <create-cpp enum="DEVPROP_TYPE" macro="DEVPROP_TYPE_.*" />
+  </extension>
+
+  <bindings>
+    <bind from="unsigned short" to="System.UInt16" />
+    <bind from="uint16_t" to="System.UInt16" />
+    <bind from="uint32_t" to="System.UInt32" />
+    <bind from="UINT32" to="System.UInt32" />
+    <bind from="UINT" to="System.UInt32" />
+    <bind from="LUID" to="Vortice.Luid"/>
+    <bind from="HWND" to="System.IntPtr"/>
+    <bind from="HDC" to="System.IntPtr"/>
+    <bind from="HINSTANCE" to="System.IntPtr"/>
+    <bind from="HBITMAP" to="System.IntPtr"/>
+    <bind from="HICON" to="System.IntPtr"/>
+    <bind from="HPALETTE" to="System.IntPtr"/>
+    <bind from="HMONITOR" to="System.IntPtr"/>
+
+    <bind from="POINT" to="Vortice.Mathematics.Int2" />
+    <bind from="SIZE" to="Vortice.Mathematics.SizeI" />
+    <bind from="RECT" to="Vortice.RawRect" />
+    <bind from="D3DCOLORVALUE" to="Vortice.Mathematics.Color4" />
+    <bind from="MSG" to="Vortice.Win32.NativeMessage" />
+    <bind from="BITMAPINFOHEADER" to="Vortice.Win32.BitmapInfoHeader"/>
+    <bind from="BY_HANDLE_FILE_INFORMATION" to="Vortice.Win32.ByHandleFileInformation"/>
+
+    <!-- DXGI -->
+    <bind from="DXGI_RGB" to="Vortice.Mathematics.Color3" />
+    <bind from="DXGI_RGBA" to="Vortice.Mathematics.Color4" />
+
+    <!-- DCommon -->
+    <bind from="D2D_SIZE_U" to="Vortice.Mathematics.SizeI" />
+    <bind from="D2D_SIZE_F" to="Vortice.Mathematics.Size" />
+    <bind from="D2D_POINT_2U" to="Vortice.Mathematics.Int2" />
+    <bind from="D2D_POINT_2F" to="System.Numerics.Vector2" />
+    <bind from="D2D_RECT_U" to="Vortice.RawRect" />
+    <bind from="D2D_RECT_F" to="Vortice.RawRectF" />
+    <bind from="D2D_VECTOR_2F" to="System.Numerics.Vector2" />
+    <bind from="D2D_VECTOR_3F" to="System.Numerics.Vector3" />
+    <bind from="D2D_VECTOR_4F" to="System.Numerics.Vector4" />
+    <bind from="D2D_MATRIX_3X2_F" to="System.Numerics.Matrix3x2" />
+    <bind from="D2D_MATRIX_4X3_F" to="Vortice.Mathematics.Matrix4x3" />
+    <bind from="D2D_MATRIX_4X4_F" to="System.Numerics.Matrix4x4" />
+    <bind from="D2D_MATRIX_5X4_F" to="Vortice.Mathematics.Matrix5x4" />
+
+    <!-- Multimedia -->
+    <bind from="WAVEFORMATEX" to="Vortice.Multimedia.WaveFormat" />
+    <bind from="tWAVEFORMATEX" to="Vortice.Multimedia.WaveFormat" />
+    <bind from="WAVEFORMATEXTENSIBLE" to="Vortice.Multimedia.WaveFormatExtensible" />
+  </bindings>
+
+  <naming>
+    <short name="(R(\d).*)$">$1</short>
+    <short name="(B(\d).*)$">$1</short>
+    <short name="(G(\d).*)$">$1</short>
+    <short name="(A(\d).*)$">$1</short>
+    <short name="(X(\d).*)$">$1</short>
+    <short name="(BC(\d).*)$">$1</short>
+    <short name="(AYUV)$">$1</short>
+    <short name="(YUY2)$">$1</short>
+    <short name="(NV\d+)$">$1</short>
+    <short name="(AI\d+)$">$1</short>
+    <short name="(IA\d+)$">$1</short>
+    <short name="DESCRIPTOR">Descriptor</short>
+    <short name="DESCRIPTION">Description</short>
+    <short name="DESC">Description</short>
+    <short name="TOPLEFT">TopLeft</short>
+    <short name="UINT32">UInt32</short>
+    <short name="UINT64">UInt64</short>
+    <short name="IUNKNOWN">IUnknown</short>
+    <short name="RECTANGLE">Rectangle</short>
+    <short name="RECTS">Rectangles</short>
+    <short name="RECT">Rectangle</short>
+    <short name="LINE">Line</short>
+    <short name="POINT">Point</short>
+    <short name="POINTS">Points</short>
+    <short name="TRIANGLE">Triangle</short>
+    <short name="LIST">List</short>
+    <short name="ADJACENCY">Adjacency</short>
+    <short name="ADJ">Adjacency</short>
+    <short name="STRIP">Strip</short>
+    <short name="SRV">ShaderResourceView</short>
+    <short name="DSV">DepthStencilView</short>
+    <short name="RTV">RenderTargetView</short>
+    <short name="UAVS">UnorderedAccessViews</short>
+    <short name="UAV">UnorderedAccessView</short>
+    <short name="TEXTURE">Texture</short>
+    <short name="TEXT">Text</short>
+    <short name="CUBE">Cube</short>
+    <short name="TEX">Texture</short>
+    <short name="1D">1D</short>
+    <short name="2D">2D</short>
+    <short name="3D">3D</short>
+    <short name="MS">Multisampled</short>
+    <short name="RW">RW</short>
+    <short name="ARRAYSIZE">ArraySize</short>
+    <short name="ARRAYSLICE">ArraySlice</short>
+    <short name="ARRAYS">Arrays</short>
+    <short name="ARRAY">Array</short>
+    <short name="BUFFERS">Buffers</short>
+    <short name="BUFFER">Buffer</short>
+    <short name="BUFFEREX">BufferExtended</short>
+    <short name="CBV">ConstantBufferView</short>
+    <short name="CBUFFER">ConstantBuffer</short>
+    <short name="TBUFFER">TextureBuffer</short>
+    <short name="BYTES">Bytes</short>
+    <short name="BYTE">Byte</short>
+    <short name="UINT8">UInt8</short>
+    <short name="UINT">UInt</short>
+    <short name="SINT">SInt</short>
+    <short name="UNORM">UNorm</short>
+    <short name="SNORM">SNorm</short>
+    <short name="SRGB">SRgb</short>
+    <short name="POINTER">Pointer</short>
+    <short name="POINTERS">Pointers</short>
+    <short name="NOPERSPECTIVE">NoPerspective</short>
+    <short name="POINTLIST">PointList</short>
+    <short name="LINELIST">LineList</short>
+    <short name="LINESTRIP">LineStrip</short>
+    <short name="TRIANGLELIST">TriangleList</short>
+    <short name="COMPUTESHADER">ComputeShader</short>
+    <short name="DEPTHSTENCIL">DepthStencil</short>
+    <short name="DEPTHSTENCILVIEW">DepthStencilView</short>
+    <short name="DOMAINSHADER">DomainShader</short>
+    <short name="GEOMETRYSHADER">GeometryShader</short>
+    <short name="HULLSHADER">HullShader</short>
+    <short name="MIN8FLOAT">Min8Float</short>
+    <short name="MIN10FLOAT">Min10Float</short>
+    <short name="MIN16FLOAT">Min16Float</short>
+    <short name="MIN12INT">Min12Int</short>
+    <short name="MIN16INT">Min16Int</short>
+    <short name="MIN16UINT">Min16UInt</short>
+    <short name="PIXELFRAGMENT">PixelFragment</short>
+    <short name="PIXELSHADER">PixelShader</short>
+    <short name="RENDERTARGETVIEW">RenderTargetView</short>
+    <short name="SAMPLER1D">Sampler1D</short>
+    <short name="SAMPLER2D">Sampler2D</short>
+    <short name="SAMPLER3D">Sampler3D</short>
+    <short name="SAMPLERCUBE">SamplerCube</short>
+    <short name="VERTEXFRAGMENT">VertexFragment</short>
+    <short name="VERTEXSHADER">VertexShader</short>
+    <short name="SHAREDEXP">SharedExp</short>
+    <short name="CROSSPROCESS">CrossProcess</short>
+    <short name="LOOPBACK">LoopBack</short>
+    <short name="EVENTCALLBACK">EventCallback</short>
+    <short name="NOPERSIST">NoPersist</short>
+    <short name="RATEADJUST">RateAdjust</short>
+    <short name="AUTOCONVERTPCM">AutoConvertPCM</short>
+    <short name="EXPIREWHENUNOWNED">ExpireWhenUnowned</short>
+    <short name="HIDEWHENEXPIRED">HideWhenExpired</short>
+    <short name="DEVPROPKEY">DevPropertyKey</short>
+    <short name="DEVPROPTYPE">DevPropertyType</short>
+    <short name="NTSTATUS">NtStatus</short>
+  </naming>
+
+  <mapping>
+    <map enum="VORTICE_ERRORCODE" assembly="Vortice.DirectX" namespace="Vortice.Win32" name="ErrorCode"/>
+    <map enum-item="ERROR_(.*)" name-tmp="$1" naming="noexpand"/>
+
+    <map enum="D3D(.*)" name-tmp="$1" />
+    <map enum="D3D(\d+)(.*)" name-tmp="$2" />
+    <map enum-item="D3D(?!_PF_)(.*)" name-tmp="$1" />
+    <map enum-item="D3D_INTERPOLATION(.*)" name-tmp="$1" />
+    <remove enum-item="D3D(\d+)_CBF_USERPACKED.*"/>
+    <remove enum-item="D3D(\d+)_PRIMITIVE_TOPOLOGY_.*" />
+    <remove enum-item="D3D(\d+)_PRIMITIVE_.*" />
+    <remove enum-item="D3D(\d+)_SRV_DIMENSION_.*" />
+    <remove enum-item="D3D(\d+_1)_SRV_DIMENSION_.*" />
+    <remove enum-item="D3D(\d+)_SVC_.*" />
+    <remove enum-item="D3D(\d+)_SVF_.*" />
+    <remove enum-item="D3D(\d+)_SVT_.*" />
+    <remove enum-item="D3D(\d+)_SIF_.*" />
+    <remove enum-item="D3D(\d+)_SIT_.*" />
+    <remove enum-item="D3D(\d+)_CT_.*" />
+    <remove enum-item="D3D(\d+)_NAME_.*" />
+    <remove enum-item="D3D(\d+)_INCLUDE_.*" />
+    <remove enum-item="D3D(\d+)_RETURN_TYPE_.*" />
+    <remove enum-item="D3D(\d+)_TESSELLATOR_OUTPUT_.*" />
+    <remove enum-item="D3D(\d+)_TESSELLATOR_DOMAIN_.*" />
+    <remove enum-item="D3D(\d+)_TESSELLATOR_PARTITIONING_.*" />
+    <remove enum-item="D3D(\d+)_REGISTER_COMPONENT_.*" />
+    <map enum="D3D_PRIMITIVE" name="InputPrimitive" />
+    <map enum-item="D3D_FEATURE_LEVEL_(.*)" name="Level_$1" />
+    <map enum="D3D_SRV_DIMENSION" name="ShaderResourceViewDimension" />
+    <map enum-item="D3D_SRV_DIMENSION_(.*)" name-tmp="$1" />
+    <map enum-item="D3D_PRIMITIVE_(\d+)_CONTROL_POINT_PATCH" name="PatchWith$1ControlPoints" />
+    <map enum-item="D3D_PRIMITIVE_([^0-9].*)" name-tmp="$1" />
+    <map enum="D3D_PRIMITIVE_TOPOLOGY" name="PrimitiveTopology" />
+    <map enum-item="D3D_PRIMITIVE_TOPOLOGY_(.*)" name-tmp="$1" />
+    <map enum-item="D3D_PRIMITIVE_TOPOLOGY_(\d+)_CONTROL_POINT_PATCHLIST" name="PatchListWith$1ControlPoints" />
+    <map enum="D3D_SHADER_CBUFFER_FLAGS" name="ConstantBufferFlags" />
+    <map enum-item="D3D_SVC_(.*)" name-tmp="$1" />
+    <map enum-item="D3D_SVF_(.*)" name-tmp="$1" />
+    <map enum-item="D3D_SVT_(.*)" name-tmp="$1" />
+    <map enum-item="D3D_SVT_MIN(\d+)(.*)" name-tmp="MIN$2$1"/>
+    <map enum-item="D3D_SIF_(.*)" name-tmp="$1" />
+    <map enum-item="D3D_SIT_(.*)" name-tmp="$1" />
+    <map enum-item="D3D_CT_(.*)" name-tmp="$1" />
+    <map enum-item="D3DFL_(.*)" name-tmp="$1" />
+    <map enum-item="D3DFTL_(.*)" name-tmp="$1" />
+    <map enum-item="D3DFCN_(.*)" name-tmp="$1" />
+    <map enum-item="D3DFCI_(.*)" name-tmp="$1" />
+    <map enum="D3D_DRIVER_TYPE" name="DriverType" />
+    <map enum-item="D3D_DRIVER_TYPE_(.*)" name-tmp="$1" />
+    <map enum="D3D_NAME" name="SystemValueType" />
+    <map enum-item="D3D_NAME_(.*)" name-tmp="$1" />
+    <map enum="D3D_INCLUDE_TYPE" name="IncludeType" />
+    <map enum-item="D3D_INCLUDE_(.*)" name-tmp="$1" />
+    <map enum-item="D3D_RETURN_TYPE_(.*)" name-tmp="$1" />
+    <map enum-item="D3D_TESSELLATOR_DOMAIN_(.*)" name-tmp="$1" />
+    <map enum-item="D3D_TESSELLATOR_DOMAIN_TRI" name="Triangle" />
+    <map enum-item="D3D_TESSELLATOR_OUTPUT_(.*)" name-tmp="$1" />
+    <map enum-item="D3D_TESSELLATOR_OUTPUT_TRIANGLE_CCW" name="TriangleCounterclockwise" />
+    <map enum-item="D3D_TESSELLATOR_OUTPUT_TRIANGLE_CW" name="TriangleClockwise" />
+    <map enum-item="D3D_TESSELLATOR_PARTITIONING_(.*)" name-tmp="$1" />
+    <map enum-item="D3D_TESSELLATOR_PARTITIONING_POW2" name="PowerOfTwo" />
+    <map enum="D3D_REGISTER_COMPONENT_TYPE" name="RegisterComponentType" />
+    <map enum-item="D3D_REGISTER_COMPONENT_(.*)" name-tmp="$1" />
+    <remove enum-item=".*_FORCE_DWORD" />
+    <remove enum-item=".*_FORCE_UINT" />
+
+    <!-- IPersistStream -->
+    <map method="IPersistStream::IsDirty" hresult="true" check="false" />
+    <map method="IPersistStream::Load" hresult="true" check="false" />
+    <map method="IPersistStream::Save" hresult="true" check="false" />
+    
+    <!-- d3dcommon structs -->
+    <map struct="D3D_SHADER_MACRO" name="ShaderMacro" native="true" marshal="true" />
+    <remove field="D3D_SHADER_MACRO::.*" />
+
+    <map interface="ID3D10Blob" name="Blob" />
+    <map interface="ID3DInclude" name="Include" callback="true" shadow-name="Vortice.Direct3D.IncludeShadow" />
+    <map method="ID3DInclude::.+" hidden="true" managed-partial="true" />
+    <map interface="ID3DDestructionNotifier" name="DestructionNotifier" callback="true" />
+
+    <!-- DxCore -->
+    <map enum="DXCore(.*)" name-tmp="$1" />
+    <map struct="DXCore(.+)" name-tmp="$1" />
+
+    <map function="DXCoreCreateAdapterFactory" dll='"DxCore.dll"' group="Vortice.DXCore.DXCore" hresult="true" check="false" visibility="private" />
+
+    <map method="IDXCoreAdapterFactory::CreateAdapterList" visibility="private" name="CreateAdapterList" hresult="true" check="false" />
+    <map method="IDXCoreAdapterFactory::GetAdapterByLuid" visibility="private" name="GetAdapterByLuid" hresult="true" check="false" />
+
+    <map method="IDXCoreAdapterList::GetAdapter" visibility="private" name="GetAdapter" hresult="true" check="false" />
+    <map method="IDXCoreAdapterList::GetFactory" visibility="private" name="GetFactory" hresult="true" check="false" />
+    <map method="IDXCoreAdapterList::Sort" hresult="true" check="false" />
+
+    <map method="IDXCoreAdapter::GetFactory" visibility="private" hresult="true" check="false" />
+    <map method="IDXCoreAdapter::GetPropertySize" hresult="true" check="false" />
+    <map method="IDXCoreAdapter::GetProperty" hresult="true" check="false" />
+    <map param="IDXCoreAdapter::GetProperty::propertyData" type="void" keep-pointers="true"/>
+    <map method="IDXCoreAdapter::SetState" visibility="private" hresult="true" check="false" />
+    <map param="IDXCoreAdapter::SetState::inputStateDetails" type="void" keep-pointers="true"/>
+    <map param="IDXCoreAdapter::SetState::inputData" type="void" keep-pointers="true"/>
+    
+    <map method="IDXCoreAdapter::QueryState" visibility="private" hresult="true" check="false" />
+    <map param="IDXCoreAdapter::QueryState::inputStateDetails" type="void" keep-pointers="true"/>
+    <map param="IDXCoreAdapter::QueryState::outputBuffer" type="void" keep-pointers="true"/>
+
+    <!-- DXGI -->
+    <map enum="DXGI(.+)" name-tmp="$1" />
+    <map enum="DXGI_FORMAT" type="uint" />
+    <map enum-item="DXGI_FORMAT_.*" naming="underscore" />
+    <map enum-item="DXGI_FORMAT_420_OPAQUE" name="Opaque420" />
+    <map struct="DXGI(.+)" name-tmp="$1" />
+    <map struct="DXGI_GAMMA_CONTROL" name="GammaControl" />
+    <remove field="DXGI_GAMMA_CONTROL::.*"/>
+    <map struct="DXGI_GAMMA_CONTROL_CAPABILITIES" name="GammaControlCapabilities" />
+    <remove field="DXGI_GAMMA_CONTROL_CAPABILITIES::.*"/>
+    <map struct="DXGI_JPEG_AC_HUFFMAN_TABLE" name="JpegAcHuffmanTable" />
+    <remove field="DXGI_JPEG_AC_HUFFMAN_TABLE::.*"/>
+    <map struct="DXGI_JPEG_DC_HUFFMAN_TABLE" name="JpegDcHuffmanTable" />
+    <remove field="DXGI_JPEG_DC_HUFFMAN_TABLE::.*"/>
+    <map struct="DXGI_JPEG_QUANTIZATION_TABLE" name="JpegQuantizationTable" />
+    <remove field="DXGI_JPEG_QUANTIZATION_TABLE::.*"/>
+
+    <!-- DCommon -->
+    <map enum="D2D1(.*)" name-tmp="$1" />
+    <map enum="DWRITE(.+)" name-tmp="$1" />
+    <map struct="D2D1(.*)" name-tmp="$1" />
+
+    <!-- Multimedia -->
+    <!-- audiosessiontypes.h -->
+    <map enum="AUDCLNT_SHAREMODE" name="AudioClientShareMode" />
+    <map enum-item="AudioSessionState(.*)" name="$1"/>
+
+    <map enum="AUDCLNT_STREAMFLAGS" name="AudioClientStreamFlags" flags="true" none="true" namespace="Vortice.Multimedia"/>
+    <map enum="AUDCLNT_SESSIONFLAGS" name="AudioClientSessionFlags" flags="true" none="true" namespace="Vortice.Multimedia"/>
+    <map enum-item="AudioCategory_(.*)" name="$1"/>
+
+    <map enum="SPEAKER_FLAGS" name="Speakers" flags="true" none="true" namespace="Vortice.Multimedia"/>
+
+    <!-- class Vortice.Multimedia.UsagePage -->
+    <map enum="HID_USAGE_PAGE" name="UsagePage" type="short" namespace="Vortice.Multimedia"/>
+    <map enum-item="HID_USAGE_PAGE_(.*)" name-tmp="$1" naming="noexpand"/>
+
+    <!-- class Vortice.Multimedia.UsageId -->
+    <map enum="HID_USAGE_ID" name="UsageId" type="short" namespace="Vortice.Multimedia"/>
+    <map enum-item="HID_USAGE_([^P].*)" name-tmp="$1" naming="noexpand"/>
+
+    <!-- d3d12 -->
+    <map enum="D3D12_RESOURCE_STATES" flags="true" type="uint" />
+    <map enum-item="D3D12_RESOURCE_STATE(.*)" name-tmp="$1" />
+
+    <!-- dxcore -->
+    <map enum="DXCoreRuntimeFilterFlags" flags="true" none="false" />
+    <map enum="DXCoreHardwareTypeFilterFlags" flags="true" none="false" />
+
+    <!-- Devpropdef.h -->
+    <map enum="DEVPROP_TYPE" name="DevPropertyType" flags="false" namespace="Vortice.Win32"/>
+    <map enum="DEVPROPSTORE" name="DevPropertyStore" />
+    <map struct="DEVPROPCOMPKEY" name="DevPropertyCompoundKey" />
+    <map struct="DEVPROPERTY" name="DevProperty" />
+    <map field="DEVPROPERTY::Type" type="DEVPROP_TYPE" />
+    <map struct="DEVPROPKEY" name="DevPropertyKey" />
+    <map field="DEVPROPKEY::fmtid" name="FormatId" />
+    <map field="DEVPROPKEY::pid" name="PropertyId" />
+  </mapping>
+</config>

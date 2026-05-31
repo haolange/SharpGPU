@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net10.0-windows</TargetFrameworks>
+    <IsPackable>false</IsPackable>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Vortice.D3DCompiler\Vortice.D3DCompiler.csproj" />
+    <ProjectReference Include="..\..\src\Vortice.Direct2D1\Vortice.Direct2D1.csproj" />
+    <ProjectReference Include="..\..\src\Vortice.Direct3D11\Vortice.Direct3D11.csproj" />
+    <ProjectReference Include="..\..\src\Vortice.Wpf\Vortice.Wpf.csproj" />
+    <ProjectReference Include="..\Vortice.SampleFramework\Vortice.SampleFramework.csproj" />
+
+    <Content Include="Assets\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

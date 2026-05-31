@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config id="vortice-dxgi" xmlns="urn:SharpGen.Config">
+  <namespace>Vortice.DXGI</namespace>
+  <depends>Vortice.DirectX</depends>
+
+  <sdk name="WindowsSdk" version="10.0.26100.0" />
+  <sdk name="StdLib" />
+  <include-dir override="true">$(THIS_CONFIG_PATH)/../native/include/directx</include-dir>
+
+  <include file="dxgidebug.h" namespace="Vortice.DXGI.Debug" attach="true" />
+
+  <include file="dxgi.h" namespace="Vortice.DXGI" attach="true"/>
+  <include file="dxgi1_2.h" namespace="Vortice.DXGI" attach="true"/>
+  <include file="dxgi1_3.h" namespace="Vortice.DXGI" attach="true"/>
+  <include file="dxgi1_4.h" namespace="Vortice.DXGI" attach="true"/>
+  <include file="dxgi1_5.h" namespace="Vortice.DXGI" attach="true"/>
+  <include file="dxgi1_6.h" namespace="Vortice.DXGI" attach="true"/>
+  <include file="DXProgrammableCapture.h" namespace="Vortice.DXGI" attach="true"/>
+  <include file="windows.ui.xaml.media.dxinterop.h" namespace="Vortice.DXGI" attach="true" />
+
+  <extension>
+    <create-cpp enum="DXGI_PRESENT_FLAGS" macro="DXGI_PRESENT_.*" />
+    <create-cpp enum="DXGI_USAGE_ENUM" macro="DXGI_USAGE_.*" />
+    <create-cpp enum="DXGI_RESOURCE_PRIORITY" macro="DXGI_RESOURCE_.*" />
+    <create-cpp enum="DXGI_MAP_FLAGS" macro="DXGI_MAP_.*" />
+    <create-cpp enum="DXGI_ENUM_MODES_FLAGS" macro="DXGI_ENUM_MODES_.*" />
+    <create-cpp enum="DXGI_MWA_FLAGS" macro="DXGI_MWA_.*" />
+    <create-cpp enum="DXGI_SHARED_RESOURCE_FLAGS" macro="DXGI_SHARED_RESOURCE_.*" />
+
+    <create class="Vortice.DXGI.ResultCode" visibility="public"/>
+    <const from-macro="DXGI_ERROR_(.*)" cpp-type="int" name="$1" class="Vortice.DXGI.ResultCode" result="true" />
+    <const from-macro="DXGI_(CREATE_FACTORY_DEBUG)" type="int" cpp-type="int" name="$1" class="Vortice.DXGI.DXGI" />
+
+    <create class="DXGI" visibility="public static" />
+  </extension>
+
+  <bindings>
+    <bind from="DXGI_MATRIX_3X2_F" to="System.Numerics.Matrix3x2" />
+  </bindings>
+
+  <naming>
+    <short name="(R(\d).*)$">$1</short>
+    <short name="(B(\d).*)$">$1</short>
+    <short name="(G(\d).*)$">$1</short>
+    <short name="(A(\d).*)$">$1</short>
+    <short name="(X(\d).*)$">$1</short>
+    <short name="(BC(\d).*)$">$1</short>
+    <short name="(AYUV)$">$1</short>
+    <short name="(YUY2)$">$1</short>
+    <short name="(NV\d+)$">$1</short>
+    <short name="(AI\d+)$">$1</short>
+    <short name="(IA\d+)$">$1</short>
+    <short name="DESCRIPTOR">Descriptor</short>
+    <short name="DESCRIPTION">Description</short>
+    <short name="DESC">Description</short>
+    <short name="UINT8">UInt8</short>
+    <short name="UINT">UInt</short>
+    <short name="SINT">SInt</short>
+    <short name="UNORM">UNorm</short>
+    <short name="SNORM">SNorm</short>
+    <short name="SRGB">SRgb</short>
+  </naming>
+
+  <mapping>
+    <!-- dxgi enums -->
+    <map enum="DXGI(.+)" name-tmp="$1" />
+    <map enum="DXGI_USAGE_ENUM" name="Usage" flags="true" none="false" />
+    <map enum-item="DXGI_USAGE_(.+)" name-tmp="$1" />
+    <map enum-item="DXGI_USAGE_BACK_BUFFER" name="Backbuffer" />
+    <map enum="DXGI_DEBUG_RLO_FLAGS" name="ReportLiveObjectFlags" />
+    <map enum="DXGI_MWA_FLAGS" name="WindowAssociationFlags" />
+    <map enum-item="DXGI_MWA_NO_WINDOW_CHANGES" name="IgnoreAll" />
+    <map enum-item="DXGI_MWA_NO_ALT_ENTER" name="IgnoreAltEnter" />
+    <map enum-item="DXGI_MWA_NO_PRINT_SCREEN" name="IgnorePrintScreen" />
+    <map enum="DXGI_SWAP_CHAIN_FLAG" name="SwapChainFlags" />
+    <map enum="DXGI_ADAPTER_FLAG" name="AdapterFlags" />
+    <map enum="DXGI_ADAPTER_FLAG3" name="AdapterFlags3" flags="true" none="false" />
+    <map enum="DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG" name="SwapChainColorSpaceSupportFlags" />
+    <map enum="DXGI_OVERLAY_SUPPORT_FLAG" name="OverlaySupportFlags" />
+    <map enum="DXGI_OVERLAY_COLOR_SPACE_SUPPORT_FLAG" name="OverlayColorSpaceSupportFlags" />
+    <map enum="DXGI_OUTDUPL_POINTER_SHAPE_TYPE" name="PointerShapeType" />
+    <map enum="DXGI_ENUM_MODES_FLAGS" name="DisplayModeEnumerationFlags" flags="true" none="false"/>
+    <map enum="DXGI_MAP_FLAGS" flags="true" none="false" />
+    <remove enum-item=".*_FORCE_DWORD" />
+
+    <!-- dxgi structs -->
+    <map struct="DXGI(.+)" name-tmp="$1" />
+    <map struct="DXGI_INFO_QUEUE_FILTER" name="InfoQueueFilter" native="true" struct-to-class="true" marshal="true" />
+    <remove struct="DXGI_DISPLAY_COLOR_SPACE" />
+
+    <map method="IDXGIInfoQueue::GetMessageW" name="GetMessage" />
+    <map method="IDXGIInfoQueue::GetMessageW?" visibility="internal"/>
+    <map param="IDXGIInfoQueue::GetMessageW?::pMessage" type="void" attribute="in"/>
+    <map method="IDXGIInfoQueue::GetStorageFilter" visibility="internal"/>
+    <map param="IDXGIInfoQueue::GetStorageFilter::pFilter" type="void" attribute="in"/>
+    <map method="IDXGIInfoQueue::GetRetrievalFilter" visibility="internal"/>
+    <map param="IDXGIInfoQueue::GetRetrievalFilter::pFilter" type="void" attribute="in"/>
+
+    <map struct="DXGI_INFO_QUEUE_FILTER_DESC" name="InfoQueueFilterDescription" struct-to-class="true" marshal="true" />
+    <remove field="DXGI_INFO_QUEUE_FILTER_DESC::.*"/>
+
+    <map field=".*::(.*)DescW?" name="$1Description" />
+
+    <map field="DXGI_ADAPTER_DESC[123]?::AdapterLuid" name="Luid" />
+    <map field="DXGI_ADAPTER_DESC[123]?::SubSysId" name="SubsystemId" />
+    <map field="DXGI_ADAPTER_DESC[12]::Flags" type="DXGI_ADAPTER_FLAG" />
+
+    <!-- DXGI_SWAP_CHAIN_DESC -->
+    <map field="DXGI_SWAP_CHAIN_DESC[12]?::BufferUsage" type="DXGI_USAGE_ENUM"/>
+    <map field="DXGI_SWAP_CHAIN_DESC[12]?::Flags" type="DXGI_SWAP_CHAIN_FLAG" />
+    <map field="DXGI_DECODE_SWAP_CHAIN_DESC::Flags" type="DXGI_SWAP_CHAIN_FLAG" />
+
+    <map struct="DXGI_PRESENT_PARAMETERS" native="true" marshal="true" marshalto="true"/>
+    <remove field="DXGI_PRESENT_PARAMETERS::.*"/>
+
+    <map struct="DXGI_SHARED_RESOURCE" visibility="internal"/>
+    <map struct="DXGI_MAPPED_RECT" visibility="internal" />
+
+    <map struct="DXGI_DISPLAY_COLOR_SPACE" name="DisplayColorSpace" />
+    <remove field="DXGI_DISPLAY_COLOR_SPACE::.*"/>
+
+    <!--<map interface="IDXGI(.+)" name-tmp="$1" />-->
+    <map method=".*::(.*)DescW?" name="$1Description" />
+    <map method=".*::(.*)Desc1" name="$1Description1" />
+    <map method=".*::(.*)Desc2" name="$1Description2" />
+    <map method=".*::(.*)Desc3" name="$1Description3" />
+
+    <!-- IDXGIObject -->
+    <map method="IDXGIObject::GetParent" visibility="private" hresult="true" check="false"/>
+    <map method="IDXGIObject::GetPrivateData" visibility="public" hresult="true" check="false"/>
+    <map method="IDXGIObject::SetPrivateData" visibility="public" hresult="true" check="false"/>
+
+    <!-- IDXGIDeviceSubObject -->
+    <map method="IDXGIDeviceSubObject::GetDevice" visibility="private" hresult="true" check="false"/>
+
+    <!-- IDXGIFactory -->
+    <map method="IDXGIFactory::EnumAdapters" hresult="true" check="false"/>
+
+    <map method="IDXGIFactory::MakeWindowAssociation" hresult="true" check="false"/>
+    <map param="IDXGIFactory::MakeWindowAssociation::Flags" type="DXGI_MWA_FLAGS" />
+    <map param="IDXGIFactory::CreateSoftwareAdapter::ppAdapter" return="true" />
+    <map method="IDXGIFactory::GetWindowAssociation" property="false" />
+    <map param="IDXGIFactory::GetWindowAssociation::pWindowHandle" return="true" />
+    <!--<map method="IDXGIFactory::CreateSwapChain" visibility="internal" />-->
+    <map param="IDXGIFactory::CreateSwapChain::pDesc" attribute="in value" />
+    <map param="IDXGIFactory::CreateSwapChain::ppSwapChain" return="true"/>
+
+    <!-- IDXGIFactory1 -->
+    <map method="IDXGIFactory1::EnumAdapters1" hresult="true" check="false"/>
+
+    <!-- IDXGIFactory2 -->
+    <map param="IDXGIFactory2::CreateSwapChainForComposition::pDesc" attribute="in value" />
+    <map param="IDXGIFactory2::CreateSwapChainForComposition::pRestrictToOutput" default="null" />
+    <map param="IDXGIFactory2::CreateSwapChainForComposition::ppSwapChain" return="true"/>
+
+    <map param="IDXGIFactory2::CreateSwapChainForCoreWindow::pDesc" attribute="in value" />
+    <map param="IDXGIFactory2::CreateSwapChainForCoreWindow::pRestrictToOutput" default="null" />
+    <map param="IDXGIFactory2::CreateSwapChainForCoreWindow::ppSwapChain" return="true"/>
+
+    <map param="IDXGIFactory2::CreateSwapChainForHwnd::pDesc" attribute="in value" />
+    <map param="IDXGIFactory2::CreateSwapChainForHwnd::pFullscreenDesc" default="null" />
+    <map param="IDXGIFactory2::CreateSwapChainForHwnd::pRestrictToOutput" default="null" />
+    <map param="IDXGIFactory2::CreateSwapChainForHwnd::ppSwapChain" return="true"/>
+
+    <map param="IDXGIFactory2::GetSharedResourceAdapterLuid::pLuid" return="true"/>
+    <map param="IDXGIFactory2::RegisterOcclusionStatusEvent::pdwCookie" return="true"/>
+    <map param="IDXGIFactory2::RegisterOcclusionStatusWindow::pdwCookie" return="true"/>
+    <map param="IDXGIFactory2::RegisterStereoStatusEvent::pdwCookie" return="true"/>
+    <map param="IDXGIFactory2::RegisterStereoStatusWindow::pdwCookie" return="true"/>
+
+    <!-- IDXGIFactory4 -->
+    <map method="IDXGIFactory4::EnumWarpAdapter" visibility="private" hresult="true" check="false"/>
+    <map method="IDXGIFactory4::EnumAdapterByLuid" visibility="private" hresult="true" check="false"/>
+
+    <!-- IDXGIFactory5 -->
+    <map method="IDXGIFactory5::CheckFeatureSupport" check="false" visibility="private"/>
+    <map param="IDXGIFactory5::CheckFeatureSupport::pFeatureSupportData" keep-pointers="true" />
+
+    <!-- IDXGIFactory6 -->
+    <map method="IDXGIFactory6::EnumAdapterByGpuPreference" visibility="internal" hresult="true" check="false"/>
+
+    <!-- IDXGIFactory7 -->
+    <map param="IDXGIFactory7::RegisterAdaptersChangedEvent::pdwCookie" return="true"/>
+
+    <!-- IDXGIDevice -->
+    <map method="IDXGIDevice::GetGPUThreadPriority" hresult="true" check="false" property="false"/>
+    <map method="IDXGIDevice::SetGPUThreadPriority" hresult="true" check="false" property="false"/>
+
+    <!-- IDXGIDevice1 -->
+    <map method="IDXGIDevice1::GetMaximumFrameLatency" hresult="true" check="false" property="false"/>
+    <map method="IDXGIDevice1::SetMaximumFrameLatency" hresult="true" check="false" property="false"/>
+
+    <!-- IDXGISwapChain -->
+    <map method="IDXGISwapChain::GetFrameStatistics" hresult="true" check="false" property="false" name="GetFrameStatistics"/>
+    <map method="IDXGISwapChain::Present" hresult="true" check="false" visibility="public" />
+    <map param="IDXGISwapChain::Present::Flags" type="DXGI_PRESENT_FLAGS" />
+    <map method="IDXGISwapChain::ResizeBuffers" hresult="true" check="false" />
+    <map param="IDXGISwapChain::ResizeBuffers::SwapChainFlags" type="DXGI_SWAP_CHAIN_FLAG" />
+    <map method="IDXGISwapChain::SetFullscreenState" hresult="true" check="false" visibility="private" />
+    <map method="IDXGISwapChain::GetBuffer" hresult="true" check="false" visibility="private" />
+    <map method="IDXGISwapChain::ResizeTarget" hresult="true" check="false" />
+    
+    <map method="IDXGISwapChain::GetContainingOutput" hresult="true" check="false" property="false" />
+    <map param="IDXGISwapChain::GetContainingOutput::ppOutput" attribute="out" return="false"/>
+    <map method="IDXGISwapChain::GetFullscreenState" hresult="true" check="false" />
+
+    <!-- IDXGISwapChain1 -->
+    <map method="IDXGISwapChain1::GetHwnd" property="false" hresult="true" check="false" />
+    <map method="IDXGISwapChain1::GetCoreWindow" property="false" visibility="private" hresult="true" check="false" />
+    <map method="IDXGISwapChain1::Present1" visibility="internal" hresult="true"/>
+    <map param="IDXGISwapChain1::Present1::pPresentParameters" type="void" keep-pointers="true" />
+    <map param="IDXGISwapChain1::Present1::PresentFlags" type="DXGI_PRESENT_FLAGS" />
+
+    <!-- IDXGISwapChain2 -->
+    <map param="IDXGISwapChain2::GetMaximumFrameLatency::pMaxLatency" attribute="out" />
+    <map param="IDXGISwapChain2::GetMatrixTransform::pMatrix" attribute="out" />
+
+    <!-- IDXGISwapChain3 -->
+    <map method="IDXGISwapChain3::CheckColorSpaceSupport" visibility="private" hresult="true" check="false" />
+    <map param="IDXGISwapChain3::CheckColorSpaceSupport::pColorSpaceSupport" type="DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG" />
+    
+    <map method="IDXGISwapChain3::ResizeBuffers1" hresult="true" check="false" />
+    <map param="IDXGISwapChain3::ResizeBuffers1::SwapChainFlags" type="DXGI_SWAP_CHAIN_FLAG" />
+
+    <!-- IDXGIAdapter -->
+    <map method="IDXGIAdapter::EnumOutputs" hresult="true" check="false"/>
+    <map method="IDXGIAdapter::CheckInterfaceSupport" visibility="public" check="false"/>
+
+    <!-- IDXGIAdapter3 -->
+    <map param="IDXGIAdapter3::QueryVideoMemoryInfo::pVideoMemoryInfo" attribute="out" return="true"/>
+    <map param="IDXGIAdapter3::RegisterHardwareContentProtectionTeardownStatusEvent::pdwCookie" return="true"/>
+    <map param="IDXGIAdapter3::RegisterVideoMemoryBudgetChangeNotificationEvent::pdwCookie" return="true"/>
+
+    <!-- IDXGIDecodeSwapChain -->
+    <map method="IDXGIDecodeSwapChain::PresentBuffer" hresult="true" check="false"/>
+    <map param="IDXGIDecodeSwapChain::PresentBuffer::Flags" type="DXGI_PRESENT_FLAGS" />
+
+    <!-- IDXGIDevice -->
+    <map method="IDXGIDevice::CreateSurface" visibility="internal" />
+    <map param="IDXGIDevice::CreateSurface::pDesc" attribute="in value optional" />
+    <map param="IDXGIDevice::CreateSurface::ppSurface" attribute="out" return="true"/>
+    <map method="IDXGIDevice::QueryResourceResidency" visibility="private" hresult="true" check="false"/>
+    <map method="IDXGIDevice::GetAdapter" property="false" hresult="true" check="false"/>
+
+    <!-- IDXGIOutput -->
+    <map method="IDXGIOutput::GetDesc" persist="true"/>
+    <map method="IDXGIOutput::FindClosestMatchingMode" visibility="private" />
+    <map method="IDXGIOutput::GetDisplayModeList" visibility="private" />
+    <map method="IDXGIOutput::SetDisplaySurface" property="false" />
+
+    <!-- IDXGIOutput1 -->
+    <map method="IDXGIOutput1::FindClosestMatchingMode1" visibility="private" />
+    <map method="IDXGIOutput1::GetDisplayModeList1" visibility="private" />
+
+    <!-- IDXGIOutput6 -->
+    <map method="IDXGIOutput6::GetDesc1" persist="true"/>
+    <map param="IDXGIOutput6::CheckHardwareCompositionSupport::pFlags" type="DXGI_HARDWARE_COMPOSITION_SUPPORT_FLAGS" attribute="out" return="true"/>
+
+    <!-- IDXGIResource -->
+    <map param="IDXGIResource::GetUsage::pUsage" type="DXGI_USAGE_ENUM" attribute="out" />
+
+    <!-- IDXGIResource1 -->
+    <map param="IDXGIResource1::CreateSubresourceSurface::ppSurface" attribute="out" return="true" />
+    <map method="IDXGIResource1::CreateSharedHandle" visibility="public"/>
+    <map param="IDXGIResource1::CreateSharedHandle::dwAccess" type="DXGI_SHARED_RESOURCE_FLAGS"/>
+    <map param="IDXGIResource1::CreateSharedHandle::pHandle" return="true"/>
+
+    <!-- IDXGISurface -->
+    <map method="IDXGISurface::(.*)" hresult="true" check="false"/>
+    <map method="IDXGISurface::Map" visibility="internal" hresult="true" check="false"/>
+
+    <!-- IDXGISurface1 -->
+    <map param="IDXGISurface1::GetDC::phdc" attribute="out" return="true" />
+
+    <!-- IDXGISurface2 -->
+    <map method="IDXGISurface2::GetResource" visibility="private" hresult="true" check="false"/>
+
+    <!-- IDXGIOutputDuplication -->
+    <map method="IDXGIOutputDuplication::(.*)" hresult="true" check="false"/>
+    <map method="IDXGIOutputDuplication::MapDesktopSurface" visibility="internal" hresult="true" check="false"/>
+    <!--<map param="IDXGIOutputDuplication::MapDesktopSurface::phdc" attribute="out" return="true" />-->
+    
+    
+    <map function="DXGIGetDebugInterface1" dll='"dxgi.dll"' group="Vortice.DXGI.DXGI" hresult="true" check="false" visibility="private" />
+    <map param="DXGIGetDebugInterface.*?::ppDebug" attribute="out" />
+
+    <remove function="CreateDXGIFactory" />
+    <remove function="DXGIGetDebugInterface" />
+
+    <map function="CreateDXGIFactory.*" dll='"dxgi.dll"' group="Vortice.DXGI.DXGI" hresult="true" check="false" visibility="private" />
+    <map param="CreateDXGIFactory.*?::ppFactory" attribute="out" />
+
+    <map function="DXGIDeclareAdapterRemovalSupport" dll='"dxgi.dll"' group="Vortice.DXGI.DXGI" hresult="true" check="false" />
+    <map function="DXGIDisableVBlankVirtualization" dll='"dxgi.dll"' group="Vortice.DXGI.DXGI" hresult="true" check="false" />
+    
+    <map param="IDXGIOutput1::DuplicateOutput::ppOutputDuplication" attribute="out" return="true"/>
+
+    <map method="IDXGIOutput3::CheckOverlaySupport" visibility="private" name="CheckOverlaySupport_" />
+    <map param="IDXGIOutput3::CheckOverlaySupport::pFlags" type="DXGI_OVERLAY_SUPPORT_FLAG" attribute="out" return="true"/>
+
+    <!-- IDXGIOutput4 -->
+    <map method="IDXGIOutput4::CheckOverlayColorSpaceSupport" visibility="private" name="CheckOverlayColorSpaceSupport_" />
+    <map param="IDXGIOutput4::CheckOverlayColorSpaceSupport::pFlags" type="DXGI_OVERLAY_COLOR_SPACE_SUPPORT_FLAG" attribute="out" return="true"/>
+
+    <!-- IDXGIOutput5 -->
+    <map method="IDXGIOutput5::DuplicateOutput1" visibility="private" name="DuplicateOutput1_" />
+    <map param="IDXGIOutput5::DuplicateOutput1::pSupportedFormats" type="void" keep-pointers="true" />
+    <map param="IDXGIOutput5::DuplicateOutput1::ppOutputDuplication" attribute="out" return="true"/>
+
+    <!-- IDXGIFactoryMedia -->
+    <map method="IDXGIFactoryMedia::CreateDecodeSwapChainForCompositionSurfaceHandle" visibility="private" />
+    <map param="IDXGIFactoryMedia::CreateDecodeSwapChainForCompositionSurfaceHandle::ppSwapChain" return="true"/>
+    <map method="IDXGIFactoryMedia::CreateSwapChainForCompositionSurfaceHandle" visibility="private" />
+    <map param="IDXGIFactoryMedia::CreateSwapChainForCompositionSurfaceHandle::ppSwapChain" return="true"/>
+
+    <!-- ISurfaceImageSourceNative -->
+    <map method="ISurfaceImageSourceNative::.*" property="false" hresult="true" check="false" />
+    <map method="ISurfaceImageSourceNative::SetDevice" property="false" />
+    <map method="ISurfaceImageSourceNative::BeginDraw" hresult="true" check="false"/>
+
+    <!-- IVirtualSurfaceUpdatesCallbackNative -->
+    <map interface="IVirtualSurfaceUpdatesCallbackNative" callback="true" callback-dual="false" callback-visibility="internal"/>
+    <map method="IVirtualSurfaceUpdatesCallbackNative::.*" property="false" hresult="true" check="false" />
+
+    <!-- IVirtualSurfaceImageSourceNative -->
+    <map method="IVirtualSurfaceImageSourceNative::Invalidate" hresult="true" check="false"/>
+    <map method="IVirtualSurfaceImageSourceNative::Resize" hresult="true" check="false"/>
+    <map method="IVirtualSurfaceImageSourceNative::GetUpdateRectCount" visibility="internal" property="false" hresult="true" check="false"/>
+    <map method="IVirtualSurfaceImageSourceNative::GetUpdateRects" visibility="internal" hresult="true" check="false"/>
+
+    <!-- ISwapChainBackgroundPanelNative -->
+    <map method="ISwapChainBackgroundPanelNative::SetSwapChain" property="false" />
+    <map method="ISwapChainBackgroundPanelNative::SetSwapChain" hresult="true" check="false"/>
+
+    <!-- ISurfaceImageSourceNativeWithD2D -->
+    <map method="ISurfaceImageSourceNativeWithD2D::SetDevice" property="false" />
+    <map method="ISurfaceImageSourceNativeWithD2D::SetDevice" hresult="true" check="false"/>
+    <map method="ISurfaceImageSourceNativeWithD2D::BeginDraw" hresult="true" check="false"/>
+    <map method="ISurfaceImageSourceNativeWithD2D::EndDraw" hresult="true" check="false"/>
+    <map method="ISurfaceImageSourceNativeWithD2D::ResumeDraw" hresult="true" check="false"/>
+    <map method="ISurfaceImageSourceNativeWithD2D::SuspendDraw" hresult="true" check="false"/>
+
+    <!-- ISwapChainPanelNative -->
+    <map method="ISwapChainPanelNative::SetSwapChain" property="false" />
+    <map method="ISwapChainPanelNative::SetSwapChain" hresult="true" check="false"/>
+
+    <!-- ISwapChainPanelNative -->
+    <map method="ISwapChainPanelNative2::SetSwapChainHandle" property="false" />
+    <map method="ISwapChainPanelNative2::SetSwapChainHandle" hresult="true" check="false"/>
+
+    <map method="ISurfaceImageSourceManagerNative::FlushAllSurfacesWithDevice" hresult="true" check="false"/>
+  </mapping>
+</config>

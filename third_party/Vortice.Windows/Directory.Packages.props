@@ -1,0 +1,25 @@
+<Project>
+  <!-- https://learn.microsoft.com/nuget/consume-packages/central-package-management -->
+  <PropertyGroup>
+    <SharpGenVersion>2.4.2-beta</SharpGenVersion>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <!--Generator -->
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageVersion Include="MessagePack" Version="3.1.4" />
+    <PackageVersion Include="Microsoft.Windows.SDK.Win32Docs" Version="0.1.42-alpha" />
+    
+    <PackageVersion Include="Vortice.Mathematics" Version="2.1.0" />
+    <PackageVersion Include="SharpGen.Runtime.COM" Version="$(SharpGenVersion)" />
+    <PackageVersion Include="Vortice.Dxc.Native" Version="1.0.5" />
+    
+    <PackageVersion Include="Microsoft.Windows.CsWin32" Version="0.3.269" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.8.260209005" />
+
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageVersion Include="NUnit" Version="4.4.0" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="5.2.0" />
+  </ItemGroup>
+
+</Project>

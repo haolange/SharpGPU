@@ -1,0 +1,81 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Sdk Name="SharpGenTools.Sdk" Version="$(SharpGenVersion)" />
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0;net8.0-windows10.0.22621;net9.0-windows10.0.22621;net10.0-windows10.0.22621</TargetFrameworks>
+    <RootNamespace>Vortice</RootNamespace>
+    <Description>Core DirectX library.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <TargetPlatformMinVersion>10.0.18362.0</TargetPlatformMinVersion>
+    <WindowsSdkPackageVersion>10.0.22621.54</WindowsSdkPackageVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="System.Diagnostics.CodeAnalysis" />
+    <Using Include="System.Runtime.InteropServices" />
+    <Using Include="SharpGen.Runtime" />
+
+    <SharpGenMapping Include="Mappings.xml" />
+    <PackageReference Include="Vortice.Mathematics" />
+    <PackageReference Include="SharpGen.Runtime.COM" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(SignAssembly)' == 'true'">
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Vortice.D3DCompiler, PublicKey=$(VorticePublicKey)</_Parameter1>
+    </AssemblyAttribute>
+
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Vortice.XAudio2, PublicKey=$(VorticePublicKey)</_Parameter1>
+    </AssemblyAttribute>
+
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Vortice.MediaFoundation, PublicKey=$(VorticePublicKey)</_Parameter1>
+    </AssemblyAttribute>
+
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Vortice.DirectSound, PublicKey=$(VorticePublicKey)</_Parameter1>
+    </AssemblyAttribute>
+
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Vortice.Direct3D11, PublicKey=$(VorticePublicKey)</_Parameter1>
+    </AssemblyAttribute>
+
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Vortice.Direct3D12, PublicKey=$(VorticePublicKey)</_Parameter1>
+    </AssemblyAttribute>
+
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(SignAssembly)' != 'true'">
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Vortice.D3DCompiler</_Parameter1>
+    </AssemblyAttribute>
+
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Vortice.XAudio2</_Parameter1>
+    </AssemblyAttribute>
+
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Vortice.MediaFoundation</_Parameter1>
+    </AssemblyAttribute>
+
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Vortice.DirectSound</_Parameter1>
+    </AssemblyAttribute>
+
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Vortice.Direct3D11</_Parameter1>
+    </AssemblyAttribute>
+
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Vortice.Direct3D12</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>
