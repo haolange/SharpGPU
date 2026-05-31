@@ -1,6 +1,6 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal unsafe class Dx12Texture : RHITexture

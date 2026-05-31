@@ -5,7 +5,7 @@ using SharpMetal.QuartzCore;
 using SharpMetal.ObjectiveCCore;
 using System.Runtime.InteropServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CS8618, CA1416
     internal unsafe partial class VulkanSwapChain : RHISwapChain

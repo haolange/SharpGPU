@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.Linq;
 using Vortice.Vulkan;
 using System.Collections.Concurrent;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal static unsafe class VulkanNative
     {

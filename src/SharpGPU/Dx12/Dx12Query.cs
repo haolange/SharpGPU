@@ -1,7 +1,7 @@
 using System;
 using SharpGPU.Collections.LowLevel;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CA1416, CS8600, CS8602
 
@@ -9,15 +9,19 @@ namespace Infinity.Graphics
     {
         public Vortice.Direct3D12.ID3D12Resource QueryResult  => m_QueryResult;
         public Vortice.Direct3D12.ID3D12QueryHeap QueryHeap => m_QueryHeap;
+        public uint ResultStrideInBytes => m_ResultStrideInBytes;
 
         private Vortice.Direct3D12.ID3D12Resource m_QueryResult;
         private Vortice.Direct3D12.ID3D12QueryHeap m_QueryHeap;
+        private readonly uint m_ResultStrideInBytes;
 
         public Dx12Query(Dx12Device device, in RHIQueryDescriptor descriptor)
         {
             m_QueryDescriptor = descriptor;
+            m_ResultStrideInBytes = GetResultStrideInBytes(descriptor.Type);
+            uint resultElementCount = checked((descriptor.Count * m_ResultStrideInBytes) / sizeof(ulong));
 
-            m_Results = new ulong[descriptor.Count];
+            m_Results = new ulong[resultElementCount];
             Results = new ReadOnlyMemory<ulong>(m_Results);
 
             Vortice.Direct3D12.QueryHeapDescription queryHeapDesc;
@@ -41,7 +45,7 @@ namespace Infinity.Graphics
             {
                 resourceDesc.Alignment = 0;
                 resourceDesc.Dimension = Vortice.Direct3D12.ResourceDimension.Buffer;
-                resourceDesc.Width = sizeof(ulong) * descriptor.Count;
+                resourceDesc.Width = m_ResultStrideInBytes * descriptor.Count;
                 resourceDesc.Height = 1;
                 resourceDesc.DepthOrArraySize = 1;
                 resourceDesc.MipLevels = 1;
@@ -60,6 +64,13 @@ namespace Infinity.Graphics
                 null,
                 out queryResult);
             m_QueryResult = queryResult;
+        }
+
+        private static uint GetResultStrideInBytes(in ERHIQueryType queryType)
+        {
+            return queryType == ERHIQueryType.Statistics
+                ? (uint)sizeof(Vortice.Direct3D12.QueryDataPipelineStatistics)
+                : sizeof(ulong);
         }
 
         public override bool ResolveData()

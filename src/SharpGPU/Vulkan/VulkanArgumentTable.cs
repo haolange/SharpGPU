@@ -1,7 +1,7 @@
-﻿using System;
+using System;
 using Vortice.Vulkan;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CS8618
     internal unsafe class VulkanArgumentTableLayout : RHIArgumentTableLayout

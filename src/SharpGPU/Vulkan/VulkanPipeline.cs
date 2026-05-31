@@ -3,7 +3,7 @@ using Vortice.Vulkan;
 using SharpGPU.Mathematics;
 using System.Runtime.InteropServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CS8618
     internal unsafe class VulkanPipelineLayout : RHIPipelineLayout

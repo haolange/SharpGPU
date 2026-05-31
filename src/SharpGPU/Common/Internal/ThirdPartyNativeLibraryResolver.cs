@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 
 internal readonly struct ThirdPartyNativeLibraryProfile

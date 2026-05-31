@@ -1,7 +1,7 @@
 using System;
 using System.Buffers.Binary;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     public sealed class RHIRayRecordBuilder
     {

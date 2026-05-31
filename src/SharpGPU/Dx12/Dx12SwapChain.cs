@@ -1,6 +1,6 @@
 using SharpGPU.Mathematics;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CA1416, CS8602, CS8604
     internal unsafe class Dx12SwapChain : RHISwapChain

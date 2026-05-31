@@ -1,14 +1,13 @@
 using System;
 using System.Text;
 using SharpGPU.Core;
-using NUnit.Framework;
 using System.Diagnostics;
 using SharpGPU.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CA1416
     internal unsafe struct Dx12DescriptorInfo
@@ -25,9 +24,10 @@ namespace Infinity.Graphics
         public Vortice.Direct3D12.DescriptorHeapType NativeType => m_NativeType;
         public Vortice.Direct3D12.ID3D12DescriptorHeap NativeDescriptorHeap => m_NativeDescriptorHeap;
         public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuStartHandle => m_NativeDescriptorHeap.GetCPUDescriptorHandleForHeapStart();
-        public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuStartHandle => m_NativeDescriptorHeap.GetGPUDescriptorHandleForHeapStart();
+        public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuStartHandle => m_IsShaderVisible ? m_NativeDescriptorHeap.GetGPUDescriptorHandleForHeapStart() : default;
 
         private int m_Capacity;
+        private bool m_IsShaderVisible;
         private uint m_DescriptorSize;
         private SortedList<int, int> m_FreeBlocks;
         private Vortice.Direct3D12.DescriptorHeapType m_NativeType;
@@ -40,6 +40,7 @@ namespace Infinity.Graphics
             m_FreeBlocks.Add(0, m_Capacity);
 
             m_NativeType = type;
+            m_IsShaderVisible = (flag & Vortice.Direct3D12.DescriptorHeapFlags.ShaderVisible) != 0;
             m_DescriptorSize = device.GetDescriptorHandleIncrementSize(m_NativeType);
 
             Vortice.Direct3D12.DescriptorHeapDescription descriptorInfo = new Vortice.Direct3D12.DescriptorHeapDescription();
@@ -150,13 +151,28 @@ namespace Infinity.Graphics
     internal static unsafe class Dx12Utility
     {
         public static void CHECK_BOOL(bool cond, [CallerFilePath] string __FILE__ = "", [CallerLineNumber] int __LINE__ = 0, [CallerArgumentExpression("cond")] string expr = "")
-            => Assert.False(!cond, $"{__FILE__}({__LINE__}): !({(string.IsNullOrEmpty(expr) ? cond : expr)})");
+        {
+            if (!cond)
+            {
+                throw new InvalidOperationException($"{__FILE__}({__LINE__}): !({(string.IsNullOrEmpty(expr) ? cond : expr)})");
+            }
+        }
 
         public static void CHECK_HR(int hr, [CallerFilePath] string __FILE__ = "", [CallerLineNumber] int __LINE__ = 0, [CallerArgumentExpression("hr")] string expr = "")
-            => Assert.False(hr < 0, $"{__FILE__}({__LINE__}): FAILED({(string.IsNullOrEmpty(expr) ? hr.ToString("X8") : expr)})");
+        {
+            if (hr < 0)
+            {
+                throw new InvalidOperationException($"{__FILE__}({__LINE__}): FAILED({(string.IsNullOrEmpty(expr) ? hr.ToString("X8") : expr)})");
+            }
+        }
 
         public static void CHECK_HR(SharpGen.Runtime.Result hr, [CallerFilePath] string __FILE__ = "", [CallerLineNumber] int __LINE__ = 0, [CallerArgumentExpression("hr")] string expr = "")
-            => Assert.False(hr.Failure, $"{__FILE__}({__LINE__}): FAILED({(string.IsNullOrEmpty(expr) ? ((int)hr).ToString("X8") : expr)})");
+        {
+            if (hr.Failure)
+            {
+                throw new InvalidOperationException($"{__FILE__}({__LINE__}): FAILED({(string.IsNullOrEmpty(expr) ? ((int)hr).ToString("X8") : expr)})");
+            }
+        }
 
         internal static uint GetFormatBytesPerPixel(in ERHIPixelFormat format)
         {
@@ -264,6 +280,9 @@ namespace Infinity.Graphics
                 case ERHIQueryType.Occlusion:
                     return Vortice.Direct3D12.QueryType.Occlusion;
 
+                case ERHIQueryType.Statistics:
+                    return Vortice.Direct3D12.QueryType.PipelineStatistics;
+
                 case ERHIQueryType.TimestampTransfer:
                 case ERHIQueryType.TimestampGenerice:
                     return Vortice.Direct3D12.QueryType.Timestamp;
@@ -279,6 +298,9 @@ namespace Infinity.Graphics
             {
                 case ERHIQueryType.Occlusion:
                     return Vortice.Direct3D12.QueryHeapType.Occlusion;
+
+                case ERHIQueryType.Statistics:
+                    return Vortice.Direct3D12.QueryHeapType.PipelineStatistics;
 
                 case ERHIQueryType.TimestampTransfer:
                     return Vortice.Direct3D12.QueryHeapType.CopyQueueTimestamp;

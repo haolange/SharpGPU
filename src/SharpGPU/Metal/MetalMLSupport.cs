@@ -1,7 +1,7 @@
 using System;
 using SharpMetal.Metal;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal sealed class MetalMLProgram : RHIMLProgram
     {

@@ -1,6 +1,6 @@
 using System;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal readonly struct MetalBindInfo
     {

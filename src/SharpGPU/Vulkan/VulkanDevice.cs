@@ -5,7 +5,7 @@ using SharpGPU.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CS8618
     internal unsafe class VulkanDevice : RHIDevice
@@ -822,22 +822,22 @@ namespace Infinity.Graphics
 
         public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
         {
-            return new VulkanMLPipeline(this, descriptor);
+            throw new NotSupportedException("Vulkan ML is not supported in SharpGPU v1. No portable Vulkan core ML abstraction is enabled.");
         }
 
         public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
         {
-            return new VulkanMLBindingSet(descriptor);
+            throw new NotSupportedException("Vulkan ML is not supported in SharpGPU v1. No portable Vulkan core ML abstraction is enabled.");
         }
 
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
         {
-            return new VulkanTensor(this, descriptor);
+            throw new NotSupportedException("Vulkan ML tensors are not supported in SharpGPU v1.");
         }
 
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
         {
-            return new VulkanWorkGraphPipeline(descriptor);
+            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
         }
 
         public int GetQueueFamilyIndex(in ERHIPipelineType pipeline)

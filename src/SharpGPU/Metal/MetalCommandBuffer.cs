@@ -3,7 +3,7 @@ using SharpMetal.Metal;
 using SharpMetal.QuartzCore;
 using SharpMetal.ObjectiveCCore;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal enum MetalActiveEncoderType : byte
     {

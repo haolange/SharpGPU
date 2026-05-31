@@ -4,7 +4,7 @@ using Vortice.Vulkan;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8618
     internal unsafe class VulkanInstance : RHIInstance

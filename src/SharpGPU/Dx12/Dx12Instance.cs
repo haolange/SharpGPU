@@ -1,6 +1,7 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CA1416, CS8602, CS8618
     internal unsafe class Dx12Instance : RHIInstance
@@ -26,6 +27,8 @@ namespace Infinity.Graphics
 
         private void CreateDX12Factory(in RHIInstanceDescriptor descriptor)
         {
+            Dx12Agility.EnsureInitialized();
+
             uint factoryFlags = 0;
 
             if(descriptor.EnableDebugLayer)
@@ -68,7 +71,22 @@ namespace Infinity.Graphics
                 {
                     break;
                 }
-                m_Devices.Add(new Dx12Device(this, adapter, descriptor.ComputeQueueRequestCount, descriptor.TransferQueueRequestCount, descriptor.GraphicsQueueRequestCount));
+
+                Vortice.DXGI.AdapterDescription1 adapterDesc = adapter.Description1;
+                try
+                {
+                    m_Devices.Add(new Dx12Device(this, adapter, descriptor.ComputeQueueRequestCount, descriptor.TransferQueueRequestCount, descriptor.GraphicsQueueRequestCount));
+                }
+                catch (Exception) when ((adapterDesc.Flags & Vortice.DXGI.AdapterFlags.Software) != 0)
+                {
+                    adapter.Release();
+                    continue;
+                }
+                catch (Exception ex)
+                {
+                    adapter.Release();
+                    throw new InvalidOperationException($"Failed to create DX12 device for adapter '{adapterDesc.Description}' (Vendor=0x{adapterDesc.VendorId:X4}, Device=0x{adapterDesc.DeviceId:X4}).", ex);
+                }
             }
         }
 
@@ -79,12 +97,12 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            DXGIFactory.Release();
-
             for(int i = 0; i < m_Devices.Count; ++i)
             {
                 m_Devices?[i].Dispose();
             }
+
+            DXGIFactory.Release();
         }
     }
 #pragma warning restore CA1416, CS8602, CS8618

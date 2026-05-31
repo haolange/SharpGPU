@@ -1,6 +1,6 @@
-﻿using System;
+using System;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CA1416
     internal unsafe class Dx12CommandQueue : RHICommandQueue
@@ -212,8 +212,7 @@ namespace Infinity.Graphics
             if (cmdBuffer != null)
             {
                 Dx12CommandBuffer dx12CommandBuffer = cmdBuffer as Dx12CommandBuffer;
-                Vortice.Direct3D12.ID3D12CommandList[] commandLists = { dx12CommandBuffer.NativeCommandList };
-                m_NativeCommandQueue.ExecuteCommandLists(commandLists);
+                m_NativeCommandQueue.ExecuteCommandList(dx12CommandBuffer.NativeCommandList);
             }
 
             if (signalSemaphore != null)
@@ -249,8 +248,7 @@ namespace Infinity.Graphics
             if (cmdBuffer != null)
             {
                 Dx12CommandBuffer dx12CommandBuffer = cmdBuffer as Dx12CommandBuffer;
-                Vortice.Direct3D12.ID3D12CommandList[] commandLists = { dx12CommandBuffer.NativeCommandList };
-                m_NativeCommandQueue.ExecuteCommandLists(commandLists);
+                m_NativeCommandQueue.ExecuteCommandList(dx12CommandBuffer.NativeCommandList);
             }
 
             if (signalSemaphores != null)

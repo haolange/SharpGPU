@@ -2,7 +2,7 @@ using System;
 using SharpGPU.Collections;
 using System.Collections.Generic;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal unsafe class Dx12DeviceLimit : RHIDeviceLimit
@@ -266,6 +266,7 @@ namespace Infinity.Graphics
         private Vortice.DirectML.IDMLDevice? m_DirectMLDevice;
         private Vortice.DirectML.IDMLDevice1? m_DirectMLDevice1;
         private Vortice.DirectML.IDMLCommandRecorder? m_DirectMLCommandRecorder;
+        private bool m_OwnsDXGIAdapter;
 
         public Dx12Device(Dx12Instance instance, in Vortice.DXGI.IDXGIAdapter1 adapter, in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
         {
@@ -285,6 +286,7 @@ namespace Infinity.Graphics
             CreateCommandQueues(computeQueueCount, transferQueueCount, graphicsQueueCount);
             CreateDescriptorHeaps();
             CreateCommandSignatures();
+            m_OwnsDXGIAdapter = true;
         }
 
         public override RHICommandQueue? GetCommandQueue(in ERHIPipelineType pipeline, in int index)
@@ -436,7 +438,12 @@ namespace Infinity.Graphics
 
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
         {
-            return new Dx12WorkGraphPipeline(descriptor);
+            if (Feature?.IsWorkgraphSupported != true)
+            {
+                throw new NotSupportedException("DX12 WorkGraph is not supported by this adapter/driver.");
+            }
+
+            return new Dx12WorkGraphPipeline(this, descriptor);
         }
 
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)
@@ -575,20 +582,49 @@ namespace Infinity.Graphics
         private void CreateDevice()
         {
             Vortice.Direct3D12.ID3D12Device10 device;
-            SharpGen.Runtime.Result hResult = Vortice.Direct3D12.D3D12.D3D12CreateDevice(m_DXGIAdapter, Vortice.Direct3D.FeatureLevel.Level_12_2, out device);
+            SharpGen.Runtime.Result hResult = CreateNativeDevice(Vortice.Direct3D.FeatureLevel.Level_12_2, out device);
             if (hResult.Failure)
             {
-                hResult = Vortice.Direct3D12.D3D12.D3D12CreateDevice(m_DXGIAdapter, Vortice.Direct3D.FeatureLevel.Level_12_1, out device);
+                hResult = CreateNativeDevice(Vortice.Direct3D.FeatureLevel.Level_12_1, out device);
 
                 if (hResult.Failure)
                 {
-                    hResult = Vortice.Direct3D12.D3D12.D3D12CreateDevice(m_DXGIAdapter, Vortice.Direct3D.FeatureLevel.Level_12_0, out device);
+                    hResult = CreateNativeDevice(Vortice.Direct3D.FeatureLevel.Level_12_0, out device);
                 }
             }
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
+            if (hResult.Failure)
+            {
+                throw new InvalidOperationException($"DX12 device creation failed for '{m_Name}'. HRESULT=0x{hResult.Code:X8}. {Dx12Agility.Diagnostic}");
+            }
+
             m_NativeDevice = device;
+        }
+
+        private SharpGen.Runtime.Result CreateNativeDevice(Vortice.Direct3D.FeatureLevel featureLevel, out Vortice.Direct3D12.ID3D12Device10 device)
+        {
+            device = null!;
+
+            if (Dx12Agility.TryGetDeviceFactory(out Vortice.Direct3D12.ID3D12DeviceFactory? deviceFactory))
+            {
+                SharpGen.Runtime.Result result = deviceFactory!.CreateDevice(m_DXGIAdapter, featureLevel, out Vortice.Direct3D12.ID3D12Device? baseDevice);
+                if (result.Failure || baseDevice == null)
+                {
+                    return result;
+                }
+
+                try
+                {
+                    device = baseDevice.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12Device10>()
+                        ?? throw new InvalidOperationException($"DX12 Agility device for '{m_Name}' does not expose ID3D12Device10 at feature level {featureLevel}. {Dx12Agility.Diagnostic}");
+                    return SharpGen.Runtime.Result.Ok;
+                }
+                finally
+                {
+                    baseDevice.Release();
+                }
+            }
+
+            return Vortice.Direct3D12.D3D12.D3D12CreateDevice(m_DXGIAdapter, featureLevel, out device);
         }
 
         private void CheckFeatureSupport()
@@ -676,6 +712,7 @@ namespace Infinity.Graphics
             Vortice.Direct3D12.FeatureDataD3D12Options18 featureOptions18 = default;
             Vortice.Direct3D12.FeatureDataD3D12Options19 featureOptions19 = default;
             Vortice.Direct3D12.FeatureDataD3D12Options20 featureOptions20 = default;
+            Vortice.Direct3D12.FeatureDataD3D12Options21 featureOptions21 = default;
 
             _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options, ref featureOptions0);
             _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options1, ref featureOptions1);
@@ -698,6 +735,7 @@ namespace Infinity.Graphics
             _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options18, ref featureOptions18);
             _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options19, ref featureOptions19);
             _ = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options20, ref featureOptions20);
+            bool options21Supported = m_NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options21, ref featureOptions21);
 
             // check programmable msaa supported
             switch (featureOptions2.ProgrammableSamplePositionsTier)
@@ -795,9 +833,9 @@ namespace Infinity.Graphics
                     break;
             }
 
-            // WorkGraph support requires Vortice.Direct3D12.FeatureDataD3D12Options21.
-            // This backend currently keeps WorkGraph disabled until an explicit implementation phase.
-            isWorkgraphSupported = false;
+            isWorkgraphSupported =
+                options21Supported &&
+                featureOptions21.WorkGraphsTier != Vortice.Direct3D12.WorkGraphsTier.TierNOT_SUPPORTED;
 
             m_Limit = new Dx12DeviceLimit(uniformBufferAlignment,
                                           uploadBufferAlignment,
@@ -1018,45 +1056,64 @@ namespace Infinity.Graphics
 
         protected override void Release()
         {
-            if (m_DirectMLCommandRecorder != null)
+            ReleaseComObject(ref m_DirectMLCommandRecorder);
+            ReleaseComObject(ref m_DirectMLDevice1);
+            ReleaseComObject(ref m_DirectMLDevice);
+
+            DisposeResource(ref m_DescriptorHeapDSV);
+            DisposeResource(ref m_DescriptorHeapHeapRTV);
+            DisposeResource(ref m_DescriptorHeapSampler);
+            DisposeResource(ref m_DescriptorHeapCbvSrvUav);
+            DisposeResource(ref m_StagingHeapCbvSrvUav);
+            DisposeResource(ref m_StagingHeapSampler);
+
+            ReleaseComObject(ref m_DrawIndirectSignature);
+            ReleaseComObject(ref m_DrawIndexedIndirectSignature);
+            if (m_Feature?.IsMeshShadingSupported == true)
             {
-                m_DirectMLCommandRecorder.Release();
-                m_DirectMLCommandRecorder = null;
+                ReleaseComObject(ref m_DispatchMeshIndirectSignature);
+            }
+            if (m_Feature?.IsRaytracingSupported == true)
+            {
+                ReleaseComObject(ref m_DispatchRayIndirectSignature);
+            }
+            ReleaseComObject(ref m_DispatchComputeIndirectSignature);
+
+            ReleaseComObject(ref m_NativeDevice);
+            if (m_OwnsDXGIAdapter)
+            {
+                m_OwnsDXGIAdapter = false;
+                ReleaseComObject(ref m_DXGIAdapter);
+            }
+        }
+
+        private static void DisposeResource<T>(ref T? resource) where T : IDisposable
+        {
+            T? local = resource;
+            resource = default;
+            local?.Dispose();
+        }
+
+        private static void ReleaseComObject<T>(ref T? comObject) where T : SharpGen.Runtime.ComObject
+        {
+            T? local = comObject;
+            comObject = default;
+            if (local == null)
+            {
+                return;
             }
 
-            if (m_DirectMLDevice1 != null)
+            try
             {
-                m_DirectMLDevice1.Release();
-                m_DirectMLDevice1 = null;
+                if (local.NativePointer != IntPtr.Zero)
+                {
+                    local.Release();
+                }
             }
-
-            if (m_DirectMLDevice != null)
+            catch (NullReferenceException)
             {
-                m_DirectMLDevice.Release();
-                m_DirectMLDevice = null;
+                // SharpGen wrappers can be finalized after their native pointer has already been cleared.
             }
-
-            m_DescriptorHeapDSV.Dispose();
-            m_DescriptorHeapHeapRTV.Dispose();
-            m_DescriptorHeapSampler.Dispose();
-            m_DescriptorHeapCbvSrvUav.Dispose();
-            m_StagingHeapCbvSrvUav.Dispose();
-            m_StagingHeapSampler.Dispose();
-
-            m_DrawIndirectSignature.Release();
-            m_DrawIndexedIndirectSignature.Release();
-            if (m_Feature.IsMeshShadingSupported)
-            {
-                DispatchMeshIndirectSignature.Release();
-            }
-            if (m_Feature.IsRaytracingSupported)
-            {
-                m_DispatchRayIndirectSignature.Release();
-            }
-            m_DispatchComputeIndirectSignature.Release();
-
-            m_NativeDevice.Release();
-            m_DXGIAdapter.Release();
         }
     }
 #pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416

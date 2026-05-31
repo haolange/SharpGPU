@@ -1,4 +1,4 @@
-﻿namespace Infinity.Graphics
+namespace SharpGPU
 {
     public enum ERHIVendorType
     {

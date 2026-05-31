@@ -1,0 +1,72 @@
+[
+  {
+    "Name": "default_builder_buffer",
+    "Iterations": 100,
+    "MeanMicroseconds": 0.776,
+    "P50Microseconds": 0,
+    "P95Microseconds": 0.1,
+    "P99Microseconds": 0.1,
+    "MaxMicroseconds": 75.1,
+    "AllocatedBytes": 0
+  },
+  {
+    "Name": "scoped_helper_transfer",
+    "Iterations": 100,
+    "MeanMicroseconds": 3.543,
+    "P50Microseconds": 0.1,
+    "P95Microseconds": 0.1,
+    "P99Microseconds": 0.3,
+    "MaxMicroseconds": 348.8,
+    "AllocatedBytes": 344
+  },
+  {
+    "Name": "pass_begin_end",
+    "Iterations": 100,
+    "MeanMicroseconds": 0.033,
+    "P50Microseconds": 0,
+    "P95Microseconds": 0.1,
+    "P99Microseconds": 0.1,
+    "MaxMicroseconds": 0.5,
+    "AllocatedBytes": 128
+  },
+  {
+    "Name": "barrier_encode",
+    "Iterations": 100,
+    "MeanMicroseconds": 0.203,
+    "P50Microseconds": 0,
+    "P95Microseconds": 0.1,
+    "P99Microseconds": 0.1,
+    "MaxMicroseconds": 18.2,
+    "AllocatedBytes": 128
+  },
+  {
+    "Name": "timestamp_write_resolve",
+    "Iterations": 100,
+    "MeanMicroseconds": 1.064,
+    "P50Microseconds": 0,
+    "P95Microseconds": 0.1,
+    "P99Microseconds": 0.2,
+    "MaxMicroseconds": 102,
+    "AllocatedBytes": 224
+  },
+  {
+    "Name": "argument_table_bind_update",
+    "Iterations": 100,
+    "MeanMicroseconds": 0.239,
+    "P50Microseconds": 0,
+    "P95Microseconds": 0.1,
+    "P99Microseconds": 0.1,
+    "MaxMicroseconds": 22.2,
+    "AllocatedBytes": 0
+  },
+  {
+    "Name": "storage_queue_enqueue",
+    "Iterations": 100,
+    "MeanMicroseconds": 0.73,
+    "P50Microseconds": 0,
+    "P95Microseconds": 0.1,
+    "P99Microseconds": 0.1,
+    "MaxMicroseconds": 69.7,
+    "AllocatedBytes": 4064
+  }
+]

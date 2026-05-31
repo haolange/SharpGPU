@@ -6,7 +6,7 @@ using Vortice.Direct3D12;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal static unsafe class Dx12PixEventMarker
     {

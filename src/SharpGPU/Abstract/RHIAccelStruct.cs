@@ -3,7 +3,7 @@ using SharpGPU.Core;
 using SharpGPU.Mathematics;
 using System.Runtime.InteropServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     public enum EAccelStructFlag
     {

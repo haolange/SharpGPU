@@ -3,7 +3,7 @@ using SharpGPU.Mathematics;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS0169, CS0649, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
     internal struct Dx12BindTypeAndParameterSlot
@@ -351,7 +351,7 @@ namespace Infinity.Graphics
             Vortice.Direct3D12.ComputePipelineStateDescription description = new Vortice.Direct3D12.ComputePipelineStateDescription
             {
                 RootSignature = pipelineLayout.NativeRootSignature,
-                ComputeShader = computeFunction.NativeShaderBytecode.Data,
+                ComputeShader = computeFunction.NativeShaderData,
                 Flags = Vortice.Direct3D12.PipelineStateFlags.None,
             };
 
@@ -362,6 +362,9 @@ namespace Infinity.Graphics
             if (hResult.Failure)
             {
                 Console.WriteLine($"[Dx12ComputePipeline] CreateComputePipelineState failed. SharpGen.Runtime.Result=0x{hResult:X8}");
+                ReadOnlySpan<byte> shaderBytes = computeFunction.NativeShaderData.Span;
+                uint shaderMagic = shaderBytes.Length >= 4 ? BitConverter.ToUInt32(shaderBytes.Slice(0, 4)) : 0;
+                Console.WriteLine($"[Dx12ComputePipeline] Shader bytecode length={shaderBytes.Length}, magic=0x{shaderMagic:X8}");
                 Dx12PipelineDebug.DumpDeviceMessages(device, "[Dx12ComputePipeline]");
             }
             Dx12Utility.CHECK_HR(hResult);
@@ -479,7 +482,7 @@ namespace Infinity.Graphics
                 }
             }
 
-            Vortice.Direct3D12.DxilLibraryDescription dxilLibraryDescription = new Vortice.Direct3D12.DxilLibraryDescription(functionLibrary.NativeShaderBytecode.Data, exportDescriptors.ToArray());
+            Vortice.Direct3D12.DxilLibraryDescription dxilLibraryDescription = new Vortice.Direct3D12.DxilLibraryDescription(functionLibrary.NativeShaderData, exportDescriptors.ToArray());
             List<Vortice.Direct3D12.StateSubObject> stateSubObjects = new List<Vortice.Direct3D12.StateSubObject>(1 + hitGroups.Length + 3 + (descriptor.LocalDataStrideInBytes > 0 ? 2 : 0));
             stateSubObjects.Add(new Vortice.Direct3D12.StateSubObject(dxilLibraryDescription));
 
@@ -704,12 +707,12 @@ namespace Infinity.Graphics
 
                     if (vertexFunction != null)
                     {
-                        nativeGraphicsPipelineDesc.VertexShader = vertexFunction.NativeShaderBytecode.Data;
+                        nativeGraphicsPipelineDesc.VertexShader = vertexFunction.NativeShaderData;
                     }
 
                     if (fragmentFunction != null)
                     {
-                        nativeGraphicsPipelineDesc.PixelShader = fragmentFunction.NativeShaderBytecode.Data;
+                        nativeGraphicsPipelineDesc.PixelShader = fragmentFunction.NativeShaderData;
                     }
 
                     SharpGen.Runtime.Result hResult = device.NativeDevice.CreateGraphicsPipelineState(nativeGraphicsPipelineDesc, out Vortice.Direct3D12.ID3D12PipelineState nativePipelineState);
@@ -829,7 +832,7 @@ namespace Infinity.Graphics
             {
                 RootSignature = pipelineLayout.NativeRootSignature,
                 Flags = Vortice.Direct3D12.PipelineStateFlags.None,
-                ComputeShader = computeFunction.NativeShaderBytecode.Data,
+                ComputeShader = computeFunction.NativeShaderData,
             };
 
             string pipelineName = GetComputePipelineCacheKey(computePipelineDescriptor);
@@ -921,14 +924,95 @@ namespace Infinity.Graphics
 #pragma warning restore CS0169, CS0649, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
     internal sealed class Dx12WorkGraphPipeline : RHIWorkGraphPipeline
     {
-        internal Dx12WorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
+        internal Vortice.Direct3D12.ID3D12StateObject NativeStateObject => m_NativeStateObject;
+        internal Vortice.Direct3D12.ProgramIdentifier ProgramIdentifier => m_ProgramIdentifier;
+        internal Vortice.Direct3D12.WorkGraphMemoryRequirements NativeMemoryRequirements => m_MemoryRequirements;
+        public override RHIWorkGraphMemoryRequirements MemoryRequirements => new RHIWorkGraphMemoryRequirements(
+            m_MemoryRequirements.MinSizeInBytes,
+            m_MemoryRequirements.MaxSizeInBytes,
+            m_MemoryRequirements.SizeGranularityInBytes);
+        internal uint WorkGraphIndex => m_WorkGraphIndex;
+
+        private Vortice.Direct3D12.ID3D12StateObject m_NativeStateObject;
+        private Vortice.Direct3D12.ID3D12StateObjectProperties1 m_StateObjectProperties;
+        private Vortice.Direct3D12.ID3D12WorkGraphProperties m_WorkGraphProperties;
+        private Vortice.Direct3D12.ProgramIdentifier m_ProgramIdentifier;
+        private Vortice.Direct3D12.WorkGraphMemoryRequirements m_MemoryRequirements;
+        private readonly Dictionary<string, uint> m_EntrypointIndices = new Dictionary<string, uint>(StringComparer.Ordinal);
+        private uint m_WorkGraphIndex;
+
+        internal Dx12WorkGraphPipeline(Dx12Device device, in RHIWorkGraphPipelineDescriptor descriptor)
         {
             m_Descriptor = descriptor;
+
+            Dx12FunctionLibrary functionLibrary = descriptor.FunctionLibrary as Dx12FunctionLibrary
+                ?? throw new InvalidOperationException("DX12 WorkGraph pipeline requires a Dx12FunctionLibrary.");
+            Dx12PipelineLayout pipelineLayout = descriptor.PipelineLayout as Dx12PipelineLayout
+                ?? throw new InvalidOperationException("DX12 WorkGraph pipeline requires a Dx12PipelineLayout.");
+            string programName = string.IsNullOrWhiteSpace(descriptor.Name) ? "WorkGraph" : descriptor.Name;
+
+            Vortice.Direct3D12.StateSubObject[] stateSubObjects =
+            [
+                new Vortice.Direct3D12.StateSubObject(new Vortice.Direct3D12.DxilLibraryDescription(functionLibrary.NativeShaderData)),
+                new Vortice.Direct3D12.StateSubObject(new Vortice.Direct3D12.GlobalRootSignature(pipelineLayout.NativeRootSignature)),
+                new Vortice.Direct3D12.StateSubObject(new Vortice.Direct3D12.WorkGraphDescription
+                {
+                    ProgramName = programName,
+                    Flags = Vortice.Direct3D12.WorkGraphFlags.IncludeAllAvailableNodes
+                })
+            ];
+
+            Vortice.Direct3D12.StateObjectDescription stateObjectDesc = new Vortice.Direct3D12.StateObjectDescription(
+                Vortice.Direct3D12.StateObjectType.Executable,
+                stateSubObjects);
+            SharpGen.Runtime.Result hResult = device.NativeDevice.CreateStateObject(stateObjectDesc, out Vortice.Direct3D12.ID3D12StateObject nativeStateObject);
+#if DEBUG
+            Dx12Utility.CHECK_HR(hResult);
+#endif
+            if (hResult.Failure || nativeStateObject == null)
+            {
+                throw new InvalidOperationException($"Failed to create DX12 WorkGraph state object. HRESULT=0x{hResult.Code:X8}");
+            }
+
+            m_NativeStateObject = nativeStateObject;
+            m_StateObjectProperties = nativeStateObject.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12StateObjectProperties1>()
+                ?? throw new InvalidOperationException("DX12 WorkGraph state object does not expose ID3D12StateObjectProperties1.");
+            m_WorkGraphProperties = nativeStateObject.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12WorkGraphProperties>()
+                ?? throw new InvalidOperationException("DX12 WorkGraph state object does not expose ID3D12WorkGraphProperties.");
+            m_WorkGraphIndex = m_WorkGraphProperties.GetWorkGraphIndex(programName);
+            m_MemoryRequirements = m_WorkGraphProperties.GetWorkGraphMemoryRequirements(m_WorkGraphIndex);
+            m_ProgramIdentifier = m_StateObjectProperties.GetProgramIdentifier(programName);
+        }
+
+        internal uint GetEntrypointIndex(string entrypoint)
+        {
+            if (string.IsNullOrWhiteSpace(entrypoint))
+            {
+                throw new ArgumentException("WorkGraph entrypoint cannot be null or empty.", nameof(entrypoint));
+            }
+
+            if (m_EntrypointIndices.TryGetValue(entrypoint, out uint cachedIndex))
+            {
+                return cachedIndex;
+            }
+
+            uint entrypointIndex = m_WorkGraphProperties.GetEntrypointIndex(m_WorkGraphIndex, new Vortice.Direct3D12.NodeId
+            {
+                Name = entrypoint,
+                ArrayIndex = 0
+            });
+            m_EntrypointIndices.Add(entrypoint, entrypointIndex);
+            return entrypointIndex;
         }
 
         protected override void Release()
         {
-            // TODO(ROADMAP-P2-1): Release WorkGraph resources when implementation is enabled.
+            m_WorkGraphProperties?.Release();
+            m_WorkGraphProperties = null;
+            m_StateObjectProperties?.Release();
+            m_StateObjectProperties = null;
+            m_NativeStateObject?.Release();
+            m_NativeStateObject = null;
         }
     }
 

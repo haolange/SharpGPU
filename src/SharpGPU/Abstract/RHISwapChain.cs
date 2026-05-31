@@ -2,7 +2,7 @@ using System;
 using SharpGPU.Core;
 using SharpGPU.Mathematics;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     public struct RHISwapChainDescriptor
     {

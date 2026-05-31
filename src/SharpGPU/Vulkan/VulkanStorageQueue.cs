@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.IO;
 using Vortice.Vulkan;
 using System.Runtime.InteropServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CS8618
     internal unsafe class VulkanStorageQueue : RHIStorageQueue

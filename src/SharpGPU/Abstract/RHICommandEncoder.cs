@@ -2,7 +2,7 @@ using System;
 using SharpGPU.Core;
 using SharpGPU.Mathematics;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     public struct RHIIndirectDispatchArgs
     {
@@ -384,6 +384,8 @@ namespace Infinity.Graphics
         public abstract void PopDebugGroup();
         public abstract void WriteTimestamp(in uint index);
         public abstract void SetPipeline(RHIWorkGraphPipeline pipeline);
+        public abstract void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex);
+        public abstract void SetPushConstants(IntPtr data, in uint size, in uint offset = 0);
         public abstract void SetBackingMemory(RHIBuffer backingMemory, ulong byteOffset, ulong byteSize);
         public abstract void DispatchGraph(string entrypoint, uint numRecords, ulong inputRecordByteStride, RHIBuffer? inputRecordBuffer = null);
         public abstract void EndPass();

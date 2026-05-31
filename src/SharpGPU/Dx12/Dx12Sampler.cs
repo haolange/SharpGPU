@@ -1,4 +1,4 @@
-﻿namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CA1416 
     internal unsafe class Dx12Sampler : RHISampler

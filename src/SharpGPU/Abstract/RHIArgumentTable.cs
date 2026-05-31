@@ -1,7 +1,7 @@
 using System;
 using SharpGPU.Core;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     public struct RHIArgumentTableLayoutElement
     {

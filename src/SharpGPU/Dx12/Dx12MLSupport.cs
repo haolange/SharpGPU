@@ -1,7 +1,7 @@
 using System;
 using Vortice.DirectML;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal enum Dx12MLProgramKind : byte
     {

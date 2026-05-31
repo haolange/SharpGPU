@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 using Vortice.Vulkan;
 using System.Diagnostics;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8618
     internal unsafe class VulkanBuffer : RHIBuffer

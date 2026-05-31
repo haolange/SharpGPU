@@ -2,13 +2,13 @@ using System;
 using System.IO;
 using SharpMetal.Metal;
 using System.Threading;
-using System.Diagnostics;
+using SharpMetal.Foundation;
 using SharpMetal.ObjectiveCCore;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal sealed class MetalFence : RHIFence
     {
@@ -90,68 +90,373 @@ namespace Infinity.Graphics
 
     internal sealed class MetalQuery : RHIQuery
     {
-        // CPU-side timestamp tracking for queries.
-        // Metal does not expose a simple readback heap like D3D12; real GPU counters
-        // require MTLCounterSampleBuffer (or MTL4CounterHeap), which in turn need
-        // a counter set obtained from MTLDevice.counterSets. Because SharpMetal
-        // bindings do not guarantee all counter APIs are reachable on every host
-        // (e.g. iOS simulators, non-Apple CI), we implement a CPU-side fallback
-        // that records Stopwatch ticks at BeginQuery/EndQuery boundaries.
-        //
-        // When real counter sample buffers are available the engine should prefer
-        // using them via the command encoder; the CPU timestamps here are a
-        // best-effort stand-in that makes ResolveData() return meaningful values.
+        private readonly bool m_IsTimestampQuery;
+        private readonly bool m_IsOcclusionQuery;
+        private readonly bool m_IsStatisticsQuery;
+        private readonly ulong m_ResultStrideInBytes;
+        private readonly ulong m_TimestampFrequency;
+        private MTL4CounterHeap m_CounterHeap;
+        private MTLBuffer m_ResultBuffer;
+        private MTLCounterSampleBuffer m_StatisticsSampleBuffer;
 
-        private readonly long[] m_CpuTimestamps;
-        private readonly object m_Lock;
-
-        public MetalQuery(in RHIQueryDescriptor descriptor)
+        public MetalQuery(MetalDevice device, in RHIQueryDescriptor descriptor)
         {
             m_QueryDescriptor = descriptor;
             m_Results = new ulong[descriptor.Count];
             Results = new ReadOnlyMemory<ulong>(m_Results);
-            m_CpuTimestamps = new long[descriptor.Count];
-            m_Lock = new object();
+            m_IsTimestampQuery = descriptor.Type == ERHIQueryType.TimestampTransfer || descriptor.Type == ERHIQueryType.TimestampGenerice;
+            m_IsOcclusionQuery = descriptor.Type == ERHIQueryType.Occlusion;
+            m_IsStatisticsQuery = descriptor.Type == ERHIQueryType.Statistics;
+
+            if (m_IsOcclusionQuery)
+            {
+                m_ResultStrideInBytes = sizeof(ulong);
+                m_ResultBuffer = device.NativeDevice.NewBuffer(
+                    m_ResultStrideInBytes * descriptor.Count,
+                    MTLResourceOptions.ResourceStorageModeShared);
+                if (m_ResultBuffer.NativePtr == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("Failed to create Metal occlusion query visibility result buffer.");
+                }
+                return;
+            }
+
+            if (m_IsStatisticsQuery)
+            {
+                if (!MetalDevice.TryGetStatisticsCounterSet(device.NativeDevice, out MTLCounterSet counterSet))
+                {
+                    throw new NotSupportedException("Metal pipeline statistics queries require a device statistics counter set.");
+                }
+
+                MTLCounterSampleBufferDescriptor sampleDescriptor = MTLCounterSampleBufferDescriptor.New();
+                NSError sampleError = default;
+                try
+                {
+                    sampleDescriptor.CounterSet = counterSet;
+                    sampleDescriptor.StorageMode = MTLStorageMode.Shared;
+                    sampleDescriptor.SampleCount = (ulong)descriptor.Count * 2;
+                    m_StatisticsSampleBuffer = device.NativeDevice.NewCounterSampleBuffer(sampleDescriptor, ref sampleError);
+                    if (m_StatisticsSampleBuffer.NativePtr == IntPtr.Zero)
+                    {
+                        throw new NotSupportedException("Failed to create Metal pipeline statistics counter sample buffer.");
+                    }
+                }
+                finally
+                {
+                    if (sampleDescriptor.NativePtr != IntPtr.Zero)
+                    {
+                        ObjectiveCRuntime.Release(sampleDescriptor);
+                    }
+                }
+                return;
+            }
+
+            if (!m_IsTimestampQuery)
+            {
+                return;
+            }
+
+            MTL4CounterHeapDescriptor counterHeapDescriptor = MTL4CounterHeapDescriptor.New();
+            NSError error = default;
+            try
+            {
+                counterHeapDescriptor.Type = MTL4CounterHeapType.Timestamp;
+                counterHeapDescriptor.Count = descriptor.Count;
+
+                m_CounterHeap = device.NativeDevice.NewCounterHeap(counterHeapDescriptor, ref error);
+                if (m_CounterHeap.NativePtr == IntPtr.Zero)
+                {
+                    throw new NotSupportedException("Metal timestamp queries require MTL4CounterHeap support.");
+                }
+
+                m_ResultStrideInBytes = Math.Max(
+                    device.NativeDevice.SizeOfCounterHeapEntry(MTL4CounterHeapType.Timestamp),
+                    (ulong)Marshal.SizeOf<MTL4TimestampHeapEntry>());
+                m_ResultBuffer = device.NativeDevice.NewBuffer(
+                    m_ResultStrideInBytes * descriptor.Count,
+                    MTLResourceOptions.ResourceStorageModeShared);
+                if (m_ResultBuffer.NativePtr == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("Failed to create Metal timestamp query readback buffer.");
+                }
+
+                m_TimestampFrequency = device.NativeDevice.QueryTimestampFrequency();
+            }
+            finally
+            {
+                if (counterHeapDescriptor.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(counterHeapDescriptor);
+                }
+            }
         }
 
-        /// <summary>
-        /// Record a CPU timestamp for the given query index.
-        /// Called by the command encoder at BeginQuery / EndQuery time.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal void RecordTimestamp(uint index)
+        internal MTLBuffer VisibilityResultBuffer
         {
-            if (index < (uint)m_CpuTimestamps.Length)
+            get
             {
-                m_CpuTimestamps[index] = Stopwatch.GetTimestamp();
+                if (!m_IsOcclusionQuery || m_ResultBuffer.NativePtr == IntPtr.Zero)
+                {
+                    throw new NotSupportedException("Metal occlusion query visibility result buffer is not available.");
+                }
+
+                return m_ResultBuffer;
             }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void WriteTimestamp(MTL4ComputeCommandEncoder encoder, uint index)
+        {
+            RequireTimestampQuery(index);
+            encoder.WriteTimestampWithGranularity(MTL4TimestampGranularity.Precise, m_CounterHeap, index);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void WriteTimestamp(MTL4RenderCommandEncoder encoder, ulong afterStage, uint index)
+        {
+            RequireTimestampQuery(index);
+            encoder.WriteTimestamp((long)MTL4TimestampGranularity.Precise, afterStage, m_CounterHeap.NativePtr, index);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal void WriteTimestamp(MetalCommandBuffer commandBuffer, uint index)
+        {
+            RequireTimestampQuery(index);
+            commandBuffer.EnsureMtl4CommandBuffer().WriteTimestampIntoHeap(m_CounterHeap, index);
+        }
+
+        internal void Resolve(MetalCommandBuffer commandBuffer, uint startIndex, uint queriesCount)
+        {
+            if (!m_IsTimestampQuery)
+            {
+                ValidateRange(startIndex, queriesCount);
+                return;
+            }
+
+            RequireTimestampQuery(startIndex);
+            if (queriesCount == 0)
+            {
+                return;
+            }
+
+            ulong endIndex = (ulong)startIndex + queriesCount;
+            if (endIndex > m_QueryDescriptor.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(queriesCount), "Metal query resolve range exceeds the query heap count.");
+            }
+
+            NSRange range = new NSRange
+            {
+                location = startIndex,
+                length = queriesCount,
+            };
+            ulong byteOffset = m_ResultStrideInBytes * startIndex;
+            MTL4BufferRange destination = MTL4BufferRange.Make(m_ResultBuffer.GpuAddress + byteOffset, m_ResultStrideInBytes * queriesCount);
+            commandBuffer.EnsureMtl4CommandBuffer().ResolveCounterHeap(m_CounterHeap, range, destination, default, default);
         }
 
         public override bool ResolveData()
         {
+            if (m_IsOcclusionQuery)
+            {
+                return ResolveOcclusionData();
+            }
+
+            if (m_IsStatisticsQuery)
+            {
+                return ResolveStatisticsData();
+            }
+
+            if (!m_IsTimestampQuery)
+            {
+                return false;
+            }
+
             if (m_Results == null || m_Results.Length == 0)
             {
                 return false;
             }
 
-            lock (m_Lock)
+            if (m_ResultBuffer.NativePtr == IntPtr.Zero)
             {
-                // Convert Stopwatch ticks → nanoseconds, matching the convention
-                // used by GPU timestamp queries on Metal (ns units).
-                double ticksToNs = 1_000_000_000.0 / Stopwatch.Frequency;
-                for (int i = 0; i < m_Results.Length; ++i)
-                {
-                    m_Results[i] = (ulong)(m_CpuTimestamps[i] * ticksToNs);
-                }
-
-                Results = new ReadOnlyMemory<ulong>(m_Results);
+                return false;
             }
 
+            IntPtr contents = m_ResultBuffer.Contents;
+            if (contents == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            double timestampToNs = m_TimestampFrequency == 0 ? 1.0 : 1_000_000_000.0 / m_TimestampFrequency;
+            for (int i = 0; i < m_Results.Length; ++i)
+            {
+                IntPtr entryPtr = IntPtr.Add(contents, checked((int)(m_ResultStrideInBytes * (ulong)i)));
+                MTL4TimestampHeapEntry entry = Marshal.PtrToStructure<MTL4TimestampHeapEntry>(entryPtr);
+                m_Results[i] = (ulong)(entry.Timestamp * timestampToNs);
+            }
+
+            Results = new ReadOnlyMemory<ulong>(m_Results);
+
+            return true;
+        }
+
+        internal void BeginOcclusion(MTL4RenderCommandEncoder encoder, uint index)
+        {
+            RequireOcclusionQuery(index);
+            encoder.SetVisibilityResultMode(MTLVisibilityResultMode.Counting, (ulong)index * sizeof(ulong));
+        }
+
+        internal void EndOcclusion(MTL4RenderCommandEncoder encoder, uint index)
+        {
+            RequireOcclusionQuery(index);
+            encoder.SetVisibilityResultMode(MTLVisibilityResultMode.Disabled, (ulong)index * sizeof(ulong));
+        }
+
+        internal void BeginStatistics(MTL4RenderCommandEncoder encoder, uint index)
+        {
+            RequireStatisticsQuery(index);
+            new MTLRenderCommandEncoder(encoder.NativePtr).SampleCountersInBuffer(m_StatisticsSampleBuffer, (ulong)index * 2, true);
+        }
+
+        internal void EndStatistics(MTL4RenderCommandEncoder encoder, uint index)
+        {
+            RequireStatisticsQuery(index);
+            new MTLRenderCommandEncoder(encoder.NativePtr).SampleCountersInBuffer(m_StatisticsSampleBuffer, (ulong)index * 2 + 1, true);
+        }
+
+        private void RequireTimestampQuery(uint index)
+        {
+            if (!m_IsTimestampQuery)
+            {
+                throw new NotSupportedException("Metal currently supports native timestamp queries only; occlusion/statistics stay feature-disabled.");
+            }
+
+            if (m_CounterHeap.NativePtr == IntPtr.Zero)
+            {
+                throw new NotSupportedException("Metal timestamp query heap is not available on this device.");
+            }
+
+            if (index >= m_QueryDescriptor.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index), "Metal timestamp query index exceeds the query heap count.");
+            }
+        }
+
+        private void RequireOcclusionQuery(uint index)
+        {
+            if (!m_IsOcclusionQuery)
+            {
+                throw new InvalidOperationException("Metal query is not an occlusion query.");
+            }
+
+            if (index >= m_QueryDescriptor.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index), "Metal occlusion query index exceeds the query heap count.");
+            }
+        }
+
+        private void RequireStatisticsQuery(uint index)
+        {
+            if (!m_IsStatisticsQuery)
+            {
+                throw new InvalidOperationException("Metal query is not a pipeline statistics query.");
+            }
+
+            if (m_StatisticsSampleBuffer.NativePtr == IntPtr.Zero)
+            {
+                throw new NotSupportedException("Metal pipeline statistics counter sample buffer is not available.");
+            }
+
+            if (index >= m_QueryDescriptor.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index), "Metal statistics query index exceeds the query heap count.");
+            }
+        }
+
+        private void ValidateRange(uint startIndex, uint queriesCount)
+        {
+            ulong endIndex = (ulong)startIndex + queriesCount;
+            if (endIndex > m_QueryDescriptor.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(queriesCount), "Metal query resolve range exceeds the query heap count.");
+            }
+        }
+
+        private bool ResolveOcclusionData()
+        {
+            if (m_ResultBuffer.NativePtr == IntPtr.Zero || m_Results == null)
+            {
+                return false;
+            }
+
+            IntPtr contents = m_ResultBuffer.Contents;
+            if (contents == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < m_Results.Length; ++i)
+            {
+                m_Results[i] = (ulong)Marshal.ReadInt64(contents, i * sizeof(ulong));
+            }
+
+            Results = new ReadOnlyMemory<ulong>(m_Results);
+            return true;
+        }
+
+        private bool ResolveStatisticsData()
+        {
+            if (m_StatisticsSampleBuffer.NativePtr == IntPtr.Zero || m_Results == null)
+            {
+                return false;
+            }
+
+            NSData data = m_StatisticsSampleBuffer.ResolveCounterRange(new NSRange
+            {
+                location = 0,
+                length = (ulong)m_QueryDescriptor.Count * 2
+            });
+            if (data.NativePtr == IntPtr.Zero || data.MutableBytes == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            int resultSize = Marshal.SizeOf<MTLCounterResultStatistic>();
+            for (int i = 0; i < m_Results.Length; ++i)
+            {
+                IntPtr beginPtr = IntPtr.Add(data.MutableBytes, checked(i * 2 * resultSize));
+                IntPtr endPtr = IntPtr.Add(data.MutableBytes, checked((i * 2 + 1) * resultSize));
+                MTLCounterResultStatistic begin = Marshal.PtrToStructure<MTLCounterResultStatistic>(beginPtr);
+                MTLCounterResultStatistic end = Marshal.PtrToStructure<MTLCounterResultStatistic>(endPtr);
+                m_Results[i] = end.fragmentInvocations >= begin.fragmentInvocations
+                    ? end.fragmentInvocations - begin.fragmentInvocations
+                    : end.fragmentsPassed;
+            }
+
+            Results = new ReadOnlyMemory<ulong>(m_Results);
             return true;
         }
 
         protected override void Release()
         {
+            if (m_ResultBuffer.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_ResultBuffer);
+                m_ResultBuffer = default;
+            }
+
+            if (m_CounterHeap.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_CounterHeap);
+                m_CounterHeap = default;
+            }
+
+            if (m_StatisticsSampleBuffer.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_StatisticsSampleBuffer);
+                m_StatisticsSampleBuffer = default;
+            }
         }
     }
 

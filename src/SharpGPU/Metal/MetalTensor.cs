@@ -4,7 +4,7 @@ using SharpMetal.Metal;
 using SharpMetal.Foundation;
 using SharpMetal.ObjectiveCCore;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal class MetalTensor : RHITensor
     {

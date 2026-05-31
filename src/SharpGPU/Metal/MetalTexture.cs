@@ -4,7 +4,7 @@ using SharpMetal.Foundation;
 using SharpMetal.QuartzCore;
 using SharpMetal.ObjectiveCCore;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal sealed class MetalTexture : RHITexture
     {

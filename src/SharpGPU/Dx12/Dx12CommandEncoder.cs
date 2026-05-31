@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using Viewport = SharpGPU.Mathematics.Viewport;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS0414, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
     internal unsafe struct Dx12AttachmentInfo
@@ -185,6 +185,12 @@ namespace Infinity.Graphics
         private static void EmitEnhancedBarriers(Dx12CommandBuffer commandBuffer, ReadOnlySpan<RHIBarrier> barriers)
         {
             ERHIPipelineType queuePipeline = commandBuffer.CommandQueue.PipelineType;
+            if (barriers.Length == 1)
+            {
+                EmitSingleEnhancedBarrier(commandBuffer, in barriers[0], queuePipeline);
+                return;
+            }
+
             List<Vortice.Direct3D12.GlobalBarrier>? globalBarriers = null;
             List<Vortice.Direct3D12.BufferBarrier>? bufferBarriers = null;
             List<Vortice.Direct3D12.TextureBarrier>? textureBarriers = null;
@@ -279,6 +285,79 @@ namespace Infinity.Graphics
             if (textureBarriers is { Count: > 0 })
             {
                 commandBuffer.NativeCommandList.Barrier(new Vortice.Direct3D12.BarrierGroup(textureBarriers.ToArray()));
+            }
+        }
+
+        private static void EmitSingleEnhancedBarrier(Dx12CommandBuffer commandBuffer, in RHIBarrier barrier, in ERHIPipelineType queuePipeline)
+        {
+            switch (barrier.Kind)
+            {
+                case ERHIBarrierKind.Global:
+                {
+                    RHIGlobalBarrier globalBarrier = barrier.GlobalBarrier;
+                    Vortice.Direct3D12.GlobalBarrier nativeBarrier = new(
+                        ResolveBarrierSync(globalBarrier.SyncBefore, queuePipeline),
+                        ResolveBarrierSync(globalBarrier.SyncAfter, queuePipeline),
+                        ConvertToBarrierAccess(globalBarrier.AccessBefore),
+                        ConvertToBarrierAccess(globalBarrier.AccessAfter));
+                    commandBuffer.NativeCommandList.Barrier(in nativeBarrier);
+                    break;
+                }
+
+                case ERHIBarrierKind.Buffer:
+                {
+                    RHIBufferBarrier bufferBarrier = barrier.BufferBarrier;
+                    Vortice.Direct3D12.BarrierAccess accessBefore = ConvertToBarrierAccess(bufferBarrier.AccessBefore);
+                    Vortice.Direct3D12.BarrierAccess accessAfter = ConvertToBarrierAccess(bufferBarrier.AccessAfter);
+                    Vortice.Direct3D12.BufferBarrier nativeBarrier = new()
+                    {
+                        SyncBefore = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(bufferBarrier.SyncBefore, queuePipeline),
+                            accessBefore,
+                            queuePipeline),
+                        SyncAfter = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(bufferBarrier.SyncAfter, queuePipeline),
+                            accessAfter,
+                            queuePipeline),
+                        AccessBefore = accessBefore,
+                        AccessAfter = accessAfter,
+                        Resource = GetBufferResource(bufferBarrier.Resource, 0),
+                        Offset = bufferBarrier.Range.Offset,
+                        Size = bufferBarrier.Range.Size == 0 ? RHIBufferRange.WholeSize : bufferBarrier.Range.Size
+                    };
+                    commandBuffer.NativeCommandList.Barrier(in nativeBarrier);
+                    break;
+                }
+
+                case ERHIBarrierKind.Texture:
+                {
+                    RHITextureBarrier textureBarrier = barrier.TextureBarrier;
+                    Vortice.Direct3D12.BarrierAccess accessBefore = ConvertToBarrierAccess(textureBarrier.AccessBefore);
+                    Vortice.Direct3D12.BarrierAccess accessAfter = ConvertToBarrierAccess(textureBarrier.AccessAfter);
+                    Vortice.Direct3D12.TextureBarrier nativeBarrier = new()
+                    {
+                        SyncBefore = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(textureBarrier.SyncBefore, queuePipeline),
+                            accessBefore,
+                            queuePipeline),
+                        SyncAfter = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(textureBarrier.SyncAfter, queuePipeline),
+                            accessAfter,
+                            queuePipeline),
+                        AccessBefore = accessBefore,
+                        AccessAfter = accessAfter,
+                        LayoutBefore = ConvertToBarrierLayout(textureBarrier.LayoutBefore, queuePipeline),
+                        LayoutAfter = ConvertToBarrierLayout(textureBarrier.LayoutAfter, queuePipeline),
+                        Resource = GetTextureResource(textureBarrier.Resource, 0),
+                        Subresources = ConvertToSubresourceRange(textureBarrier.SubresourceRange),
+                        Flags = Vortice.Direct3D12.TextureBarrierFlags.None
+                    };
+                    commandBuffer.NativeCommandList.Barrier(in nativeBarrier);
+                    break;
+                }
+
+                default:
+                    throw new InvalidOperationException($"Unsupported barrier kind {barrier.Kind}.");
             }
         }
 
@@ -462,13 +541,14 @@ namespace Infinity.Graphics
             }
 
             Vortice.Direct3D12.ResourceStates result = 0;
+            bool hasShaderWrite = (accessMask & ERHIAccessMask.ShaderWrite) != 0;
             if ((accessMask & ERHIAccessMask.TransferRead) != 0) result |= Vortice.Direct3D12.ResourceStates.CopySource;
             if ((accessMask & ERHIAccessMask.TransferWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.CopyDest;
             if ((accessMask & ERHIAccessMask.IndexRead) != 0) result |= Vortice.Direct3D12.ResourceStates.IndexBuffer;
             if ((accessMask & ERHIAccessMask.VertexRead) != 0) result |= Vortice.Direct3D12.ResourceStates.VertexAndConstantBuffer;
             if ((accessMask & ERHIAccessMask.ConstantRead) != 0) result |= Vortice.Direct3D12.ResourceStates.VertexAndConstantBuffer;
             if ((accessMask & ERHIAccessMask.IndirectCommandRead) != 0) result |= Vortice.Direct3D12.ResourceStates.IndirectArgument;
-            if ((accessMask & ERHIAccessMask.ShaderRead) != 0) result |= Vortice.Direct3D12.ResourceStates.PixelShaderResource | Vortice.Direct3D12.ResourceStates.NonPixelShaderResource;
+            if ((accessMask & ERHIAccessMask.ShaderRead) != 0 && !hasShaderWrite) result |= Vortice.Direct3D12.ResourceStates.PixelShaderResource | Vortice.Direct3D12.ResourceStates.NonPixelShaderResource;
             if ((accessMask & ERHIAccessMask.ShaderWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.UnorderedAccess;
             if ((accessMask & ERHIAccessMask.AccelStructRead) != 0) result |= Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure;
             if ((accessMask & ERHIAccessMask.AccelStructWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure;
@@ -529,6 +609,7 @@ namespace Infinity.Graphics
         private static Vortice.Direct3D12.ResourceStates ConvertTextureAccessToLegacyState(in ERHIAccessMask accessMask)
         {
             Vortice.Direct3D12.ResourceStates result = 0;
+            bool hasShaderWrite = (accessMask & ERHIAccessMask.ShaderWrite) != 0;
             if ((accessMask & ERHIAccessMask.TransferRead) != 0) result |= Vortice.Direct3D12.ResourceStates.CopySource;
             if ((accessMask & ERHIAccessMask.TransferWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.CopyDest;
             if ((accessMask & ERHIAccessMask.ResolveRead) != 0) result |= Vortice.Direct3D12.ResourceStates.ResolveSource;
@@ -537,7 +618,7 @@ namespace Infinity.Graphics
             if ((accessMask & ERHIAccessMask.DepthStencilWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.DepthWrite;
             if ((accessMask & ERHIAccessMask.RenderTargetRead) != 0) result |= Vortice.Direct3D12.ResourceStates.RenderTarget;
             if ((accessMask & ERHIAccessMask.RenderTargetWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.RenderTarget;
-            if ((accessMask & ERHIAccessMask.ShaderRead) != 0) result |= Vortice.Direct3D12.ResourceStates.PixelShaderResource | Vortice.Direct3D12.ResourceStates.NonPixelShaderResource;
+            if ((accessMask & ERHIAccessMask.ShaderRead) != 0 && !hasShaderWrite) result |= Vortice.Direct3D12.ResourceStates.PixelShaderResource | Vortice.Direct3D12.ResourceStates.NonPixelShaderResource;
             if ((accessMask & ERHIAccessMask.ShaderWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.UnorderedAccess;
             if ((accessMask & ERHIAccessMask.ShadingRateRead) != 0) result |= Vortice.Direct3D12.ResourceStates.ShadingRateSource;
             if ((accessMask & ERHIAccessMask.Present) != 0) result |= Vortice.Direct3D12.ResourceStates.Present;
@@ -1016,15 +1097,15 @@ namespace Infinity.Graphics
             switch (query.QueryDescriptor.Type)
             {
                 case ERHIQueryType.Occlusion:
-                    dx12CommandBuffer.NativeCommandList.ResolveQueryData(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Occlusion, startIndex, queriesCount, dx12Query.QueryResult, startIndex * 8);
+                    dx12CommandBuffer.NativeCommandList.ResolveQueryData(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Occlusion, startIndex, queriesCount, dx12Query.QueryResult, startIndex * dx12Query.ResultStrideInBytes);
                     break;
 
                 case ERHIQueryType.Statistics:
-                    dx12CommandBuffer.NativeCommandList.ResolveQueryData(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, startIndex, queriesCount, dx12Query.QueryResult, startIndex * (uint)sizeof(Vortice.Direct3D12.QueryDataPipelineStatistics));
+                    dx12CommandBuffer.NativeCommandList.ResolveQueryData(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, startIndex, queriesCount, dx12Query.QueryResult, startIndex * dx12Query.ResultStrideInBytes);
                     break;
 
                 default:
-                    dx12CommandBuffer.NativeCommandList.ResolveQueryData(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, startIndex, queriesCount, dx12Query.QueryResult, startIndex * 8);
+                    dx12CommandBuffer.NativeCommandList.ResolveQueryData(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, startIndex, queriesCount, dx12Query.QueryResult, startIndex * dx12Query.ResultStrideInBytes);
                     break;
             }
         }
@@ -2460,8 +2541,18 @@ namespace Infinity.Graphics
         }
     }
 #pragma warning restore CS0414, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
-    internal sealed class Dx12WorkGraphEncoder : RHIWorkGraphEncoder
+    internal unsafe sealed class Dx12WorkGraphEncoder : RHIWorkGraphEncoder
     {
+        private RHIWorkGraphPassDescriptor m_PassDescriptor;
+        private Vortice.Direct3D12.ID3D12GraphicsCommandList10 m_CommandList10;
+        private Dx12Buffer m_BackingMemory;
+        private ulong m_BackingMemoryGpuAddress;
+        private ulong m_BackingMemorySize;
+        private bool m_BackingMemoryInitialized;
+        private Dx12Buffer m_NodeInputDescriptorUpload;
+        private IntPtr m_NodeInputDescriptorUploadPtr;
+        private ulong m_NodeInputDescriptorUploadGpuAddress;
+
         internal Dx12WorkGraphEncoder(RHICommandBuffer commandBuffer)
         {
             m_CommandBuffer = commandBuffer;
@@ -2469,55 +2560,263 @@ namespace Infinity.Graphics
 
         internal override void BeginPass(in RHIWorkGraphPassDescriptor descriptor)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
+            Dx12CommandBuffer commandBuffer = (Dx12CommandBuffer)m_CommandBuffer!;
+            m_CommandList10 ??= commandBuffer.NativeCommandList.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12GraphicsCommandList10>()
+                ?? throw new NotSupportedException("DX12 WorkGraph requires ID3D12GraphicsCommandList10 support.");
+            m_PassDescriptor = descriptor;
+            m_CachedPipeline = null;
+            m_BackingMemory = null;
+            m_BackingMemoryGpuAddress = 0;
+            m_BackingMemorySize = 0;
+            m_BackingMemoryInitialized = false;
+
+            if (!string.IsNullOrWhiteSpace(descriptor.Name))
+            {
+                PushDebugGroup(descriptor.Name);
+            }
+
+            if (descriptor.Timestamp.HasValue)
+            {
+                commandBuffer.TimestampQueryHeap = descriptor.Timestamp.Value.Query;
+                commandBuffer.TimestampQueryIndex = descriptor.Timestamp.Value.BeginIndex;
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
+            }
         }
 
         public override void Barrier(in RHIBarrier barrier)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
+            Dx12BarrierEmitter.EmitBarrier((Dx12CommandBuffer)m_CommandBuffer!, barrier);
         }
 
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
+            Dx12BarrierEmitter.EmitBarriers((Dx12CommandBuffer)m_CommandBuffer!, barriers);
         }
         public override void PushDebugGroup(string name)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
+            Dx12PixEventMarker.BeginEvent(((Dx12CommandBuffer)m_CommandBuffer!).NativeCommandList.NativePointer, name);
         }
 
         public override void PopDebugGroup()
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
+            Dx12PixEventMarker.EndEvent(((Dx12CommandBuffer)m_CommandBuffer!).NativeCommandList.NativePointer);
         }
 
         public override void WriteTimestamp(in uint index)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
+            Debug.Assert(m_CommandBuffer!.TimestampQueryHeap != null, "Current WorkGraphPass TimestampQuery is null");
+            Dx12CommandBuffer dx12CommandBuffer = (Dx12CommandBuffer)m_CommandBuffer!;
+            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query
+                ?? throw new InvalidOperationException("DX12 WorkGraph timestamp pass requires a Dx12Query.");
+            dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, index);
         }
 
         public override void SetPipeline(RHIWorkGraphPipeline pipeline)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
+            m_CachedPipeline = pipeline as Dx12WorkGraphPipeline
+                ?? throw new InvalidOperationException("DX12 WorkGraph encoder requires a Dx12WorkGraphPipeline.");
+
+            Dx12PipelineLayout dx12PipelineLayout = pipeline.Descriptor.PipelineLayout as Dx12PipelineLayout
+                ?? throw new InvalidOperationException("DX12 WorkGraph pipeline requires a Dx12PipelineLayout.");
+            ((Dx12CommandBuffer)m_CommandBuffer!).NativeCommandList.SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
+        }
+
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
+        {
+            Dx12ArgumentTable dx12ArgumentTable = resourceTable as Dx12ArgumentTable
+                ?? throw new InvalidOperationException("DX12 WorkGraph encoder requires a Dx12ArgumentTable.");
+            Dx12ArgumentTableLayout dx12ArgumentTableLayout = dx12ArgumentTable.ArgumentTableLayout;
+            Dx12PipelineLayout dx12PipelineLayout = RequirePipeline().Descriptor.PipelineLayout as Dx12PipelineLayout
+                ?? throw new InvalidOperationException("DX12 WorkGraph pipeline requires a Dx12PipelineLayout.");
+            Dx12CommandBuffer dx12CommandBuffer = (Dx12CommandBuffer)m_CommandBuffer!;
+
+#if DEBUG
+            Debug.Assert(tableIndex == dx12ArgumentTableLayout.Index, "error resourceTable index");
+#endif
+
+            for (int i = 0; i < dx12ArgumentTable.NativeGpuDescriptorHandles.Length; ++i)
+            {
+                ref Dx12BindInfo bindInfo = ref dx12ArgumentTableLayout.BindInfos[i];
+                Dx12BindTypeAndParameterSlot? parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Compute, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                if (!parameter.HasValue)
+                {
+                    parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.All, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
+                }
+
+                if (parameter.HasValue)
+                {
+#if DEBUG
+                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
+#endif
+                    dx12CommandBuffer.NativeCommandList.SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
+                }
+            }
+        }
+
+        public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
+        {
+            Dx12PipelineLayout dx12PipelineLayout = RequirePipeline().Descriptor.PipelineLayout as Dx12PipelineLayout
+                ?? throw new InvalidOperationException("DX12 WorkGraph pipeline requires a Dx12PipelineLayout.");
+#if DEBUG
+            Debug.Assert(offset + size <= dx12PipelineLayout.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({dx12PipelineLayout.PushConstantSize}).");
+#endif
+            ((Dx12CommandBuffer)m_CommandBuffer!).NativeCommandList.SetComputeRoot32BitConstants(
+                dx12PipelineLayout.PushConstantRootParameterIndex,
+                size / 4,
+                data.ToPointer(),
+                offset / 4);
         }
 
         public override void SetBackingMemory(RHIBuffer backingMemory, ulong byteOffset, ulong byteSize)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
+            Dx12WorkGraphPipeline pipeline = RequirePipeline();
+            Dx12Buffer dx12Buffer = backingMemory as Dx12Buffer
+                ?? throw new InvalidOperationException("DX12 WorkGraph backing memory requires a Dx12Buffer.");
+            if (byteOffset > (ulong)dx12Buffer.Descriptor.ByteSize || byteSize > (ulong)dx12Buffer.Descriptor.ByteSize - byteOffset)
+            {
+                throw new ArgumentOutOfRangeException(nameof(byteSize), "WorkGraph backing memory range exceeds buffer bounds.");
+            }
+
+            Vortice.Direct3D12.WorkGraphMemoryRequirements requirements = pipeline.NativeMemoryRequirements;
+            if (byteSize < requirements.MinSizeInBytes)
+            {
+                throw new ArgumentOutOfRangeException(nameof(byteSize), $"WorkGraph backing memory is smaller than the required minimum size ({requirements.MinSizeInBytes} bytes).");
+            }
+
+            uint granularity = requirements.SizeGranularityInBytes;
+            if (granularity != 0 && (byteSize % granularity) != 0)
+            {
+                throw new ArgumentException($"WorkGraph backing memory size must be aligned to {granularity} bytes.", nameof(byteSize));
+            }
+
+            bool sameBackingRange = ReferenceEquals(m_BackingMemory, dx12Buffer)
+                && m_BackingMemoryGpuAddress == dx12Buffer.NativeResource.GPUVirtualAddress + byteOffset
+                && m_BackingMemorySize == byteSize;
+            m_BackingMemoryInitialized = sameBackingRange && m_BackingMemoryInitialized;
+            m_BackingMemory = dx12Buffer;
+            m_BackingMemoryGpuAddress = dx12Buffer.NativeResource.GPUVirtualAddress + byteOffset;
+            m_BackingMemorySize = byteSize;
         }
 
         public override void DispatchGraph(string entrypoint, uint numRecords, ulong inputRecordByteStride, RHIBuffer? inputRecordBuffer = null)
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
+            if (numRecords == 0)
+            {
+                return;
+            }
+
+            Dx12WorkGraphPipeline pipeline = RequirePipeline();
+            if (m_BackingMemory == null)
+            {
+                throw new InvalidOperationException("WorkGraph backing memory must be set before DispatchGraph.");
+            }
+            if (inputRecordBuffer == null)
+            {
+                throw new ArgumentNullException(nameof(inputRecordBuffer), "DX12 WorkGraph GPU input mode requires an input record buffer when numRecords is greater than zero.");
+            }
+            if (inputRecordByteStride == 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(inputRecordByteStride), "WorkGraph input record stride must be non-zero.");
+            }
+
+            Dx12Buffer dx12InputBuffer = inputRecordBuffer as Dx12Buffer
+                ?? throw new InvalidOperationException("DX12 WorkGraph input records require a Dx12Buffer.");
+            ulong requiredInputBytes = checked((ulong)numRecords * inputRecordByteStride);
+            if (requiredInputBytes > (ulong)dx12InputBuffer.Descriptor.ByteSize)
+            {
+                throw new ArgumentOutOfRangeException(nameof(numRecords), "WorkGraph input record range exceeds buffer size.");
+            }
+
+            EnsureNodeInputDescriptorUpload();
+            Vortice.Direct3D12.NodeGpuInput nodeInput = new Vortice.Direct3D12.NodeGpuInput
+            {
+                EntrypointIndex = pipeline.GetEntrypointIndex(entrypoint),
+                NumRecords = numRecords,
+                Records = new Vortice.Direct3D12.GpuVirtualAddressAndStride
+                {
+                    StartAddress = dx12InputBuffer.NativeResource.GPUVirtualAddress,
+                    StrideInBytes = inputRecordByteStride
+                }
+            };
+            Unsafe.Write(m_NodeInputDescriptorUploadPtr.ToPointer(), nodeInput);
+
+            Vortice.Direct3D12.SetWorkGraphDescription workGraphDescription = new Vortice.Direct3D12.SetWorkGraphDescription
+            {
+                ProgramIdentifier = pipeline.ProgramIdentifier,
+                Flags = m_BackingMemoryInitialized ? Vortice.Direct3D12.SetWorkGraphFlags.None : Vortice.Direct3D12.SetWorkGraphFlags.Initialize,
+                BackingMemory = new Vortice.Direct3D12.GpuVirtualAddressRange
+                {
+                    StartAddress = m_BackingMemoryGpuAddress,
+                    SizeInBytes = m_BackingMemorySize
+                }
+            };
+            m_CommandList10.SetWorkGraphProgram(in workGraphDescription);
+            m_BackingMemoryInitialized = true;
+
+            Vortice.Direct3D12.DispatchGraphDescription dispatchDescription = new Vortice.Direct3D12.DispatchGraphDescription
+            {
+                Mode = Vortice.Direct3D12.DispatchMode.NodeGpuInput
+            };
+            dispatchDescription.NodeGPUInput = m_NodeInputDescriptorUploadGpuAddress;
+            m_CommandList10.DispatchGraph(ref dispatchDescription);
         }
 
         public override void EndPass()
         {
-            throw new NotImplementedException("WorkGraph not yet implemented. Tracked: ROADMAP.md P2-1.");
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
+                m_CommandBuffer!.TimestampQueryHeap = null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(m_PassDescriptor.Name))
+            {
+                PopDebugGroup();
+            }
+
+            m_CachedPipeline = null;
+            m_BackingMemory = null;
+            m_BackingMemoryGpuAddress = 0;
+            m_BackingMemorySize = 0;
         }
 
         protected override void Release()
         {
+            if (m_NodeInputDescriptorUploadPtr != IntPtr.Zero && m_NodeInputDescriptorUpload != null)
+            {
+                m_NodeInputDescriptorUpload.UnMap(0, (uint)Unsafe.SizeOf<Vortice.Direct3D12.NodeGpuInput>());
+                m_NodeInputDescriptorUploadPtr = IntPtr.Zero;
+            }
+
+            m_NodeInputDescriptorUpload?.Dispose();
+            m_NodeInputDescriptorUpload = null;
+            m_CommandList10?.Release();
+            m_CommandList10 = null;
+        }
+
+        private Dx12WorkGraphPipeline RequirePipeline()
+        {
+            return m_CachedPipeline as Dx12WorkGraphPipeline
+                ?? throw new InvalidOperationException("DX12 WorkGraph pipeline must be set before this operation.");
+        }
+
+        private void EnsureNodeInputDescriptorUpload()
+        {
+            if (m_NodeInputDescriptorUpload != null)
+            {
+                return;
+            }
+
+            Dx12Device device = ((Dx12CommandQueue)m_CommandBuffer!.CommandQueue).Dx12Device;
+            int byteSize = Unsafe.SizeOf<Vortice.Direct3D12.NodeGpuInput>();
+            m_NodeInputDescriptorUpload = new Dx12Buffer(device, new RHIBufferDescriptor
+            {
+                ByteSize = byteSize,
+                UsageFlag = ERHIBufferUsage.CopySrc,
+                StorageMode = ERHIStorageMode.HostUpload
+            });
+            m_NodeInputDescriptorUploadPtr = m_NodeInputDescriptorUpload.Map(0, 0);
+            m_NodeInputDescriptorUploadGpuAddress = m_NodeInputDescriptorUpload.NativeResource.GPUVirtualAddress;
         }
     }
 }

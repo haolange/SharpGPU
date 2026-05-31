@@ -1,6 +1,6 @@
 using SharpGPU.Mathematics;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal unsafe class Dx12BufferView : RHIBufferView
     {

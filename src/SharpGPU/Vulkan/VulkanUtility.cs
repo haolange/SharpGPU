@@ -2,13 +2,12 @@ using System;
 using System.Text;
 using SharpGPU.Core;
 using Vortice.Vulkan;
-using NUnit.Framework;
 using SharpGPU.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CA1416
     internal enum EOSPlatform

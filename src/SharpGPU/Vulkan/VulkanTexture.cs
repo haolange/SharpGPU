@@ -2,7 +2,7 @@ using System;
 using Vortice.Vulkan;
 using SharpGPU.Mathematics;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8618
     internal unsafe class VulkanTexture : RHITexture

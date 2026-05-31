@@ -1,6 +1,6 @@
-﻿using Vortice.Vulkan;
+using Vortice.Vulkan;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8618
     internal unsafe class VulkanHeap : RHIHeap

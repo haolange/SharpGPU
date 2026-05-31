@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Threading;
 using System.Diagnostics;
@@ -7,7 +7,7 @@ using Vortice.DirectStorage;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CA1416
     internal unsafe class Dx12StorageQueue : RHIStorageQueue

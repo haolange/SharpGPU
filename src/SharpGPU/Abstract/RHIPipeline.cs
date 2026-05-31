@@ -2,7 +2,7 @@ using System;
 using SharpGPU.Core;
 using SharpGPU.Mathematics;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     public struct RHIPipelineLayoutDescriptor
     {
@@ -261,9 +261,24 @@ namespace Infinity.Graphics
         public RHIPipelineLayout PipelineLayout;
     }
 
+    public readonly struct RHIWorkGraphMemoryRequirements
+    {
+        public readonly ulong MinSizeInBytes;
+        public readonly ulong MaxSizeInBytes;
+        public readonly uint SizeGranularityInBytes;
+
+        public RHIWorkGraphMemoryRequirements(ulong minSizeInBytes, ulong maxSizeInBytes, uint sizeGranularityInBytes)
+        {
+            MinSizeInBytes = minSizeInBytes;
+            MaxSizeInBytes = maxSizeInBytes;
+            SizeGranularityInBytes = sizeGranularityInBytes;
+        }
+    }
+
     public abstract class RHIWorkGraphPipeline : Disposal
     {
         public RHIWorkGraphPipelineDescriptor Descriptor => m_Descriptor;
+        public virtual RHIWorkGraphMemoryRequirements MemoryRequirements => default;
 
         protected RHIWorkGraphPipelineDescriptor m_Descriptor;
     }

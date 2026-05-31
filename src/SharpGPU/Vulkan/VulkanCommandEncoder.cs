@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using Viewport = SharpGPU.Mathematics.Viewport;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS0414, CS8600, CS8601, CS8602, CS8604, CS8618
 
@@ -434,6 +434,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
+                VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.AllCommands, vkQuery.NativeQueryPool, index);
             }
         }
@@ -609,6 +610,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
+                VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.ComputeShader, vkQuery.NativeQueryPool, index);
             }
         }
@@ -619,6 +621,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery;
+                VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 0);
             }
         }
@@ -941,6 +944,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
+                VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.AllGraphics, vkQuery.NativeQueryPool, index);
             }
         }
@@ -951,6 +955,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Occlusion.Value.Query as VulkanQuery;
+                VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, VkQueryControlFlags.Precise);
             }
         }
@@ -971,6 +976,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery;
+                VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 0);
             }
         }
@@ -1249,6 +1255,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
+                VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.RayTracingShaderKHR, vkQuery.NativeQueryPool, index);
             }
         }
@@ -1259,6 +1266,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery;
+                VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 0);
             }
         }
@@ -1678,6 +1686,7 @@ namespace Infinity.Graphics
             {
                 VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
                 VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
+                VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.ComputeShader, vkQuery.NativeQueryPool, index);
             }
         }
@@ -1764,6 +1773,16 @@ namespace Infinity.Graphics
         }
 
         public override void SetPipeline(RHIWorkGraphPipeline pipeline)
+        {
+            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
+        }
+
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
+        {
+            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
+        }
+
+        public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
             throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
         }

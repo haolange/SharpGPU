@@ -7,7 +7,7 @@ using SharpMetal.Foundation;
 using SharpMetal.ObjectiveCCore;
 using System.Collections.Generic;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal sealed class MetalDevice : RHIDevice
     {
@@ -104,7 +104,12 @@ namespace Infinity.Graphics
 
         public override RHIQuery CreateQuery(in RHIQueryDescriptor descriptor)
         {
-            return new MetalQuery(descriptor);
+            if (descriptor.Type == ERHIQueryType.Statistics && !TryGetStatisticsCounterSet(m_NativeDevice, out _))
+            {
+                throw new NotSupportedException("Metal pipeline statistics queries require a device statistics counter set.");
+            }
+
+            return new MetalQuery(this, descriptor);
         }
 
         public override RHIHeap CreateHeap(in RHIHeapDescription descriptor)
@@ -199,7 +204,7 @@ namespace Infinity.Graphics
 
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
         {
-            return new MetalWorkGraphPipeline(descriptor);
+            throw new NotSupportedException("WorkGraph is not supported on the Metal backend.");
         }
 
         public override RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
@@ -311,6 +316,7 @@ namespace Infinity.Graphics
             }
             bool isMetal3 = m_SupportsMetal3;
             bool isTimestampSupported = m_NativeDevice.CounterSets.Count > 0;
+            bool isPipelineStatsSupported = TryGetStatisticsCounterSet(m_NativeDevice, out _);
 
             m_Feature = new RHIDeviceFeature(
                 isFlipProjection: true,
@@ -324,8 +330,8 @@ namespace Infinity.Graphics
                 isDepthbufferFetchSupported: false,
                 isFramebufferFetchSupported: false,
                 isTimestampQueriesSupported: isTimestampSupported,
-                isOcclusionQueriesSupported: false,
-                isPipelineStatsQueriesSupported: false,
+                isOcclusionQueriesSupported: true,
+                isPipelineStatsQueriesSupported: isPipelineStatsSupported,
                 isAtomicUInt64Supported: isMetal3,
                 isWorkgraphSupported: false,
                 isMeshShadingSupported: false,
@@ -342,6 +348,38 @@ namespace Infinity.Graphics
                 depthValueRange: ERHIDepthValueRange.ZeroToOne,
                 multiviewStrategy: ERHIMultiviewStrategy.Unsupported,
                 waveOperationStrategy: ERHIWaveOperationStrategy.Basic);
+        }
+
+        internal static bool TryGetStatisticsCounterSet(MTLDevice device, out MTLCounterSet counterSet)
+        {
+            NSArray counterSets = device.CounterSets;
+            for (uint i = 0; i < counterSets.Count; ++i)
+            {
+                MTLCounterSet candidate = new MTLCounterSet(counterSets[i]);
+                string name = candidate.Name.ToString() ?? string.Empty;
+                if (name.Contains("stat", StringComparison.OrdinalIgnoreCase))
+                {
+                    counterSet = candidate;
+                    return true;
+                }
+
+                NSArray counters = candidate.Counters;
+                for (uint counterIndex = 0; counterIndex < counters.Count; ++counterIndex)
+                {
+                    MTLCounter counter = new MTLCounter(counters[counterIndex]);
+                    string counterName = counter.Name.ToString() ?? string.Empty;
+                    if (counterName.Contains("vertex", StringComparison.OrdinalIgnoreCase)
+                        || counterName.Contains("fragment", StringComparison.OrdinalIgnoreCase)
+                        || counterName.Contains("primitive", StringComparison.OrdinalIgnoreCase))
+                    {
+                        counterSet = candidate;
+                        return true;
+                    }
+                }
+            }
+
+            counterSet = default;
+            return false;
         }
 
         private static bool IsAppleM3OrNewer(string deviceName)

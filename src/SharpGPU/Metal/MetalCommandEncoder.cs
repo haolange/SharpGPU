@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal static class MetalBindingLogHelper
     {
@@ -994,6 +994,7 @@ namespace Infinity.Graphics
     internal sealed class MetalTransferEncoder : RHITransferEncoder
     {
         private MTL4ComputeCommandEncoder m_NativeEncoder4;
+        private RHITransferPassDescriptor m_PassDescriptor;
 
         internal MetalTransferEncoder(MetalCommandBuffer commandBuffer)
         {
@@ -1003,6 +1004,7 @@ namespace Infinity.Graphics
 
         internal override void BeginPass(in RHITransferPassDescriptor descriptor)
         {
+            m_PassDescriptor = descriptor;
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             m_NativeEncoder4 = commandBuffer.EnsureMtl4CommandBuffer().ComputeCommandEncoder();
             if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
@@ -1013,6 +1015,11 @@ namespace Infinity.Graphics
             if (!string.IsNullOrWhiteSpace(descriptor.Name))
             {
                 PushDebugGroup(descriptor.Name);
+            }
+
+            if (descriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
             }
         }
 
@@ -1057,10 +1064,19 @@ namespace Infinity.Graphics
 
         public override void WriteTimestamp(in uint index)
         {
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                MetalQuery query = m_PassDescriptor.Timestamp.Value.Query as MetalQuery
+                    ?? throw new InvalidOperationException("Metal transfer timestamp pass requires a MetalQuery.");
+                query.WriteTimestamp(m_NativeEncoder4, index);
+            }
         }
 
         public override void ResolveQuery(RHIQuery query, in uint startIndex, in uint queriesCount)
         {
+            MetalQuery metalQuery = query as MetalQuery
+                ?? throw new InvalidOperationException("Metal transfer resolve requires a MetalQuery.");
+            metalQuery.Resolve((MetalCommandBuffer)m_CommandBuffer!, startIndex, queriesCount);
         }
 
         public override void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size)
@@ -1166,9 +1182,15 @@ namespace Infinity.Graphics
                 return;
             }
 
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
+            }
+
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.EndEncoding();
             m_NativeEncoder4 = default;
+            m_PassDescriptor = default;
         }
 
         protected override void Release()
@@ -1190,6 +1212,7 @@ namespace Infinity.Graphics
         private MTL4ComputeCommandEncoder m_NativeEncoder4;
         private IMetalBindingBackend? m_BindingBackend;
         private string? m_PendingPassDebugGroup;
+        private RHIComputePassDescriptor m_PassDescriptor;
 
         internal MetalComputeEncoder(MetalCommandBuffer commandBuffer)
         {
@@ -1202,6 +1225,7 @@ namespace Infinity.Graphics
 
         internal override void BeginPass(in RHIComputePassDescriptor descriptor)
         {
+            m_PassDescriptor = descriptor;
             m_NativeEncoder4 = default;
             m_PendingPassDebugGroup = null;
 
@@ -1217,6 +1241,11 @@ namespace Infinity.Graphics
                 {
                     m_PendingPassDebugGroup = descriptor.Name;
                 }
+            }
+
+            if (descriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
             }
         }
 
@@ -1286,6 +1315,12 @@ namespace Infinity.Graphics
 
         public override void WriteTimestamp(in uint index)
         {
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                MetalQuery query = m_PassDescriptor.Timestamp.Value.Query as MetalQuery
+                    ?? throw new InvalidOperationException("Metal compute timestamp pass requires a MetalQuery.");
+                query.WriteTimestamp(m_NativeEncoder4, index);
+            }
         }
 
         public override void BeginStatistics(in uint index)
@@ -1376,6 +1411,11 @@ namespace Infinity.Graphics
 
         public override void EndPass()
         {
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
+            }
+
             if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
             {
                 MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
@@ -1385,6 +1425,7 @@ namespace Infinity.Graphics
 
             m_PendingPassDebugGroup = null;
             m_CachedPipeline = null;
+            m_PassDescriptor = default;
         }
 
         protected override void Release()
@@ -1439,6 +1480,7 @@ namespace Infinity.Graphics
         private MTL4ComputeCommandEncoder m_NativeEncoder4;
         private IMetalBindingBackend? m_BindingBackend;
         private string? m_PendingPassDebugGroup;
+        private RHIRayTracingPassDescriptor m_PassDescriptor;
 
         internal MetalRaytracingEncoder(MetalCommandBuffer commandBuffer)
         {
@@ -1451,6 +1493,7 @@ namespace Infinity.Graphics
 
         internal override void BeginPass(in RHIRayTracingPassDescriptor descriptor)
         {
+            m_PassDescriptor = descriptor;
             m_NativeEncoder4 = default;
             m_PendingPassDebugGroup = null;
 
@@ -1466,6 +1509,11 @@ namespace Infinity.Graphics
                 {
                     m_PendingPassDebugGroup = descriptor.Name;
                 }
+            }
+
+            if (descriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
             }
         }
 
@@ -1511,6 +1559,12 @@ namespace Infinity.Graphics
 
         public override void WriteTimestamp(in uint index)
         {
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                MetalQuery query = m_PassDescriptor.Timestamp.Value.Query as MetalQuery
+                    ?? throw new InvalidOperationException("Metal ray tracing timestamp pass requires a MetalQuery.");
+                query.WriteTimestamp(m_NativeEncoder4, index);
+            }
         }
 
         public override void BeginStatistics(in uint index)
@@ -1653,6 +1707,11 @@ namespace Infinity.Graphics
 
         public override void EndPass()
         {
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
+            }
+
             if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
             {
                 MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
@@ -1662,6 +1721,7 @@ namespace Infinity.Graphics
 
             m_PendingPassDebugGroup = null;
             m_CachedPipeline = null;
+            m_PassDescriptor = default;
         }
 
         internal void WaitForFence(in MTLFence fence)
@@ -1790,6 +1850,11 @@ namespace Infinity.Graphics
                     m_PendingPassDebugGroup = descriptor.Name;
                 }
             }
+
+            if (descriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
+            }
         }
 
         internal void WaitForFence(in MTLFence fence)
@@ -1858,22 +1923,53 @@ namespace Infinity.Graphics
 
         public override void WriteTimestamp(in uint index)
         {
+            if (m_HasPendingPassDescriptor && m_PendingPassDescriptor.Timestamp.HasValue)
+            {
+                MetalQuery query = m_PendingPassDescriptor.Timestamp.Value.Query as MetalQuery
+                    ?? throw new InvalidOperationException("Metal raster timestamp pass requires a MetalQuery.");
+                ulong stages = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Vertex | ERHISyncStageMask.Fragment);
+                query.WriteTimestamp(m_NativeEncoder4, stages, index);
+            }
         }
 
         public override void BeginOcclusion(in uint index)
         {
+            if (m_HasPendingPassDescriptor && m_PendingPassDescriptor.Occlusion.HasValue)
+            {
+                MetalQuery query = m_PendingPassDescriptor.Occlusion.Value.Query as MetalQuery
+                    ?? throw new InvalidOperationException("Metal raster occlusion pass requires a MetalQuery.");
+                query.BeginOcclusion(m_NativeEncoder4, index);
+            }
         }
 
         public override void EndOcclusion(in uint index)
         {
+            if (m_HasPendingPassDescriptor && m_PendingPassDescriptor.Occlusion.HasValue)
+            {
+                MetalQuery query = m_PendingPassDescriptor.Occlusion.Value.Query as MetalQuery
+                    ?? throw new InvalidOperationException("Metal raster occlusion pass requires a MetalQuery.");
+                query.EndOcclusion(m_NativeEncoder4, index);
+            }
         }
 
         public override void BeginStatistics(in uint index)
         {
+            if (m_HasPendingPassDescriptor && m_PendingPassDescriptor.Statistics.HasValue)
+            {
+                MetalQuery query = m_PendingPassDescriptor.Statistics.Value.Query as MetalQuery
+                    ?? throw new InvalidOperationException("Metal raster statistics pass requires a MetalQuery.");
+                query.BeginStatistics(m_NativeEncoder4, index);
+            }
         }
 
         public override void EndStatistics(in uint index)
         {
+            if (m_HasPendingPassDescriptor && m_PendingPassDescriptor.Statistics.HasValue)
+            {
+                MetalQuery query = m_PendingPassDescriptor.Statistics.Value.Query as MetalQuery
+                    ?? throw new InvalidOperationException("Metal raster statistics pass requires a MetalQuery.");
+                query.EndStatistics(m_NativeEncoder4, index);
+            }
         }
 
         public override void NextSubPass()
@@ -2112,6 +2208,11 @@ namespace Infinity.Graphics
 
         public override void EndPass()
         {
+            if (m_HasPendingPassDescriptor && m_PendingPassDescriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(m_PendingPassDescriptor.Timestamp.Value.EndIndex);
+            }
+
             if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
             {
                 MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
@@ -2176,6 +2277,14 @@ namespace Infinity.Graphics
         private static void PopulateRenderPassDescriptor(MetalCommandBuffer commandBuffer, in RHIRasterPassDescriptor descriptor, MTL4RenderPassDescriptor passDescriptor)
         {
             passDescriptor.RenderTargetArrayLength = descriptor.ArrayLength;
+
+            if (descriptor.Occlusion.HasValue)
+            {
+                MetalQuery query = descriptor.Occlusion.Value.Query as MetalQuery
+                    ?? throw new InvalidOperationException("Metal raster occlusion pass requires a MetalQuery.");
+                passDescriptor.VisibilityResultBuffer = query.VisibilityResultBuffer;
+                passDescriptor.VisibilityResultType = MTLVisibilityResultMode.Counting;
+            }
 
             for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
             {
@@ -2289,6 +2398,7 @@ namespace Infinity.Graphics
     {
         private MTL4MachineLearningCommandEncoder m_NativeEncoder;
         private readonly MetalDevice m_MetalDevice;
+        private RHIMLPassDescriptor m_PassDescriptor;
 
         public MetalMLEncoder(MetalCommandBuffer cmdBuffer)
         {
@@ -2298,6 +2408,7 @@ namespace Infinity.Graphics
 
         internal override void BeginPass(in RHIMLPassDescriptor descriptor)
         {
+            m_PassDescriptor = descriptor;
             m_NativeEncoder = default;
 
             MTL4CommandBuffer mtl4CmdBuffer = ((MetalCommandBuffer)m_CommandBuffer!).EnsureMtl4CommandBuffer();
@@ -2311,6 +2422,11 @@ namespace Infinity.Graphics
             if (!string.IsNullOrWhiteSpace(descriptor.Name))
             {
                 PushDebugGroup(descriptor.Name);
+            }
+
+            if (descriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
             }
         }
 
@@ -2352,8 +2468,12 @@ namespace Infinity.Graphics
 
         public override void WriteTimestamp(in uint index)
         {
-            // Metal timestamp queries are not yet wired in the base infrastructure.
-            // This is consistent with other Metal encoder WriteTimestamp implementations.
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                MetalQuery query = m_PassDescriptor.Timestamp.Value.Query as MetalQuery
+                    ?? throw new InvalidOperationException("Metal ML timestamp pass requires a MetalQuery.");
+                query.WriteTimestamp((MetalCommandBuffer)m_CommandBuffer!, index);
+            }
         }
 
         public override void SetPipeline(RHIMLPipeline pipeline)
@@ -2390,6 +2510,11 @@ namespace Infinity.Graphics
 
         public override void EndPass()
         {
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
+            }
+
             if (m_NativeEncoder.NativePtr != IntPtr.Zero)
             {
                 MTL4CommandEncoder baseEncoder = new MTL4CommandEncoder(m_NativeEncoder.NativePtr);
@@ -2398,6 +2523,7 @@ namespace Infinity.Graphics
             }
             m_CachedPipeline = null;
             m_CachedBindingSet = null;
+            m_PassDescriptor = default;
         }
 
         protected override void Release()
@@ -2444,6 +2570,16 @@ namespace Infinity.Graphics
         }
 
         public override void SetPipeline(RHIWorkGraphPipeline pipeline)
+        {
+            throw new NotSupportedException("WorkGraph is not supported on the Metal backend.");
+        }
+
+        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
+        {
+            throw new NotSupportedException("WorkGraph is not supported on the Metal backend.");
+        }
+
+        public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
             throw new NotSupportedException("WorkGraph is not supported on the Metal backend.");
         }

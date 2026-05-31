@@ -4,7 +4,7 @@ using Vortice.Direct3D;
 using System.Diagnostics;
 using Vortice.Direct3D12;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal struct Dx12BindInfo

@@ -1,21 +1,25 @@
-﻿using System;
+using System;
 using Vortice.Vulkan;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8618
     internal unsafe class VulkanQuery : RHIQuery
     {
         public VkQueryPool NativeQueryPool => m_NativeQueryPool;
+        public uint ResultStrideInBytes => m_ResultStrideInBytes;
 
         private VulkanDevice m_VulkanDevice;
         private VkQueryPool m_NativeQueryPool;
+        private readonly uint m_ResultStrideInBytes;
 
         public VulkanQuery(VulkanDevice device, in RHIQueryDescriptor descriptor)
         {
             m_VulkanDevice = device;
             m_QueryDescriptor = descriptor;
-            m_Results = new ulong[descriptor.Count];
+            m_ResultStrideInBytes = GetResultStrideInBytes(descriptor.Type);
+            uint resultElementCount = checked((descriptor.Count * m_ResultStrideInBytes) / sizeof(ulong));
+            m_Results = new ulong[resultElementCount];
             Results = m_Results;
 
             VkQueryPoolCreateInfo queryPoolInfo = new VkQueryPoolCreateInfo()
@@ -50,13 +54,20 @@ namespace Infinity.Graphics
                     m_NativeQueryPool,
                     0,
                     m_QueryDescriptor.Count,
-                    (nuint)(m_QueryDescriptor.Count * sizeof(ulong)),
+                    (nuint)(m_Results!.Length * sizeof(ulong)),
                     resultsPtr,
-                    (ulong)sizeof(ulong),
+                    m_ResultStrideInBytes,
                     VkQueryResultFlags.Bit64);
 
                 return result == VkResult.Success;
             }
+        }
+
+        private static uint GetResultStrideInBytes(in ERHIQueryType queryType)
+        {
+            return queryType == ERHIQueryType.Statistics
+                ? 5u * sizeof(ulong)
+                : sizeof(ulong);
         }
 
         protected override void Release()

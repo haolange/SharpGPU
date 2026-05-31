@@ -2,7 +2,7 @@ using System;
 using SharpGPU.Collections.LowLevel;
 using System.Runtime.InteropServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal static unsafe class Dx12RaytracingHelper

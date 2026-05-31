@@ -2,7 +2,7 @@ using System;
 using SharpMetal.Metal;
 using SharpMetal.ObjectiveCCore;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal sealed class MetalSampler : RHISampler
     {

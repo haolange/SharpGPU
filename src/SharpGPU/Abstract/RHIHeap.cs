@@ -1,6 +1,6 @@
 using SharpGPU.Core;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8618
     public struct RHIHeapDescription

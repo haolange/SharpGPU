@@ -6,7 +6,7 @@ using SharpMetal.ObjectiveCCore;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal static class MetalArrayHelper
     {

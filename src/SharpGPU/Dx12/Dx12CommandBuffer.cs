@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
     internal unsafe class Dx12CommandBuffer : RHICommandBuffer
@@ -30,6 +30,7 @@ namespace Infinity.Graphics
         private Dx12WorkGraphEncoder m_WorkGraphEncoder;
         private Vortice.Direct3D12.ID3D12CommandAllocator m_NativeCommandAllocator;
         private Vortice.Direct3D12.ID3D12GraphicsCommandList7 m_NativeCommandList;
+        private Vortice.Direct3D12.ID3D12DescriptorHeap[] m_DescriptorHeaps;
 
         public Dx12CommandBuffer(Dx12CommandQueue commandQueue)
         {
@@ -41,6 +42,13 @@ namespace Infinity.Graphics
             m_RaytracingEncoder = new Dx12RaytracingEncoder(this);
             m_MLEncoder = new Dx12MLEncoder(this);
             m_WorkGraphEncoder = new Dx12WorkGraphEncoder(this);
+
+            Dx12Device device = commandQueue.Dx12Device;
+            m_DescriptorHeaps = new Vortice.Direct3D12.ID3D12DescriptorHeap[]
+            {
+                device.DescriptorHeapSampler.NativeDescriptorHeap,
+                device.DescriptorHeapCbvSrvUav.NativeDescriptorHeap,
+            };
         }
 
         private void InitializeNativeObjects()
@@ -99,13 +107,7 @@ namespace Infinity.Graphics
             Dx12PixEventMarker.BeginEvent((nint)m_NativeCommandList, name);
 #endif
 
-            Dx12CommandQueue commandQueue = m_CommandQueue as Dx12CommandQueue;
-            Vortice.Direct3D12.ID3D12DescriptorHeap[] descriptorHeaps =
-            {
-                commandQueue.Dx12Device.DescriptorHeapSampler.NativeDescriptorHeap,
-                commandQueue.Dx12Device.DescriptorHeapCbvSrvUav.NativeDescriptorHeap,
-            };
-            m_NativeCommandList.SetDescriptorHeaps(descriptorHeaps);
+            m_NativeCommandList.SetDescriptorHeaps(m_DescriptorHeaps);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -179,7 +181,19 @@ namespace Infinity.Graphics
 #if DEBUG
             Dx12PixEventMarker.EndEvent((nint)m_NativeCommandList);
 #endif
-            m_NativeCommandList.Close();
+            try
+            {
+                m_NativeCommandList.Close();
+            }
+            catch (SharpGen.Runtime.SharpGenException)
+            {
+                if (m_CommandQueue is Dx12CommandQueue commandQueue)
+                {
+                    Dx12PipelineDebug.DumpDeviceMessages(commandQueue.Dx12Device, "[Dx12CommandBuffer.End]");
+                }
+
+                throw;
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

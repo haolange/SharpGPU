@@ -3,7 +3,7 @@ using SharpGPU.Collections;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CA1416
     internal unsafe class Dx12Function : RHIFunction
@@ -15,8 +15,10 @@ namespace Infinity.Graphics
                 return m_NativeShaderBytecode;
             }
         }
+        public ReadOnlyMemory<byte> NativeShaderData => m_NativeShaderData;
 
         private Vortice.Direct3D12.ShaderBytecode m_NativeShaderBytecode;
+        private byte[] m_NativeShaderData;
         private IntPtr m_OwnedByteCode;
 
         public Dx12Function(in RHIFunctionDescriptor descriptor)
@@ -24,6 +26,7 @@ namespace Infinity.Graphics
             m_OwnedByteCode = CloneShaderByteCode(descriptor.ByteCode, descriptor.ByteSize, nameof(Dx12Function));
             m_Descriptor = descriptor;
             m_Descriptor.ByteCode = m_OwnedByteCode;
+            m_NativeShaderData = CopyShaderByteCode(m_OwnedByteCode, descriptor.ByteSize, nameof(Dx12Function));
             m_NativeShaderBytecode = new Vortice.Direct3D12.ShaderBytecode(m_OwnedByteCode, checked((int)descriptor.ByteSize));
         }
 
@@ -49,6 +52,18 @@ namespace Infinity.Graphics
             return destination;
         }
 
+        private static byte[] CopyShaderByteCode(IntPtr source, uint byteSize, string context)
+        {
+            if (source == IntPtr.Zero || byteSize == 0)
+            {
+                throw new ArgumentException($"{context} received invalid shader bytecode.");
+            }
+
+            byte[] data = new byte[checked((int)byteSize)];
+            Marshal.Copy(source, data, 0, data.Length);
+            return data;
+        }
+
         protected override void Release()
         {
             if (m_OwnedByteCode != IntPtr.Zero)
@@ -58,6 +73,7 @@ namespace Infinity.Graphics
             }
 
             m_NativeShaderBytecode = default;
+            m_NativeShaderData = Array.Empty<byte>();
         }
     }
 
@@ -70,8 +86,10 @@ namespace Infinity.Graphics
                 return m_NativeShaderBytecode;
             }
         }
+        public ReadOnlyMemory<byte> NativeShaderData => m_NativeShaderData;
 
         private Vortice.Direct3D12.ShaderBytecode m_NativeShaderBytecode;
+        private byte[] m_NativeShaderData;
         private IntPtr m_OwnedByteCode;
 
         public Dx12FunctionLibrary(in RHIFunctionLibraryDescriptor descriptor)
@@ -79,6 +97,7 @@ namespace Infinity.Graphics
             m_OwnedByteCode = CloneShaderByteCode(descriptor.ByteCode, descriptor.ByteSize, nameof(Dx12FunctionLibrary));
             m_Descriptor = descriptor;
             m_Descriptor.ByteCode = m_OwnedByteCode;
+            m_NativeShaderData = CopyShaderByteCode(m_OwnedByteCode, descriptor.ByteSize, nameof(Dx12FunctionLibrary));
             m_NativeShaderBytecode = new Vortice.Direct3D12.ShaderBytecode(m_OwnedByteCode, checked((int)descriptor.ByteSize));
         }
 
@@ -91,6 +110,7 @@ namespace Infinity.Graphics
             }
 
             m_NativeShaderBytecode = default;
+            m_NativeShaderData = Array.Empty<byte>();
         }
 
         private static IntPtr CloneShaderByteCode(in IntPtr source, in uint byteSize, string context)
@@ -113,6 +133,18 @@ namespace Infinity.Graphics
             IntPtr destination = Marshal.AllocHGlobal((int)byteSize);
             Buffer.MemoryCopy(source.ToPointer(), destination.ToPointer(), byteSize, byteSize);
             return destination;
+        }
+
+        private static byte[] CopyShaderByteCode(IntPtr source, uint byteSize, string context)
+        {
+            if (source == IntPtr.Zero || byteSize == 0)
+            {
+                throw new ArgumentException($"{context} received invalid shader bytecode.");
+            }
+
+            byte[] data = new byte[checked((int)byteSize)];
+            Marshal.Copy(source, data, 0, data.Length);
+            return data;
         }
     }
 

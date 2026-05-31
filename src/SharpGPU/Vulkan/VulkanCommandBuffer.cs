@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using Vortice.Vulkan;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8600, CS8602, CS8618
     internal unsafe class VulkanCommandBuffer : RHICommandBuffer
@@ -202,14 +202,13 @@ namespace Infinity.Graphics
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIMLEncoder BeginMLPass(in RHIMLPassDescriptor descriptor)
         {
-            m_MLEncoder.BeginPass(descriptor);
-            return m_MLEncoder;
+            throw new NotSupportedException("Vulkan ML is not supported in SharpGPU v1.");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void EndMLPass()
         {
-            m_MLEncoder.EndPass();
+            throw new NotSupportedException("Vulkan ML is not supported in SharpGPU v1.");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

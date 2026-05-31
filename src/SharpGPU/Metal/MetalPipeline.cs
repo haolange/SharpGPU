@@ -5,7 +5,7 @@ using SharpMetal.Foundation;
 using SharpMetal.ObjectiveCCore;
 using System.Collections.Generic;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal sealed class MetalPipelineLayout : RHIPipelineLayout
     {

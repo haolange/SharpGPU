@@ -50,18 +50,27 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="NUnit" Version="4.5.1" />
+		<PackageReference Include="Microsoft.Direct3D.D3D12" Version="1.619.3" GeneratePathProperty="true" />
 		<PackageReference Include="SharpGen.Runtime" Version="2.4.2-beta" />
-		<PackageReference Include="Vortice.Direct3D12" Version="3.8.3" />
 		<PackageReference Include="Vortice.DirectML" Version="3.8.3" GeneratePathProperty="true" />
 		<PackageReference Include="Vortice.DirectStorage" Version="3.8.3" />
-		<PackageReference Include="Vortice.DXGI" Version="3.8.3" />
 		<PackageReference Include="Vortice.Pix.Native" Version="1.0.1" />
 		<PackageReference Include="Vortice.Vulkan" Version="3.2.1" />
 	</ItemGroup>
 
+	<ItemGroup Condition="'$(PkgMicrosoft_Direct3D_D3D12)' != '' and '$(Platform)' == 'x64'">
+		<None Include="$(PkgMicrosoft_Direct3D_D3D12)\build\native\bin\x64\D3D12Core.dll" Link="D3D12\D3D12Core.dll" CopyToOutputDirectory="PreserveNewest" />
+		<None Include="$(PkgMicrosoft_Direct3D_D3D12)\build\native\bin\x64\d3d12SDKLayers.dll" Link="D3D12\d3d12SDKLayers.dll" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(PkgMicrosoft_Direct3D_D3D12)' != '' and '$(Platform)' == 'ARM64'">
+		<None Include="$(PkgMicrosoft_Direct3D_D3D12)\build\native\bin\ARM64\D3D12Core.dll" Link="D3D12\D3D12Core.dll" CopyToOutputDirectory="PreserveNewest" />
+		<None Include="$(PkgMicrosoft_Direct3D_D3D12)\build\native\bin\ARM64\d3d12SDKLayers.dll" Link="D3D12\d3d12SDKLayers.dll" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
 	<ItemGroup>
 	  <ProjectReference Include="..\..\..\ThirdParty\Apple\SharpMetal\SharpMetal.csproj" />
+	  <ProjectReference Include="..\..\..\ThirdParty\Vortice.Windows\src\Vortice.Direct3D12\Vortice.Direct3D12.csproj" />
 	</ItemGroup>
 
 </Project>

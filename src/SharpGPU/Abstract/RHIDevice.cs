@@ -3,7 +3,7 @@ using SharpGPU.Core;
 using SharpGPU.Collections;
 using System.Collections.Generic;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     public class RHIDeviceLimit
     {

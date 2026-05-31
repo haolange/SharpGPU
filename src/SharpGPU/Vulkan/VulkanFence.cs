@@ -1,7 +1,7 @@
-﻿using System;
+using System;
 using Vortice.Vulkan;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
 #pragma warning disable CS8618
     internal unsafe class VulkanFence : RHIFence

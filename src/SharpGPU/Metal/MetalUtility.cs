@@ -2,7 +2,7 @@ using System;
 using SharpMetal.Metal;
 using SharpGPU.Mathematics;
 
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal static class MetalUtility
     {

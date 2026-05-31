@@ -1,0 +1,50 @@
+[
+  {
+    "Name": "default_builder_buffer",
+    "Mode": "api",
+    "Backend": "none",
+    "Submit": "none",
+    "Status": "passed",
+    "Iterations": 10000,
+    "MeanMicroseconds": 0.02826,
+    "P50Microseconds": 0,
+    "P95Microseconds": 0.1,
+    "P99Microseconds": 0.1,
+    "MaxMicroseconds": 12.1,
+    "AllocatedBytes": 0,
+    "Adapter": null,
+    "SkipReason": null
+  },
+  {
+    "Name": "scoped_helper_transfer",
+    "Mode": "api",
+    "Backend": "none",
+    "Submit": "none",
+    "Status": "passed",
+    "Iterations": 10000,
+    "MeanMicroseconds": 0.0312,
+    "P50Microseconds": 0,
+    "P95Microseconds": 0.1,
+    "P99Microseconds": 0.1,
+    "MaxMicroseconds": 0.4,
+    "AllocatedBytes": 0,
+    "Adapter": null,
+    "SkipReason": null
+  },
+  {
+    "Name": "storage_queue_enqueue",
+    "Mode": "api",
+    "Backend": "none",
+    "Submit": "none",
+    "Status": "passed",
+    "Iterations": 10000,
+    "MeanMicroseconds": 0.02435,
+    "P50Microseconds": 0,
+    "P95Microseconds": 0.1,
+    "P99Microseconds": 0.1,
+    "MaxMicroseconds": 0.3,
+    "AllocatedBytes": 0,
+    "Adapter": null,
+    "SkipReason": null
+  }
+]

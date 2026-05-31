@@ -1,4 +1,4 @@
-namespace Infinity.Graphics
+namespace SharpGPU
 {
     internal sealed class MetalBufferView : RHIBufferView
     {
