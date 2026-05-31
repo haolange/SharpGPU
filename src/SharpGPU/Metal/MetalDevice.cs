@@ -16,6 +16,9 @@ namespace SharpGPU
         internal bool SupportsMetal4Barriers => m_SupportsMetal4Barriers;
         internal bool SupportsMetal4 => m_SupportsMetal4;
         internal bool SupportsArgumentTable => m_SupportsArgumentTable;
+        internal bool SupportsMetalML => m_Feature?.IsMLSupported == true;
+        internal string? TimestampQueriesUnavailableReason => m_TimestampQueriesUnavailableReason;
+        internal string? MetalMLUnavailableReason => m_MetalMLUnavailableReason;
         internal MTLTextureViewPool TextureViewPool => m_TextureViewPool;
 
         private readonly MTLDevice m_NativeDevice;
@@ -24,11 +27,16 @@ namespace SharpGPU
         private readonly bool m_SupportsMetal3;
         private readonly bool m_SupportsMetal4;
         private readonly bool m_SupportsArgumentTable;
+        private string? m_TimestampQueriesUnavailableReason;
+        private string? m_MetalMLUnavailableReason;
         private MTLTextureViewPool m_TextureViewPool;
         private int m_NextTextureViewIndex;
 
         private static readonly Selector s_RespondsToSelector = "respondsToSelector:";
         private static readonly Selector s_NewArgumentTableWithDescriptorError = "newArgumentTableWithDescriptor:error:";
+        private static readonly Selector s_NewCompilerWithDescriptorError = "newCompilerWithDescriptor:error:";
+        private static readonly Selector s_NewCounterHeapWithDescriptorError = "newCounterHeapWithDescriptor:error:";
+        private static readonly Selector s_NewTensorWithDescriptorError = "newTensorWithDescriptor:error:";
 
         public MetalDevice(MetalInstance instance, in MTLDevice device, in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
         {
@@ -104,7 +112,13 @@ namespace SharpGPU
 
         public override RHIQuery CreateQuery(in RHIQueryDescriptor descriptor)
         {
-            if (descriptor.Type == ERHIQueryType.Statistics && !TryGetStatisticsCounterSet(m_NativeDevice, out _))
+            if ((descriptor.Type == ERHIQueryType.TimestampTransfer || descriptor.Type == ERHIQueryType.TimestampGenerice)
+                && m_Feature?.IsTimestampQueriesSupported != true)
+            {
+                throw new NotSupportedException(m_TimestampQueriesUnavailableReason ?? "Metal timestamp queries require native MTL4CounterHeap support.");
+            }
+
+            if (descriptor.Type == ERHIQueryType.Statistics && m_Feature?.IsPipelineStatsQueriesSupported != true)
             {
                 throw new NotSupportedException("Metal pipeline statistics queries require a device statistics counter set.");
             }
@@ -189,11 +203,21 @@ namespace SharpGPU
 
         public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
         {
+            if (!SupportsMetalML)
+            {
+                throw new NotSupportedException(m_MetalMLUnavailableReason ?? "Metal ML is not supported on this device.");
+            }
+
             return new MetalMLPipeline(this, descriptor);
         }
 
         public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
         {
+            if (!SupportsMetalML)
+            {
+                throw new NotSupportedException(m_MetalMLUnavailableReason ?? "Metal ML is not supported on this device.");
+            }
+
             return new MetalMLBindingSet(this, descriptor);
         }
 
@@ -315,8 +339,11 @@ namespace SharpGPU
                 Console.WriteLine($"[MetalDevice] Ray tracing capability appears software-emulated on '{deviceName}'; disabling RT for MTL4 runtime stability.");
             }
             bool isMetal3 = m_SupportsMetal3;
-            bool isTimestampSupported = m_NativeDevice.CounterSets.Count > 0;
+            bool isTimestampSupported = TryProbeTimestampCounterHeap(out string? timestampUnavailableReason);
+            m_TimestampQueriesUnavailableReason = timestampUnavailableReason;
             bool isPipelineStatsSupported = TryGetStatisticsCounterSet(m_NativeDevice, out _);
+            bool isMLSupported = TryProbeMetalMLSupport(out string? metalMLUnavailableReason);
+            m_MetalMLUnavailableReason = metalMLUnavailableReason;
 
             m_Feature = new RHIDeviceFeature(
                 isFlipProjection: true,
@@ -343,11 +370,104 @@ namespace SharpGPU
                 isHiddenSurfaceRemovalSupported: false,
                 isBarycentricCoordSupported: m_NativeDevice.SupportsShaderBarycentricCoordinates,
                 isProgrammableSamplePositionSupported: m_NativeDevice.ProgrammableSamplePositionsSupported,
-                isMLSupported: m_SupportsMetal4,
+                isMLSupported: isMLSupported,
                 matrixMajorons: ERHIMatrixMajorons.RowMajor,
                 depthValueRange: ERHIDepthValueRange.ZeroToOne,
                 multiviewStrategy: ERHIMultiviewStrategy.Unsupported,
                 waveOperationStrategy: ERHIWaveOperationStrategy.Basic);
+        }
+
+        private bool TryProbeTimestampCounterHeap(out string? unavailableReason)
+        {
+            unavailableReason = null;
+
+            if (!m_SupportsMetal4)
+            {
+                unavailableReason = "Metal timestamp queries require Metal 4.";
+                return false;
+            }
+
+            if (!SafeSupportsSelector(s_NewCounterHeapWithDescriptorError))
+            {
+                unavailableReason = "Metal timestamp queries require newCounterHeapWithDescriptor:error:.";
+                return false;
+            }
+
+            MTL4CounterHeapDescriptor descriptor = MTL4CounterHeapDescriptor.New();
+            MTL4CounterHeap heap = default;
+            NSError error = default;
+            try
+            {
+                descriptor.Type = MTL4CounterHeapType.Timestamp;
+                descriptor.Count = 1;
+                heap = m_NativeDevice.NewCounterHeap(descriptor, ref error);
+                if (heap.NativePtr == IntPtr.Zero)
+                {
+                    unavailableReason = error.NativePtr != IntPtr.Zero
+                        ? $"Metal timestamp queries require MTL4CounterHeap support: {error.LocalizedDescription}."
+                        : "Metal timestamp queries require MTL4CounterHeap support.";
+                    return false;
+                }
+
+                ulong entrySize = m_NativeDevice.SizeOfCounterHeapEntry(MTL4CounterHeapType.Timestamp);
+                ulong frequency = m_NativeDevice.QueryTimestampFrequency();
+                if (entrySize == 0 || frequency == 0)
+                {
+                    unavailableReason = $"Metal timestamp queries require nonzero counter entry size and frequency. entrySize={entrySize}, frequency={frequency}.";
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                unavailableReason = $"Metal timestamp query probe failed: {ex.Message}";
+                return false;
+            }
+            finally
+            {
+                if (heap.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(heap);
+                }
+
+                if (descriptor.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(descriptor);
+                }
+            }
+        }
+
+        private bool TryProbeMetalMLSupport(out string? unavailableReason)
+        {
+            unavailableReason = null;
+
+            if (!m_SupportsMetal4)
+            {
+                unavailableReason = "Metal ML requires Metal 4.";
+                return false;
+            }
+
+            if (!m_SupportsArgumentTable || !SafeSupportsSelector(s_NewArgumentTableWithDescriptorError))
+            {
+                unavailableReason = "Metal ML requires native MTL4 argument table support.";
+                return false;
+            }
+
+            if (!SafeSupportsSelector(s_NewCompilerWithDescriptorError))
+            {
+                unavailableReason = "Metal ML requires native MTL4 compiler support.";
+                return false;
+            }
+
+            if (!SafeSupportsSelector(s_NewTensorWithDescriptorError))
+            {
+                unavailableReason = "Metal ML requires native MTLTensor creation support.";
+                return false;
+            }
+
+            unavailableReason = "Metal ML is disabled until SharpGPU provides a native Metal ML package program path; CPU and no-op fallbacks are not allowed.";
+            return false;
         }
 
         internal static bool TryGetStatisticsCounterSet(MTLDevice device, out MTLCounterSet counterSet)

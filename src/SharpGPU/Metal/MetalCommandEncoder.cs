@@ -1006,6 +1006,13 @@ namespace SharpGPU
         {
             m_PassDescriptor = descriptor;
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            if (descriptor.Timestamp.HasValue)
+            {
+                MetalQuery query = descriptor.Timestamp.Value.Query as MetalQuery
+                    ?? throw new InvalidOperationException("Metal transfer timestamp pass requires a MetalQuery.");
+                query.WriteTimestamp(commandBuffer, descriptor.Timestamp.Value.BeginIndex);
+            }
+
             m_NativeEncoder4 = commandBuffer.EnsureMtl4CommandBuffer().ComputeCommandEncoder();
             if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
             {
@@ -1017,10 +1024,6 @@ namespace SharpGPU
                 PushDebugGroup(descriptor.Name);
             }
 
-            if (descriptor.Timestamp.HasValue)
-            {
-                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
-            }
         }
 
         public override void Barrier(in RHIBarrier barrier)
@@ -1182,14 +1185,20 @@ namespace SharpGPU
                 return;
             }
 
-            if (m_PassDescriptor.Timestamp.HasValue)
-            {
-                WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
-            }
+            RHITimestampDescriptor? timestamp = m_PassDescriptor.Timestamp;
 
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.EndEncoding();
             m_NativeEncoder4 = default;
+
+            if (timestamp.HasValue)
+            {
+                MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+                MetalQuery query = timestamp.Value.Query as MetalQuery
+                    ?? throw new InvalidOperationException("Metal transfer timestamp pass requires a MetalQuery.");
+                query.WriteTimestamp(commandBuffer, timestamp.Value.EndIndex);
+            }
+
             m_PassDescriptor = default;
         }
 
@@ -2408,15 +2417,22 @@ namespace SharpGPU
 
         internal override void BeginPass(in RHIMLPassDescriptor descriptor)
         {
+            if (!m_MetalDevice.SupportsMetalML)
+            {
+                throw new NotSupportedException(m_MetalDevice.MetalMLUnavailableReason ?? "Metal ML is not supported on this device.");
+            }
+
             m_PassDescriptor = descriptor;
             m_NativeEncoder = default;
+            m_CachedPipeline = null;
+            m_CachedBindingSet = null;
 
             MTL4CommandBuffer mtl4CmdBuffer = ((MetalCommandBuffer)m_CommandBuffer!).EnsureMtl4CommandBuffer();
             m_NativeEncoder = mtl4CmdBuffer.MachineLearningCommandEncoder();
 
             if (m_NativeEncoder.NativePtr == IntPtr.Zero)
             {
-                throw new InvalidOperationException("Failed to create MTL4MachineLearningCommandEncoder.");
+                throw new NotSupportedException("Metal ML requires a native MTL4MachineLearningCommandEncoder.");
             }
 
             if (!string.IsNullOrWhiteSpace(descriptor.Name))
@@ -2500,9 +2516,14 @@ namespace SharpGPU
 
         public override void Dispatch()
         {
+            if (m_CachedPipeline is not MetalMLPipeline)
+            {
+                throw new InvalidOperationException("Metal ML encoder requires SetPipeline before Dispatch.");
+            }
+
             if (m_CachedBindingSet is not MetalMLBindingSet metalBindingSet)
             {
-                throw new InvalidOperationException("Metal ML encoder requires a bound ML binding set before Dispatch.");
+                throw new InvalidOperationException("Metal ML encoder requires SetBindingSet before Dispatch.");
             }
 
             m_NativeEncoder.DispatchNetworkWithIntermediatesHeap(metalBindingSet.NativeIntermediatesHeap);

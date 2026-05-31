@@ -58,6 +58,10 @@
 		<PackageReference Include="Vortice.Vulkan" Version="3.2.1" />
 	</ItemGroup>
 
+	<ItemGroup Condition="'$(InfinityBuildOS)' != 'Win'">
+		<Compile Remove="Dx12/**/*.cs" />
+	</ItemGroup>
+
 	<ItemGroup Condition="'$(PkgMicrosoft_Direct3D_D3D12)' != '' and '$(Platform)' == 'x64'">
 		<None Include="$(PkgMicrosoft_Direct3D_D3D12)\build\native\bin\x64\D3D12Core.dll" Link="D3D12\D3D12Core.dll" CopyToOutputDirectory="PreserveNewest" />
 		<None Include="$(PkgMicrosoft_Direct3D_D3D12)\build\native\bin\x64\d3d12SDKLayers.dll" Link="D3D12\d3d12SDKLayers.dll" CopyToOutputDirectory="PreserveNewest" />
@@ -70,7 +74,7 @@
 
 	<ItemGroup>
 	  <ProjectReference Include="..\..\..\ThirdParty\Apple\SharpMetal\SharpMetal.csproj" />
-	  <ProjectReference Include="..\..\..\ThirdParty\Vortice.Windows\src\Vortice.Direct3D12\Vortice.Direct3D12.csproj" />
+	  <ProjectReference Include="..\..\..\ThirdParty\Vortice.Windows\src\Vortice.Direct3D12\Vortice.Direct3D12.csproj" Condition="'$(InfinityBuildOS)' == 'Win'" />
 	</ItemGroup>
 
 </Project>

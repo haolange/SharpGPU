@@ -105,7 +105,11 @@ namespace SharpGPU
                     return new VulkanInstance(descriptor);
 
                 case ERHIBackend.DirectX12:
+#if SHARPGPU_ENABLE_DX12
                     return new Dx12Instance(descriptor);
+#else
+                    throw new NotSupportedException("DirectX12 backend is not compiled into this build.");
+#endif
 
                 default:
                     return null;

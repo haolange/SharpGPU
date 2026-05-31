@@ -244,15 +244,6 @@ namespace SharpGPU
             {
                 throw new ArgumentOutOfRangeException(nameof(queriesCount), "Metal query resolve range exceeds the query heap count.");
             }
-
-            NSRange range = new NSRange
-            {
-                location = startIndex,
-                length = queriesCount,
-            };
-            ulong byteOffset = m_ResultStrideInBytes * startIndex;
-            MTL4BufferRange destination = MTL4BufferRange.Make(m_ResultBuffer.GpuAddress + byteOffset, m_ResultStrideInBytes * queriesCount);
-            commandBuffer.EnsureMtl4CommandBuffer().ResolveCounterHeap(m_CounterHeap, range, destination, default, default);
         }
 
         public override bool ResolveData()
@@ -277,13 +268,19 @@ namespace SharpGPU
                 return false;
             }
 
-            if (m_ResultBuffer.NativePtr == IntPtr.Zero)
+            NSData data = new NSData(m_CounterHeap.ResolveCounterRange(new NSRange
+            {
+                location = 0,
+                length = (ulong)m_QueryDescriptor.Count,
+            }));
+            IntPtr bytes = data.NativePtr == IntPtr.Zero ? IntPtr.Zero : data.Bytes;
+            if (bytes == IntPtr.Zero)
             {
                 return false;
             }
 
-            IntPtr contents = m_ResultBuffer.Contents;
-            if (contents == IntPtr.Zero)
+            ulong expectedBytes = m_ResultStrideInBytes * (ulong)m_Results.Length;
+            if (data.Length < expectedBytes)
             {
                 return false;
             }
@@ -291,7 +288,7 @@ namespace SharpGPU
             double timestampToNs = m_TimestampFrequency == 0 ? 1.0 : 1_000_000_000.0 / m_TimestampFrequency;
             for (int i = 0; i < m_Results.Length; ++i)
             {
-                IntPtr entryPtr = IntPtr.Add(contents, checked((int)(m_ResultStrideInBytes * (ulong)i)));
+                IntPtr entryPtr = IntPtr.Add(bytes, checked((int)(m_ResultStrideInBytes * (ulong)i)));
                 MTL4TimestampHeapEntry entry = Marshal.PtrToStructure<MTL4TimestampHeapEntry>(entryPtr);
                 m_Results[i] = (ulong)(entry.Timestamp * timestampToNs);
             }
@@ -329,7 +326,7 @@ namespace SharpGPU
         {
             if (!m_IsTimestampQuery)
             {
-                throw new NotSupportedException("Metal currently supports native timestamp queries only; occlusion/statistics stay feature-disabled.");
+                throw new InvalidOperationException("Metal query is not a timestamp query.");
             }
 
             if (m_CounterHeap.NativePtr == IntPtr.Zero)
@@ -417,7 +414,8 @@ namespace SharpGPU
                 location = 0,
                 length = (ulong)m_QueryDescriptor.Count * 2
             });
-            if (data.NativePtr == IntPtr.Zero || data.MutableBytes == IntPtr.Zero)
+            IntPtr bytes = data.NativePtr == IntPtr.Zero ? IntPtr.Zero : data.Bytes;
+            if (bytes == IntPtr.Zero)
             {
                 return false;
             }
@@ -425,8 +423,8 @@ namespace SharpGPU
             int resultSize = Marshal.SizeOf<MTLCounterResultStatistic>();
             for (int i = 0; i < m_Results.Length; ++i)
             {
-                IntPtr beginPtr = IntPtr.Add(data.MutableBytes, checked(i * 2 * resultSize));
-                IntPtr endPtr = IntPtr.Add(data.MutableBytes, checked((i * 2 + 1) * resultSize));
+                IntPtr beginPtr = IntPtr.Add(bytes, checked(i * 2 * resultSize));
+                IntPtr endPtr = IntPtr.Add(bytes, checked((i * 2 + 1) * resultSize));
                 MTLCounterResultStatistic begin = Marshal.PtrToStructure<MTLCounterResultStatistic>(beginPtr);
                 MTLCounterResultStatistic end = Marshal.PtrToStructure<MTLCounterResultStatistic>(endPtr);
                 m_Results[i] = end.fragmentInvocations >= begin.fragmentInvocations

@@ -1,3 +1,4 @@
+#if SHARPGPU_ENABLE_DX12
 using System;
 using SharpGPU;
 using System.IO;
@@ -477,3 +478,4 @@ void WorkNode(ThreadNodeInputRecord<InputRecord> input)
         }
     }
 }
+#endif
