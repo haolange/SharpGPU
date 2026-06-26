@@ -1147,7 +1147,7 @@ namespace SharpGPU
             {
                 pResource = dstTexture.NativeResource,
                 Type = Vortice.Direct3D12.TextureCopyType.SubresourceIndex,
-                SubresourceIndex = dst.SliceCount * dstTexture.Descriptor.MipCount + dst.MipLevel
+                SubresourceIndex = dst.SliceBase * dstTexture.Descriptor.MipCount + dst.MipLevel
             };
 
             Dx12Box srcBox = new Dx12Box
@@ -1173,7 +1173,7 @@ namespace SharpGPU
             {
                 pResource = srcTexture.NativeResource,
                 Type = Vortice.Direct3D12.TextureCopyType.SubresourceIndex,
-                SubresourceIndex = src.SliceCount * srcTexture.Descriptor.MipCount + src.MipLevel
+                SubresourceIndex = src.SliceBase * srcTexture.Descriptor.MipCount + src.MipLevel
             };
 
             Dx12TextureCopyLocation dstLocation = new Dx12TextureCopyLocation
@@ -1207,14 +1207,14 @@ namespace SharpGPU
             {
                 pResource = srcTexture.NativeResource,
                 Type = Vortice.Direct3D12.TextureCopyType.SubresourceIndex,
-                SubresourceIndex = src.SliceCount * srcTexture.Descriptor.MipCount + src.MipLevel
+                SubresourceIndex = src.SliceBase * srcTexture.Descriptor.MipCount + src.MipLevel
             };
 
             Dx12TextureCopyLocation dstLocation = new Dx12TextureCopyLocation
             {
                 pResource = dstTexture.NativeResource,
                 Type = Vortice.Direct3D12.TextureCopyType.SubresourceIndex,
-                SubresourceIndex = dst.SliceCount * dstTexture.Descriptor.MipCount + dst.MipLevel
+                SubresourceIndex = dst.SliceBase * dstTexture.Descriptor.MipCount + dst.MipLevel
             };
 
             Dx12Box srcBox = new Dx12Box

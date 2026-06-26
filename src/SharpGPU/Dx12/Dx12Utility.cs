@@ -878,14 +878,17 @@ namespace SharpGPU
             {
                 for (int i = 0; i < 8; i++)
                 {
-                    blendDescription.RenderTarget[i].BlendEnable = blendDescriptorPtr[i].BlendEnable;
-                    blendDescription.RenderTarget[i].BlendOperation = ConvertToDx12BlendOp(blendDescriptorPtr[i].BlendOpColor);
-                    blendDescription.RenderTarget[i].SourceBlend = ConvertToDx12BlendMode(blendDescriptorPtr[i].SrcBlendColor);
-                    blendDescription.RenderTarget[i].DestinationBlend = ConvertToDx12BlendMode(blendDescriptorPtr[i].DstBlendColor);
-                    blendDescription.RenderTarget[i].BlendOperationAlpha = ConvertToDx12BlendOp(blendDescriptorPtr[i].BlendOpAlpha);
-                    blendDescription.RenderTarget[i].SourceBlendAlpha = ConvertToDx12BlendMode(blendDescriptorPtr[i].SrcBlendAlpha);
-                    blendDescription.RenderTarget[i].DestinationBlendAlpha = ConvertToDx12BlendMode(blendDescriptorPtr[i].DstBlendAlpha);
-                    blendDescription.RenderTarget[i].RenderTargetWriteMask = (Vortice.Direct3D12.ColorWriteEnable)ConvertToDx12WriteChannel(blendDescriptorPtr[i].ColorWriteChannel);
+                    ref readonly RHIBlendDescriptor source = ref blendDescriptorPtr[blendStateDescriptor.IndependentBlend ? i : 0];
+                    blendDescription.RenderTarget[i].BlendEnable = source.BlendEnable;
+                    blendDescription.RenderTarget[i].LogicOpEnable = false;
+                    blendDescription.RenderTarget[i].BlendOperation = ConvertToDx12BlendOp(source.BlendOpColor);
+                    blendDescription.RenderTarget[i].SourceBlend = ConvertToDx12BlendMode(source.SrcBlendColor);
+                    blendDescription.RenderTarget[i].DestinationBlend = ConvertToDx12BlendMode(source.DstBlendColor);
+                    blendDescription.RenderTarget[i].BlendOperationAlpha = ConvertToDx12BlendOp(source.BlendOpAlpha);
+                    blendDescription.RenderTarget[i].SourceBlendAlpha = ConvertToDx12BlendMode(source.SrcBlendAlpha);
+                    blendDescription.RenderTarget[i].DestinationBlendAlpha = ConvertToDx12BlendMode(source.DstBlendAlpha);
+                    blendDescription.RenderTarget[i].LogicOp = Vortice.Direct3D12.LogicOp.Noop;
+                    blendDescription.RenderTarget[i].RenderTargetWriteMask = (Vortice.Direct3D12.ColorWriteEnable)ConvertToDx12WriteChannel(source.ColorWriteChannel);
                 }
             }
             return blendDescription;
@@ -936,7 +939,7 @@ namespace SharpGPU
                 case ERHIStencilOp.Decrement:
                     return Vortice.Direct3D12.StencilOperation.Decrement;
             }
-            return 0;
+            return Vortice.Direct3D12.StencilOperation.Keep;
         }
 
         internal static Vortice.Direct3D12.ComparisonFunction ConvertToDx12Comparison(in ERHIComparisonMode comparisonMode)
@@ -972,6 +975,10 @@ namespace SharpGPU
 
         internal static Vortice.Direct3D12.DepthStencilDescription CreateDx12DepthStencilState(in RHIDepthStencilStateDescriptor depthStencilStateDescriptor)
         {
+            if (!depthStencilStateDescriptor.DepthEnable && !depthStencilStateDescriptor.StencilEnable)
+            {
+                return Vortice.Direct3D12.DepthStencilDescription.None;
+            }
             Vortice.Direct3D12.DepthStencilDescription depthStencilDescription = new Vortice.Direct3D12.DepthStencilDescription
             {
                 DepthEnable = depthStencilStateDescriptor.DepthEnable,
@@ -1686,7 +1693,7 @@ namespace SharpGPU
                     element.SemanticIndex = vertexElement.Slot;
                     element.Classification = ConvertToDx12InputSlotClass(vertexLayout.StepMode);
                     element.AlignedByteOffset = vertexElement.Offset;
-                    element.InstanceDataStepRate = vertexLayout.StepRate;
+                    element.InstanceDataStepRate = vertexLayout.StepMode == ERHIVertexStepMode.PerInstance ? vertexLayout.StepRate : 0;
 
                     ++num6;
                     ++index;

@@ -1,6 +1,7 @@
 using System;
 using SharpGPU.Mathematics;
 using System.Collections.Generic;
+using System.Text;
 using System.Runtime.InteropServices;
 
 namespace SharpGPU
@@ -283,11 +284,17 @@ namespace SharpGPU
 
         public static void DumpDeviceMessages(Dx12Device device, string scope)
         {
+            Console.Write(CollectDeviceMessages(device, scope));
+        }
+
+        public static string CollectDeviceMessages(Dx12Device device, string scope)
+        {
+            StringBuilder builder = new StringBuilder();
             Vortice.Direct3D12.Debug.ID3D12InfoQueue infoQueue = device.NativeDevice.QueryInterfaceOrNull<Vortice.Direct3D12.Debug.ID3D12InfoQueue>();
             if (infoQueue == null)
             {
-                Console.WriteLine($"{scope} Failed to query Vortice.Direct3D12.Debug.ID3D12InfoQueue.");
-                return;
+                builder.AppendLine($"{scope} Failed to query Vortice.Direct3D12.Debug.ID3D12InfoQueue.");
+                return builder.ToString();
             }
 
             try
@@ -295,8 +302,8 @@ namespace SharpGPU
                 ulong messageCount = infoQueue.NumStoredMessagesAllowedByRetrievalFilter;
                 if (messageCount == 0)
                 {
-                    Console.WriteLine($"{scope} Vortice.Direct3D12.D3D12 info queue has no stored messages.");
-                    return;
+                    builder.AppendLine($"{scope} Vortice.Direct3D12.D3D12 info queue has no stored messages.");
+                    return builder.ToString();
                 }
 
                 ulong startIndex = messageCount > MaxMessagesToDump ? messageCount - MaxMessagesToDump : 0;
@@ -304,7 +311,7 @@ namespace SharpGPU
                 {
                     Vortice.Direct3D12.Debug.Message message = infoQueue.GetMessage(messageIndex);
                     string text = message.Description ?? string.Empty;
-                    Console.WriteLine($"{scope} [Vortice.Direct3D12.D3D12 {message.Severity}] {text}");
+                    builder.AppendLine($"{scope} [Vortice.Direct3D12.D3D12 {message.Severity}] {text}");
                 }
 
                 infoQueue.ClearStoredMessages();
@@ -313,6 +320,8 @@ namespace SharpGPU
             {
                 infoQueue.Release();
             }
+
+            return builder.ToString();
         }
     }
 
@@ -716,12 +725,37 @@ namespace SharpGPU
                     }
 
                     SharpGen.Runtime.Result hResult = device.NativeDevice.CreateGraphicsPipelineState(nativeGraphicsPipelineDesc, out Vortice.Direct3D12.ID3D12PipelineState nativePipelineState);
-#if DEBUG
-                    Dx12Utility.CHECK_HR(hResult);
-#endif
+                    if (hResult.Failure || nativePipelineState == null)
+                    {
+                        string message =
+                            $"Failed to create DX12 raster pipeline state. HRESULT=0x{hResult.Code:X8}; " +
+                            $"PrimitiveTopology={descriptor.PrimitiveAssembler.PrimitiveTopology}; " +
+                            $"TopologyType={nativeGraphicsPipelineDesc.PrimitiveTopologyType}; " +
+                            $"DepthFormat={descriptor.DepthFormat}/{nativeGraphicsPipelineDesc.DepthStencilFormat}; " +
+                            $"ColorFormats={string.Join(",", descriptor.ColorFormats)}; " +
+                            $"RTVFormats={string.Join(",", nativeGraphicsPipelineDesc.RenderTargetFormats)}; " +
+                            $"Sample={nativeGraphicsPipelineDesc.SampleDescription.Count}x q{nativeGraphicsPipelineDesc.SampleDescription.Quality}; " +
+                            $"InputElements={inputElements.Length}; " +
+                            $"VS={DescribeShaderBytecode(vertexFunction)}; PS={DescribeShaderBytecode(fragmentFunction)}" +
+                            Environment.NewLine + Dx12PipelineDebug.CollectDeviceMessages(device, "[Dx12RasterPipeline]");
+                        throw new InvalidOperationException(message);
+                    }
+
                     m_NativePipelineState = nativePipelineState;
                     break;
             }
+        }
+
+        private static string DescribeShaderBytecode(Dx12Function? function)
+        {
+            if (function == null)
+            {
+                return "<null>";
+            }
+
+            ReadOnlySpan<byte> bytes = function.NativeShaderData.Span;
+            uint magic = bytes.Length >= 4 ? BitConverter.ToUInt32(bytes.Slice(0, 4)) : 0;
+            return $"entry={function.Descriptor.EntryName}, payload={function.Descriptor.PayloadKind}, bytes={bytes.Length}, magic=0x{magic:X8}";
         }
 
         protected override void Release()

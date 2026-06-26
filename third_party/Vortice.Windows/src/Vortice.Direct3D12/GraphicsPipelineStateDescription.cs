@@ -109,6 +109,7 @@ public partial class GraphicsPipelineStateDescription
 
     internal unsafe void __MarshalTo(ref __Native @ref)
     {
+        @ref = default;
         @ref.RootSignature = MarshallingHelpers.ToCallbackPtr<ID3D12RootSignature>(RootSignature);
         if (VertexShader.Length > 0)
         {
