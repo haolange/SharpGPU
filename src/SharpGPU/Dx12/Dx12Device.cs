@@ -456,6 +456,16 @@ namespace SharpGPU
             return new Dx12Tensor(this, descriptor);
         }
 
+        public override RHIMLProgram CreateMLProgram(in RHIMLProgramDescriptor descriptor)
+        {
+            if (Feature?.IsMLSupported != true)
+            {
+                throw new NotSupportedException("DX12 ML is not supported by this adapter/driver.");
+            }
+
+            return Dx12MLProgram.Create(descriptor);
+        }
+
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
         {
             if (Feature?.IsWorkgraphSupported != true)

@@ -2429,9 +2429,7 @@ namespace SharpGPU
             {
                 EmitMachineLearningUavBarriers(
                     dx12CommandBuffer,
-                    dx12BindingSet.IntermediateBuffer,
-                    dx12BindingSet.PersistentBuffer,
-                    dx12BindingSet.TemporaryBuffer);
+                    CollectIntermediateAndPersistentTemporaryBuffers(dx12BindingSet));
             }
 
             if (!dx12BindingSet.IsInitialized)
@@ -2450,9 +2448,7 @@ namespace SharpGPU
                 {
                     EmitMachineLearningUavBarriers(
                         dx12CommandBuffer,
-                        dx12BindingSet.IntermediateBuffer,
-                        dx12BindingSet.PersistentBuffer,
-                        dx12BindingSet.TemporaryBuffer);
+                        CollectIntermediateAndPersistentTemporaryBuffers(dx12BindingSet));
                 }
             }
         }
@@ -2473,9 +2469,15 @@ namespace SharpGPU
 
         private static void TransitionBoundResourcesToMachineLearning(Dx12CommandBuffer commandBuffer, Dx12MLBindingSet bindingSet)
         {
+            Dx12Buffer[] intermediates = bindingSet.IntermediateBuffers;
             int barrierCount = (bindingSet.TemporaryBuffer != null ? 1 : 0)
                 + (bindingSet.PersistentBuffer != null ? 1 : 0)
-                + 1;
+                + intermediates.Length;
+            if (barrierCount == 0)
+            {
+                return;
+            }
+
             RHIBarrier[] barriers = new RHIBarrier[barrierCount];
             int index = 0;
 
@@ -2489,8 +2491,41 @@ namespace SharpGPU
                 barriers[index++] = CreateMachineLearningBufferBarrier(bindingSet.PersistentBuffer);
             }
 
-            barriers[index++] = CreateMachineLearningBufferBarrier(bindingSet.IntermediateBuffer);
+            for (int i = 0; i < intermediates.Length; ++i)
+            {
+                barriers[index++] = CreateMachineLearningBufferBarrier(intermediates[i]);
+            }
+
             Dx12BarrierEmitter.EmitBarriers(commandBuffer, barriers);
+        }
+
+        private static Dx12Buffer?[] CollectIntermediateAndPersistentTemporaryBuffers(Dx12MLBindingSet bindingSet)
+        {
+            Dx12Buffer[] intermediates = bindingSet.IntermediateBuffers;
+            int count = intermediates.Length + (bindingSet.PersistentBuffer != null ? 1 : 0) + (bindingSet.TemporaryBuffer != null ? 1 : 0);
+            if (count == 0)
+            {
+                return Array.Empty<Dx12Buffer?>();
+            }
+
+            Dx12Buffer?[] buffers = new Dx12Buffer?[count];
+            int index = 0;
+            for (int i = 0; i < intermediates.Length; ++i)
+            {
+                buffers[index++] = intermediates[i];
+            }
+
+            if (bindingSet.PersistentBuffer != null)
+            {
+                buffers[index++] = bindingSet.PersistentBuffer;
+            }
+
+            if (bindingSet.TemporaryBuffer != null)
+            {
+                buffers[index++] = bindingSet.TemporaryBuffer;
+            }
+
+            return buffers;
         }
 
         private static RHIBarrier CreateMachineLearningBufferBarrier(RHIBuffer buffer)

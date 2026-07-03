@@ -1119,7 +1119,7 @@ namespace SharpGPU
                 m_InitializerBindingProperties = m_OperatorInitializer.GetBindingProperties();
                 m_RequiredDescriptorCount = Math.Max(m_RequiredDescriptorCount, m_InitializerBindingProperties.RequiredDescriptorCount);
                 m_TemporaryResourceSize = Math.Max(m_TemporaryResourceSize, m_InitializerBindingProperties.TemporaryResourceSize);
-                m_ProgramIntermediateTensorSize = RHIMLHelpers.CalculateMinimumByteLength(m_Program.IntermediateTensorDescriptor);
+                m_ProgramIntermediateTensorSize = CalculateProgramIntermediateTensorSize(m_Program);
             }
             catch
             {
@@ -1146,6 +1146,18 @@ namespace SharpGPU
         internal uint GetRequiredDescriptorCount(int stageIndex)
         {
             return m_CompiledBindingProperties[stageIndex].RequiredDescriptorCount;
+        }
+
+        private static ulong CalculateProgramIntermediateTensorSize(Dx12MLProgram program)
+        {
+            ulong total = 0;
+            RHIMLTensorDescriptor[] intermediates = program.IntermediateTensorDescriptors;
+            for (int i = 0; i < intermediates.Length; ++i)
+            {
+                total += RHIMLHelpers.CalculateMinimumByteLength(intermediates[i]);
+            }
+
+            return total;
         }
 
         protected override void Release()

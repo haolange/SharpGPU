@@ -835,6 +835,14 @@ namespace SharpGPU
             throw new NotSupportedException("Vulkan ML tensors are not supported in SharpGPU v1.");
         }
 
+        public override RHIMLProgram CreateMLProgram(in RHIMLProgramDescriptor descriptor)
+        {
+            throw new NotSupportedException(
+                "Vulkan ML program construction is not supported in SharpGPU v1. " +
+                "The backend-neutral op-sequence program builder (ADR-0028) is currently implemented on DX12/DirectML only; " +
+                "a Vulkan ML execution path is an open question of RFC-0003.");
+        }
+
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
         {
             throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");

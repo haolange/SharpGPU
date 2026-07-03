@@ -231,6 +231,19 @@ namespace SharpGPU
             return new MetalTensor(this, descriptor);
         }
 
+        public override RHIMLProgram CreateMLProgram(in RHIMLProgramDescriptor descriptor)
+        {
+            // Metal 4 ML is function/shader-based, not operator-description-based: a MetalMLProgram
+            // wraps a compiled MetalFunction, not an op sequence. The backend-neutral op-sequence
+            // program builder (ADR-0028) is therefore implemented on DX12/DirectML in MVP3; a Metal
+            // lowering that emits a Metal ML kernel per op (or a fused kernel) is the MVP4 Metal
+            // backend's scope. Failing loudly keeps the contract honest instead of silently no-op'ing.
+            throw new NotSupportedException(
+                "Metal ML program construction from an op sequence is not implemented yet. " +
+                "Metal 4 ML is function-based; the op-sequence -> Metal ML kernel lowering is scoped to the SharpNeural MVP4 Metal backend (RFC-0010). " +
+                "TODO(UNVERIFIED): macOS ARM64 Metal 4 ML lowering.");
+        }
+
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
         {
             throw new NotSupportedException("WorkGraph is not supported on the Metal backend.");

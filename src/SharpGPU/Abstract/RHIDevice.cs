@@ -214,6 +214,17 @@ namespace SharpGPU
         public abstract RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor);
         public abstract RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor);
 
+        /// <summary>
+        /// Builds an <see cref="RHIMLProgram"/> from a backend-neutral program descriptor (an ordered
+        /// op sequence). This is the constructible counterpart to the existing
+        /// <see cref="CreateMLPipeline"/>/<see cref="CreateMLBindingSet"/>/<see cref="CreateTensor"/>
+        /// execution surface: it lets a graph builder above the RHI lower a subgraph without taking a
+        /// hard compile-time dependency on any backend's private operator-description types. Backends
+        /// translate each <see cref="RHIMLOpDescriptor"/> into their native operator description
+        /// (DirectML on DX12, Metal 4 ML on Metal). See RFC-0003 §3.3 / ADR-0028.
+        /// </summary>
+        public abstract RHIMLProgram CreateMLProgram(in RHIMLProgramDescriptor descriptor);
+
         public virtual bool TryToggleGpuCapture(string savedPath, string reason)
         {
             return false;

@@ -11,10 +11,150 @@ public sealed class SharpGPUDirectMLContractTests
 {
     private const float Epsilon = 1e-5f;
 
-    private static MethodInfo CreateGemmAddReluProgramMethod => typeof(RHIInstance).Assembly
+        private static MethodInfo CreateGemmAddReluProgramMethod => typeof(RHIInstance).Assembly
         .GetType("SharpGPU.Dx12MLProgram", throwOnError: true)!
         .GetMethod("CreateGemmAddRelu", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException("Failed to locate Dx12MLProgram.CreateGemmAddRelu.");
+
+        [Fact]
+        public void Dx12_DirectML_GenericBuilder_AddSigmoid_EndToEnd_ShouldMatchCpuReference()
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return;
+            }
+
+            using DirectMLTestContext? context = DirectMLTestContext.TryCreate();
+            if (context == null)
+            {
+                return;
+            }
+
+            // A 2-op program built via the generic descriptor path (ADR-0028): ElementWiseAdd(a,b)
+            // -> intermediate -> Sigmoid -> output. This verifies that CreateMLProgram + the
+            // N-stage pipeline/bindingset/encoder machinery work for an arbitrary op sequence, not
+            // just the GemmAddRelu convenience factory.
+            uint[] dims = { 1, 1, 2, 3 };
+            float[] a = { 0.5f, -1.0f, 2.0f, -3.0f, 1.0f, 0.0f };
+            float[] b = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+            float[] expected = new float[a.Length];
+            for (int i = 0; i < a.Length; ++i)
+            {
+                expected[i] = 1.0f / (1.0f + MathF.Exp(-(a[i] + b[i])));
+            }
+
+            RHIMLTensorDescriptor aLayout = CreateTensorDescriptor(dims, ERHITensorUsage.MachineLearning | ERHITensorUsage.Read);
+            RHIMLTensorDescriptor bLayout = CreateTensorDescriptor(dims, ERHITensorUsage.MachineLearning | ERHITensorUsage.Read);
+            RHIMLTensorDescriptor outLayout = CreateTensorDescriptor(dims, ERHITensorUsage.MachineLearning | ERHITensorUsage.Write);
+            RHIMLTensorDescriptor intermediateLayout = new RHIMLTensorDescriptor
+            {
+                DataType = ERHIMLDataType.Float32,
+                UsageFlag = ERHITensorUsage.MachineLearning | ERHITensorUsage.Read | ERHITensorUsage.Write,
+                StorageMode = ERHIStorageMode.GPULocal,
+                Dimensions = dims,
+                Strides = null,
+                BackingBuffer = null,
+                BackingBufferOffset = 0,
+            };
+
+            RHIMLOpDescriptor addOp = RHIMLOpDescriptor.Create(
+                ERHIMLOpKind.ElementWiseAdd,
+                new[] { RHIMLOpTensorRef.FromInput(0), RHIMLOpTensorRef.FromInput(1) },
+                intermediateLayout,
+                "Add");
+            RHIMLOpDescriptor sigmoidOp = RHIMLOpDescriptor.Create(
+                ERHIMLOpKind.ActivationSigmoid,
+                new[] { RHIMLOpTensorRef.FromOpOutput(0) },
+                outLayout,
+                "Sigmoid");
+
+            RHIMLProgramDescriptor programDesc = RHIMLProgramDescriptor.Create(
+                "DirectML.AddSigmoid",
+                new[] { aLayout, bLayout },
+                new[] { outLayout },
+                new[] { addOp, sigmoidOp });
+
+            RHIMLProgram program = context.Device.CreateMLProgram(programDesc);
+            RHIMLPipeline pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
+            {
+                Name = "DirectML.AddSigmoid.Pipeline",
+                Program = program,
+            });
+
+            ulong byteSize = CalculateTensorByteLength(dims);
+            RHIBuffer uploadA = CreateUploadBuffer(context.Device, checked((int)byteSize));
+            RHIBuffer uploadB = CreateUploadBuffer(context.Device, checked((int)byteSize));
+            RHIBuffer inputABacking = CreateTensorBackingBuffer(context.Device, checked((int)byteSize));
+            RHIBuffer inputBBacking = CreateTensorBackingBuffer(context.Device, checked((int)byteSize));
+            RHIBuffer outputBacking = CreateTensorBackingBuffer(context.Device, checked((int)byteSize));
+            RHITensor inputA = context.Device.CreateTensor(CreateTensorDescriptor(dims, ERHITensorUsage.MachineLearning | ERHITensorUsage.Read, inputABacking));
+            RHITensor inputB = context.Device.CreateTensor(CreateTensorDescriptor(dims, ERHITensorUsage.MachineLearning | ERHITensorUsage.Read, inputBBacking));
+            RHITensor output = context.Device.CreateTensor(CreateTensorDescriptor(dims, ERHITensorUsage.MachineLearning | ERHITensorUsage.Write, outputBacking));
+            RHIBuffer readback = CreateReadbackBuffer(context.Device, checked((int)byteSize));
+
+            RHIMLBindingSet bindingSet = context.Device.CreateMLBindingSet(new RHIMLBindingSetDescriptor
+            {
+                Pipeline = pipeline,
+                Inputs = new[] { inputA, inputB },
+                Outputs = new[] { output },
+            });
+
+            UploadFloats(uploadA, a);
+            UploadFloats(uploadB, b);
+
+            using RHICommandBuffer commandBuffer = context.CommandQueue.CreateCommandBuffer();
+            commandBuffer.Begin("DirectML.AddSigmoid");
+            RHITransferEncoder upload = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor { Name = "Upload" });
+            upload.Barriers(new[]
+            {
+                RHIBarrier.Buffer(inputABacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+                RHIBarrier.Buffer(inputBBacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+            });
+            upload.CopyBufferToBuffer(uploadA, 0, inputABacking, 0, inputABacking.Descriptor.ByteSize);
+            upload.CopyBufferToBuffer(uploadB, 0, inputBBacking, 0, inputBBacking.Descriptor.ByteSize);
+            upload.Barriers(new[]
+            {
+                RHIBarrier.Buffer(inputABacking, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
+                RHIBarrier.Buffer(inputBBacking, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
+                RHIBarrier.Buffer(outputBacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.MachineLearning, ERHIAccessMask.None, ERHIAccessMask.ShaderWrite),
+            });
+            commandBuffer.EndTransferPass();
+
+            RHIMLEncoder ml = commandBuffer.BeginMLPass(new RHIMLPassDescriptor { Name = "AddSigmoid" });
+            ml.SetPipeline(pipeline);
+            ml.SetBindingSet(bindingSet);
+            ml.Dispatch();
+            commandBuffer.EndMLPass();
+
+            RHITransferEncoder download = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor { Name = "Readback" });
+            download.Barriers(new[]
+            {
+                RHIBarrier.Buffer(outputBacking, RHIBufferRange.Whole(), ERHISyncStageMask.MachineLearning, ERHISyncStageMask.Transfer, ERHIAccessMask.ShaderWrite, ERHIAccessMask.TransferRead),
+            });
+            download.CopyBufferToBuffer(outputBacking, 0, readback, 0, readback.Descriptor.ByteSize);
+            commandBuffer.EndTransferPass();
+            commandBuffer.End();
+
+            context.Fence.Reset();
+            context.CommandQueue.Submit(commandBuffer, context.Fence, null!, null!);
+            context.Fence.Wait();
+
+            float[] actual = ReadBackFloats(readback, expected.Length);
+            AssertFloatArraysEqual(expected, actual);
+
+            readback.Dispose();
+            output.Dispose();
+            inputB.Dispose();
+            inputA.Dispose();
+            outputBacking.Dispose();
+            inputBBacking.Dispose();
+            inputABacking.Dispose();
+            uploadB.Dispose();
+            uploadA.Dispose();
+            bindingSet.Dispose();
+            pipeline.Dispose();
+            program.Dispose();
+        }
 
     [Fact]
     public void Dx12_DirectML_GemmAddRelu_EndToEnd_ShouldMatchCpuReference()

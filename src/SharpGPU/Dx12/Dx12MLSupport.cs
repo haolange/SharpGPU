@@ -1,11 +1,17 @@
 using System;
+using System.Collections.Generic;
 using Vortice.DirectML;
 
 namespace SharpGPU
 {
     internal enum Dx12MLProgramKind : byte
     {
+        // Legacy single-purpose kind retained for the CreateGemmAddRelu convenience factory's
+        // diagnostics. Descriptor-driven programs (Create(RHIMLProgramDescriptor)) carry the op
+        // sequence directly and do not need a discriminating kind.
         GeneralMatrixMultiplyAddRelu = 0,
+        // Descriptor-driven op sequence (ADR-0028). The op list lives on the program descriptor.
+        OpSequence = 1,
     }
 
     internal static class Dx12MLUtilities
@@ -117,40 +123,343 @@ namespace SharpGPU
                 throw new InvalidOperationException("DX12 ML GEMM+Add+ReLU requires A/B/C/Output tensors to share the same data type.");
             }
         }
+
+        /// <summary>
+        /// Builds the DirectML <see cref="OperatorDescription"/> for a single RHI ML op, using the
+        /// provided resolved tensor descriptions (already mapped from program inputs / earlier op
+        /// outputs). Returns null when the op kind is not mapped to a DirectML operator; the caller
+        /// surfaces that as an explicit unsupported-op error.
+        /// </summary>
+        internal static OperatorDescription? CreateOperatorDescription(
+            in RHIMLOpDescriptor op,
+            TensorDescription[] resolvedInputs,
+            TensorDescription outputTensor)
+        {
+            switch (op.Kind)
+            {
+                case ERHIMLOpKind.ElementWiseAdd:
+                    return new ElementWiseAddOperatorDescription
+                    {
+                        ATensor = resolvedInputs[0],
+                        BTensor = resolvedInputs[1],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ElementWiseSubtract:
+                    return new ElementWiseSubtractOperatorDescription
+                    {
+                        ATensor = resolvedInputs[0],
+                        BTensor = resolvedInputs[1],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ElementWiseMultiply:
+                    return new ElementWiseMultiplyOperatorDescription
+                    {
+                        ATensor = resolvedInputs[0],
+                        BTensor = resolvedInputs[1],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ElementWiseDivide:
+                    return new ElementWiseDivideOperatorDescription
+                    {
+                        ATensor = resolvedInputs[0],
+                        BTensor = resolvedInputs[1],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ElementWiseNegate:
+                    return new ElementWiseNegateOperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ActivationRelu:
+                    return new ActivationReluOperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ActivationSigmoid:
+                    return new ActivationSigmoidOperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ActivationTanh:
+                    return new ActivationTanhOperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.MatrixMultiply:
+                    return new GeneralMatrixMultiplyOperatorDescription
+                    {
+                        ATensor = resolvedInputs[0],
+                        BTensor = resolvedInputs[1],
+                        CTensor = null,
+                        OutputTensor = outputTensor,
+                        TransformA = MapMatrixTransform(op.TransformA),
+                        TransformB = MapMatrixTransform(op.TransformB),
+                        Alpha = op.Alpha,
+                        Beta = 0.0f,
+                        FusedActivation = BuildFusedActivation(op.FusedActivation),
+                    };
+                case ERHIMLOpKind.GeneralMatrixMultiply:
+                    return new GeneralMatrixMultiplyOperatorDescription
+                    {
+                        ATensor = resolvedInputs[0],
+                        BTensor = resolvedInputs[1],
+                        CTensor = resolvedInputs.Length >= 3 ? resolvedInputs[2] : null,
+                        OutputTensor = outputTensor,
+                        TransformA = MapMatrixTransform(op.TransformA),
+                        TransformB = MapMatrixTransform(op.TransformB),
+                        Alpha = op.Alpha,
+                        Beta = op.Beta,
+                        FusedActivation = BuildFusedActivation(op.FusedActivation),
+                    };
+                case ERHIMLOpKind.ActivationSoftmax:
+                    return new ActivationSoftmaxOperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.MeanVarianceNormalization:
+                    return new MeanVarianceNormalization1OperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        ScaleTensor = resolvedInputs.Length >= 2 ? resolvedInputs[1] : null,
+                        BiasTensor = resolvedInputs.Length >= 3 ? resolvedInputs[2] : null,
+                        OutputTensor = outputTensor,
+                        Axes = op.Axes ?? new[] { -1 },
+                        NormalizeVariance = true,
+                        Epsilon = op.Epsilon,
+                        FusedActivation = null,
+                    };
+                case ERHIMLOpKind.ReduceMean:
+                    return new ReduceOperatorDescription
+                    {
+                        Function = ReduceFunction.Average,
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                        Axes = op.Axes ?? new[] { -1 },
+                    };
+                case ERHIMLOpKind.Reshape:
+                case ERHIMLOpKind.Transpose:
+                case ERHIMLOpKind.ElementWiseIdentity:
+                    // DirectML has no dedicated reshape/transpose operator: both are expressed as an
+                    // element-wise identity copy with the permuted/reshaped layout encoded on the
+                    // output tensor descriptor (sizes + strides). The outputTensor carries the
+                    // target shape (reshape) or the permuted strides (transpose).
+                    return new ElementWiseIdentityOperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                        ScaleBias = null,
+                    };
+                default:
+                    return null;
+            }
+        }
+
+        internal static OperatorDescription? BuildFusedActivation(ERHIMLFusedActivation activation)
+        {
+            return activation switch
+            {
+                ERHIMLFusedActivation.None => null,
+                ERHIMLFusedActivation.Relu => new ActivationReluOperatorDescription(),
+                ERHIMLFusedActivation.Sigmoid => new ActivationSigmoidOperatorDescription(),
+                ERHIMLFusedActivation.Tanh => new ActivationTanhOperatorDescription(),
+                _ => null,
+            };
+        }
+
+        internal static MatrixTransform MapMatrixTransform(ERHIMLMatrixTransform transform)
+        {
+            return transform switch
+            {
+                ERHIMLMatrixTransform.None => MatrixTransform.None,
+                ERHIMLMatrixTransform.Transpose => MatrixTransform.Transpose,
+                _ => MatrixTransform.None,
+            };
+        }
     }
 
     internal sealed class Dx12MLProgram : RHIMLProgram
     {
         internal Dx12MLProgramKind Kind { get; }
         internal RHIMLTensorBindingInfo[] BindingInfos { get; }
-        internal RHIMLTensorDescriptor IntermediateTensorDescriptor => m_IntermediateTensorDescriptor;
+        internal RHIMLTensorDescriptor[] IntermediateTensorDescriptors => m_IntermediateTensorDescriptors;
+        internal RHIMLOpDescriptor[] Ops => m_Ops;
+        internal RHIMLTensorDescriptor[] ProgramInputs => m_ProgramInputs;
+        internal RHIMLTensorDescriptor[] ProgramOutputs => m_ProgramOutputs;
 
-        private readonly RHIMLTensorDescriptor m_ATensorDescriptor;
-        private readonly RHIMLTensorDescriptor m_BTensorDescriptor;
-        private readonly RHIMLTensorDescriptor m_CTensorDescriptor;
-        private readonly RHIMLTensorDescriptor m_IntermediateTensorDescriptor;
-        private readonly RHIMLTensorDescriptor m_OutputTensorDescriptor;
+        private readonly RHIMLTensorDescriptor[] m_ProgramInputs;
+        private readonly RHIMLTensorDescriptor[] m_ProgramOutputs;
+        private readonly RHIMLTensorDescriptor[] m_IntermediateTensorDescriptors;
+        private readonly RHIMLOpDescriptor[] m_Ops;
+
+        // Legacy single-intermediate accessor for the GemmAddRelu convenience factory's
+        // diagnostics. Descriptor-driven programs read their intermediate list via the array above.
+        internal RHIMLTensorDescriptor IntermediateTensorDescriptor
+        {
+            get
+            {
+                if (m_IntermediateTensorDescriptors.Length == 0)
+                {
+                    throw new InvalidOperationException("DX12 ML program has no intermediate tensor.");
+                }
+
+                return m_IntermediateTensorDescriptors[0];
+            }
+        }
 
         private Dx12MLProgram(
             string name,
             Dx12MLProgramKind kind,
-            in RHIMLTensorDescriptor aDescriptor,
-            in RHIMLTensorDescriptor bDescriptor,
-            in RHIMLTensorDescriptor cDescriptor,
-            in RHIMLTensorDescriptor intermediateDescriptor,
-            in RHIMLTensorDescriptor outputDescriptor,
+            RHIMLTensorDescriptor[] programInputs,
+            RHIMLTensorDescriptor[] programOutputs,
+            RHIMLTensorDescriptor[] intermediateDescriptors,
+            RHIMLOpDescriptor[] ops,
             RHIMLTensorBindingInfo[] bindingInfos)
         {
             m_Name = name;
             Kind = kind;
-            m_ATensorDescriptor = RHIMLHelpers.CloneLayoutDescriptor(aDescriptor);
-            m_BTensorDescriptor = RHIMLHelpers.CloneLayoutDescriptor(bDescriptor);
-            m_CTensorDescriptor = RHIMLHelpers.CloneLayoutDescriptor(cDescriptor);
-            m_IntermediateTensorDescriptor = RHIMLHelpers.CloneLayoutDescriptor(intermediateDescriptor);
-            m_OutputTensorDescriptor = RHIMLHelpers.CloneLayoutDescriptor(outputDescriptor);
+            m_ProgramInputs = programInputs;
+            m_ProgramOutputs = programOutputs;
+            m_IntermediateTensorDescriptors = intermediateDescriptors;
+            m_Ops = ops;
             BindingInfos = bindingInfos ?? Array.Empty<RHIMLTensorBindingInfo>();
         }
 
+        /// <summary>
+        /// Descriptor-driven constructor: the canonical entry point for general subgraph lowering
+        /// (ADR-0028). Each op's output that is not a program output becomes an intermediate
+        /// tensor; program outputs are surfaced as the binding set's output slots. Binding infos
+        /// advertise the program's input and output slots so that <see cref="Dx12MLPipeline"/> and
+        /// <see cref="Dx12MLBindingSet"/> can wire stages identically to the legacy 2-stage path.
+        /// </summary>
+        internal static Dx12MLProgram Create(in RHIMLProgramDescriptor descriptor)
+        {
+            if (descriptor.Ops.Length == 0)
+            {
+                throw new InvalidOperationException("DX12 ML program descriptor must contain at least one op.");
+            }
+
+            RHIMLTensorDescriptor[] programInputs = CloneDescriptors(descriptor.Inputs);
+            RHIMLOpDescriptor[] ops = new RHIMLOpDescriptor[descriptor.Ops.Length];
+            List<RHIMLTensorDescriptor> intermediates = new List<RHIMLTensorDescriptor>();
+
+            // Determine which op outputs are program outputs (by matching shape/dtype to the
+            // declared program outputs, in declared order) and which are intermediates. A program
+            // output is matched to the op that produces it by position: the k-th program output is
+            // the output of the op referenced by no-one-but-the-output-binding. Because the
+            // descriptor is a linear DAG, we mark an op output as a program output when its op is
+            // the last producer of that logical output; the simpler, contract-faithful rule used
+            // here: op outputs that are never consumed by a later op are program outputs (in op
+            // order), and their count must equal descriptor.Outputs.Length.
+            bool[] isProgramOutput = new bool[ops.Length];
+            for (int i = 0; i < descriptor.Ops.Length; ++i)
+            {
+                isProgramOutput[i] = true;
+            }
+
+            for (int i = 0; i < descriptor.Ops.Length; ++i)
+            {
+                foreach (RHIMLOpTensorRef inputRef in descriptor.Ops[i].Inputs)
+                {
+                    if (inputRef.IsOpOutput && inputRef.OpIndex < isProgramOutput.Length)
+                    {
+                        isProgramOutput[inputRef.OpIndex] = false;
+                    }
+                }
+            }
+
+            int programOutputCount = 0;
+            for (int i = 0; i < isProgramOutput.Length; ++i)
+            {
+                if (isProgramOutput[i])
+                {
+                    ++programOutputCount;
+                }
+            }
+
+            if (programOutputCount != descriptor.Outputs.Length)
+            {
+                throw new InvalidOperationException(
+                    $"DX12 ML program descriptor output count mismatch: {programOutputCount} op(s) produce unconsumed outputs but {descriptor.Outputs.Length} program output(s) were declared.");
+            }
+
+            // Build per-op output descriptors: program outputs use the declared output descriptors
+            // (in op order over unconsumed ops); intermediate outputs get a GPULocal descriptor with
+            // the op's output shape. The op's output descriptor already carries the shape from the
+            // graph builder.
+            int outputMatchIndex = 0;
+            RHIMLTensorDescriptor[] opOutputDescriptors = new RHIMLTensorDescriptor[ops.Length];
+            for (int i = 0; i < descriptor.Ops.Length; ++i)
+            {
+                ref readonly RHIMLOpDescriptor srcOp = ref descriptor.Ops[i];
+                if (isProgramOutput[i])
+                {
+                    opOutputDescriptors[i] = RHIMLHelpers.CloneLayoutDescriptor(descriptor.Outputs[outputMatchIndex]);
+                    ++outputMatchIndex;
+                }
+                else
+                {
+                    RHIMLTensorDescriptor intermediate = RHIMLHelpers.CloneLayoutDescriptor(srcOp.Output);
+                    intermediate.StorageMode = ERHIStorageMode.GPULocal;
+                    intermediate.BackingBuffer = null;
+                    intermediate.BackingBufferOffset = 0;
+                    intermediate.UsageFlag = ERHITensorUsage.MachineLearning | ERHITensorUsage.Read | ERHITensorUsage.Write;
+                    opOutputDescriptors[i] = intermediate;
+                    intermediates.Add(intermediate);
+                }
+
+                ops[i] = srcOp;
+            }
+
+            // Binding infos: program inputs first (Input kind), then program outputs (Output kind).
+            // Intermediate tensors are owned by the binding set, not advertised as program bindings.
+            List<RHIMLTensorBindingInfo> bindingInfos = new List<RHIMLTensorBindingInfo>();
+            for (int i = 0; i < programInputs.Length; ++i)
+            {
+                bindingInfos.Add(new RHIMLTensorBindingInfo
+                {
+                    Name = $"Input{i}",
+                    Index = (uint)i,
+                    Kind = ERHIMLTensorBindingKind.Input,
+                    Descriptor = RHIMLHelpers.CloneLayoutDescriptor(programInputs[i]),
+                });
+            }
+
+            for (int i = 0; i < descriptor.Outputs.Length; ++i)
+            {
+                bindingInfos.Add(new RHIMLTensorBindingInfo
+                {
+                    Name = $"Output{i}",
+                    Index = (uint)i,
+                    Kind = ERHIMLTensorBindingKind.Output,
+                    Descriptor = RHIMLHelpers.CloneLayoutDescriptor(descriptor.Outputs[i]),
+                });
+            }
+
+            return new Dx12MLProgram(
+                descriptor.Name,
+                Dx12MLProgramKind.OpSequence,
+                programInputs,
+                CloneDescriptors(descriptor.Outputs),
+                intermediates.ToArray(),
+                ops,
+                bindingInfos.ToArray());
+        }
+
+        /// <summary>
+        /// Convenience factory for the canonical <c>alpha=1, beta=1, no-transpose GEMM + ReLU</c>
+        /// program (RFC-0003 §4.1 v1 reference). Retained as a thin sugar over the descriptor-driven
+        /// <see cref="Create(in RHIMLProgramDescriptor)"/> path so that existing callers (the
+        /// DirectML conformance and rendering tests) compile and pass unchanged while indirectly
+        /// exercising the general op-sequence machinery. The signature is preserved exactly. The
+        /// program is a 2-op sequence (GEMM -> intermediate -> ReLU -> output) mirroring the original
+        /// hand-written <c>CreateOperatorDescriptions</c> so that the compiled-operator topology and
+        /// binding shape are byte-for-byte equivalent to the pre-refactor program.
+        /// </summary>
         internal static Dx12MLProgram CreateGemmAddRelu(
             string name,
             in RHIMLTensorDescriptor aDescriptor,
@@ -160,7 +469,16 @@ namespace SharpGPU
         {
             Dx12MLUtilities.ValidateGemmAddReluLayouts(aDescriptor, bDescriptor, cDescriptor, outputDescriptor);
 
-            RHIMLTensorDescriptor intermediateDescriptor = new RHIMLTensorDescriptor
+            RHIMLTensorDescriptor[] inputs =
+            {
+                RHIMLHelpers.CloneLayoutDescriptor(aDescriptor),
+                RHIMLHelpers.CloneLayoutDescriptor(bDescriptor),
+                RHIMLHelpers.CloneLayoutDescriptor(cDescriptor),
+            };
+            RHIMLTensorDescriptor[] outputs = { RHIMLHelpers.CloneLayoutDescriptor(outputDescriptor) };
+
+            // Intermediate tensor between GEMM and ReLU — same shape/dtype as the output, GPULocal.
+            RHIMLTensorDescriptor intermediate = new RHIMLTensorDescriptor
             {
                 DataType = outputDescriptor.DataType,
                 UsageFlag = ERHITensorUsage.MachineLearning | ERHITensorUsage.Read | ERHITensorUsage.Write,
@@ -171,47 +489,32 @@ namespace SharpGPU
                 BackingBufferOffset = 0,
             };
 
-            RHIMLTensorBindingInfo[] bindingInfos =
-            {
-                new RHIMLTensorBindingInfo
+            // Op 0: GEMM (alpha=1, beta=1, no transpose, no fused activation) writes A*B + C into the
+            // intermediate tensor. Op 1: ReLU reads the intermediate and writes the program output.
+            RHIMLOpDescriptor gemmOp = RHIMLOpDescriptor.Create(
+                ERHIMLOpKind.GeneralMatrixMultiply,
+                new[]
                 {
-                    Name = "A",
-                    Index = 0,
-                    Kind = ERHIMLTensorBindingKind.Input,
-                    Descriptor = RHIMLHelpers.CloneLayoutDescriptor(aDescriptor),
+                    RHIMLOpTensorRef.FromInput(0),
+                    RHIMLOpTensorRef.FromInput(1),
+                    RHIMLOpTensorRef.FromInput(2),
                 },
-                new RHIMLTensorBindingInfo
-                {
-                    Name = "B",
-                    Index = 1,
-                    Kind = ERHIMLTensorBindingKind.Input,
-                    Descriptor = RHIMLHelpers.CloneLayoutDescriptor(bDescriptor),
-                },
-                new RHIMLTensorBindingInfo
-                {
-                    Name = "C",
-                    Index = 2,
-                    Kind = ERHIMLTensorBindingKind.Input,
-                    Descriptor = RHIMLHelpers.CloneLayoutDescriptor(cDescriptor),
-                },
-                new RHIMLTensorBindingInfo
-                {
-                    Name = "Output",
-                    Index = 0,
-                    Kind = ERHIMLTensorBindingKind.Output,
-                    Descriptor = RHIMLHelpers.CloneLayoutDescriptor(outputDescriptor),
-                },
-            };
+                intermediate,
+                name + ".Gemm");
+            gemmOp.Alpha = 1.0f;
+            gemmOp.Beta = 1.0f;
+            gemmOp.TransformA = ERHIMLMatrixTransform.None;
+            gemmOp.TransformB = ERHIMLMatrixTransform.None;
+            gemmOp.FusedActivation = ERHIMLFusedActivation.None;
 
-            return new Dx12MLProgram(
-                name,
-                Dx12MLProgramKind.GeneralMatrixMultiplyAddRelu,
-                aDescriptor,
-                bDescriptor,
-                cDescriptor,
-                intermediateDescriptor,
-                outputDescriptor,
-                bindingInfos);
+            RHIMLOpDescriptor reluOp = RHIMLOpDescriptor.Create(
+                ERHIMLOpKind.ActivationRelu,
+                new[] { RHIMLOpTensorRef.FromOpOutput(0) },
+                RHIMLHelpers.CloneLayoutDescriptor(outputDescriptor),
+                name + ".Relu");
+
+            RHIMLProgramDescriptor descriptor = RHIMLProgramDescriptor.Create(name, inputs, outputs, new[] { gemmOp, reluOp });
+            return Create(descriptor);
         }
 
         internal void ValidateDeviceSupport(Dx12Device device)
@@ -221,50 +524,197 @@ namespace SharpGPU
                 throw new NotSupportedException("DirectML is unavailable on this DX12 device.");
             }
 
-            TensorDataType[] tensorDataTypes =
+            HashSet<TensorDataType> seenTypes = new HashSet<TensorDataType>();
+            for (int i = 0; i < m_ProgramInputs.Length; ++i)
             {
-                Dx12MLUtilities.ConvertToDirectMLDataType(m_ATensorDescriptor.DataType),
-                Dx12MLUtilities.ConvertToDirectMLDataType(m_BTensorDescriptor.DataType),
-                Dx12MLUtilities.ConvertToDirectMLDataType(m_CTensorDescriptor.DataType),
-                Dx12MLUtilities.ConvertToDirectMLDataType(m_IntermediateTensorDescriptor.DataType),
-                Dx12MLUtilities.ConvertToDirectMLDataType(m_OutputTensorDescriptor.DataType),
-            };
+                seenTypes.Add(Dx12MLUtilities.ConvertToDirectMLDataType(m_ProgramInputs[i].DataType));
+            }
 
-            for (int i = 0; i < tensorDataTypes.Length; ++i)
+            for (int i = 0; i < m_ProgramOutputs.Length; ++i)
             {
-                if (!device.DirectMLDevice.CheckTensorDataTypeSupport(tensorDataTypes[i]))
+                seenTypes.Add(Dx12MLUtilities.ConvertToDirectMLDataType(m_ProgramOutputs[i].DataType));
+            }
+
+            for (int i = 0; i < m_IntermediateTensorDescriptors.Length; ++i)
+            {
+                seenTypes.Add(Dx12MLUtilities.ConvertToDirectMLDataType(m_IntermediateTensorDescriptors[i].DataType));
+            }
+
+            foreach (TensorDataType tensorDataType in seenTypes)
+            {
+                if (!device.DirectMLDevice.CheckTensorDataTypeSupport(tensorDataType))
                 {
-                    throw new NotSupportedException($"DirectML tensor data type '{tensorDataTypes[i]}' is not supported by the current DX12 device.");
+                    throw new NotSupportedException($"DirectML tensor data type '{tensorDataType}' is not supported by the current DX12 device.");
                 }
             }
         }
 
         internal OperatorDescription[] CreateOperatorDescriptions()
         {
-            GeneralMatrixMultiplyOperatorDescription gemmDescription = new GeneralMatrixMultiplyOperatorDescription
+            OperatorDescription[] descriptions = new OperatorDescription[m_Ops.Length];
+            for (int i = 0; i < m_Ops.Length; ++i)
             {
-                ATensor = Dx12MLUtilities.CreateTensorDescription(m_ATensorDescriptor),
-                BTensor = Dx12MLUtilities.CreateTensorDescription(m_BTensorDescriptor),
-                CTensor = Dx12MLUtilities.CreateTensorDescription(m_CTensorDescriptor),
-                OutputTensor = Dx12MLUtilities.CreateTensorDescription(m_IntermediateTensorDescriptor),
-                TransformA = MatrixTransform.None,
-                TransformB = MatrixTransform.None,
-                Alpha = 1.0f,
-                Beta = 1.0f,
-                FusedActivation = null,
-            };
+                ref readonly RHIMLOpDescriptor op = ref m_Ops[i];
+                TensorDescription[] resolvedInputs = ResolveOpInputs(op);
+                TensorDescription outputTensor = Dx12MLUtilities.CreateTensorDescription(GetOpOutputDescriptor(i));
+                OperatorDescription? description = Dx12MLUtilities.CreateOperatorDescription(op, resolvedInputs, outputTensor);
+                if (!description.HasValue)
+                {
+                    throw new NotSupportedException($"DirectML does not support RHI ML op kind '{op.Kind}' (op '{op.Name}').");
+                }
 
-            ActivationReluOperatorDescription reluDescription = new ActivationReluOperatorDescription
-            {
-                InputTensor = Dx12MLUtilities.CreateTensorDescription(m_IntermediateTensorDescriptor),
-                OutputTensor = Dx12MLUtilities.CreateTensorDescription(m_OutputTensorDescriptor),
-            };
+                descriptions[i] = description.Value;
+            }
 
-            return new OperatorDescription[]
+            return descriptions;
+        }
+
+        internal RHIMLTensorDescriptor GetOpOutputDescriptor(int opIndex)
+        {
+            // A program output if unconsumed; otherwise an intermediate.
+            // Re-derive the isProgramOutput flag consistently with Create().
+            bool isProgramOutput = true;
+            for (int i = 0; i < m_Ops.Length; ++i)
             {
-                gemmDescription,
-                reluDescription,
-            };
+                foreach (RHIMLOpTensorRef inputRef in m_Ops[i].Inputs)
+                {
+                    if (inputRef.IsOpOutput && inputRef.OpIndex == opIndex && i != opIndex)
+                    {
+                        isProgramOutput = false;
+                        break;
+                    }
+                }
+
+                if (!isProgramOutput)
+                {
+                    break;
+                }
+            }
+
+            if (isProgramOutput)
+            {
+                // Map to the program output by op order among unconsumed ops.
+                int outputIndex = 0;
+                for (int i = 0; i < opIndex; ++i)
+                {
+                    bool unconsumed = true;
+                    for (int j = 0; j < m_Ops.Length; ++j)
+                    {
+                        foreach (RHIMLOpTensorRef inputRef in m_Ops[j].Inputs)
+                        {
+                            if (inputRef.IsOpOutput && inputRef.OpIndex == i && j != i)
+                            {
+                                unconsumed = false;
+                                break;
+                            }
+                        }
+
+                        if (!unconsumed)
+                        {
+                            break;
+                        }
+                    }
+
+                    if (unconsumed)
+                    {
+                        ++outputIndex;
+                    }
+                }
+
+                return m_ProgramOutputs[outputIndex];
+            }
+
+            // Intermediate: find by op order among consumed ops.
+            int intermediateIndex = 0;
+            for (int i = 0; i < opIndex; ++i)
+            {
+                bool consumed = false;
+                for (int j = 0; j < m_Ops.Length; ++j)
+                {
+                    foreach (RHIMLOpTensorRef inputRef in m_Ops[j].Inputs)
+                    {
+                        if (inputRef.IsOpOutput && inputRef.OpIndex == i && j != i)
+                        {
+                            consumed = true;
+                            break;
+                        }
+                    }
+
+                    if (consumed)
+                    {
+                        break;
+                    }
+                }
+
+                if (consumed)
+                {
+                    ++intermediateIndex;
+                }
+            }
+
+            return m_IntermediateTensorDescriptors[intermediateIndex];
+        }
+
+        internal int GetOpIntermediateIndex(int opIndex)
+        {
+            int intermediateIndex = 0;
+            for (int i = 0; i < opIndex; ++i)
+            {
+                bool consumed = false;
+                for (int j = 0; j < m_Ops.Length; ++j)
+                {
+                    foreach (RHIMLOpTensorRef inputRef in m_Ops[j].Inputs)
+                    {
+                        if (inputRef.IsOpOutput && inputRef.OpIndex == i && j != i)
+                        {
+                            consumed = true;
+                            break;
+                        }
+                    }
+
+                    if (consumed)
+                    {
+                        break;
+                    }
+                }
+
+                if (consumed)
+                {
+                    ++intermediateIndex;
+                }
+            }
+
+            return intermediateIndex;
+        }
+
+        private TensorDescription[] ResolveOpInputs(in RHIMLOpDescriptor op)
+        {
+            TensorDescription[] resolved = new TensorDescription[op.Inputs.Length];
+            for (int i = 0; i < op.Inputs.Length; ++i)
+            {
+                RHIMLOpTensorRef inputRef = op.Inputs[i];
+                if (inputRef.IsOpOutput)
+                {
+                    resolved[i] = Dx12MLUtilities.CreateTensorDescription(GetOpOutputDescriptor(inputRef.OpIndex));
+                }
+                else
+                {
+                    resolved[i] = Dx12MLUtilities.CreateTensorDescription(m_ProgramInputs[inputRef.InputIndex]);
+                }
+            }
+
+            return resolved;
+        }
+
+        private static RHIMLTensorDescriptor[] CloneDescriptors(RHIMLTensorDescriptor[] descriptors)
+        {
+            RHIMLTensorDescriptor[] clones = new RHIMLTensorDescriptor[descriptors.Length];
+            for (int i = 0; i < descriptors.Length; ++i)
+            {
+                clones[i] = RHIMLHelpers.CloneLayoutDescriptor(descriptors[i]);
+            }
+
+            return clones;
         }
 
         protected override void Release()
@@ -279,14 +729,15 @@ namespace SharpGPU
         internal Dx12Tensor[] Outputs { get; }
         internal Dx12Buffer? TemporaryBuffer => m_TemporaryBuffer;
         internal Dx12Buffer? PersistentBuffer => m_PersistentBuffer;
-        internal Dx12Buffer IntermediateBuffer => m_IntermediateBuffer ?? throw new InvalidOperationException("DX12 ML intermediate buffer is unavailable.");
+        internal Dx12Buffer[] IntermediateBuffers => m_IntermediateBuffers;
         internal IDMLBindingTable InitializerBindingTable => m_InitializerBindingTable ?? throw new InvalidOperationException("DX12 ML initializer binding table is unavailable.");
         internal bool IsInitialized => m_IsInitialized;
         internal bool InternalResourcesPrepared => m_InternalResourcesPrepared;
 
         private readonly Dx12Device m_Device;
-        private readonly BindingDescription[] m_InputBindings;
-        private readonly BindingDescription[] m_OutputBindings;
+        private readonly BindingDescription[] m_ProgramInputBindings;
+        private readonly BindingDescription[] m_ProgramOutputBindings;
+        private readonly BindingDescription[] m_IntermediateBindings;
         private readonly BindingDescription[][] m_StageInputs;
         private readonly BindingDescription[][] m_StageOutputs;
         private readonly BindingDescription?[] m_StagePersistentBindings;
@@ -300,7 +751,7 @@ namespace SharpGPU
         private int m_InitializerDescriptorCount;
         private Dx12Buffer? m_TemporaryBuffer;
         private Dx12Buffer? m_PersistentBuffer;
-        private Dx12Buffer? m_IntermediateBuffer;
+        private Dx12Buffer[] m_IntermediateBuffers;
         private bool m_IsInitialized;
         private bool m_InternalResourcesPrepared;
 
@@ -317,16 +768,20 @@ namespace SharpGPU
             Inputs = ConvertTensors(dx12Pipeline, descriptor.Inputs.Span, ERHIMLTensorBindingKind.Input, dx12Pipeline.InputCount);
             Outputs = ConvertTensors(dx12Pipeline, descriptor.Outputs.Span, ERHIMLTensorBindingKind.Output, dx12Pipeline.OutputCount);
 
-            m_InputBindings = CreateTensorBindings(Inputs);
-            m_OutputBindings = CreateTensorBindings(Outputs);
+            m_ProgramInputBindings = CreateTensorBindings(Inputs);
+            m_ProgramOutputBindings = CreateTensorBindings(Outputs);
             m_ExecutionBindingTables = new IDMLBindingTable[dx12Pipeline.StageCount];
             m_ExecutionDescriptorAllocations = new Dx12DescriptorInfo[dx12Pipeline.StageCount];
             m_ExecutionDescriptorCounts = new int[dx12Pipeline.StageCount];
             m_StagePersistentBindings = new BindingDescription?[dx12Pipeline.StageCount];
 
+            Dx12MLProgram program = dx12Pipeline.Program;
+            int intermediateCount = program.IntermediateTensorDescriptors.Length;
+            m_IntermediateBuffers = new Dx12Buffer[intermediateCount];
+            m_IntermediateBindings = new BindingDescription[intermediateCount];
+
             Dx12Buffer? temporaryBuffer = null;
             Dx12Buffer? persistentBuffer = null;
-            Dx12Buffer? intermediateBuffer = null;
             IDMLBindingTable? initializerBindingTable = null;
             int createdExecutionTables = 0;
 
@@ -354,58 +809,60 @@ namespace SharpGPU
                     persistentBuffer = CreateInternalResourceBuffer(device, dx12Pipeline.PersistentResourceSize);
                 }
 
-                intermediateBuffer = CreateInternalResourceBuffer(device, dx12Pipeline.ProgramIntermediateTensorSize);
-                BindingDescription intermediateBinding = Dx12MLUtilities.CreateBufferBinding(intermediateBuffer, 0, dx12Pipeline.ProgramIntermediateTensorSize);
+                for (int i = 0; i < intermediateCount; ++i)
+                {
+                    ulong intermediateSize = RHIMLHelpers.CalculateMinimumByteLength(program.IntermediateTensorDescriptors[i]);
+                    Dx12Buffer intermediateBuffer = CreateInternalResourceBuffer(device, intermediateSize);
+                    m_IntermediateBuffers[i] = intermediateBuffer;
+                    m_IntermediateBindings[i] = Dx12MLUtilities.CreateBufferBinding(intermediateBuffer, 0, intermediateSize);
+                }
 
-                m_StageInputs = new BindingDescription[][]
+                // Per-stage input/output binding arrays, resolved from the program's op dataflow.
+                m_StageInputs = new BindingDescription[dx12Pipeline.StageCount][];
+                m_StageOutputs = new BindingDescription[dx12Pipeline.StageCount][];
+                for (int stageIndex = 0; stageIndex < dx12Pipeline.StageCount; ++stageIndex)
                 {
-                    m_InputBindings,
-                    new[] { intermediateBinding },
-                };
-                m_StageOutputs = new BindingDescription[][]
-                {
-                    new[] { intermediateBinding },
-                    m_OutputBindings,
-                };
+                    m_StageInputs[stageIndex] = ResolveStageInputs(program, stageIndex);
+                    m_StageOutputs[stageIndex] = ResolveStageOutputs(program, stageIndex);
 
-                for (int i = 0; i < dx12Pipeline.StageCount; ++i)
-                {
-                    ulong stagePersistentSize = dx12Pipeline.GetPersistentResourceSize(i);
+                    ulong stagePersistentSize = dx12Pipeline.GetPersistentResourceSize(stageIndex);
                     if (persistentBuffer != null && stagePersistentSize > 0)
                     {
-                        m_StagePersistentBindings[i] = Dx12MLUtilities.CreateBufferBinding(
+                        m_StagePersistentBindings[stageIndex] = Dx12MLUtilities.CreateBufferBinding(
                             persistentBuffer,
-                            dx12Pipeline.GetPersistentResourceOffset(i),
+                            dx12Pipeline.GetPersistentResourceOffset(stageIndex),
                             stagePersistentSize);
                     }
 
-                    int executionDescriptorCount = Math.Max(1, checked((int)dx12Pipeline.GetRequiredDescriptorCount(i)));
+                    int executionDescriptorCount = Math.Max(1, checked((int)dx12Pipeline.GetRequiredDescriptorCount(stageIndex)));
                     Dx12DescriptorInfo executionDescriptorAllocation = device.AllocateCbvSrvUavDescriptor(executionDescriptorCount);
                     BindingTableDescription executionTableDescription = new BindingTableDescription
                     {
-                        Dispatchable = dx12Pipeline.GetCompiledOperator(i),
+                        Dispatchable = dx12Pipeline.GetCompiledOperator(stageIndex),
                         CPUDescriptorHandle = executionDescriptorAllocation.CpuHandle,
                         GPUDescriptorHandle = executionDescriptorAllocation.GpuHandle,
                         SizeInDescriptors = checked((uint)executionDescriptorCount),
                     };
 
-                    m_ExecutionDescriptorCounts[i] = executionDescriptorCount;
-                    m_ExecutionDescriptorAllocations[i] = executionDescriptorAllocation;
-                    m_ExecutionBindingTables[i] = device.DirectMLDevice.CreateBindingTable(ref executionTableDescription);
+                    m_ExecutionDescriptorCounts[stageIndex] = executionDescriptorCount;
+                    m_ExecutionDescriptorAllocations[stageIndex] = executionDescriptorAllocation;
+                    m_ExecutionBindingTables[stageIndex] = device.DirectMLDevice.CreateBindingTable(ref executionTableDescription);
                     ++createdExecutionTables;
                 }
 
                 m_InitializerBindingTable = initializerBindingTable;
                 m_TemporaryBuffer = temporaryBuffer;
                 m_PersistentBuffer = persistentBuffer;
-                m_IntermediateBuffer = intermediateBuffer;
             }
             catch
             {
                 initializerBindingTable?.Release();
                 temporaryBuffer?.Dispose();
                 persistentBuffer?.Dispose();
-                intermediateBuffer?.Dispose();
+                for (int i = 0; i < m_IntermediateBuffers.Length; ++i)
+                {
+                    m_IntermediateBuffers[i]?.Dispose();
+                }
 
                 if (m_InitializerDescriptorCount > 0)
                 {
@@ -467,6 +924,84 @@ namespace SharpGPU
         internal void MarkInternalResourcesPrepared()
         {
             m_InternalResourcesPrepared = true;
+        }
+
+        private BindingDescription[] ResolveStageInputs(Dx12MLProgram program, int stageIndex)
+        {
+            RHIMLOpDescriptor op = program.Ops[stageIndex];
+            BindingDescription[] inputs = new BindingDescription[op.Inputs.Length];
+            for (int i = 0; i < op.Inputs.Length; ++i)
+            {
+                RHIMLOpTensorRef inputRef = op.Inputs[i];
+                if (inputRef.IsOpOutput)
+                {
+                    int intermediateIndex = program.GetOpIntermediateIndex(inputRef.OpIndex);
+                    inputs[i] = m_IntermediateBindings[intermediateIndex];
+                }
+                else
+                {
+                    inputs[i] = m_ProgramInputBindings[inputRef.InputIndex];
+                }
+            }
+
+            return inputs;
+        }
+
+        private BindingDescription[] ResolveStageOutputs(Dx12MLProgram program, int stageIndex)
+        {
+            // A stage output is either a program output (unconsumed op) or an intermediate.
+            bool isProgramOutput = true;
+            for (int i = 0; i < program.Ops.Length; ++i)
+            {
+                foreach (RHIMLOpTensorRef inputRef in program.Ops[i].Inputs)
+                {
+                    if (inputRef.IsOpOutput && inputRef.OpIndex == stageIndex && i != stageIndex)
+                    {
+                        isProgramOutput = false;
+                        break;
+                    }
+                }
+
+                if (!isProgramOutput)
+                {
+                    break;
+                }
+            }
+
+            if (isProgramOutput)
+            {
+                int outputIndex = 0;
+                for (int i = 0; i < stageIndex; ++i)
+                {
+                    bool unconsumed = true;
+                    for (int j = 0; j < program.Ops.Length; ++j)
+                    {
+                        foreach (RHIMLOpTensorRef inputRef in program.Ops[j].Inputs)
+                        {
+                            if (inputRef.IsOpOutput && inputRef.OpIndex == i && j != i)
+                            {
+                                unconsumed = false;
+                                break;
+                            }
+                        }
+
+                        if (!unconsumed)
+                        {
+                            break;
+                        }
+                    }
+
+                    if (unconsumed)
+                    {
+                        ++outputIndex;
+                    }
+                }
+
+                return new[] { m_ProgramOutputBindings[outputIndex] };
+            }
+
+            int intermediateIndex = program.GetOpIntermediateIndex(stageIndex);
+            return new[] { m_IntermediateBindings[intermediateIndex] };
         }
 
         private static Dx12Tensor[] ConvertTensors(
@@ -561,8 +1096,14 @@ namespace SharpGPU
             m_PersistentBuffer?.Dispose();
             m_PersistentBuffer = null;
 
-            m_IntermediateBuffer?.Dispose();
-            m_IntermediateBuffer = null;
+            if (m_IntermediateBuffers != null)
+            {
+                for (int i = 0; i < m_IntermediateBuffers.Length; ++i)
+                {
+                    m_IntermediateBuffers[i]?.Dispose();
+                }
+                m_IntermediateBuffers = Array.Empty<Dx12Buffer>();
+            }
 
             if (m_InitializerDescriptorCount > 0)
             {
