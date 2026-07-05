@@ -13,6 +13,7 @@ namespace SharpGPU
         internal ulong ByteLength => m_ByteLength;
         internal MetalBuffer? BackingBuffer => m_BackingBuffer;
 
+        private readonly MetalDevice m_MetalDevice;
         private MTLTensor m_NativeTensor;
         private MetalBuffer? m_BackingBuffer;
         private readonly ulong m_BackingBufferOffset;
@@ -20,6 +21,7 @@ namespace SharpGPU
 
         public MetalTensor(MetalDevice device, in RHIMLTensorDescriptor descriptor)
         {
+            m_MetalDevice = device;
             m_Descriptor = descriptor;
             m_BackingBufferOffset = descriptor.BackingBufferOffset;
             m_ByteLength = RHIMLHelpers.CalculateMinimumByteLength(descriptor);
@@ -33,11 +35,11 @@ namespace SharpGPU
                 nativeDescriptor.DataType = ConvertDataType(descriptor.DataType);
                 nativeDescriptor.Usage = ConvertTensorUsage(descriptor.UsageFlag);
                 nativeDescriptor.ResourceOptions = ConvertStorageMode(descriptor.StorageMode);
-                nativeDimensions = CreateTensorExtents(descriptor.Dimensions.Span);
+                nativeDimensions = CreateNativeTensorExtents(descriptor.Dimensions.Span);
                 nativeDescriptor.Dimensions = nativeDimensions;
-                if (RHIMLHelpers.HasExplicitStrides(descriptor))
+                if (descriptor.BackingBuffer != null || RHIMLHelpers.HasExplicitStrides(descriptor))
                 {
-                    nativeStrides = CreateTensorExtents(descriptor.Strides.Value.Span);
+                    nativeStrides = CreateNativeTensorExtentsFromNativeOrder(CalculateNativeTensorStrides(descriptor));
                     nativeDescriptor.Strides = nativeStrides;
                 }
 
@@ -72,7 +74,88 @@ namespace SharpGPU
             }
         }
 
-        private static unsafe MTLTensorExtents CreateTensorExtents(ReadOnlySpan<uint> values)
+        internal static MTLTensorExtents CreateNativeTensorExtents(ReadOnlySpan<uint> values)
+        {
+            return CreateTensorExtents(values, reverseOrder: true);
+        }
+
+        internal static MTLTensorExtents CreateLogicalTensorExtents(ReadOnlySpan<uint> values)
+        {
+            return CreateTensorExtents(values, reverseOrder: false);
+        }
+
+        internal static uint[] CalculateNativeTensorStrides(in RHIMLTensorDescriptor descriptor)
+        {
+            ReadOnlySpan<uint> dimensions = descriptor.Dimensions.Span;
+            uint[] nativeDimensions = Reverse(dimensions);
+            uint[] nativeStrides = new uint[nativeDimensions.Length];
+            if (nativeStrides.Length == 0)
+            {
+                return nativeStrides;
+            }
+
+            if (RHIMLHelpers.HasExplicitStrides(descriptor))
+            {
+                nativeStrides = Reverse(descriptor.Strides!.Value.Span);
+                ValidateMachineLearningStrides(descriptor, nativeDimensions, nativeStrides);
+                return nativeStrides;
+            }
+
+            nativeStrides[0] = 1;
+            uint elementSize = RHIMLHelpers.GetElementSize(descriptor.DataType);
+            for (int i = 1; i < nativeStrides.Length; ++i)
+            {
+                ulong stride = (ulong)nativeStrides[i - 1] * nativeDimensions[i - 1];
+                if (i == 1 && (descriptor.UsageFlag & ERHITensorUsage.MachineLearning) != 0)
+                {
+                    stride = AlignUp(stride * elementSize, 64UL) / elementSize;
+                }
+
+                nativeStrides[i] = checked((uint)stride);
+            }
+
+            ValidateMachineLearningStrides(descriptor, nativeDimensions, nativeStrides);
+            return nativeStrides;
+        }
+
+        internal static ulong CalculateNativeBufferByteLength(in RHIMLTensorDescriptor descriptor)
+        {
+            ReadOnlySpan<uint> dimensions = descriptor.Dimensions.Span;
+            if (dimensions.Length == 0)
+            {
+                return 0;
+            }
+
+            uint[] nativeDimensions = Reverse(dimensions);
+            uint[] nativeStrides = CalculateNativeTensorStrides(descriptor);
+            for (int i = 0; i < nativeDimensions.Length; ++i)
+            {
+                if (nativeDimensions[i] == 0)
+                {
+                    return 0;
+                }
+            }
+
+            int outermost = nativeDimensions.Length - 1;
+            return (ulong)nativeStrides[outermost] * nativeDimensions[outermost] * RHIMLHelpers.GetElementSize(descriptor.DataType);
+        }
+
+        internal static void PackContiguousToNative(ReadOnlySpan<byte> source, Span<byte> destination, in RHIMLTensorDescriptor descriptor)
+        {
+            CopyBetweenContiguousAndNative(source, destination, descriptor, contiguousToNative: true);
+        }
+
+        internal static void UnpackNativeToContiguous(ReadOnlySpan<byte> source, Span<byte> destination, in RHIMLTensorDescriptor descriptor)
+        {
+            CopyBetweenContiguousAndNative(source, destination, descriptor, contiguousToNative: false);
+        }
+
+        private static MTLTensorExtents CreateNativeTensorExtentsFromNativeOrder(ReadOnlySpan<uint> values)
+        {
+            return CreateTensorExtents(values, reverseOrder: false);
+        }
+
+        private static unsafe MTLTensorExtents CreateTensorExtents(ReadOnlySpan<uint> values, bool reverseOrder)
         {
             if (values.Length > (int)MTLTensorExtents.MaxRank)
             {
@@ -87,12 +170,103 @@ namespace SharpGPU
             nint[] nativeValues = new nint[values.Length];
             for (int i = 0; i < values.Length; ++i)
             {
-                nativeValues[i] = checked((nint)values[i]);
+                int sourceIndex = reverseOrder ? values.Length - 1 - i : i;
+                nativeValues[i] = checked((nint)values[sourceIndex]);
             }
 
             fixed (nint* nativeValuesPtr = nativeValues)
             {
                 return MTLTensorExtents.New((ulong)nativeValues.Length, (IntPtr)nativeValuesPtr);
+            }
+        }
+
+        private static uint[] Reverse(ReadOnlySpan<uint> values)
+        {
+            uint[] reversed = new uint[values.Length];
+            for (int i = 0; i < values.Length; ++i)
+            {
+                reversed[i] = values[values.Length - 1 - i];
+            }
+
+            return reversed;
+        }
+
+        private static ulong AlignUp(ulong value, ulong alignment)
+        {
+            return ((value + alignment - 1UL) / alignment) * alignment;
+        }
+
+        private static void ValidateMachineLearningStrides(in RHIMLTensorDescriptor descriptor, ReadOnlySpan<uint> nativeDimensions, ReadOnlySpan<uint> nativeStrides)
+        {
+            if ((descriptor.UsageFlag & ERHITensorUsage.MachineLearning) == 0 || nativeStrides.Length <= 1)
+            {
+                return;
+            }
+
+            uint elementSize = RHIMLHelpers.GetElementSize(descriptor.DataType);
+            if ((nativeStrides[1] * elementSize) % 64 != 0)
+            {
+                throw new InvalidOperationException("Metal ML tensor stride[1] must be 64-byte aligned.");
+            }
+
+            for (int i = 2; i < nativeStrides.Length; ++i)
+            {
+                ulong expected = (ulong)nativeStrides[i - 1] * nativeDimensions[i - 1];
+                if (nativeStrides[i] != expected)
+                {
+                    throw new InvalidOperationException($"Metal ML tensor stride[{i}] must equal stride[{i - 1}] * dimension[{i - 1}].");
+                }
+            }
+        }
+
+        private static void CopyBetweenContiguousAndNative(ReadOnlySpan<byte> source, Span<byte> destination, in RHIMLTensorDescriptor descriptor, bool contiguousToNative)
+        {
+            uint elementSize = RHIMLHelpers.GetElementSize(descriptor.DataType);
+            ulong elementCount = RHIMLHelpers.CalculateElementCount(descriptor);
+            ulong contiguousByteLength = elementCount * elementSize;
+            ulong nativeByteLength = CalculateNativeBufferByteLength(descriptor);
+            if (source.Length < (int)(contiguousToNative ? contiguousByteLength : nativeByteLength)
+                || destination.Length < (int)(contiguousToNative ? nativeByteLength : contiguousByteLength))
+            {
+                throw new InvalidOperationException("Metal ML tensor pack/unpack buffer is too small.");
+            }
+
+            if (elementCount == 0)
+            {
+                return;
+            }
+
+            ReadOnlySpan<uint> dimensions = descriptor.Dimensions.Span;
+            uint[] nativeStrides = CalculateNativeTensorStrides(descriptor);
+            int rank = dimensions.Length;
+            uint[] coords = new uint[rank];
+
+            for (ulong elementIndex = 0; elementIndex < elementCount; ++elementIndex)
+            {
+                ulong remaining = elementIndex;
+                for (int axis = rank - 1; axis >= 0; --axis)
+                {
+                    coords[axis] = (uint)(remaining % dimensions[axis]);
+                    remaining /= dimensions[axis];
+                }
+
+                ulong nativeElementOffset = 0;
+                for (int axis = 0; axis < rank; ++axis)
+                {
+                    int nativeAxis = rank - 1 - axis;
+                    nativeElementOffset += coords[axis] * (ulong)nativeStrides[nativeAxis];
+                }
+
+                int contiguousByteOffset = checked((int)(elementIndex * elementSize));
+                int nativeByteOffset = checked((int)(nativeElementOffset * elementSize));
+                if (contiguousToNative)
+                {
+                    source.Slice(contiguousByteOffset, (int)elementSize).CopyTo(destination.Slice(nativeByteOffset, (int)elementSize));
+                }
+                else
+                {
+                    source.Slice(nativeByteOffset, (int)elementSize).CopyTo(destination.Slice(contiguousByteOffset, (int)elementSize));
+                }
             }
         }
 
@@ -161,6 +335,12 @@ namespace SharpGPU
         {
             if (m_NativeTensor.NativePtr != IntPtr.Zero)
             {
+                MTLBuffer nativeBuffer = m_NativeTensor.Buffer;
+                if (nativeBuffer.NativePtr != IntPtr.Zero)
+                {
+                    m_MetalDevice.RemoveResidencyAllocation(nativeBuffer);
+                }
+
                 ObjectiveCRuntime.Release(m_NativeTensor);
                 m_NativeTensor = default;
             }

@@ -5,18 +5,29 @@ namespace SharpGPU
 {
     internal sealed class MetalMLProgram : RHIMLProgram
     {
-        internal MetalFunction Function { get; }
+        internal MTLLibrary NativeLibrary => m_NativeLibrary;
+        internal string EntryName { get; }
         internal RHIMLTensorBindingInfo[] BindingInfos { get; }
 
-        internal MetalMLProgram(string name, MetalFunction function, params RHIMLTensorBindingInfo[] bindingInfos)
+        private MTLLibrary m_NativeLibrary;
+
+        internal MetalMLProgram(string name, MTLLibrary nativeLibrary, string entryName, string packageDirectory, params RHIMLTensorBindingInfo[] bindingInfos)
         {
             m_Name = name;
-            Function = function ?? throw new ArgumentNullException(nameof(function));
+            if (nativeLibrary.NativePtr == IntPtr.Zero)
+            {
+                throw new ArgumentException("Metal ML program requires a native MTLLibrary.", nameof(nativeLibrary));
+            }
+
+            m_NativeLibrary = nativeLibrary;
+            EntryName = string.IsNullOrWhiteSpace(entryName) ? MetalMpsGraphPackageBuilder.EntryName : entryName;
+            _ = packageDirectory;
             BindingInfos = bindingInfos ?? Array.Empty<RHIMLTensorBindingInfo>();
         }
 
         protected override void Release()
         {
+            m_NativeLibrary = default;
         }
     }
 
@@ -26,7 +37,7 @@ namespace SharpGPU
         internal MetalTensor[] Inputs { get; }
         internal MetalTensor[] Outputs { get; }
         internal MTL4ArgumentTable NativeArgumentTable => m_NativeArgumentTable;
-        internal SharpMetal.Metal.MTLHeap NativeIntermediatesHeap => m_IntermediatesHeap?.NativeHeap ?? default;
+        internal MTLHeap NativeIntermediatesHeap => m_IntermediatesHeap?.NativeHeap ?? default;
 
         private MTL4ArgumentTable m_NativeArgumentTable;
         private MetalHeap? m_IntermediatesHeap;
@@ -43,7 +54,8 @@ namespace SharpGPU
             Outputs = ConvertTensors(descriptor.Outputs.Span, ERHIMLTensorBindingKind.Output, metalPipeline.OutputCount);
 
             MTL4ArgumentTableDescriptor argumentTableDescriptor = MTL4ArgumentTableDescriptor.New();
-            argumentTableDescriptor.MaxBufferBindCount = Math.Max(1u, (uint)metalPipeline.BindingInfos.Length);
+            argumentTableDescriptor.MaxBufferBindCount = Math.Max(1UL, metalPipeline.ArgumentTableBufferBindCount);
+            argumentTableDescriptor.InitializeBindings = true;
             SharpMetal.Foundation.NSError error = default;
             m_NativeArgumentTable = device.NativeDevice.NewArgumentTable(argumentTableDescriptor, ref error);
             SharpMetal.ObjectiveCCore.ObjectiveCRuntime.Release(argumentTableDescriptor);
@@ -54,6 +66,8 @@ namespace SharpGPU
                 throw new InvalidOperationException($"Failed to create MTL4ArgumentTable for ML binding set: {errorText}");
             }
 
+            device.RegisterMetalMLArgumentTable(m_NativeArgumentTable);
+
             if (metalPipeline.TemporaryResourceSize > 0)
             {
                 RHIHeapDescription heapDescriptor = new RHIHeapDescription
@@ -61,7 +75,8 @@ namespace SharpGPU
                     Size = metalPipeline.TemporaryResourceSize,
                     StorageMode = ERHIStorageMode.GPULocal,
                 };
-                m_IntermediatesHeap = new MetalHeap(device, heapDescriptor);
+                m_IntermediatesHeap = new MetalHeap(device, heapDescriptor, MTLHeapType.Automatic);
+                device.RegisterMetalMLIntermediatesHeap(m_IntermediatesHeap.NativeHeap);
             }
 
             PopulateArgumentTable(device, metalPipeline);
@@ -94,8 +109,14 @@ namespace SharpGPU
             }
 
             ReadOnlySpan<RHIMLTensorBindingInfo> bindingInfos = pipeline.BindingInfos.Span;
-            ulong bindingSlot = 0;
-            for (int i = 0; i < bindingInfos.Length; ++i, ++bindingSlot)
+            ReadOnlySpan<ulong> bindingSlots = pipeline.NativeBindingSlots.Span;
+            if (bindingSlots.Length != bindingInfos.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Metal ML native binding slot count mismatch. slots={bindingSlots.Length}, bindings={bindingInfos.Length}.");
+            }
+
+            for (int i = 0; i < bindingInfos.Length; ++i)
             {
                 ref readonly RHIMLTensorBindingInfo bindingInfo = ref bindingInfos[i];
                 MetalTensor tensor = bindingInfo.Kind switch
@@ -111,19 +132,14 @@ namespace SharpGPU
                         $"Metal ML tensor layout mismatch for '{bindingInfo.Name}'. expected={RHIMLHelpers.DescribeLayout(bindingInfo.Descriptor)}, actual={RHIMLHelpers.DescribeLayout(tensor.Descriptor)}.");
                 }
 
+                ulong bindingSlot = bindingSlots[i];
                 m_NativeArgumentTable.SetResource(tensor.NativeTensor.GpuResourceID, bindingSlot);
             }
         }
 
         protected override void Release()
         {
-            if (m_NativeArgumentTable.NativePtr != IntPtr.Zero)
-            {
-                SharpMetal.ObjectiveCCore.ObjectiveCRuntime.Release(m_NativeArgumentTable);
-                m_NativeArgumentTable = default;
-            }
-
-            m_IntermediatesHeap?.Dispose();
+            m_NativeArgumentTable = default;
             m_IntermediatesHeap = null;
         }
     }

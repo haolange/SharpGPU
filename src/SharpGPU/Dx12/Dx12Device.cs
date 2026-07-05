@@ -114,6 +114,7 @@ namespace SharpGPU
 
     internal unsafe class Dx12Device : RHIDevice
     {
+        public override ERHIBackend BackendType => ERHIBackend.DirectX12;
         public Dx12Instance Dx12Instance
         {
             get

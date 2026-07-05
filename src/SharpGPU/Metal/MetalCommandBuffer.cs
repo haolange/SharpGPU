@@ -20,6 +20,7 @@ namespace SharpGPU
     {
         internal MTL4CommandBuffer NativeCommandBuffer4 => m_NativeCommandBuffer4;
         internal CAMetalDrawable PresentDrawable => m_PresentDrawable;
+        internal bool UsesMachineLearning => m_UsesMachineLearning;
 
         private readonly MetalTransferEncoder m_TransferEncoder;
         private readonly MetalComputeEncoder m_ComputeEncoder;
@@ -29,9 +30,11 @@ namespace SharpGPU
         private readonly MetalWorkGraphEncoder m_WorkGraphEncoder;
 
         private MTL4CommandBuffer m_NativeCommandBuffer4;
+        private MTL4CommandAllocator m_NativeCommandAllocator4;
         private CAMetalDrawable m_PresentDrawable;
         private MetalActiveEncoderType m_ActiveEncoder;
         private bool m_Mtl4CommandBufferEnded;
+        private bool m_UsesMachineLearning;
         private string m_CommandBufferName = string.Empty;
 
         // Barrier tracking: seenStagesMask tracks which Metal 4 stage bits have had
@@ -143,6 +146,7 @@ namespace SharpGPU
             m_MLEncoder.BeginPass(descriptor);
             BeginEncoderBarrierState();
             m_ActiveEncoder = MetalActiveEncoderType.ML;
+            m_UsesMachineLearning = true;
             return m_MLEncoder;
         }
 
@@ -260,7 +264,20 @@ namespace SharpGPU
                 throw new InvalidOperationException("Failed to create MTL4CommandBuffer.");
             }
 
-            m_NativeCommandBuffer4.BeginCommandBuffer(queue.NativeMtl4CommandAllocator);
+            m_NativeCommandAllocator4 = queue.MetalDevice.NativeDevice.NewMTL4CommandAllocator();
+            if (m_NativeCommandAllocator4.NativePtr == IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_NativeCommandBuffer4);
+                m_NativeCommandBuffer4 = default;
+                throw new InvalidOperationException("Failed to create MTL4CommandAllocator.");
+            }
+
+            m_NativeCommandBuffer4.BeginCommandBuffer(m_NativeCommandAllocator4);
+            if (queue.HasResidencySet)
+            {
+                m_NativeCommandBuffer4.UseResidencySet(queue.NativeResidencySet);
+            }
+
             m_NativeCommandBuffer4.Label = new SharpMetal.Foundation.NSString(m_CommandBufferName);
             m_Mtl4CommandBufferEnded = false;
             return m_NativeCommandBuffer4;
@@ -304,10 +321,12 @@ namespace SharpGPU
         private void ResetState()
         {
             m_NativeCommandBuffer4 = default;
+            m_NativeCommandAllocator4 = default;
             m_PresentDrawable = default;
             m_ActiveEncoder = MetalActiveEncoderType.None;
             m_Mtl4CommandBufferEnded = false;
             m_CurrentEncoderSeenStages = 0;
+            m_UsesMachineLearning = false;
         }
 
         protected override void Release()
@@ -318,6 +337,17 @@ namespace SharpGPU
             m_RaytracingEncoder.Dispose();
             m_MLEncoder.Dispose();
             m_WorkGraphEncoder.Dispose();
+            if (m_NativeCommandBuffer4.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_NativeCommandBuffer4);
+                m_NativeCommandBuffer4 = default;
+            }
+
+            if (m_NativeCommandAllocator4.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_NativeCommandAllocator4);
+                m_NativeCommandAllocator4 = default;
+            }
         }
     }
 

@@ -683,9 +683,13 @@ namespace SharpGPU
         internal MTL4MachineLearningPipelineState NativePipelineState => m_NativePipelineState;
         internal MetalMLProgram Program => m_Program;
         internal ulong ReflectionBindingCount => m_ReflectionBindingCount;
+        internal ReadOnlyMemory<ulong> NativeBindingSlots => m_NativeBindingSlots;
+        internal ulong ArgumentTableBufferBindCount => m_ArgumentTableBufferBindCount;
 
         private MTL4MachineLearningPipelineState m_NativePipelineState;
         private readonly MetalMLProgram m_Program;
+        private readonly ulong[] m_NativeBindingSlots;
+        private readonly ulong m_ArgumentTableBufferBindCount;
         private ulong m_ReflectionBindingCount;
 
         public MetalMLPipeline(MetalDevice device, in RHIMLPipelineDescriptor descriptor)
@@ -701,8 +705,6 @@ namespace SharpGPU
                     "MetalMLPipeline requires Metal 4 (MTL4MachineLearningPipelineState). " +
                     "The current device does not support Metal 4.");
             }
-
-            MetalFunction mlFunction = m_Program.Function;
 
             // ── Create MTL4Compiler ──
             NSError compilerError = default;
@@ -721,12 +723,17 @@ namespace SharpGPU
 
             // ── Build MTL4LibraryFunctionDescriptor from RHIFunction ──
             MTL4LibraryFunctionDescriptor funcDesc = MTL4LibraryFunctionDescriptor.New();
-            funcDesc.Library = mlFunction.NativeLibrary;
-            funcDesc.Name = new NSString(mlFunction.Descriptor.EntryName);
+            funcDesc.Library = m_Program.NativeLibrary;
+            funcDesc.Name = new NSString(m_Program.EntryName);
 
             // ── Build ML pipeline descriptor ──
             MTL4MachineLearningPipelineDescriptor mlDesc = MTL4MachineLearningPipelineDescriptor.New();
             mlDesc.MachineLearningFunctionDescriptor = funcDesc;
+            MTL4PipelineOptions pipelineOptions = MTL4PipelineOptions.New();
+            pipelineOptions.ShaderReflection = MTL4ShaderReflection.BindingInfo;
+            MTL4PipelineDescriptor pipelineDescriptor = mlDesc;
+            pipelineDescriptor.Options = pipelineOptions;
+            ObjectiveCRuntime.Release(pipelineOptions.NativePtr);
             if (!string.IsNullOrEmpty(descriptor.Name))
             {
                 mlDesc.Label = new NSString(descriptor.Name);
@@ -740,7 +747,7 @@ namespace SharpGPU
                     continue;
                 }
 
-                MTLTensorExtents dimensions = CreateTensorExtents(bindingInfo.Descriptor.Dimensions.Span);
+                MTLTensorExtents dimensions = MetalTensor.CreateNativeTensorExtents(bindingInfo.Descriptor.Dimensions.Span);
                 mlDesc.SetInputDimensions(dimensions, bindingInfo.Index);
                 ReleaseNativeObject(dimensions);
             }
@@ -761,15 +768,9 @@ namespace SharpGPU
                     $"MetalMLPipeline: failed to create MTL4MachineLearningPipelineState '{descriptor.Name}' — {errorText}");
             }
 
-            MTL4MachineLearningPipelineReflection reflection = m_NativePipelineState.Reflection;
-            if (reflection.NativePtr != IntPtr.Zero)
-            {
-                NSArray reflectionBindings = reflection.Bindings;
-                if (reflectionBindings.NativePtr != IntPtr.Zero)
-                {
-                    m_ReflectionBindingCount = reflectionBindings.Count;
-                }
-            }
+            device.RegisterMetalMLPipelineState(m_NativePipelineState);
+            m_NativeBindingSlots = ResolveNativeBindingSlots();
+            m_ArgumentTableBufferBindCount = CalculateArgumentTableBufferBindCount(m_NativeBindingSlots);
 
             for (int i = 0; i < m_BindingInfos.Length; ++i)
             {
@@ -791,35 +792,7 @@ namespace SharpGPU
 
         protected override void Release()
         {
-            if (m_NativePipelineState.NativePtr != IntPtr.Zero)
-            {
-                ObjectiveCRuntime.Release(m_NativePipelineState);
-                m_NativePipelineState = default;
-            }
-        }
-
-        private static unsafe MTLTensorExtents CreateTensorExtents(ReadOnlySpan<uint> values)
-        {
-            if (values.Length > (int)MTLTensorExtents.MaxRank)
-            {
-                throw new ArgumentOutOfRangeException(nameof(values), $"Metal ML tensors support at most {MTLTensorExtents.MaxRank} dimensions.");
-            }
-
-            if (values.Length == 0)
-            {
-                return MTLTensorExtents.New(0, IntPtr.Zero);
-            }
-
-            nint[] nativeValues = new nint[values.Length];
-            for (int i = 0; i < values.Length; ++i)
-            {
-                nativeValues[i] = checked((nint)values[i]);
-            }
-
-            fixed (nint* nativeValuesPtr = nativeValues)
-            {
-                return MTLTensorExtents.New((ulong)nativeValues.Length, (IntPtr)nativeValuesPtr);
-            }
+            m_NativePipelineState = default;
         }
 
         private static void ReleaseNativeObject(IntPtr nativePtr)
@@ -830,6 +803,163 @@ namespace SharpGPU
             }
 
             ObjectiveCRuntime.Release(nativePtr);
+        }
+
+        private ulong[] ResolveNativeBindingSlots()
+        {
+            MTL4MachineLearningPipelineReflection reflection = m_NativePipelineState.Reflection;
+            if (reflection.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Metal ML pipeline reflection is unavailable; cannot bind artifact-backed tensor arguments.");
+            }
+
+            NSArray reflectionBindings = reflection.Bindings;
+            if (reflectionBindings.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Metal ML pipeline reflection did not expose tensor bindings.");
+            }
+
+            m_ReflectionBindingCount = reflectionBindings.Count;
+            Dictionary<string, ulong> slotsByName = new Dictionary<string, ulong>(StringComparer.Ordinal);
+            List<ulong> tensorSlots = new List<ulong>(checked((int)m_ReflectionBindingCount));
+            List<ulong> readOnlyTensorSlots = new List<ulong>(checked((int)m_ReflectionBindingCount));
+            List<ulong> writableTensorSlots = new List<ulong>(checked((int)m_ReflectionBindingCount));
+            List<string> observedBindings = new List<string>(checked((int)m_ReflectionBindingCount));
+
+            for (ulong i = 0; i < m_ReflectionBindingCount; ++i)
+            {
+                IntPtr bindingPtr = reflectionBindings.Object(i);
+                if (bindingPtr == IntPtr.Zero)
+                {
+                    continue;
+                }
+
+                MTLBinding binding = new MTLBinding(bindingPtr);
+                string bindingName = GetBindingName(binding);
+                MTLBindingType bindingType = binding.Type;
+                MTLBindingAccess bindingAccess = binding.Access;
+                ulong bindingIndex = binding.Index;
+                observedBindings.Add(string.IsNullOrWhiteSpace(bindingName)
+                    ? $"<unnamed>:{bindingType}:{bindingAccess}@{bindingIndex}"
+                    : $"{bindingName}:{bindingType}:{bindingAccess}@{bindingIndex}");
+
+                if (bindingType != MTLBindingType.Tensor)
+                {
+                    continue;
+                }
+
+                tensorSlots.Add(bindingIndex);
+                if (bindingAccess == MTLBindingAccess.ReadOnly)
+                {
+                    readOnlyTensorSlots.Add(bindingIndex);
+                }
+                else
+                {
+                    writableTensorSlots.Add(bindingIndex);
+                }
+
+                if (string.IsNullOrWhiteSpace(bindingName))
+                {
+                    continue;
+                }
+
+                if (!slotsByName.TryAdd(bindingName, bindingIndex))
+                {
+                    throw new InvalidOperationException($"Metal ML pipeline reflection has duplicate tensor binding name '{bindingName}'.");
+                }
+            }
+
+            RHIMLTensorBindingInfo[] bindingInfos = m_BindingInfos
+                ?? throw new InvalidOperationException("Metal ML pipeline binding metadata is unavailable.");
+            if (slotsByName.Count == 0 && tensorSlots.Count == bindingInfos.Length)
+            {
+                if (TryResolveUnnamedBindingSlotsByAccess(bindingInfos, readOnlyTensorSlots, writableTensorSlots, out ulong[]? accessSlots))
+                {
+                    return accessSlots;
+                }
+
+                return tensorSlots.ToArray();
+            }
+
+            if (slotsByName.Count < bindingInfos.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Metal ML pipeline reflection exposed {slotsByName.Count} named tensor binding(s), expected {bindingInfos.Length}. observed=[{string.Join(", ", observedBindings)}].");
+            }
+
+            ulong[] slots = new ulong[bindingInfos.Length];
+            for (int i = 0; i < bindingInfos.Length; ++i)
+            {
+                ref readonly RHIMLTensorBindingInfo bindingInfo = ref bindingInfos[i];
+                if (!slotsByName.TryGetValue(bindingInfo.Name, out ulong slot))
+                {
+                    throw new InvalidOperationException(
+                        $"Metal ML pipeline reflection did not expose expected tensor binding '{bindingInfo.Name}'. observed=[{string.Join(", ", observedBindings)}].");
+                }
+
+                slots[i] = slot;
+            }
+
+            return slots;
+        }
+
+        private static bool TryResolveUnnamedBindingSlotsByAccess(
+            ReadOnlySpan<RHIMLTensorBindingInfo> bindingInfos,
+            List<ulong> readOnlyTensorSlots,
+            List<ulong> writableTensorSlots,
+            out ulong[]? slots)
+        {
+            slots = null;
+            int inputCount = 0;
+            int outputCount = 0;
+            for (int i = 0; i < bindingInfos.Length; ++i)
+            {
+                if (bindingInfos[i].Kind == ERHIMLTensorBindingKind.Input)
+                {
+                    ++inputCount;
+                }
+                else if (bindingInfos[i].Kind == ERHIMLTensorBindingKind.Output)
+                {
+                    ++outputCount;
+                }
+            }
+
+            if (readOnlyTensorSlots.Count != inputCount || writableTensorSlots.Count != outputCount)
+            {
+                return false;
+            }
+
+            slots = new ulong[bindingInfos.Length];
+            int inputCursor = 0;
+            int outputCursor = 0;
+            for (int i = 0; i < bindingInfos.Length; ++i)
+            {
+                slots[i] = bindingInfos[i].Kind switch
+                {
+                    ERHIMLTensorBindingKind.Input => readOnlyTensorSlots[inputCursor++],
+                    ERHIMLTensorBindingKind.Output => writableTensorSlots[outputCursor++],
+                    _ => throw new InvalidOperationException($"Unsupported Metal ML tensor binding kind '{bindingInfos[i].Kind}'."),
+                };
+            }
+
+            return true;
+        }
+
+        private static string GetBindingName(in MTLBinding binding)
+        {
+            NSString name = binding.Name;
+            return name.NativePtr == IntPtr.Zero ? string.Empty : name.ToString();
+        }
+
+        private static ulong CalculateArgumentTableBufferBindCount(ReadOnlySpan<ulong> bindingSlots)
+        {
+            ulong maxSlot = 0;
+            for (int i = 0; i < bindingSlots.Length; ++i)
+            {
+                maxSlot = Math.Max(maxSlot, bindingSlots[i]);
+            }
+
+            return maxSlot + 1UL;
         }
     }
 }

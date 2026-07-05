@@ -10,6 +10,7 @@ namespace SharpGPU
 #pragma warning disable CS8600, CS8602, CS8618
     internal unsafe class VulkanDevice : RHIDevice
     {
+        public override ERHIBackend BackendType => ERHIBackend.Vulkan;
         public VulkanInstance VulkanInstance
         {
             get

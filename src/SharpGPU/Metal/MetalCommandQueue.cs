@@ -18,6 +18,7 @@ namespace SharpGPU
 
         internal MTL4CommandQueue NativeQueue4 => m_NativeQueue4;
         internal MTL4CommandAllocator NativeMtl4CommandAllocator => m_NativeMtl4CommandAllocator;
+        internal MTLResidencySet NativeResidencySet => m_ResidencySet;
         internal bool HasResidencySet => m_ResidencySet.NativePtr != IntPtr.Zero;
 
         private readonly MetalDevice m_MetalDevice;
@@ -27,6 +28,7 @@ namespace SharpGPU
         private MTLResidencySet m_ResidencySet;
         private ulong m_LastSubmittedMtl4Value;
         private ulong m_NextMtl4CompletionValue;
+        private bool m_LastSubmittedUsedMachineLearning;
         private bool m_HasLoggedMtl4SubmitOrder;
 
         public MetalCommandQueue(MetalDevice device, in ERHIPipelineType pipeline)
@@ -39,6 +41,7 @@ namespace SharpGPU
             m_ResidencySet = default;
             m_LastSubmittedMtl4Value = 0;
             m_NextMtl4CompletionValue = 1;
+            m_LastSubmittedUsedMachineLearning = false;
             m_HasLoggedMtl4SubmitOrder = false;
 
             m_NativeQueue4 = device.NativeDevice.NewMTL4CommandQueue();
@@ -295,10 +298,19 @@ namespace SharpGPU
             SignalDrawable(m_NativeQueue4, metalCommandBuffer.PresentDrawable);
             PresentDrawable(metalCommandBuffer.PresentDrawable);
             m_LastSubmittedMtl4Value = completionValue;
+            m_LastSubmittedUsedMachineLearning = metalCommandBuffer.UsesMachineLearning;
 
             if (signalFence != null)
             {
                 WaitForMtl4Completion(completionValue);
+                ResetMtl4CommandAllocator();
+                if (m_LastSubmittedUsedMachineLearning)
+                {
+                    RecreateMtl4SubmissionObjects();
+                }
+
+                m_LastSubmittedMtl4Value = 0;
+                m_LastSubmittedUsedMachineLearning = false;
                 SignalFence(signalFence);
             }
         }
@@ -318,6 +330,25 @@ namespace SharpGPU
             if (!m_ResidencySet.ContainsAllocation(allocation))
             {
                 m_ResidencySet.AddAllocation(allocation);
+                m_ResidencySet.Commit();
+            }
+        }
+
+        internal void RemoveResidencyAllocation(in MTLAllocation allocation)
+        {
+            if (m_ResidencySet.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (allocation.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (m_ResidencySet.ContainsAllocation(allocation))
+            {
+                m_ResidencySet.RemoveAllocation(allocation);
                 m_ResidencySet.Commit();
             }
         }
@@ -343,12 +374,90 @@ namespace SharpGPU
             m_NativeQueue4.AddResidencySet(m_ResidencySet);
         }
 
+        private void RecreateMtl4SubmissionObjects()
+        {
+            ReleaseMtl4SubmissionObjects();
+
+            m_NativeQueue4 = m_MetalDevice.NativeDevice.NewMTL4CommandQueue();
+            if (m_NativeQueue4.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to recreate MTL4CommandQueue after ML submission.");
+            }
+
+            m_NativeMtl4CommandAllocator = m_MetalDevice.NativeDevice.NewMTL4CommandAllocator();
+            if (m_NativeMtl4CommandAllocator.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to recreate MTL4CommandAllocator after ML submission.");
+            }
+
+            m_Mtl4CompletionEvent = m_MetalDevice.NativeDevice.NewSharedEvent();
+            if (m_Mtl4CompletionEvent.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Failed to recreate MTLSharedEvent after ML submission.");
+            }
+
+            m_NextMtl4CompletionValue = 1;
+            InitializeResidencySet();
+        }
+
+        private void ReleaseMtl4SubmissionObjects()
+        {
+            if (m_ResidencySet.NativePtr != IntPtr.Zero)
+            {
+                m_ResidencySet.EndResidency();
+                ObjectiveCRuntime.Release(m_ResidencySet.NativePtr);
+                m_ResidencySet = default;
+            }
+
+            if (m_Mtl4CompletionEvent.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_Mtl4CompletionEvent.NativePtr);
+                m_Mtl4CompletionEvent = default;
+            }
+
+            if (m_NativeMtl4CommandAllocator.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_NativeMtl4CommandAllocator.NativePtr);
+                m_NativeMtl4CommandAllocator = default;
+            }
+
+            if (m_NativeQueue4.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_NativeQueue4.NativePtr);
+                m_NativeQueue4 = default;
+            }
+        }
+
         private void WaitLastSubmission()
         {
             if (m_LastSubmittedMtl4Value > 0 && m_Mtl4CompletionEvent.NativePtr != IntPtr.Zero)
             {
                 WaitForMtl4Completion(m_LastSubmittedMtl4Value);
+                ResetMtl4CommandAllocator();
+                if (m_LastSubmittedUsedMachineLearning)
+                {
+                    RecreateMtl4SubmissionObjects();
+                }
+
                 m_LastSubmittedMtl4Value = 0;
+                m_LastSubmittedUsedMachineLearning = false;
+            }
+        }
+
+        private void ClearResidencyAllocations()
+        {
+            if (m_ResidencySet.NativePtr != IntPtr.Zero && m_ResidencySet.AllocatedCount > 0)
+            {
+                m_ResidencySet.RemoveAllAllocations();
+                m_ResidencySet.Commit();
+            }
+        }
+
+        private void ResetMtl4CommandAllocator()
+        {
+            if (m_NativeMtl4CommandAllocator.NativePtr != IntPtr.Zero)
+            {
+                m_NativeMtl4CommandAllocator.Reset();
             }
         }
 
@@ -431,35 +540,7 @@ namespace SharpGPU
 
         protected override void Release()
         {
-            ReleaseMtl4Handles();
-        }
-
-        private void ReleaseMtl4Handles()
-        {
-            if (m_ResidencySet.NativePtr != IntPtr.Zero)
-            {
-                m_ResidencySet.EndResidency();
-                ObjectiveCRuntime.Release(m_ResidencySet.NativePtr);
-                m_ResidencySet = default;
-            }
-
-            if (m_Mtl4CompletionEvent.NativePtr != IntPtr.Zero)
-            {
-                ObjectiveCRuntime.Release(m_Mtl4CompletionEvent);
-                m_Mtl4CompletionEvent = default;
-            }
-
-            if (m_NativeMtl4CommandAllocator.NativePtr != IntPtr.Zero)
-            {
-                ObjectiveCRuntime.Release(m_NativeMtl4CommandAllocator.NativePtr);
-                m_NativeMtl4CommandAllocator = default;
-            }
-
-            if (m_NativeQueue4.NativePtr != IntPtr.Zero)
-            {
-                ObjectiveCRuntime.Release(m_NativeQueue4.NativePtr);
-                m_NativeQueue4 = default;
-            }
+            ReleaseMtl4SubmissionObjects();
         }
     }
 }

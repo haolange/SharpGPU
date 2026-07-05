@@ -650,12 +650,17 @@ namespace SharpGPU
         private SharpMetal.Metal.MTLHeap m_NativeHeap;
 
         internal MetalHeap(MetalDevice device, in RHIHeapDescription descriptor)
+            : this(device, descriptor, MTLHeapType.Placement)
+        {
+        }
+
+        internal MetalHeap(MetalDevice device, in RHIHeapDescription descriptor, MTLHeapType heapType)
         {
             m_MetalDevice = device;
 
             MTLHeapDescriptor nativeDescriptor = MTLHeapDescriptor.New();
             nativeDescriptor.Size = descriptor.Size;
-            nativeDescriptor.Type = MTLHeapType.Placement;
+            nativeDescriptor.Type = heapType;
             nativeDescriptor.ResourceOptions = MetalUtility.ConvertToMetalResourceOptions(descriptor.StorageMode);
             nativeDescriptor.StorageMode = (MTLStorageMode)(((ulong)nativeDescriptor.ResourceOptions >> 4) & 0xF);
             nativeDescriptor.CpuCacheMode = (MTLCPUCacheMode)((ulong)nativeDescriptor.ResourceOptions & 0xF);
@@ -673,6 +678,7 @@ namespace SharpGPU
         {
             if (m_NativeHeap.NativePtr != IntPtr.Zero)
             {
+                m_MetalDevice.RemoveResidencyAllocation(m_NativeHeap);
                 ObjectiveCRuntime.Release(m_NativeHeap);
                 m_NativeHeap = default;
             }

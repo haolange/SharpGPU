@@ -2499,6 +2499,11 @@ namespace SharpGPU
             MetalMLPipeline metalPipeline = (MetalMLPipeline)m_CachedPipeline;
             if (metalPipeline.NativePipelineState.NativePtr != IntPtr.Zero)
             {
+                if (m_CommandBuffer?.CommandQueue is MetalCommandQueue queue)
+                {
+                    queue.AddResidencyAllocation(new MTLAllocation(metalPipeline.NativePipelineState.NativePtr));
+                }
+
                 m_NativeEncoder.SetPipelineState(metalPipeline.NativePipelineState);
             }
         }
@@ -2510,6 +2515,7 @@ namespace SharpGPU
             m_CachedBindingSet = metalBindingSet;
             if (metalBindingSet.NativeArgumentTable.NativePtr != IntPtr.Zero)
             {
+                TrackBindingResidency(metalBindingSet);
                 m_NativeEncoder.SetArgumentTable(metalBindingSet.NativeArgumentTable);
             }
         }
@@ -2527,6 +2533,7 @@ namespace SharpGPU
             }
 
             m_NativeEncoder.DispatchNetworkWithIntermediatesHeap(metalBindingSet.NativeIntermediatesHeap);
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.MachineLearning));
         }
 
         public override void EndPass()
@@ -2549,6 +2556,43 @@ namespace SharpGPU
 
         protected override void Release()
         {
+        }
+
+        private void TrackBindingResidency(MetalMLBindingSet bindingSet)
+        {
+            if (m_CommandBuffer?.CommandQueue is not MetalCommandQueue queue)
+            {
+                return;
+            }
+
+            for (int i = 0; i < bindingSet.Inputs.Length; ++i)
+            {
+                TrackTensorResidency(queue, bindingSet.Inputs[i]);
+            }
+
+            for (int i = 0; i < bindingSet.Outputs.Length; ++i)
+            {
+                TrackTensorResidency(queue, bindingSet.Outputs[i]);
+            }
+
+            if (bindingSet.NativeIntermediatesHeap.NativePtr != IntPtr.Zero)
+            {
+                queue.AddResidencyAllocation(bindingSet.NativeIntermediatesHeap);
+            }
+        }
+
+        private static void TrackTensorResidency(MetalCommandQueue queue, MetalTensor tensor)
+        {
+            if (tensor.BackingBuffer != null)
+            {
+                queue.AddResidencyAllocation(tensor.BackingBuffer.NativeBuffer);
+            }
+
+            MTLBuffer nativeBuffer = tensor.NativeTensor.Buffer;
+            if (nativeBuffer.NativePtr != IntPtr.Zero)
+            {
+                queue.AddResidencyAllocation(nativeBuffer);
+            }
         }
     }
 

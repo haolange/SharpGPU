@@ -65,6 +65,7 @@ namespace SharpGPU
         {
             if (m_NativeBuffer.NativePtr != IntPtr.Zero)
             {
+                m_MetalDevice.RemoveResidencyAllocation(m_NativeBuffer);
                 ObjectiveCRuntime.Release(m_NativeBuffer);
                 m_NativeBuffer = default;
             }

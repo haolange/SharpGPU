@@ -13,6 +13,7 @@ namespace SharpGPU
     {
         public MTLDevice NativeDevice => m_NativeDevice;
         public MetalInstance MetalInstance => m_MetalInstance;
+        public override ERHIBackend BackendType => ERHIBackend.Metal;
         internal bool SupportsMetal4Barriers => m_SupportsMetal4Barriers;
         internal bool SupportsMetal4 => m_SupportsMetal4;
         internal bool SupportsArgumentTable => m_SupportsArgumentTable;
@@ -31,6 +32,14 @@ namespace SharpGPU
         private string? m_MetalMLUnavailableReason;
         private MTLTextureViewPool m_TextureViewPool;
         private int m_NextTextureViewIndex;
+        // Metal 4 ML package objects are retained for the device lifetime. Releasing argument
+        // tables / intermediates heaps / pipeline libraries at per-program disposal time made
+        // subsequent native ML dispatches observe zeroed outputs on macOS 26.5.
+        private readonly List<string> m_MetalMLPackageDirectories = new List<string>();
+        private readonly List<MTLLibrary> m_MetalMLLibraries = new List<MTLLibrary>();
+        private readonly List<MTL4MachineLearningPipelineState> m_MetalMLPipelineStates = new List<MTL4MachineLearningPipelineState>();
+        private readonly List<MTL4ArgumentTable> m_MetalMLArgumentTables = new List<MTL4ArgumentTable>();
+        private readonly List<MTLHeap> m_MetalMLIntermediatesHeaps = new List<MTLHeap>();
 
         private static readonly Selector s_RespondsToSelector = "respondsToSelector:";
         private static readonly Selector s_NewArgumentTableWithDescriptorError = "newArgumentTableWithDescriptor:error:";
@@ -233,15 +242,39 @@ namespace SharpGPU
 
         public override RHIMLProgram CreateMLProgram(in RHIMLProgramDescriptor descriptor)
         {
-            // Metal 4 ML is function/shader-based, not operator-description-based: a MetalMLProgram
-            // wraps a compiled MetalFunction, not an op sequence. The backend-neutral op-sequence
-            // program builder (ADR-0028) is therefore implemented on DX12/DirectML in MVP3; a Metal
-            // lowering that emits a Metal ML kernel per op (or a fused kernel) is the MVP4 Metal
-            // backend's scope. Failing loudly keeps the contract honest instead of silently no-op'ing.
-            throw new NotSupportedException(
-                "Metal ML program construction from an op sequence is not implemented yet. " +
-                "Metal 4 ML is function-based; the op-sequence -> Metal ML kernel lowering is scoped to the SharpNeural MVP4 Metal backend (RFC-0010). " +
-                "TODO(UNVERIFIED): macOS ARM64 Metal 4 ML lowering.");
+            if (!SupportsMetalML)
+            {
+                throw new NotSupportedException(m_MetalMLUnavailableReason ?? "Metal ML is not supported on this device.");
+            }
+
+            if (descriptor.Ops.Length > 1)
+            {
+                throw new NotSupportedException(
+                    "Metal ML MPSGraph package lowering currently supports one RHI ML op per native artifact. " +
+                    "Multi-op packages execute once but corrupt subsequent MTL4MachineLearningCommandEncoder dispatches on macOS 26.5; " +
+                    "compute-kernel and CPU fallbacks are intentionally rejected.");
+            }
+
+            try
+            {
+                MetalMpsGraphPackage package = MetalMpsGraphPackageBuilder.Build(this, descriptor);
+                RegisterMetalMLPackageDirectory(package.PackageDirectory);
+                RegisterMetalMLLibrary(package.Library);
+                return new MetalMLProgram(
+                    descriptor.Name,
+                    package.Library,
+                    MetalMpsGraphPackageBuilder.EntryName,
+                    package.PackageDirectory,
+                    package.BindingInfos);
+            }
+            catch (NotSupportedException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Metal ML program construction failed for '{descriptor.Name}': {ex.Message}", ex);
+            }
         }
 
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
@@ -484,8 +517,134 @@ namespace SharpGPU
                 return false;
             }
 
-            unavailableReason = "Metal ML is disabled until SharpGPU provides a native Metal ML package program path; CPU and no-op fallbacks are not allowed.";
+            if (!MetalMpsGraphPackageBuilder.IsAvailable(out string? packageUnavailableReason))
+            {
+                unavailableReason = packageUnavailableReason ?? "Metal ML requires MPSGraph package serialization support.";
+                return false;
+            }
+
+            unavailableReason =
+                "Metal ML package artifacts are available, but the current MPSGraph-package route is disabled: " +
+                "matrix/intermediates-heap packages can dispatch once and then corrupt subsequent MTL4MachineLearningCommandEncoder dispatches in the same process on macOS 26.5. " +
+                "No compute-kernel or CPU fallback is allowed; keep Metal ML unsupported until a stable native artifact route is proven.";
             return false;
+        }
+
+        internal void RegisterMetalMLPipelineState(in MTL4MachineLearningPipelineState pipelineState)
+        {
+            if (pipelineState.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            m_MetalMLPipelineStates.Add(pipelineState);
+        }
+
+        internal void RegisterMetalMLArgumentTable(in MTL4ArgumentTable argumentTable)
+        {
+            if (argumentTable.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            m_MetalMLArgumentTables.Add(argumentTable);
+        }
+
+        internal void RegisterMetalMLIntermediatesHeap(in MTLHeap heap)
+        {
+            if (heap.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            m_MetalMLIntermediatesHeaps.Add(heap);
+        }
+
+        private void RegisterMetalMLPackageDirectory(string packageDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(packageDirectory))
+            {
+                return;
+            }
+
+            m_MetalMLPackageDirectories.Add(packageDirectory);
+        }
+
+        private void RegisterMetalMLLibrary(in MTLLibrary library)
+        {
+            if (library.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            m_MetalMLLibraries.Add(library);
+        }
+
+        private void ReleaseMetalMLNativeObjects()
+        {
+            for (int i = 0; i < m_MetalMLIntermediatesHeaps.Count; ++i)
+            {
+                MTLHeap heap = m_MetalMLIntermediatesHeaps[i];
+                if (heap.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(heap);
+                }
+            }
+
+            m_MetalMLIntermediatesHeaps.Clear();
+
+            for (int i = 0; i < m_MetalMLArgumentTables.Count; ++i)
+            {
+                MTL4ArgumentTable argumentTable = m_MetalMLArgumentTables[i];
+                if (argumentTable.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(argumentTable);
+                }
+            }
+
+            m_MetalMLArgumentTables.Clear();
+
+            for (int i = 0; i < m_MetalMLPipelineStates.Count; ++i)
+            {
+                MTL4MachineLearningPipelineState pipelineState = m_MetalMLPipelineStates[i];
+                if (pipelineState.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(pipelineState);
+                }
+            }
+
+            m_MetalMLPipelineStates.Clear();
+
+            for (int i = 0; i < m_MetalMLLibraries.Count; ++i)
+            {
+                MTLLibrary library = m_MetalMLLibraries[i];
+                if (library.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(library);
+                }
+            }
+
+            m_MetalMLLibraries.Clear();
+        }
+
+        private void DeleteMetalMLPackageDirectories()
+        {
+            for (int i = 0; i < m_MetalMLPackageDirectories.Count; ++i)
+            {
+                string packageDirectory = m_MetalMLPackageDirectories[i];
+                try
+                {
+                    if (Directory.Exists(packageDirectory))
+                    {
+                        Directory.Delete(packageDirectory, recursive: true);
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            m_MetalMLPackageDirectories.Clear();
         }
 
         internal static bool TryGetStatisticsCounterSet(MTLDevice device, out MTLCounterSet counterSet)
@@ -635,6 +794,26 @@ namespace SharpGPU
             return (uint)Interlocked.Increment(ref m_NextTextureViewIndex) - 1;
         }
 
+        internal void RemoveResidencyAllocation(in MTLAllocation allocation)
+        {
+            if (allocation.NativePtr == IntPtr.Zero || m_CommandQueueMap == null)
+            {
+                return;
+            }
+
+            foreach (KeyValuePair<ERHIPipelineType, TArray<RHICommandQueue>> pair in m_CommandQueueMap)
+            {
+                TArray<RHICommandQueue> queues = pair.Value;
+                for (int i = 0; i < queues.length; ++i)
+                {
+                    if (queues[i] is MetalCommandQueue queue)
+                    {
+                        queue.RemoveResidencyAllocation(allocation);
+                    }
+                }
+            }
+        }
+
         private static string SanitizeFileName(string value)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -689,6 +868,9 @@ namespace SharpGPU
                 ObjectiveCRuntime.Release(m_TextureViewPool.NativePtr);
                 m_TextureViewPool = default;
             }
+
+            ReleaseMetalMLNativeObjects();
+            DeleteMetalMLPackageDirectories();
 
             if (m_NativeDevice.NativePtr != IntPtr.Zero)
             {

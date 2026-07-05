@@ -167,6 +167,14 @@ namespace SharpGPU
         public RHIVendorId VendorId => m_VendorId;
         public RHIDeviceId DeviceId => m_DeviceId;
         public ERHIDeviceType Type => m_Type;
+        /// <summary>
+        /// The backend kind this device belongs to (DirectX12 / Metal / Vulkan). Exposed on the
+        /// abstract HAL so higher layers (e.g. SharpNeural's GPU backend) can branch on the active
+        /// backend without taking a compile-time dependency on backend-specific types or performing
+        /// runtime type checks. This is a HAL-level property, not part of the ML execution-layer
+        /// surface frozen by ADR-0019.
+        /// </summary>
+        public abstract ERHIBackend BackendType { get; }
         public RHIDeviceLimit? Limit => m_Limit;
         public RHIDeviceFeature? Feature => m_Feature;
         public int ComputeQueueCount => m_ComputeQueueCount;
