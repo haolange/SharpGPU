@@ -281,33 +281,56 @@ public sealed class MetalMLStabilityProbeTests
 
     private static byte[] Pack(RHIMLTensorDescriptor descriptor, byte[] contiguous)
     {
-        return MetalTensor.PackNativeBuffer(descriptor, contiguous);
+        byte[] native = new byte[checked((int)MetalTensor.CalculateNativeBufferByteLength(descriptor))];
+        MetalTensor.PackContiguousToNative(contiguous, native, descriptor);
+        return native;
     }
 
     private static byte[] Unpack(RHIMLTensorDescriptor descriptor, byte[] native)
     {
-        return MetalTensor.UnpackNativeBuffer(descriptor, native);
+        byte[] contiguous = new byte[GetContiguousByteLength(descriptor)];
+        MetalTensor.UnpackNativeToContiguous(native, contiguous, descriptor);
+        return contiguous;
+    }
+
+    private static int GetContiguousByteLength(RHIMLTensorDescriptor descriptor)
+    {
+        ulong elementCount = 1;
+        foreach (uint dimension in descriptor.Dimensions.Span)
+        {
+            elementCount = checked(elementCount * Math.Max(1u, dimension));
+        }
+
+        uint elementSize = descriptor.DataType switch
+        {
+            ERHIMLDataType.Float32 => 4,
+            ERHIMLDataType.Float16 => 2,
+            ERHIMLDataType.BFloat16 => 2,
+            ERHIMLDataType.Int32 => 4,
+            ERHIMLDataType.Int16 => 2,
+            ERHIMLDataType.Int8 => 1,
+            ERHIMLDataType.UInt32 => 4,
+            ERHIMLDataType.UInt16 => 2,
+            ERHIMLDataType.UInt8 => 1,
+            _ => throw new NotSupportedException($"Unsupported tensor data type '{descriptor.DataType}'."),
+        };
+
+        return checked((int)(elementCount * elementSize));
     }
 
     private static void WriteBytes(RHIBuffer buffer, byte[] data)
     {
-        unsafe
-        {
-            IntPtr mapped = buffer.Map();
-            new Span<byte>(mapped.ToPointer(), data.Length).CopyFrom(data);
-            buffer.Unmap();
-        }
+        IntPtr mapped = buffer.Map(0, 0);
+        Marshal.Copy(data, 0, mapped, data.Length);
+        buffer.UnMap(0, checked((uint)data.Length));
     }
 
     private static byte[] ReadbackBytes(RHIBuffer buffer, int byteSize)
     {
         byte[] data = new byte[byteSize];
-        unsafe
-        {
-            IntPtr mapped = buffer.Map();
-            new Span<byte>(mapped.ToPointer(), byteSize).CopyTo(data);
-            buffer.Unmap();
-        }
+        IntPtr mapped = buffer.Map(0, 0);
+        Marshal.Copy(mapped, data, 0, byteSize);
+        buffer.UnMap(0, 0);
         return data;
     }
 
@@ -462,5 +485,3 @@ public sealed class MetalMLStabilityProbeTests
         return FromBytes(Unpack(outDesc, ReadbackBytes(readback, outNativeByteSize)));
     }
 }
-
-

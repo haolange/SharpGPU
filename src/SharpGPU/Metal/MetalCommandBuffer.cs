@@ -21,6 +21,7 @@ namespace SharpGPU
         internal MTL4CommandBuffer NativeCommandBuffer4 => m_NativeCommandBuffer4;
         internal CAMetalDrawable PresentDrawable => m_PresentDrawable;
         internal bool UsesMachineLearning => m_UsesMachineLearning;
+        internal bool UsesArgumentTables => m_UsesArgumentTables;
 
         private readonly MetalTransferEncoder m_TransferEncoder;
         private readonly MetalComputeEncoder m_ComputeEncoder;
@@ -35,6 +36,7 @@ namespace SharpGPU
         private MetalActiveEncoderType m_ActiveEncoder;
         private bool m_Mtl4CommandBufferEnded;
         private bool m_UsesMachineLearning;
+        private bool m_UsesArgumentTables;
         private string m_CommandBufferName = string.Empty;
 
         // Barrier tracking: seenStagesMask tracks which Metal 4 stage bits have had
@@ -298,6 +300,11 @@ namespace SharpGPU
             m_CurrentEncoderSeenStages |= stages;
         }
 
+        internal void MarkArgumentTablesUsed()
+        {
+            m_UsesArgumentTables = true;
+        }
+
         /// <summary>
         /// Returns true if the srcStage was already seen in the current encoder (intra-encoder dependency).
         /// Returns false if the srcStage must have been produced by a previous encoder (cross-encoder dependency).
@@ -327,6 +334,7 @@ namespace SharpGPU
             m_Mtl4CommandBufferEnded = false;
             m_CurrentEncoderSeenStages = 0;
             m_UsesMachineLearning = false;
+            m_UsesArgumentTables = false;
         }
 
         protected override void Release()

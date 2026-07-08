@@ -455,11 +455,14 @@ namespace SharpGPU
     {
         // Single-set mode state (direct MTL4ArgumentTable resource binding)
         private readonly SortedDictionary<uint, MTL4ArgumentTable> m_ArgumentTables;
+        private readonly List<MTL4ArgumentTable> m_RetiredArgumentTables;
 
         // Multi-set mode state (descriptor buffer per set → single root argument table)
         private bool m_IsMultiSet;
         private MTL4ArgumentTable m_RootArgumentTable;
         private readonly SortedDictionary<uint, MTLBuffer> m_DescriptorBuffers;
+        private readonly List<MTLBuffer> m_RetiredDescriptorBuffers;
+        private readonly List<MTL4ArgumentTable> m_RetiredRootArgumentTables;
 
         // Shared state
         private readonly SortedDictionary<uint, RasterVertexBinding> m_RasterVertexBindings;
@@ -481,7 +484,10 @@ namespace SharpGPU
             : base(device, pipelineType)
         {
             m_ArgumentTables = new SortedDictionary<uint, MTL4ArgumentTable>();
+            m_RetiredArgumentTables = new List<MTL4ArgumentTable>();
             m_DescriptorBuffers = new SortedDictionary<uint, MTLBuffer>();
+            m_RetiredDescriptorBuffers = new List<MTLBuffer>();
+            m_RetiredRootArgumentTables = new List<MTL4ArgumentTable>();
             m_RasterVertexBindings = new SortedDictionary<uint, RasterVertexBinding>();
             m_CommandQueue = commandQueue;
         }
@@ -491,8 +497,8 @@ namespace SharpGPU
         public override void ResetForPipeline(MetalPipelineLayout pipelineLayout)
         {
             base.ResetForPipeline(pipelineLayout);
-            ReleaseArgumentTables();
-            ReleaseDescriptorBuffers();
+            RetireArgumentTables();
+            RetireDescriptorBuffers();
             m_RasterVertexBindings.Clear();
 
             int layoutCount = pipelineLayout.ArgumentTableLayoutCount;
@@ -610,6 +616,8 @@ namespace SharpGPU
         {
             ReleaseArgumentTables();
             ReleaseDescriptorBuffers();
+            ReleaseRetiredArgumentTables();
+            ReleaseRetiredDescriptorBuffers();
             m_RasterVertexBindings.Clear();
         }
 
@@ -969,6 +977,32 @@ namespace SharpGPU
             m_ArgumentTables.Clear();
         }
 
+        private void RetireArgumentTables()
+        {
+            foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in m_ArgumentTables)
+            {
+                if (pair.Value.NativePtr != IntPtr.Zero)
+                {
+                    m_RetiredArgumentTables.Add(pair.Value);
+                }
+            }
+
+            m_ArgumentTables.Clear();
+        }
+
+        private void ReleaseRetiredArgumentTables()
+        {
+            foreach (MTL4ArgumentTable argumentTable in m_RetiredArgumentTables)
+            {
+                if (argumentTable.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(argumentTable.NativePtr);
+                }
+            }
+
+            m_RetiredArgumentTables.Clear();
+        }
+
         private void ReleaseDescriptorBuffers()
         {
             foreach (KeyValuePair<uint, MTLBuffer> pair in m_DescriptorBuffers)
@@ -988,6 +1022,50 @@ namespace SharpGPU
             }
 
             m_IsMultiSet = false;
+        }
+
+        private void RetireDescriptorBuffers()
+        {
+            foreach (KeyValuePair<uint, MTLBuffer> pair in m_DescriptorBuffers)
+            {
+                if (pair.Value.NativePtr != IntPtr.Zero)
+                {
+                    m_RetiredDescriptorBuffers.Add(pair.Value);
+                }
+            }
+
+            m_DescriptorBuffers.Clear();
+
+            if (m_RootArgumentTable.NativePtr != IntPtr.Zero)
+            {
+                m_RetiredRootArgumentTables.Add(m_RootArgumentTable);
+                m_RootArgumentTable = default;
+            }
+
+            m_IsMultiSet = false;
+        }
+
+        private void ReleaseRetiredDescriptorBuffers()
+        {
+            foreach (MTLBuffer buffer in m_RetiredDescriptorBuffers)
+            {
+                if (buffer.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(buffer.NativePtr);
+                }
+            }
+
+            m_RetiredDescriptorBuffers.Clear();
+
+            foreach (MTL4ArgumentTable argumentTable in m_RetiredRootArgumentTables)
+            {
+                if (argumentTable.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(argumentTable.NativePtr);
+                }
+            }
+
+            m_RetiredRootArgumentTables.Clear();
         }
     }
 
@@ -1361,6 +1439,7 @@ namespace SharpGPU
             }
 
             MetalArgumentTable table = (MetalArgumentTable)resourceTable;
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkArgumentTablesUsed();
             m_BindingBackend.SetArgumentTable(table, tableIndex);
         }
 

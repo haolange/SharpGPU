@@ -29,6 +29,7 @@ namespace SharpGPU
         private ulong m_LastSubmittedMtl4Value;
         private ulong m_NextMtl4CompletionValue;
         private bool m_LastSubmittedUsedMachineLearning;
+        private bool m_LastSubmittedUsedArgumentTables;
         private bool m_HasLoggedMtl4SubmitOrder;
 
         public MetalCommandQueue(MetalDevice device, in ERHIPipelineType pipeline)
@@ -42,6 +43,7 @@ namespace SharpGPU
             m_LastSubmittedMtl4Value = 0;
             m_NextMtl4CompletionValue = 1;
             m_LastSubmittedUsedMachineLearning = false;
+            m_LastSubmittedUsedArgumentTables = false;
             m_HasLoggedMtl4SubmitOrder = false;
 
             m_NativeQueue4 = device.NativeDevice.NewMTL4CommandQueue();
@@ -299,18 +301,20 @@ namespace SharpGPU
             PresentDrawable(metalCommandBuffer.PresentDrawable);
             m_LastSubmittedMtl4Value = completionValue;
             m_LastSubmittedUsedMachineLearning = metalCommandBuffer.UsesMachineLearning;
+            m_LastSubmittedUsedArgumentTables = metalCommandBuffer.UsesArgumentTables;
 
             if (signalFence != null)
             {
                 WaitForMtl4Completion(completionValue);
                 ResetMtl4CommandAllocator();
-                if (m_LastSubmittedUsedMachineLearning)
+                if (m_LastSubmittedUsedMachineLearning || m_LastSubmittedUsedArgumentTables)
                 {
                     RecreateMtl4SubmissionObjects();
                 }
 
                 m_LastSubmittedMtl4Value = 0;
                 m_LastSubmittedUsedMachineLearning = false;
+                m_LastSubmittedUsedArgumentTables = false;
                 SignalFence(signalFence);
             }
         }
@@ -434,13 +438,14 @@ namespace SharpGPU
             {
                 WaitForMtl4Completion(m_LastSubmittedMtl4Value);
                 ResetMtl4CommandAllocator();
-                if (m_LastSubmittedUsedMachineLearning)
+                if (m_LastSubmittedUsedMachineLearning || m_LastSubmittedUsedArgumentTables)
                 {
                     RecreateMtl4SubmissionObjects();
                 }
 
                 m_LastSubmittedMtl4Value = 0;
                 m_LastSubmittedUsedMachineLearning = false;
+                m_LastSubmittedUsedArgumentTables = false;
             }
         }
 
