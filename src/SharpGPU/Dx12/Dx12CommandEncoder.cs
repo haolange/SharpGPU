@@ -432,7 +432,7 @@ namespace SharpGPU
             }
 
             Vortice.Direct3D12.BarrierSync sync = Vortice.Direct3D12.BarrierSync.None;
-            if ((syncMask & ERHISyncStageMask.Transfer) != 0) sync |= Vortice.Direct3D12.BarrierSync.Copy | Vortice.Direct3D12.BarrierSync.Resolve;
+            if ((syncMask & ERHISyncStageMask.Transfer) != 0) sync |= Vortice.Direct3D12.BarrierSync.Copy;
             if ((syncMask & ERHISyncStageMask.Indirect) != 0) sync |= Vortice.Direct3D12.BarrierSync.ExecuteIndirect;
             if ((syncMask & ERHISyncStageMask.IndexInput) != 0) sync |= Vortice.Direct3D12.BarrierSync.IndexInput;
             if ((syncMask & ERHISyncStageMask.VertexInput) != 0) sync |= Vortice.Direct3D12.BarrierSync.IndexInput;
@@ -723,7 +723,12 @@ namespace SharpGPU
             if ((effectiveAccess & (Vortice.Direct3D12.BarrierAccess.ResolveSource | Vortice.Direct3D12.BarrierAccess.ResolveDestination)) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.Resolve;
             if ((effectiveAccess & Vortice.Direct3D12.BarrierAccess.IndexBuffer) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.IndexInput;
             if ((effectiveAccess & Vortice.Direct3D12.BarrierAccess.VertexBuffer) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.VertexShading | Vortice.Direct3D12.BarrierSync.NonPixelShading;
-            if ((effectiveAccess & (Vortice.Direct3D12.BarrierAccess.ConstantBuffer | Vortice.Direct3D12.BarrierAccess.ShaderResource | Vortice.Direct3D12.BarrierAccess.UnorderedAccess)) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.AllShading;
+            if ((effectiveAccess & (Vortice.Direct3D12.BarrierAccess.ConstantBuffer | Vortice.Direct3D12.BarrierAccess.ShaderResource | Vortice.Direct3D12.BarrierAccess.UnorderedAccess)) != 0)
+            {
+                requiredSync |= queuePipeline == ERHIPipelineType.Compute
+                    ? Vortice.Direct3D12.BarrierSync.ComputeShading
+                    : Vortice.Direct3D12.BarrierSync.AllShading;
+            }
             if ((effectiveAccess & Vortice.Direct3D12.BarrierAccess.IndirectArgument) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.ExecuteIndirect;
             if ((effectiveAccess & Vortice.Direct3D12.BarrierAccess.RenderTarget) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.RenderTarget;
             if ((effectiveAccess & (Vortice.Direct3D12.BarrierAccess.DepthStencilRead | Vortice.Direct3D12.BarrierAccess.DepthStencilWrite)) != 0) requiredSync |= Vortice.Direct3D12.BarrierSync.DepthStencil;
