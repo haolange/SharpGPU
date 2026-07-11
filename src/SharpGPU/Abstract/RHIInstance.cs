@@ -6,6 +6,7 @@ namespace SharpGPU
     public struct RHIInstanceDescriptor
     {
         public ERHIBackend Backend;
+        public RHINativeSurfaceKind SurfaceKind;
         public bool EnableDebugLayer;
         public bool EnableValidatior;
         public int ComputeQueueRequestCount;

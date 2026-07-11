@@ -70,7 +70,7 @@ namespace SharpGPU
 
             Vortice.DXGI.IDXGISwapChain1 dx12SwapChain1 = dx12Instance.DXGIFactory.CreateSwapChainForHwnd(
                 dx12Queue.NativeCommandQueue,
-                new System.IntPtr(descriptor.Surface.ToPointer()),
+                descriptor.WindowHandle,
                 desc,
                 null,
                 null);
@@ -84,7 +84,7 @@ namespace SharpGPU
             desc.BufferCount = descriptor.Count;
             desc.SampleDescription = new Vortice.DXGI.SampleDescription(1, 0);
             desc.SwapEffect = Dx12Utility.ConvertToDx12SwapEffect(m_Descriptor.PresentMode);
-            desc.OutputWindow = new System.IntPtr(descriptor.Surface.ToPointer());
+            desc.OutputWindow = descriptor.WindowHandle;
             desc.BufferDescription.Width = descriptor.Extent.x;
             desc.BufferDescription.Height = descriptor.Extent.y;
             desc.BufferDescription.Format = Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(descriptor.Format));

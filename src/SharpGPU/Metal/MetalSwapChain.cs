@@ -47,7 +47,7 @@ namespace SharpGPU
             m_Layer.DisplaySyncEnabled = descriptor.PresentMode != ERHIPresentMode.Immediately;
             m_Layer.Opaque = true;
 
-            AttachLayerToSurface(descriptor.Surface);
+            AttachLayerToSurface(descriptor.WindowHandle);
             Resize(descriptor.Extent);
         }
 

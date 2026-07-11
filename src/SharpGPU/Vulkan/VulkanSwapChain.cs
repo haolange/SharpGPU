@@ -21,7 +21,6 @@ namespace SharpGPU
         private uint m_CurrentImageIndex;
         private VkFence m_ImageAcquireFence;
         private bool m_HasAcquiredImageThisFrame;
-        private IntPtr m_X11Display;
         private IntPtr m_MetalLayerHandle;
 
         private static ObjectiveCClass s_NSWindowClass;
@@ -55,21 +54,25 @@ namespace SharpGPU
         {
             VulkanInstance vkInstance = m_VulkanDevice.VulkanInstance;
 
-            switch (VulkanUtility.GetCurrentOSPlatfom())
+            switch (descriptor.SurfaceKind)
             {
-                case EOSPlatform.Windows:
+                case RHINativeSurfaceKind.Win32Hwnd:
                 {
                     // TODO(UNVERIFIED): Validate on Windows runtime (x64/x86_64).
-                    IntPtr moduleHandle = GetModuleHandle(null);
+                    IntPtr moduleHandle = descriptor.InstanceHandle;
                     if (moduleHandle == IntPtr.Zero)
                     {
-                        moduleHandle = System.Diagnostics.Process.GetCurrentProcess().Handle;
+                        moduleHandle = GetModuleHandle(null);
+                    }
+                    if (moduleHandle == IntPtr.Zero)
+                    {
+                        throw new InvalidOperationException("A Win32 HINSTANCE is required for Vulkan surface creation.");
                     }
 
                     VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = new VkWin32SurfaceCreateInfoKHR()
                     {
                         sType = VkStructureType.Win32SurfaceCreateInfoKHR,
-                        hwnd = descriptor.Surface,
+                        hwnd = descriptor.WindowHandle,
                         hinstance = moduleHandle,
                     };
 
@@ -79,20 +82,19 @@ namespace SharpGPU
                     }
                     break;
                 }
-                case EOSPlatform.Linux:
+                case RHINativeSurfaceKind.X11Window:
                 {
                     // TODO(UNVERIFIED): Validate on Linux/X11 runtime.
-                    m_X11Display = XOpenDisplay(IntPtr.Zero);
-                    if (m_X11Display == IntPtr.Zero)
+                    if (descriptor.DisplayHandle == IntPtr.Zero)
                     {
-                        throw new InvalidOperationException("Failed to open X11 display via XOpenDisplay(null).");
+                        throw new InvalidOperationException("The SDL-owned X11 Display handle is required for Vulkan surface creation.");
                     }
 
                     VkXlibSurfaceCreateInfoKHR surfaceCreateInfo = new VkXlibSurfaceCreateInfoKHR()
                     {
                         sType = VkStructureType.XlibSurfaceCreateInfoKHR,
-                        dpy = m_X11Display,
-                        window = (ulong)descriptor.Surface,
+                        dpy = descriptor.DisplayHandle,
+                        window = (ulong)descriptor.WindowHandle,
                     };
 
                     fixed (VkSurfaceKHR* surfacePtr = &m_Surface)
@@ -101,13 +103,34 @@ namespace SharpGPU
                     }
                     break;
                 }
-                case EOSPlatform.Android:
+                case RHINativeSurfaceKind.WaylandSurface:
+                {
+                    // TODO(UNVERIFIED): Validate on Linux/Wayland runtime.
+                    if (descriptor.DisplayHandle == IntPtr.Zero)
+                    {
+                        throw new InvalidOperationException("The SDL-owned wl_display handle is required for Vulkan surface creation.");
+                    }
+
+                    VkWaylandSurfaceCreateInfoKHR surfaceCreateInfo = new VkWaylandSurfaceCreateInfoKHR
+                    {
+                        sType = VkStructureTypeWaylandSurfaceCreateInfoKHR,
+                        display = descriptor.DisplayHandle,
+                        surface = descriptor.WindowHandle,
+                    };
+
+                    fixed (VkSurfaceKHR* surfacePtr = &m_Surface)
+                    {
+                        VulkanUtility.CheckErrors(VulkanNative.vkCreateWaylandSurfaceKHR(vkInstance.NativeInstance, &surfaceCreateInfo, null, surfacePtr));
+                    }
+                    break;
+                }
+                case RHINativeSurfaceKind.AndroidNativeWindow:
                 {
                     // TODO(UNVERIFIED): Validate on Android runtime with ANativeWindow* surface handle.
                     VkAndroidSurfaceCreateInfoKHR surfaceCreateInfo = new VkAndroidSurfaceCreateInfoKHR()
                     {
                         sType = VkStructureType.AndroidSurfaceCreateInfoKHR,
-                        window = descriptor.Surface,
+                        window = descriptor.WindowHandle,
                     };
 
                     fixed (VkSurfaceKHR* surfacePtr = &m_Surface)
@@ -116,11 +139,12 @@ namespace SharpGPU
                     }
                     break;
                 }
-                case EOSPlatform.MacOS:
-                case EOSPlatform.iOS:
+                case RHINativeSurfaceKind.AppKitNsWindow:
+                case RHINativeSurfaceKind.UIKitUiWindow:
                 {
                     // TODO(UNVERIFIED): iOS path requires device runtime verification.
-                    m_MetalLayerHandle = ResolveMetalLayer(descriptor.Surface, VulkanUtility.GetCurrentOSPlatfom());
+                    EOSPlatform platform = descriptor.SurfaceKind == RHINativeSurfaceKind.AppKitNsWindow ? EOSPlatform.MacOS : EOSPlatform.iOS;
+                    m_MetalLayerHandle = ResolveMetalLayer(descriptor.WindowHandle, platform);
                     if (m_MetalLayerHandle == IntPtr.Zero)
                     {
                         throw new InvalidOperationException("Failed to resolve CAMetalLayer for Vulkan surface creation.");
@@ -135,7 +159,7 @@ namespace SharpGPU
                     break;
                 }
                 default:
-                    throw new PlatformNotSupportedException("Vulkan swapchain surface creation is not supported on the current platform.");
+                    throw new PlatformNotSupportedException($"Vulkan swapchain surface kind '{descriptor.SurfaceKind}' is not supported.");
             }
         }
 
@@ -504,12 +528,6 @@ namespace SharpGPU
             VulkanNative.vkDestroySwapchainKHR(m_VulkanDevice.NativeDevice, m_NativeSwapChain, null);
             VulkanNative.vkDestroySurfaceKHR(m_VulkanDevice.VulkanInstance.NativeInstance, m_Surface, null);
 
-            if (m_X11Display != IntPtr.Zero)
-            {
-                XCloseDisplay(m_X11Display);
-                m_X11Display = IntPtr.Zero;
-            }
-
             if (m_MetalLayerHandle != IntPtr.Zero)
             {
                 ObjectiveCRuntime.Release(m_MetalLayerHandle);
@@ -532,11 +550,17 @@ namespace SharpGPU
         [LibraryImport("kernel32", EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
         private static partial IntPtr GetModuleHandle(string? moduleName);
 
-        [LibraryImport("libX11.so.6", EntryPoint = "XOpenDisplay")]
-        private static partial IntPtr XOpenDisplay(IntPtr displayName);
+        private const VkStructureType VkStructureTypeWaylandSurfaceCreateInfoKHR = (VkStructureType)1000006000;
 
-        [LibraryImport("libX11.so.6", EntryPoint = "XCloseDisplay")]
-        private static partial int XCloseDisplay(IntPtr display);
+        [StructLayout(LayoutKind.Sequential)]
+        private struct VkWaylandSurfaceCreateInfoKHR
+        {
+            public VkStructureType sType;
+            public IntPtr pNext;
+            public uint flags;
+            public IntPtr display;
+            public IntPtr surface;
+        }
     }
 #pragma warning restore CS8600, CS8602, CS8618, CA1416
 }

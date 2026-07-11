@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Vortice.Vulkan;
 using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 
 namespace SharpGPU
 {
@@ -17,6 +18,9 @@ namespace SharpGPU
         private static readonly ConcurrentDictionary<nint, nint> s_PhysicalToInstance = new();
         private static readonly ConcurrentDictionary<nint, nint> s_QueueToDevice = new();
         private static readonly ConcurrentDictionary<nint, nint> s_CommandBufferToDevice = new();
+        private static readonly ConcurrentDictionary<nint, PFN_vkCreateWaylandSurfaceKHR> s_CreateWaylandSurface = new();
+        private static nint s_VulkanLoader;
+        private static PFN_vkGetInstanceProcAddr? s_GetInstanceProcAddr;
 
         private static VkInstanceApi GetInstanceApi(VkInstance instance) => s_InstanceApis.GetOrAdd(instance.Handle, _ => Vulkan.GetApi(instance));
         private static VkInstanceApi GetPrimaryInstanceApi() { foreach (VkInstanceApi api in s_InstanceApis.Values) return api; throw new InvalidOperationException("No Vulkan instance API registered."); }
@@ -425,6 +429,52 @@ namespace SharpGPU
             VkResult result = GetInstanceApi(instance).vkCreateXlibSurfaceKHR(createInfo, allocator, surface);
             return result;
         }
+
+        public static VkResult vkCreateWaylandSurfaceKHR(VkInstance instance, void* createInfo, VkAllocationCallbacks* allocator, VkSurfaceKHR* surface)
+        {
+            PFN_vkCreateWaylandSurfaceKHR create = s_CreateWaylandSurface.GetOrAdd(instance.Handle, _ =>
+            {
+                PFN_vkGetInstanceProcAddr getProc = GetInstanceProcAddr();
+                nint name = Marshal.StringToCoTaskMemUTF8("vkCreateWaylandSurfaceKHR");
+                try
+                {
+                    nint address = getProc(instance, (byte*)name);
+                    if (address == IntPtr.Zero)
+                    {
+                        throw new InvalidOperationException("vkCreateWaylandSurfaceKHR is unavailable on the active Vulkan instance.");
+                    }
+                    return Marshal.GetDelegateForFunctionPointer<PFN_vkCreateWaylandSurfaceKHR>(address);
+                }
+                finally
+                {
+                    Marshal.FreeCoTaskMem(name);
+                }
+            });
+            return create(instance, createInfo, allocator, surface);
+        }
+
+        private static PFN_vkGetInstanceProcAddr GetInstanceProcAddr()
+        {
+            if (s_GetInstanceProcAddr != null)
+            {
+                return s_GetInstanceProcAddr;
+            }
+
+            if (!NativeLibrary.TryLoad("libvulkan.so.1", out s_VulkanLoader) &&
+                !NativeLibrary.TryLoad("libvulkan.so", out s_VulkanLoader))
+            {
+                throw new InvalidOperationException("Unable to load the Vulkan loader for Wayland surface creation.");
+            }
+            nint address = NativeLibrary.GetExport(s_VulkanLoader, "vkGetInstanceProcAddr");
+            s_GetInstanceProcAddr = Marshal.GetDelegateForFunctionPointer<PFN_vkGetInstanceProcAddr>(address);
+            return s_GetInstanceProcAddr;
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private unsafe delegate nint PFN_vkGetInstanceProcAddr(VkInstance instance, byte* name);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private unsafe delegate VkResult PFN_vkCreateWaylandSurfaceKHR(VkInstance instance, void* createInfo, VkAllocationCallbacks* allocator, VkSurfaceKHR* surface);
 
         public static void vkDestroyAccelerationStructureKHR(VkDevice device, VkAccelerationStructureKHR accelerationStructure, VkAllocationCallbacks* allocator)
         {

@@ -111,20 +111,22 @@ namespace SharpGPU
 
             RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_surface");
 
-            switch (VulkanUtility.GetCurrentOSPlatfom())
+            switch (descriptor.SurfaceKind)
             {
-                case EOSPlatform.Windows:
+                case RHINativeSurfaceKind.Win32Hwnd:
                     RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_win32_surface");
                     break;
-                case EOSPlatform.Linux:
-                    // TODO(UNVERIFIED): Wayland surface path is pending; current Linux path targets X11 only.
+                case RHINativeSurfaceKind.X11Window:
                     RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_xlib_surface");
                     break;
-                case EOSPlatform.Android:
+                case RHINativeSurfaceKind.WaylandSurface:
+                    RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_wayland_surface");
+                    break;
+                case RHINativeSurfaceKind.AndroidNativeWindow:
                     RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_android_surface");
                     break;
-                case EOSPlatform.MacOS:
-                case EOSPlatform.iOS:
+                case RHINativeSurfaceKind.AppKitNsWindow:
+                case RHINativeSurfaceKind.UIKitUiWindow:
                     // TODO(UNVERIFIED): iOS runtime verification pending.
                     RequireExtension(availableExtensions, m_RequiredExtensions, "VK_EXT_metal_surface");
                     if (ContainsExtension(availableExtensions, "VK_KHR_portability_enumeration"))
@@ -133,6 +135,8 @@ namespace SharpGPU
                         m_EnablePortabilityEnumeration = true;
                     }
                     break;
+                default:
+                    throw new NotSupportedException($"Vulkan surface kind '{descriptor.SurfaceKind}' is not supported.");
             }
 
             EnableExtensionIfAvailable(availableExtensions, m_RequiredExtensions, "VK_KHR_get_physical_device_properties2");

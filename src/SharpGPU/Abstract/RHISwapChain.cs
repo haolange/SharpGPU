@@ -4,13 +4,27 @@ using SharpGPU.Mathematics;
 
 namespace SharpGPU
 {
+    public enum RHINativeSurfaceKind : byte
+    {
+        Unknown = 0,
+        Win32Hwnd,
+        AppKitNsWindow,
+        X11Window,
+        WaylandSurface,
+        UIKitUiWindow,
+        AndroidNativeWindow,
+    }
+
     public struct RHISwapChainDescriptor
     {
         public bool FrameBufferOnly;
         public uint FPS;
         public uint Count;
         public uint2 Extent;
-        public IntPtr Surface;
+        public RHINativeSurfaceKind SurfaceKind;
+        public IntPtr WindowHandle;
+        public IntPtr DisplayHandle;
+        public IntPtr InstanceHandle;
         public ERHIPresentMode PresentMode;
         public ERHISwapChainFormat Format;
         public RHICommandQueue PresentQueue;
