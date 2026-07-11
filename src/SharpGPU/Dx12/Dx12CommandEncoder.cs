@@ -1611,6 +1611,7 @@ namespace SharpGPU
         protected List<Dx12AttachmentInfo> m_AttachmentInfos;
         private bool m_UseNativeRenderPass;
         private bool m_IsNativeRenderPassActive;
+        private RHIRasterPassDescriptor m_PassDescriptor;
         private Vortice.Direct3D12.RenderPassRenderTargetDescription[] m_NativeRenderPassColorDescriptions;
         private Vortice.Direct3D12.RenderPassDepthStencilDescription? m_NativeRenderPassDepthStencilDescription;
 
@@ -1627,9 +1628,16 @@ namespace SharpGPU
 
         internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
         {
+            m_PassDescriptor = descriptor;
 #if DEBUG
             PushDebugGroup(descriptor.Name);
 #endif
+            if (descriptor.Timestamp.HasValue)
+            {
+                m_CommandBuffer.TimestampQueryHeap = descriptor.Timestamp.Value.Query;
+                m_CommandBuffer.TimestampQueryIndex = descriptor.Timestamp.Value.BeginIndex;
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
+            }
             m_SubPassIndex = 0;
             m_AttachmentInfos.Clear();
             m_UseNativeRenderPass = false;
@@ -2296,6 +2304,11 @@ namespace SharpGPU
 
         public override void EndPass()
         {
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
+                m_CommandBuffer.TimestampQueryHeap = null;
+            }
 #if DEBUG
             PopDebugGroup();
 #endif
