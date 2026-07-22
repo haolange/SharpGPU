@@ -166,6 +166,7 @@ namespace SharpGPU
         public string? Name => m_Name;
         public RHIVendorId VendorId => m_VendorId;
         public RHIDeviceId DeviceId => m_DeviceId;
+        public string DriverVersion => m_DriverVersion;
         public ERHIDeviceType Type => m_Type;
         /// <summary>
         /// The backend kind this device belongs to (DirectX12 / Metal / Vulkan). Exposed on the
@@ -184,6 +185,7 @@ namespace SharpGPU
         protected string? m_Name;
         protected RHIVendorId m_VendorId;
         protected RHIDeviceId m_DeviceId;
+        protected string m_DriverVersion = "Unknown";
         protected ERHIDeviceType m_Type;
         protected RHIDeviceLimit? m_Limit;
         protected RHIDeviceFeature? m_Feature;

@@ -89,6 +89,11 @@ namespace SharpGPU
             m_Name = VulkanUtility.GetString(properties.deviceName);
             m_VendorId.IntValue = properties.vendorID;
             m_DeviceId.IntValue = properties.deviceID;
+            m_DriverVersion = String.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "Vulkan-0x{0:X8}-API-0x{1:X8}",
+                properties.driverVersion,
+                properties.apiVersion);
 
             switch (properties.deviceType)
             {

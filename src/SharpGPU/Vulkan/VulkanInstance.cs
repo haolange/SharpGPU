@@ -109,10 +109,15 @@ namespace SharpGPU
             m_RequiredExtensions = new List<string>();
             m_EnablePortabilityEnumeration = false;
 
-            RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_surface");
+            if (descriptor.SurfaceKind != RHINativeSurfaceKind.Headless)
+            {
+                RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_surface");
+            }
 
             switch (descriptor.SurfaceKind)
             {
+                case RHINativeSurfaceKind.Headless:
+                    break;
                 case RHINativeSurfaceKind.Win32Hwnd:
                     RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_win32_surface");
                     break;

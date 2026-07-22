@@ -1,6 +1,5 @@
 #if SHARPGPU_ENABLE_DX12
 using System;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using SharpGPU;
 using Xunit;
@@ -11,14 +10,9 @@ public sealed class SharpGPUDirectMLContractTests
 {
     private const float Epsilon = 1e-5f;
 
-        private static MethodInfo CreateGemmAddReluProgramMethod => typeof(RHIInstance).Assembly
-        .GetType("SharpGPU.Dx12MLProgram", throwOnError: true)!
-        .GetMethod("CreateGemmAddRelu", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
-        ?? throw new InvalidOperationException("Failed to locate Dx12MLProgram.CreateGemmAddRelu.");
-
-        [Fact]
-        public void Dx12_DirectML_GenericBuilder_AddSigmoid_EndToEnd_ShouldMatchCpuReference()
-        {
+    [Fact]
+    public void Dx12_DirectML_GenericBuilder_AddSigmoid_EndToEnd_ShouldMatchCpuReference()
+    {
             if (!OperatingSystem.IsWindows())
             {
                 return;
@@ -33,7 +27,7 @@ public sealed class SharpGPUDirectMLContractTests
             // A 2-op program built via the generic descriptor path (ADR-0028): ElementWiseAdd(a,b)
             // -> intermediate -> Sigmoid -> output. This verifies that CreateMLProgram + the
             // N-stage pipeline/bindingset/encoder machinery work for an arbitrary op sequence, not
-            // just the GemmAddRelu convenience factory.
+            // just one preselected workload shape.
             uint[] dims = { 1, 1, 2, 3 };
             float[] a = { 0.5f, -1.0f, 2.0f, -3.0f, 1.0f, 0.0f };
             float[] b = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
@@ -221,7 +215,7 @@ public sealed class SharpGPUDirectMLContractTests
         ulong cBytes = CalculateTensorByteLength(cDimensions);
         ulong outputBytes = CalculateTensorByteLength(outputDimensions);
 
-        RHIMLProgram program = CreateGemmAddReluProgram(aLayout, bLayout, cLayout, outputLayout);
+        RHIMLProgram program = CreateGemmReluProgram(context.Device, aLayout, bLayout, cLayout, outputLayout);
         RHIMLPipeline pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
         {
             Name = "DirectML.GemmAddRelu",
@@ -318,20 +312,45 @@ public sealed class SharpGPUDirectMLContractTests
         commandBuffer.End();
     }
 
-    private static RHIMLProgram CreateGemmAddReluProgram(
+    private static RHIMLProgram CreateGemmReluProgram(
+        RHIDevice device,
         in RHIMLTensorDescriptor aLayout,
         in RHIMLTensorDescriptor bLayout,
         in RHIMLTensorDescriptor cLayout,
         in RHIMLTensorDescriptor outputLayout)
     {
-        return (RHIMLProgram)CreateGemmAddReluProgramMethod.Invoke(null, new object[]
+        RHIMLTensorDescriptor intermediateLayout = new RHIMLTensorDescriptor
         {
-            "DirectML.GemmAddRelu",
-            aLayout,
-            bLayout,
-            cLayout,
+            DataType = outputLayout.DataType,
+            UsageFlag = ERHITensorUsage.MachineLearning | ERHITensorUsage.Read | ERHITensorUsage.Write,
+            StorageMode = ERHIStorageMode.GPULocal,
+            Dimensions = outputLayout.Dimensions.ToArray(),
+        };
+
+        RHIMLOpDescriptor gemmOp = RHIMLOpDescriptor.Create(
+            ERHIMLOpKind.GeneralMatrixMultiply,
+            new[]
+            {
+                RHIMLOpTensorRef.FromInput(0),
+                RHIMLOpTensorRef.FromInput(1),
+                RHIMLOpTensorRef.FromInput(2),
+            },
+            intermediateLayout,
+            "DirectML.Gemm");
+        gemmOp.Alpha = 1.0f;
+        gemmOp.Beta = 1.0f;
+
+        RHIMLOpDescriptor reluOp = RHIMLOpDescriptor.Create(
+            ERHIMLOpKind.ActivationRelu,
+            new[] { RHIMLOpTensorRef.FromOpOutput(0) },
             outputLayout,
-        })!;
+            "DirectML.Relu");
+
+        return device.CreateMLProgram(RHIMLProgramDescriptor.Create(
+            "DirectML.GemmAddRelu",
+            new[] { aLayout, bLayout, cLayout },
+            new[] { outputLayout },
+            new[] { gemmOp, reluOp }));
     }
 
     private static RHIMLTensorDescriptor CreateTensorDescriptor(uint[] dimensions, ERHITensorUsage usage, RHIBuffer? backingBuffer = null)

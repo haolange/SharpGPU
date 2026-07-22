@@ -13,6 +13,7 @@ namespace SharpGPU
         WaylandSurface,
         UIKitUiWindow,
         AndroidNativeWindow,
+        Headless,
     }
 
     public struct RHISwapChainDescriptor

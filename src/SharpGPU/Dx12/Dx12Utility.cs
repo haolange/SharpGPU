@@ -27,6 +27,7 @@ namespace SharpGPU
         public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuStartHandle => m_IsShaderVisible ? m_NativeDescriptorHeap.GetGPUDescriptorHandleForHeapStart() : default;
 
         private int m_Capacity;
+        private readonly object m_AllocationGate = new();
         private bool m_IsShaderVisible;
         private uint m_DescriptorSize;
         private SortedList<int, int> m_FreeBlocks;
@@ -65,30 +66,33 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int Allocate(in int count)
         {
-            if (count <= 0 || m_FreeBlocks.Count == 0)
+            lock (m_AllocationGate)
             {
+                if (count <= 0 || m_FreeBlocks.Count == 0)
+                {
+                    return -1;
+                }
+
+                for (int i = 0; i < m_FreeBlocks.Count; ++i)
+                {
+                    int blockStart = m_FreeBlocks.Keys[i];
+                    int blockSize = m_FreeBlocks.Values[i];
+
+                    if (blockSize >= count)
+                    {
+                        m_FreeBlocks.RemoveAt(i);
+
+                        if (blockSize > count)
+                        {
+                            m_FreeBlocks.Add(blockStart + count, blockSize - count);
+                        }
+
+                        return blockStart;
+                    }
+                }
+
                 return -1;
             }
-
-            for (int i = 0; i < m_FreeBlocks.Count; ++i)
-            {
-                int blockStart = m_FreeBlocks.Keys[i];
-                int blockSize = m_FreeBlocks.Values[i];
-
-                if (blockSize >= count)
-                {
-                    m_FreeBlocks.RemoveAt(i);
-
-                    if (blockSize > count)
-                    {
-                        m_FreeBlocks.Add(blockStart + count, blockSize - count);
-                    }
-
-                    return blockStart;
-                }
-            }
-
-            return -1;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -100,51 +104,57 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Free(in int index, in int count)
         {
-            if (count <= 0)
+            lock (m_AllocationGate)
             {
-                return;
-            }
-
-            int newStart = index;
-            int newSize = count;
-
-            // Try to coalesce with the block immediately after
-            if (m_FreeBlocks.TryGetValue(index + count, out int afterSize))
-            {
-                newSize += afterSize;
-                m_FreeBlocks.Remove(index + count);
-            }
-
-            // Try to coalesce with the block immediately before
-            int beforeIndex = -1;
-            for (int i = 0; i < m_FreeBlocks.Count; ++i)
-            {
-                int blockStart = m_FreeBlocks.Keys[i];
-                int blockSize = m_FreeBlocks.Values[i];
-
-                if (blockStart + blockSize == index)
+                if (count <= 0)
                 {
-                    beforeIndex = i;
-                    break;
+                    return;
                 }
-            }
 
-            if (beforeIndex >= 0)
-            {
-                int blockStart = m_FreeBlocks.Keys[beforeIndex];
-                int blockSize = m_FreeBlocks.Values[beforeIndex];
-                newStart = blockStart;
-                newSize += blockSize;
-                m_FreeBlocks.RemoveAt(beforeIndex);
-            }
+                int newStart = index;
+                int newSize = count;
 
-            m_FreeBlocks.Add(newStart, newSize);
+                // Try to coalesce with the block immediately after
+                if (m_FreeBlocks.TryGetValue(index + count, out int afterSize))
+                {
+                    newSize += afterSize;
+                    m_FreeBlocks.Remove(index + count);
+                }
+
+                // Try to coalesce with the block immediately before
+                int beforeIndex = -1;
+                for (int i = 0; i < m_FreeBlocks.Count; ++i)
+                {
+                    int blockStart = m_FreeBlocks.Keys[i];
+                    int blockSize = m_FreeBlocks.Values[i];
+
+                    if (blockStart + blockSize == index)
+                    {
+                        beforeIndex = i;
+                        break;
+                    }
+                }
+
+                if (beforeIndex >= 0)
+                {
+                    int blockStart = m_FreeBlocks.Keys[beforeIndex];
+                    int blockSize = m_FreeBlocks.Values[beforeIndex];
+                    newStart = blockStart;
+                    newSize += blockSize;
+                    m_FreeBlocks.RemoveAt(beforeIndex);
+                }
+
+                m_FreeBlocks.Add(newStart, newSize);
+            }
         }
 
         protected override void Release()
         {
-            m_FreeBlocks.Clear();
-            m_NativeDescriptorHeap.Release();
+            lock (m_AllocationGate)
+            {
+                m_FreeBlocks.Clear();
+                m_NativeDescriptorHeap.Release();
+            }
         }
     }
 

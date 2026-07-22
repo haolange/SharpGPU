@@ -4,16 +4,6 @@ using Vortice.DirectML;
 
 namespace SharpGPU
 {
-    internal enum Dx12MLProgramKind : byte
-    {
-        // Legacy single-purpose kind retained for the CreateGemmAddRelu convenience factory's
-        // diagnostics. Descriptor-driven programs (Create(RHIMLProgramDescriptor)) carry the op
-        // sequence directly and do not need a discriminating kind.
-        GeneralMatrixMultiplyAddRelu = 0,
-        // Descriptor-driven op sequence (ADR-0028). The op list lives on the program descriptor.
-        OpSequence = 1,
-    }
-
     internal static class Dx12MLUtilities
     {
         internal static TensorDataType ConvertToDirectMLDataType(in ERHIMLDataType dataType)
@@ -66,61 +56,6 @@ namespace SharpGPU
             {
                 throw new InvalidOperationException(
                     $"{label} tensor layout mismatch. expected={RHIMLHelpers.DescribeLayout(expected)}, actual={RHIMLHelpers.DescribeLayout(actual)}.");
-            }
-        }
-
-        internal static void ValidateGemmAddReluLayouts(
-            in RHIMLTensorDescriptor aDescriptor,
-            in RHIMLTensorDescriptor bDescriptor,
-            in RHIMLTensorDescriptor cDescriptor,
-            in RHIMLTensorDescriptor outputDescriptor)
-        {
-            ReadOnlySpan<uint> aDims = aDescriptor.Dimensions.Span;
-            ReadOnlySpan<uint> bDims = bDescriptor.Dimensions.Span;
-            ReadOnlySpan<uint> cDims = cDescriptor.Dimensions.Span;
-            ReadOnlySpan<uint> outputDims = outputDescriptor.Dimensions.Span;
-
-            if (aDims.Length < 2 || aDims.Length != bDims.Length || aDims.Length != cDims.Length || aDims.Length != outputDims.Length)
-            {
-                throw new InvalidOperationException("DX12 ML GEMM+Add+ReLU requires A/B/C/Output tensors to share the same rank and have rank >= 2.");
-            }
-
-            int batchRank = aDims.Length - 2;
-            for (int i = 0; i < batchRank; ++i)
-            {
-                if (aDims[i] != bDims[i] || aDims[i] != cDims[i] || aDims[i] != outputDims[i])
-                {
-                    throw new InvalidOperationException("DX12 ML GEMM+Add+ReLU requires matching batch dimensions across A/B/C/Output.");
-                }
-            }
-
-            uint m = aDims[aDims.Length - 2];
-            uint k = aDims[aDims.Length - 1];
-            if (bDims[bDims.Length - 2] != k)
-            {
-                throw new InvalidOperationException($"DX12 ML GEMM+Add+ReLU requires compatible matrix dimensions. A.K={k}, B.K={bDims[bDims.Length - 2]}.");
-            }
-
-            uint n = bDims[bDims.Length - 1];
-            if (outputDims[outputDims.Length - 2] != m || outputDims[outputDims.Length - 1] != n)
-            {
-                throw new InvalidOperationException(
-                    $"DX12 ML GEMM+Add+ReLU output shape mismatch. expected MxN={m}x{n}, actual={outputDims[outputDims.Length - 2]}x{outputDims[outputDims.Length - 1]}.");
-            }
-
-            for (int i = 0; i < cDims.Length; ++i)
-            {
-                if (cDims[i] != outputDims[i])
-                {
-                    throw new InvalidOperationException("DX12 ML GEMM+Add+ReLU bias tensor C must match the output tensor shape exactly.");
-                }
-            }
-
-            if (aDescriptor.DataType != bDescriptor.DataType
-                || aDescriptor.DataType != cDescriptor.DataType
-                || aDescriptor.DataType != outputDescriptor.DataType)
-            {
-                throw new InvalidOperationException("DX12 ML GEMM+Add+ReLU requires A/B/C/Output tensors to share the same data type.");
             }
         }
 
@@ -284,7 +219,6 @@ namespace SharpGPU
 
     internal sealed class Dx12MLProgram : RHIMLProgram
     {
-        internal Dx12MLProgramKind Kind { get; }
         internal RHIMLTensorBindingInfo[] BindingInfos { get; }
         internal RHIMLTensorDescriptor[] IntermediateTensorDescriptors => m_IntermediateTensorDescriptors;
         internal RHIMLOpDescriptor[] Ops => m_Ops;
@@ -296,24 +230,8 @@ namespace SharpGPU
         private readonly RHIMLTensorDescriptor[] m_IntermediateTensorDescriptors;
         private readonly RHIMLOpDescriptor[] m_Ops;
 
-        // Legacy single-intermediate accessor for the GemmAddRelu convenience factory's
-        // diagnostics. Descriptor-driven programs read their intermediate list via the array above.
-        internal RHIMLTensorDescriptor IntermediateTensorDescriptor
-        {
-            get
-            {
-                if (m_IntermediateTensorDescriptors.Length == 0)
-                {
-                    throw new InvalidOperationException("DX12 ML program has no intermediate tensor.");
-                }
-
-                return m_IntermediateTensorDescriptors[0];
-            }
-        }
-
         private Dx12MLProgram(
             string name,
-            Dx12MLProgramKind kind,
             RHIMLTensorDescriptor[] programInputs,
             RHIMLTensorDescriptor[] programOutputs,
             RHIMLTensorDescriptor[] intermediateDescriptors,
@@ -321,7 +239,6 @@ namespace SharpGPU
             RHIMLTensorBindingInfo[] bindingInfos)
         {
             m_Name = name;
-            Kind = kind;
             m_ProgramInputs = programInputs;
             m_ProgramOutputs = programOutputs;
             m_IntermediateTensorDescriptors = intermediateDescriptors;
@@ -334,7 +251,7 @@ namespace SharpGPU
         /// (ADR-0028). Each op's output that is not a program output becomes an intermediate
         /// tensor; program outputs are surfaced as the binding set's output slots. Binding infos
         /// advertise the program's input and output slots so that <see cref="Dx12MLPipeline"/> and
-        /// <see cref="Dx12MLBindingSet"/> can wire stages identically to the legacy 2-stage path.
+        /// <see cref="Dx12MLBindingSet"/> can wire every stage from the same descriptor contract.
         /// </summary>
         internal static Dx12MLProgram Create(in RHIMLProgramDescriptor descriptor)
         {
@@ -442,79 +359,11 @@ namespace SharpGPU
 
             return new Dx12MLProgram(
                 descriptor.Name,
-                Dx12MLProgramKind.OpSequence,
                 programInputs,
                 CloneDescriptors(descriptor.Outputs),
                 intermediates.ToArray(),
                 ops,
                 bindingInfos.ToArray());
-        }
-
-        /// <summary>
-        /// Convenience factory for the canonical <c>alpha=1, beta=1, no-transpose GEMM + ReLU</c>
-        /// program (RFC-0003 §4.1 v1 reference). Retained as a thin sugar over the descriptor-driven
-        /// <see cref="Create(in RHIMLProgramDescriptor)"/> path so that existing callers (the
-        /// DirectML conformance and rendering tests) compile and pass unchanged while indirectly
-        /// exercising the general op-sequence machinery. The signature is preserved exactly. The
-        /// program is a 2-op sequence (GEMM -> intermediate -> ReLU -> output) mirroring the original
-        /// hand-written <c>CreateOperatorDescriptions</c> so that the compiled-operator topology and
-        /// binding shape are byte-for-byte equivalent to the pre-refactor program.
-        /// </summary>
-        internal static Dx12MLProgram CreateGemmAddRelu(
-            string name,
-            in RHIMLTensorDescriptor aDescriptor,
-            in RHIMLTensorDescriptor bDescriptor,
-            in RHIMLTensorDescriptor cDescriptor,
-            in RHIMLTensorDescriptor outputDescriptor)
-        {
-            Dx12MLUtilities.ValidateGemmAddReluLayouts(aDescriptor, bDescriptor, cDescriptor, outputDescriptor);
-
-            RHIMLTensorDescriptor[] inputs =
-            {
-                RHIMLHelpers.CloneLayoutDescriptor(aDescriptor),
-                RHIMLHelpers.CloneLayoutDescriptor(bDescriptor),
-                RHIMLHelpers.CloneLayoutDescriptor(cDescriptor),
-            };
-            RHIMLTensorDescriptor[] outputs = { RHIMLHelpers.CloneLayoutDescriptor(outputDescriptor) };
-
-            // Intermediate tensor between GEMM and ReLU — same shape/dtype as the output, GPULocal.
-            RHIMLTensorDescriptor intermediate = new RHIMLTensorDescriptor
-            {
-                DataType = outputDescriptor.DataType,
-                UsageFlag = ERHITensorUsage.MachineLearning | ERHITensorUsage.Read | ERHITensorUsage.Write,
-                StorageMode = ERHIStorageMode.GPULocal,
-                Dimensions = outputDescriptor.Dimensions.ToArray(),
-                Strides = null,
-                BackingBuffer = null,
-                BackingBufferOffset = 0,
-            };
-
-            // Op 0: GEMM (alpha=1, beta=1, no transpose, no fused activation) writes A*B + C into the
-            // intermediate tensor. Op 1: ReLU reads the intermediate and writes the program output.
-            RHIMLOpDescriptor gemmOp = RHIMLOpDescriptor.Create(
-                ERHIMLOpKind.GeneralMatrixMultiply,
-                new[]
-                {
-                    RHIMLOpTensorRef.FromInput(0),
-                    RHIMLOpTensorRef.FromInput(1),
-                    RHIMLOpTensorRef.FromInput(2),
-                },
-                intermediate,
-                name + ".Gemm");
-            gemmOp.Alpha = 1.0f;
-            gemmOp.Beta = 1.0f;
-            gemmOp.TransformA = ERHIMLMatrixTransform.None;
-            gemmOp.TransformB = ERHIMLMatrixTransform.None;
-            gemmOp.FusedActivation = ERHIMLFusedActivation.None;
-
-            RHIMLOpDescriptor reluOp = RHIMLOpDescriptor.Create(
-                ERHIMLOpKind.ActivationRelu,
-                new[] { RHIMLOpTensorRef.FromOpOutput(0) },
-                RHIMLHelpers.CloneLayoutDescriptor(outputDescriptor),
-                name + ".Relu");
-
-            RHIMLProgramDescriptor descriptor = RHIMLProgramDescriptor.Create(name, inputs, outputs, new[] { gemmOp, reluOp });
-            return Create(descriptor);
         }
 
         internal void ValidateDeviceSupport(Dx12Device device)
@@ -783,7 +632,6 @@ namespace SharpGPU
             Dx12Buffer? temporaryBuffer = null;
             Dx12Buffer? persistentBuffer = null;
             IDMLBindingTable? initializerBindingTable = null;
-            int createdExecutionTables = 0;
 
             try
             {
@@ -847,7 +695,6 @@ namespace SharpGPU
                     m_ExecutionDescriptorCounts[stageIndex] = executionDescriptorCount;
                     m_ExecutionDescriptorAllocations[stageIndex] = executionDescriptorAllocation;
                     m_ExecutionBindingTables[stageIndex] = device.DirectMLDevice.CreateBindingTable(ref executionTableDescription);
-                    ++createdExecutionTables;
                 }
 
                 m_InitializerBindingTable = initializerBindingTable;
@@ -867,16 +714,10 @@ namespace SharpGPU
                 if (m_InitializerDescriptorCount > 0)
                 {
                     device.FreeCbvSrvUavDescriptor(m_InitializerDescriptorAllocation.Index, m_InitializerDescriptorCount);
+                    m_InitializerDescriptorCount = 0;
                 }
 
-                for (int i = 0; i < createdExecutionTables; ++i)
-                {
-                    m_ExecutionBindingTables[i]?.Release();
-                    if (m_ExecutionDescriptorCounts[i] > 0)
-                    {
-                        device.FreeCbvSrvUavDescriptor(m_ExecutionDescriptorAllocations[i].Index, m_ExecutionDescriptorCounts[i]);
-                    }
-                }
+                ReleaseExecutionBindingsAndDescriptors();
 
                 throw;
             }
@@ -1081,14 +922,10 @@ namespace SharpGPU
             m_InitializerBindingTable?.Release();
             m_InitializerBindingTable = null;
 
-            if (m_ExecutionBindingTables != null)
-            {
-                for (int i = 0; i < m_ExecutionBindingTables.Length; ++i)
-                {
-                    m_ExecutionBindingTables[i]?.Release();
-                }
-                m_ExecutionBindingTables = Array.Empty<IDMLBindingTable>();
-            }
+            ReleaseExecutionBindingsAndDescriptors();
+            m_ExecutionBindingTables = Array.Empty<IDMLBindingTable>();
+            m_ExecutionDescriptorAllocations = Array.Empty<Dx12DescriptorInfo>();
+            m_ExecutionDescriptorCounts = Array.Empty<int>();
 
             m_TemporaryBuffer?.Dispose();
             m_TemporaryBuffer = null;
@@ -1108,16 +945,21 @@ namespace SharpGPU
             if (m_InitializerDescriptorCount > 0)
             {
                 m_Device.FreeCbvSrvUavDescriptor(m_InitializerDescriptorAllocation.Index, m_InitializerDescriptorCount);
+                m_InitializerDescriptorCount = 0;
             }
+        }
 
-            if (m_ExecutionDescriptorCounts != null)
+        private void ReleaseExecutionBindingsAndDescriptors()
+        {
+            for (int i = 0; i < m_ExecutionDescriptorCounts.Length; ++i)
             {
-                for (int i = 0; i < m_ExecutionDescriptorCounts.Length; ++i)
+                m_ExecutionBindingTables[i]?.Release();
+                m_ExecutionBindingTables[i] = null!;
+
+                if (m_ExecutionDescriptorCounts[i] > 0)
                 {
-                    if (m_ExecutionDescriptorCounts[i] > 0)
-                    {
-                        m_Device.FreeCbvSrvUavDescriptor(m_ExecutionDescriptorAllocations[i].Index, m_ExecutionDescriptorCounts[i]);
-                    }
+                    m_Device.FreeCbvSrvUavDescriptor(m_ExecutionDescriptorAllocations[i].Index, m_ExecutionDescriptorCounts[i]);
+                    m_ExecutionDescriptorCounts[i] = 0;
                 }
             }
         }

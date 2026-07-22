@@ -61,6 +61,7 @@ namespace SharpGPU
             m_Type = m_NativeDevice.IsHeadless ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
             m_VendorId.IntValue = (uint)ERHIVendorType.Apple;
             m_DeviceId.IntValue = (uint)(m_NativeDevice.RegistryID & uint.MaxValue);
+            m_DriverVersion = "Metal-" + Environment.OSVersion.Version.ToString();
             m_SupportsMetal3 = SafeSupportsFamily(MTLGPUFamily.Metal3);
             m_SupportsMetal4 = SafeSupportsFamily(MTLGPUFamily.Metal4);
             m_SupportsArgumentTable = m_SupportsMetal4 && SafeSupportsSelector(s_NewArgumentTableWithDescriptorError);

@@ -280,6 +280,7 @@ namespace SharpGPU
             m_Type = (adapterDesc.Flags & Vortice.DXGI.AdapterFlags.Software) != 0 ? ERHIDeviceType.Software : ERHIDeviceType.Hardware;
             m_VendorId.IntValue = adapterDesc.VendorId;
             m_DeviceId.IntValue = adapterDesc.DeviceId;
+            m_DriverVersion = QueryDriverVersion(m_DXGIAdapter);
 
             CreateDevice();
             CreateDirectMLObjects();
@@ -288,6 +289,26 @@ namespace SharpGPU
             CreateDescriptorHeaps();
             CreateCommandSignatures();
             m_OwnsDXGIAdapter = true;
+        }
+
+        private static string QueryDriverVersion(Vortice.DXGI.IDXGIAdapter adapter)
+        {
+            // DXGI exposes the UMD package version through IDXGIDevice. Direct3D 11+
+            // interface GUIDs are explicitly unsupported by CheckInterfaceSupport; since
+            // WDDM 2.3 every D3D component in a driver package shares this version.
+            if (!adapter.CheckInterfaceSupport<Vortice.DXGI.IDXGIDevice>(out long packedVersion))
+            {
+                throw new InvalidOperationException("DXGI did not expose the Direct3D 12 user-mode driver version.");
+            }
+
+            ulong version = unchecked((ulong)packedVersion);
+            return String.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "{0}.{1}.{2}.{3}",
+                (version >> 48) & 0xffff,
+                (version >> 32) & 0xffff,
+                (version >> 16) & 0xffff,
+                version & 0xffff);
         }
 
         public override RHICommandQueue? GetCommandQueue(in ERHIPipelineType pipeline, in int index)
