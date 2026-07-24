@@ -18,13 +18,51 @@ namespace SharpGPU
         public Vortice.Direct3D12.GpuDescriptorHandle GpuHandle;
     };
 
+    internal readonly struct Dx12DescriptorPair
+    {
+        public Dx12DescriptorInfo ShaderVisible { get; }
+        public Dx12DescriptorInfo Staging { get; }
+        public Dx12DescriptorHeap StagingHeap { get; }
+        public Vortice.Direct3D12.DescriptorHeapType NativeType { get; }
+
+        public Dx12DescriptorPair(
+            in Dx12DescriptorInfo shaderVisible,
+            in Dx12DescriptorInfo staging,
+            Dx12DescriptorHeap stagingHeap,
+            in Vortice.Direct3D12.DescriptorHeapType nativeType)
+        {
+            ShaderVisible = shaderVisible;
+            Staging = staging;
+            StagingHeap = stagingHeap;
+            NativeType = nativeType;
+        }
+    }
+
     internal unsafe class Dx12DescriptorHeap : Disposal
     {
+        public int Capacity => m_Capacity;
+        public bool IsShaderVisible => m_IsShaderVisible;
         public uint DescriptorSize => m_DescriptorSize;
         public Vortice.Direct3D12.DescriptorHeapType NativeType => m_NativeType;
         public Vortice.Direct3D12.ID3D12DescriptorHeap NativeDescriptorHeap => m_NativeDescriptorHeap;
         public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuStartHandle => m_NativeDescriptorHeap.GetCPUDescriptorHandleForHeapStart();
         public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuStartHandle => m_IsShaderVisible ? m_NativeDescriptorHeap.GetGPUDescriptorHandleForHeapStart() : default;
+        public int AvailableDescriptorCount
+        {
+            get
+            {
+                lock (m_AllocationGate)
+                {
+                    int available = 0;
+                    for (int i = 0; i < m_FreeBlocks.Count; ++i)
+                    {
+                        available = checked(available + m_FreeBlocks.Values[i]);
+                    }
+
+                    return available;
+                }
+            }
+        }
 
         private int m_Capacity;
         private readonly object m_AllocationGate = new();
@@ -36,7 +74,12 @@ namespace SharpGPU
 
         public Dx12DescriptorHeap(Vortice.Direct3D12.ID3D12Device10 device, in Vortice.Direct3D12.DescriptorHeapType type, in Vortice.Direct3D12.DescriptorHeapFlags flag, in uint count)
         {
-            m_Capacity = (int)count;
+            if (count == 0 || count > int.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(count), count, "DX12 descriptor heap capacity must be in the range [1, Int32.MaxValue].");
+            }
+
+            m_Capacity = checked((int)count);
             m_FreeBlocks = new SortedList<int, int>(16);
             m_FreeBlocks.Add(0, m_Capacity);
 
@@ -51,10 +94,26 @@ namespace SharpGPU
 
             Vortice.Direct3D12.ID3D12DescriptorHeap nativeDescriptorHeap;
             SharpGen.Runtime.Result hResult = device.CreateDescriptorHeap(descriptorInfo, out nativeDescriptorHeap);
-#if DEBUG
             Dx12Utility.CHECK_HR(hResult);
-#endif
             m_NativeDescriptorHeap = nativeDescriptorHeap;
+        }
+
+        public Dx12DescriptorInfo GetDescriptorInfo(in int index)
+        {
+            if ((uint)index >= (uint)m_Capacity)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index), index, $"DX12 descriptor index must be in [0, {m_Capacity}).");
+            }
+
+            return new Dx12DescriptorInfo
+            {
+                Index = index,
+                CpuHandle = NativeCpuStartHandle.Offset(index, DescriptorSize),
+                GpuHandle = IsShaderVisible
+                    ? NativeGpuStartHandle.Offset(index, DescriptorSize)
+                    : default,
+                DescriptorHeap = NativeDescriptorHeap,
+            };
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -106,9 +165,20 @@ namespace SharpGPU
         {
             lock (m_AllocationGate)
             {
-                if (count <= 0)
+                if (count <= 0 || index < 0 || index > m_Capacity - count)
                 {
-                    return;
+                    throw new ArgumentOutOfRangeException(nameof(index), index, $"DX12 descriptor free range [{index}, {index + count}) is outside heap capacity {m_Capacity}.");
+                }
+
+                for (int i = 0; i < m_FreeBlocks.Count; ++i)
+                {
+                    int freeStart = m_FreeBlocks.Keys[i];
+                    int freeEnd = checked(freeStart + m_FreeBlocks.Values[i]);
+                    int releaseEnd = checked(index + count);
+                    if (index < freeEnd && releaseEnd > freeStart)
+                    {
+                        throw new InvalidOperationException($"DX12 descriptor range [{index}, {releaseEnd}) overlaps the already free range [{freeStart}, {freeEnd}).");
+                    }
                 }
 
                 int newStart = index;
@@ -154,6 +224,112 @@ namespace SharpGPU
             {
                 m_FreeBlocks.Clear();
                 m_NativeDescriptorHeap.Release();
+            }
+        }
+    }
+
+    internal readonly struct Dx12CpuDescriptorAllocation
+    {
+        public Dx12DescriptorHeap Heap { get; }
+        public Dx12DescriptorInfo Descriptor { get; }
+
+        public Dx12CpuDescriptorAllocation(Dx12DescriptorHeap heap, in Dx12DescriptorInfo descriptor)
+        {
+            Heap = heap;
+            Descriptor = descriptor;
+        }
+    }
+
+    internal sealed class Dx12CpuDescriptorPool : Disposal
+    {
+        private readonly object m_Gate = new object();
+        private readonly Vortice.Direct3D12.ID3D12Device10 m_Device;
+        private readonly Vortice.Direct3D12.DescriptorHeapType m_NativeType;
+        private readonly int m_PageCapacity;
+        private readonly List<Dx12DescriptorHeap> m_Pages = new List<Dx12DescriptorHeap>();
+
+        public Dx12CpuDescriptorPool(
+            Vortice.Direct3D12.ID3D12Device10 device,
+            in Vortice.Direct3D12.DescriptorHeapType nativeType,
+            in int pageCapacity)
+        {
+            if (pageCapacity <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(pageCapacity), pageCapacity, "DX12 CPU descriptor page capacity must be positive.");
+            }
+
+            m_Device = device;
+            m_NativeType = nativeType;
+            m_PageCapacity = pageCapacity;
+        }
+
+        public Dx12CpuDescriptorAllocation Allocate(in int count, string poolName)
+        {
+            if (count <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(count), count, $"DX12 {poolName} allocation count must be positive.");
+            }
+
+            lock (m_Gate)
+            {
+                for (int i = 0; i < m_Pages.Count; ++i)
+                {
+                    Dx12DescriptorHeap page = m_Pages[i];
+                    int index = page.Allocate(count);
+                    if (index >= 0)
+                    {
+                        return new Dx12CpuDescriptorAllocation(page, page.GetDescriptorInfo(index));
+                    }
+                }
+
+                int pageCapacity = Math.Max(m_PageCapacity, count);
+                Dx12DescriptorHeap newPage = new Dx12DescriptorHeap(
+                    m_Device,
+                    m_NativeType,
+                    Vortice.Direct3D12.DescriptorHeapFlags.None,
+                    checked((uint)pageCapacity));
+                try
+                {
+                    int index = newPage.Allocate(count);
+                    if (index < 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"DX12 {poolName} failed to allocate {count} descriptors from a new page with capacity {pageCapacity}.");
+                    }
+
+                    m_Pages.Add(newPage);
+                    return new Dx12CpuDescriptorAllocation(newPage, newPage.GetDescriptorInfo(index));
+                }
+                catch
+                {
+                    newPage.Dispose();
+                    throw;
+                }
+            }
+        }
+
+        public void Free(Dx12DescriptorHeap page, in int index, in int count = 1)
+        {
+            lock (m_Gate)
+            {
+                if (!m_Pages.Contains(page))
+                {
+                    throw new ArgumentException("DX12 CPU descriptor allocation does not belong to this pool.", nameof(page));
+                }
+
+                page.Free(index, count);
+            }
+        }
+
+        protected override void Release()
+        {
+            lock (m_Gate)
+            {
+                for (int i = m_Pages.Count - 1; i >= 0; --i)
+                {
+                    m_Pages[i].Dispose();
+                }
+                m_Pages.Clear();
             }
         }
     }
@@ -1734,6 +1910,7 @@ namespace SharpGPU
 
                 case ERHIBindType.StorageBuffer:
                 case ERHIBindType.StorageTexture2D:
+                case ERHIBindType.StorageTexture2DMS:
                 case ERHIBindType.StorageTexture2DArray:
                 case ERHIBindType.StorageTexture2DArrayMS:
                 case ERHIBindType.StorageTextureCube:
@@ -1742,49 +1919,16 @@ namespace SharpGPU
                     return Vortice.Direct3D12.DescriptorRangeType.UnorderedAccessView;
 
                 default:
-                    return Vortice.Direct3D12.DescriptorRangeType.ShaderResourceView;
+                    throw new ArgumentOutOfRangeException(nameof(bindType), bindType, "Unsupported DX12 argument-table bind type.");
             }
         }
 
-        internal static uint GetDx12BindKey(in ERHIBindType bindType)
+        internal static Vortice.Direct3D12.DescriptorRangeFlags GetDx12DescriptorRangeFlags(in ERHIBindType bindType)
         {
             switch (bindType)
             {
                 case ERHIBindType.Buffer:
-                case ERHIBindType.Texture2D:
-                case ERHIBindType.Texture2DMS:
-                case ERHIBindType.Texture2DArray:
-                case ERHIBindType.Texture2DArrayMS:
-                case ERHIBindType.TextureCube:
-                case ERHIBindType.TextureCubeArray:
-                case ERHIBindType.Texture3D:
-                    return 64;
-
-                case ERHIBindType.Sampler:
-                    return 128;
-
-                case ERHIBindType.UniformBuffer:
-                    return 256;
-
-                case ERHIBindType.StorageBuffer:
-                case ERHIBindType.StorageTexture2D:
-                case ERHIBindType.StorageTexture2DArray:
-                case ERHIBindType.StorageTexture2DArrayMS:
-                case ERHIBindType.StorageTextureCube:
-                case ERHIBindType.StorageTextureCubeArray:
-                case ERHIBindType.StorageTexture3D:
-                    return 512;
-
-                default:
-                    return 64;
-            }
-        }
-
-        internal static Vortice.Direct3D12.DescriptorRangeFlags GetDx12DescriptorRangeFalag(in ERHIBindType bindType)
-        {
-            switch (bindType)
-            {
-                case ERHIBindType.Buffer:
+                case ERHIBindType.AccelStruct:
                 case ERHIBindType.Texture2D:
                 case ERHIBindType.Texture2DMS:
                 case ERHIBindType.Texture2DArray:
@@ -1798,10 +1942,9 @@ namespace SharpGPU
                     return Vortice.Direct3D12.DescriptorRangeFlags.DescriptorsVolatile;
 
                 case ERHIBindType.UniformBuffer:
-                    return Vortice.Direct3D12.DescriptorRangeFlags.DescriptorsVolatile | Vortice.Direct3D12.DescriptorRangeFlags.DataVolatile;
-
                 case ERHIBindType.StorageBuffer:
                 case ERHIBindType.StorageTexture2D:
+                case ERHIBindType.StorageTexture2DMS:
                 case ERHIBindType.StorageTexture2DArray:
                 case ERHIBindType.StorageTexture2DArrayMS:
                 case ERHIBindType.StorageTextureCube:
@@ -1810,7 +1953,7 @@ namespace SharpGPU
                     return Vortice.Direct3D12.DescriptorRangeFlags.DescriptorsVolatile | Vortice.Direct3D12.DescriptorRangeFlags.DataVolatile;
 
                 default:
-                    return Vortice.Direct3D12.DescriptorRangeFlags.DescriptorsVolatile;
+                    throw new ArgumentOutOfRangeException(nameof(bindType), bindType, "Unsupported DX12 argument-table bind type.");
             }
         }
 
@@ -1830,8 +1973,14 @@ namespace SharpGPU
                 case ERHIShaderStage.Fragment:
                     return Vortice.Direct3D12.ShaderVisibility.Pixel;
 
-                default:
+                case ERHIShaderStage.Compute:
+                case ERHIShaderStage.AllGraphics:
+                case ERHIShaderStage.RayTracing:
+                case ERHIShaderStage.All:
                     return Vortice.Direct3D12.ShaderVisibility.All;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(shaderStage), shaderStage, "Unsupported DX12 argument-table shader stage.");
             }
         }
 
@@ -1915,7 +2064,7 @@ namespace SharpGPU
 
         internal static void FillTexture2DSRV(ref Vortice.Direct3D12.Texture2DShaderResourceView srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ERHITextureDimension.Texture2D) == ERHITextureDimension.Texture2D))
+            if (dimension != ERHITextureDimension.Texture2D)
             {
                 return;
             }
@@ -1927,7 +2076,7 @@ namespace SharpGPU
 
         internal static void FillTexture2DArraySRV(ref Vortice.Direct3D12.Texture2DArrayShaderResourceView srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ERHITextureDimension.Texture2DArray) == ERHITextureDimension.Texture2DArray))
+            if (dimension != ERHITextureDimension.Texture2DArray)
             {
                 return;
             }
@@ -1941,7 +2090,7 @@ namespace SharpGPU
 
         internal static void FillTextureCubeSRV(ref Vortice.Direct3D12.TextureCubeShaderResourceView srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ERHITextureDimension.TextureCube) == ERHITextureDimension.TextureCube))
+            if (dimension != ERHITextureDimension.TextureCube)
             {
                 return;
             }
@@ -1952,7 +2101,7 @@ namespace SharpGPU
 
         internal static void FillTextureCubeArraySRV(ref Vortice.Direct3D12.TextureCubeArrayShaderResourceView srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ERHITextureDimension.TextureCubeArray) == ERHITextureDimension.TextureCubeArray))
+            if (dimension != ERHITextureDimension.TextureCubeArray)
             {
                 return;
             }
@@ -1965,7 +2114,7 @@ namespace SharpGPU
 
         internal static void FillTexture3DSRV(ref Vortice.Direct3D12.Texture3DShaderResourceView srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ERHITextureDimension.Texture3D) == ERHITextureDimension.Texture3D))
+            if (dimension != ERHITextureDimension.Texture3D)
             {
                 return;
             }
@@ -1976,7 +2125,7 @@ namespace SharpGPU
 
         internal static void FillTexture2DUAV(ref Vortice.Direct3D12.Texture2DUnorderedAccessView uav, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ERHITextureDimension.Texture2D) == ERHITextureDimension.Texture2D))
+            if (dimension != ERHITextureDimension.Texture2D)
             {
                 return;
             }
@@ -1986,7 +2135,7 @@ namespace SharpGPU
 
         internal static void FillTexture2DArrayUAV(ref Vortice.Direct3D12.Texture2DArrayUnorderedAccessView uav, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ERHITextureDimension.Texture2DArray) == ERHITextureDimension.Texture2DArray))
+            if (dimension != ERHITextureDimension.Texture2DArray)
             {
                 return;
             }
@@ -1998,7 +2147,7 @@ namespace SharpGPU
 
         internal static void FillTexture3DUAV(ref Vortice.Direct3D12.Texture3DUnorderedAccessView uav, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ERHITextureDimension.Texture3D) == ERHITextureDimension.Texture3D))
+            if (dimension != ERHITextureDimension.Texture3D)
             {
                 return;
             }
@@ -2009,7 +2158,7 @@ namespace SharpGPU
 
         internal static void FillTexture2DRTV(ref Vortice.Direct3D12.Texture2DRenderTargetView rtv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ERHITextureDimension.Texture2D) == ERHITextureDimension.Texture2D))
+            if (dimension != ERHITextureDimension.Texture2D)
             {
                 return;
             }
@@ -2019,7 +2168,7 @@ namespace SharpGPU
 
         internal static void FillTexture2DArrayRTV(ref Vortice.Direct3D12.Texture2DArrayRenderTargetView rtv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ERHITextureDimension.Texture2DArray) == ERHITextureDimension.Texture2DArray))
+            if (dimension != ERHITextureDimension.Texture2DArray)
             {
                 return;
             }
@@ -2031,7 +2180,7 @@ namespace SharpGPU
 
         internal static void FillTexture3DRTV(ref Vortice.Direct3D12.Texture3DRenderTargetView rtv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ERHITextureDimension.Texture3D) == ERHITextureDimension.Texture3D))
+            if (dimension != ERHITextureDimension.Texture3D)
             {
                 return;
             }
@@ -2042,7 +2191,7 @@ namespace SharpGPU
 
         internal static void FillTexture2DDSV(ref Vortice.Direct3D12.Texture2DDepthStencilView dsv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ERHITextureDimension.Texture2D) == ERHITextureDimension.Texture2D))
+            if (dimension != ERHITextureDimension.Texture2D)
             {
                 return;
             }
@@ -2051,7 +2200,7 @@ namespace SharpGPU
 
         internal static void FillTexture2DArrayDSV(ref Vortice.Direct3D12.Texture2DArrayDepthStencilView dsv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
         {
-            if (!((dimension & ERHITextureDimension.Texture2DArray) == ERHITextureDimension.Texture2DArray))
+            if (dimension != ERHITextureDimension.Texture2DArray)
             {
                 return;
             }

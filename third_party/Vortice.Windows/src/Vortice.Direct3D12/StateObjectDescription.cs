@@ -42,7 +42,9 @@ public partial class StateObjectDescription
                 SubObjects[i].__MarshalFree(ref @ref.pSubobjects[i]);
             }
 
-            Marshal.FreeHGlobal((IntPtr)@ref.pSubobjects);
+            UnsafeUtilities.Free(@ref.pSubobjects);
+            @ref.pSubobjects = null;
+            @ref.NumSubobjects = 0;
         }
     }
 

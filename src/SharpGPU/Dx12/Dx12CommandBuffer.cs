@@ -262,8 +262,15 @@ namespace SharpGPU
 
         protected override void Release()
         {
+            m_WorkGraphEncoder?.ReleaseCommandListInterface();
             m_NativeCommandList.Release();
             m_NativeCommandAllocator.Release();
+            m_WorkGraphEncoder?.Dispose();
+            m_MLEncoder?.Dispose();
+            m_RaytracingEncoder?.Dispose();
+            m_RasterEncoder?.Dispose();
+            m_ComputeEncoder?.Dispose();
+            m_TransferEncoder?.Dispose();
         }
     }
 

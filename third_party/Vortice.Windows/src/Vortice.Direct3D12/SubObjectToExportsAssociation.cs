@@ -40,6 +40,7 @@ public partial class SubObjectToExportsAssociation : IStateSubObjectDescription,
     unsafe IntPtr IStateSubObjectDescriptionMarshal.__MarshalAlloc(Dictionary<StateSubObject, IntPtr> subObjectLookup)
     {
         __Native* native = (__Native*)Marshal.AllocHGlobal(sizeof(__Native));
+        *native = default;
 
         if (subObjectLookup.ContainsKey(SubObjectToAssociate) == false)
         {

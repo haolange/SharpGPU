@@ -114,6 +114,10 @@ namespace SharpGPU
 
     internal unsafe class Dx12Device : RHIDevice
     {
+        private const int SamplerDescriptorCapacity = 2048;
+        private const int CbvSrvUavDescriptorCapacity = 1000000;
+        private const int StagingDescriptorPageCapacity = 65536;
+
         public override ERHIBackend BackendType => ERHIBackend.DirectX12;
         public Dx12Instance Dx12Instance
         {
@@ -136,6 +140,8 @@ namespace SharpGPU
                 return m_NativeDevice;
             }
         }
+        internal Dx12NullDescriptorCache NullDescriptors => m_NullDescriptors;
+
         public Dx12DescriptorHeap DescriptorHeapDSV
         {
             get
@@ -162,20 +168,6 @@ namespace SharpGPU
             get
             {
                 return m_DescriptorHeapCbvSrvUav;
-            }
-        }
-        public Dx12DescriptorHeap StagingHeapCbvSrvUav
-        {
-            get
-            {
-                return m_StagingHeapCbvSrvUav;
-            }
-        }
-        public Dx12DescriptorHeap StagingHeapSampler
-        {
-            get
-            {
-                return m_StagingHeapSampler;
             }
         }
         public Vortice.Direct3D12.ID3D12CommandSignature DrawIndirectSignature
@@ -253,12 +245,13 @@ namespace SharpGPU
         private Dx12Instance m_Dx12Instance;
         private Vortice.DXGI.IDXGIAdapter1 m_DXGIAdapter;
         private Vortice.Direct3D12.ID3D12Device10 m_NativeDevice;
+        private Dx12NullDescriptorCache m_NullDescriptors;
         private Dx12DescriptorHeap m_DescriptorHeapDSV;
         private Dx12DescriptorHeap m_DescriptorHeapHeapRTV;
         private Dx12DescriptorHeap m_DescriptorHeapSampler;
         private Dx12DescriptorHeap m_DescriptorHeapCbvSrvUav;
-        private Dx12DescriptorHeap m_StagingHeapCbvSrvUav;
-        private Dx12DescriptorHeap m_StagingHeapSampler;
+        private Dx12CpuDescriptorPool m_StagingPoolCbvSrvUav;
+        private Dx12CpuDescriptorPool m_StagingPoolSampler;
         private Vortice.Direct3D12.ID3D12CommandSignature m_DrawIndirectSignature;
         private Vortice.Direct3D12.ID3D12CommandSignature m_DrawIndexedIndirectSignature;
         private Vortice.Direct3D12.ID3D12CommandSignature m_DispatchRayIndirectSignature;
@@ -500,75 +493,108 @@ namespace SharpGPU
 
         public Dx12DescriptorInfo AllocateDsvDescriptor(in int count)
         {
-            int index = m_DescriptorHeapDSV.Allocate(count);
-            Dx12DescriptorInfo descriptorInfo;
-            descriptorInfo.Index = index;
-            descriptorInfo.CpuHandle = m_DescriptorHeapDSV.NativeCpuStartHandle.Offset(index, m_DescriptorHeapDSV.DescriptorSize);
-            descriptorInfo.GpuHandle = m_DescriptorHeapDSV.NativeGpuStartHandle.Offset(index, m_DescriptorHeapDSV.DescriptorSize);
-            descriptorInfo.DescriptorHeap = m_DescriptorHeapDSV.NativeDescriptorHeap;
-            return descriptorInfo;
+            return AllocateDescriptor(m_DescriptorHeapDSV, count, "DSV");
         }
 
         public Dx12DescriptorInfo AllocateRtvDescriptor(in int count)
         {
-            int index = m_DescriptorHeapHeapRTV.Allocate(count);
-            Dx12DescriptorInfo descriptorInfo;
-            descriptorInfo.Index = index;
-            descriptorInfo.CpuHandle = m_DescriptorHeapHeapRTV.NativeCpuStartHandle.Offset(index, m_DescriptorHeapHeapRTV.DescriptorSize);
-            descriptorInfo.GpuHandle = m_DescriptorHeapHeapRTV.NativeGpuStartHandle.Offset(index, m_DescriptorHeapHeapRTV.DescriptorSize);
-            descriptorInfo.DescriptorHeap = m_DescriptorHeapHeapRTV.NativeDescriptorHeap;
-            return descriptorInfo;
+            return AllocateDescriptor(m_DescriptorHeapHeapRTV, count, "RTV");
         }
 
         public Dx12DescriptorInfo AllocateSamplerDescriptor(in int count)
         {
-            int index = m_DescriptorHeapSampler.Allocate(count);
-            Dx12DescriptorInfo descriptorInfo;
-            descriptorInfo.Index = index;
-            descriptorInfo.CpuHandle = m_DescriptorHeapSampler.NativeCpuStartHandle.Offset(index, m_DescriptorHeapSampler.DescriptorSize);
-            descriptorInfo.GpuHandle = m_DescriptorHeapSampler.NativeGpuStartHandle.Offset(index, m_DescriptorHeapSampler.DescriptorSize);
-            descriptorInfo.DescriptorHeap = m_DescriptorHeapSampler.NativeDescriptorHeap;
-            return descriptorInfo;
+            return AllocateDescriptor(m_DescriptorHeapSampler, count, "shader-visible sampler");
         }
 
         public Dx12DescriptorInfo AllocateCbvSrvUavDescriptor(in int count)
         {
-            int index = m_DescriptorHeapCbvSrvUav.Allocate(count);
-            Dx12DescriptorInfo descriptorInfo;
-            descriptorInfo.Index = index;
-            descriptorInfo.CpuHandle = m_DescriptorHeapCbvSrvUav.NativeCpuStartHandle.Offset(index, m_DescriptorHeapCbvSrvUav.DescriptorSize);
-            descriptorInfo.GpuHandle = m_DescriptorHeapCbvSrvUav.NativeGpuStartHandle.Offset(index, m_DescriptorHeapCbvSrvUav.DescriptorSize);
-            descriptorInfo.DescriptorHeap = m_DescriptorHeapCbvSrvUav.NativeDescriptorHeap;
-            return descriptorInfo;
+            return AllocateDescriptor(m_DescriptorHeapCbvSrvUav, count, "shader-visible CBV/SRV/UAV");
         }
 
-        public Dx12DescriptorInfo AllocateStagingCbvSrvUavDescriptor(in int count)
+        public Dx12DescriptorPair AllocateCbvSrvUavDescriptorPair()
         {
-            int index = m_StagingHeapCbvSrvUav.Allocate(count);
-            Dx12DescriptorInfo descriptorInfo;
-            descriptorInfo.Index = index;
-            descriptorInfo.CpuHandle = m_StagingHeapCbvSrvUav.NativeCpuStartHandle.Offset(index, m_StagingHeapCbvSrvUav.DescriptorSize);
-            descriptorInfo.GpuHandle = default;
-            descriptorInfo.DescriptorHeap = m_StagingHeapCbvSrvUav.NativeDescriptorHeap;
-            return descriptorInfo;
+            return AllocateDescriptorPair(
+                m_DescriptorHeapCbvSrvUav,
+                m_StagingPoolCbvSrvUav,
+                Vortice.Direct3D12.DescriptorHeapType.ConstantBufferViewShaderResourceViewUnorderedAccessView,
+                "CBV/SRV/UAV");
         }
 
-        public Dx12DescriptorInfo AllocateStagingSamplerDescriptor(in int count)
+        public Dx12DescriptorPair AllocateSamplerDescriptorPair()
         {
-            int index = m_StagingHeapSampler.Allocate(count);
-            Dx12DescriptorInfo descriptorInfo;
-            descriptorInfo.Index = index;
-            descriptorInfo.CpuHandle = m_StagingHeapSampler.NativeCpuStartHandle.Offset(index, m_StagingHeapSampler.DescriptorSize);
-            descriptorInfo.GpuHandle = default;
-            descriptorInfo.DescriptorHeap = m_StagingHeapSampler.NativeDescriptorHeap;
-            return descriptorInfo;
+            return AllocateDescriptorPair(
+                m_DescriptorHeapSampler,
+                m_StagingPoolSampler,
+                Vortice.Direct3D12.DescriptorHeapType.Sampler,
+                "sampler");
         }
 
-        public void CopyDescriptors(Dx12DescriptorHeap srcHeap, in int srcIndex, Dx12DescriptorHeap dstHeap, in int dstIndex, in int count)
+        public void CopyDescriptorToShaderVisible(in Dx12DescriptorPair descriptors)
         {
-            Vortice.Direct3D12.CpuDescriptorHandle srcHandle = srcHeap.NativeCpuStartHandle.Offset(srcIndex, srcHeap.DescriptorSize);
-            Vortice.Direct3D12.CpuDescriptorHandle dstHandle = dstHeap.NativeCpuStartHandle.Offset(dstIndex, dstHeap.DescriptorSize);
-            m_NativeDevice.CopyDescriptorsSimple((uint)count, dstHandle, srcHandle, dstHeap.NativeType);
+            m_NativeDevice.CopyDescriptorsSimple(
+                1,
+                descriptors.ShaderVisible.CpuHandle,
+                descriptors.Staging.CpuHandle,
+                descriptors.NativeType);
+        }
+
+        public void FreeDescriptorPair(in Dx12DescriptorPair descriptors)
+        {
+            switch (descriptors.NativeType)
+            {
+                case Vortice.Direct3D12.DescriptorHeapType.ConstantBufferViewShaderResourceViewUnorderedAccessView:
+                    m_DescriptorHeapCbvSrvUav.Free(descriptors.ShaderVisible.Index);
+                    m_StagingPoolCbvSrvUav.Free(descriptors.StagingHeap, descriptors.Staging.Index);
+                    break;
+                case Vortice.Direct3D12.DescriptorHeapType.Sampler:
+                    m_DescriptorHeapSampler.Free(descriptors.ShaderVisible.Index);
+                    m_StagingPoolSampler.Free(descriptors.StagingHeap, descriptors.Staging.Index);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(descriptors),
+                        descriptors.NativeType,
+                        "DX12 descriptor pairs are only supported for shader-visible CBV/SRV/UAV and sampler heaps.");
+            }
+        }
+
+        private static Dx12DescriptorPair AllocateDescriptorPair(
+            Dx12DescriptorHeap shaderVisibleHeap,
+            Dx12CpuDescriptorPool stagingPool,
+            in Vortice.Direct3D12.DescriptorHeapType nativeType,
+            string heapName)
+        {
+            Dx12CpuDescriptorAllocation staging = stagingPool.Allocate(1, $"staging {heapName}");
+            try
+            {
+                Dx12DescriptorInfo shaderVisible = AllocateDescriptor(shaderVisibleHeap, 1, $"shader-visible {heapName}");
+                return new Dx12DescriptorPair(
+                    shaderVisible,
+                    staging.Descriptor,
+                    staging.Heap,
+                    nativeType);
+            }
+            catch
+            {
+                stagingPool.Free(staging.Heap, staging.Descriptor.Index);
+                throw;
+            }
+        }
+
+        private static Dx12DescriptorInfo AllocateDescriptor(Dx12DescriptorHeap heap, in int count, string heapName)
+        {
+            if (count <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(count), count, $"DX12 {heapName} descriptor allocation count must be positive.");
+            }
+
+            int index = heap.Allocate(count);
+            if (index < 0)
+            {
+                throw new InvalidOperationException($"DX12 {heapName} descriptor heap is exhausted: requested {count}, available {heap.AvailableDescriptorCount}, capacity {heap.Capacity}.");
+            }
+
+            return heap.GetDescriptorInfo(index);
         }
 
         public void FreeDsvDescriptor(in int index)
@@ -609,26 +635,6 @@ namespace SharpGPU
         public void FreeCbvSrvUavDescriptor(in int index, in int count)
         {
             m_DescriptorHeapCbvSrvUav.Free(index, count);
-        }
-
-        public void FreeStagingCbvSrvUavDescriptor(in int index)
-        {
-            m_StagingHeapCbvSrvUav.Free(index);
-        }
-
-        public void FreeStagingCbvSrvUavDescriptor(in int index, in int count)
-        {
-            m_StagingHeapCbvSrvUav.Free(index, count);
-        }
-
-        public void FreeStagingSamplerDescriptor(in int index)
-        {
-            m_StagingHeapSampler.Free(index);
-        }
-
-        public void FreeStagingSamplerDescriptor(in int index, in int count)
-        {
-            m_StagingHeapSampler.Free(index, count);
         }
 
         private void CreateDevice()
@@ -978,12 +984,19 @@ namespace SharpGPU
             m_DescriptorHeapHeapRTV = new Dx12DescriptorHeap(m_NativeDevice, Vortice.Direct3D12.DescriptorHeapType.RenderTargetView, Vortice.Direct3D12.DescriptorHeapFlags.None, 4096);
 
             // Shader-visible heaps for GPU access - large enough for bindless resource arrays
-            m_DescriptorHeapSampler = new Dx12DescriptorHeap(m_NativeDevice, Vortice.Direct3D12.DescriptorHeapType.Sampler, Vortice.Direct3D12.DescriptorHeapFlags.ShaderVisible, 2048);
-            m_DescriptorHeapCbvSrvUav = new Dx12DescriptorHeap(m_NativeDevice, Vortice.Direct3D12.DescriptorHeapType.ConstantBufferViewShaderResourceViewUnorderedAccessView, Vortice.Direct3D12.DescriptorHeapFlags.ShaderVisible, 1000000);
+            m_DescriptorHeapSampler = new Dx12DescriptorHeap(m_NativeDevice, Vortice.Direct3D12.DescriptorHeapType.Sampler, Vortice.Direct3D12.DescriptorHeapFlags.ShaderVisible, SamplerDescriptorCapacity);
+            m_DescriptorHeapCbvSrvUav = new Dx12DescriptorHeap(m_NativeDevice, Vortice.Direct3D12.DescriptorHeapType.ConstantBufferViewShaderResourceViewUnorderedAccessView, Vortice.Direct3D12.DescriptorHeapFlags.ShaderVisible, CbvSrvUavDescriptorCapacity);
 
-            // CPU-only staging heaps for building descriptors before copying to GPU-visible heaps
-            m_StagingHeapCbvSrvUav = new Dx12DescriptorHeap(m_NativeDevice, Vortice.Direct3D12.DescriptorHeapType.ConstantBufferViewShaderResourceViewUnorderedAccessView, Vortice.Direct3D12.DescriptorHeapFlags.None, 65536);
-            m_StagingHeapSampler = new Dx12DescriptorHeap(m_NativeDevice, Vortice.Direct3D12.DescriptorHeapType.Sampler, Vortice.Direct3D12.DescriptorHeapFlags.None, 2048);
+            // CPU-only staging pages provide legal descriptor-copy sources without a single oversized native heap.
+            m_StagingPoolCbvSrvUav = new Dx12CpuDescriptorPool(
+                m_NativeDevice,
+                Vortice.Direct3D12.DescriptorHeapType.ConstantBufferViewShaderResourceViewUnorderedAccessView,
+                StagingDescriptorPageCapacity);
+            m_StagingPoolSampler = new Dx12CpuDescriptorPool(
+                m_NativeDevice,
+                Vortice.Direct3D12.DescriptorHeapType.Sampler,
+                SamplerDescriptorCapacity);
+            m_NullDescriptors = new Dx12NullDescriptorCache(this);
         }
 
         private void CreateCommandSignatures()
@@ -1110,16 +1123,18 @@ namespace SharpGPU
 
         protected override void Release()
         {
+            DisposeCommandQueues();
             ReleaseComObject(ref m_DirectMLCommandRecorder);
             ReleaseComObject(ref m_DirectMLDevice1);
             ReleaseComObject(ref m_DirectMLDevice);
 
+            DisposeResource(ref m_NullDescriptors);
             DisposeResource(ref m_DescriptorHeapDSV);
             DisposeResource(ref m_DescriptorHeapHeapRTV);
             DisposeResource(ref m_DescriptorHeapSampler);
             DisposeResource(ref m_DescriptorHeapCbvSrvUav);
-            DisposeResource(ref m_StagingHeapCbvSrvUav);
-            DisposeResource(ref m_StagingHeapSampler);
+            DisposeResource(ref m_StagingPoolCbvSrvUav);
+            DisposeResource(ref m_StagingPoolSampler);
 
             ReleaseComObject(ref m_DrawIndirectSignature);
             ReleaseComObject(ref m_DrawIndexedIndirectSignature);
@@ -1139,6 +1154,28 @@ namespace SharpGPU
                 m_OwnsDXGIAdapter = false;
                 ReleaseComObject(ref m_DXGIAdapter);
             }
+        }
+
+        private void DisposeCommandQueues()
+        {
+            Dictionary<ERHIPipelineType, TArray<RHICommandQueue>>? commandQueues = m_CommandQueueMap;
+            m_CommandQueueMap = null;
+            if (commandQueues == null)
+            {
+                return;
+            }
+
+            foreach (KeyValuePair<ERHIPipelineType, TArray<RHICommandQueue>> pair in commandQueues)
+            {
+                TArray<RHICommandQueue> queues = pair.Value;
+                for (int i = 0; i < queues.length; ++i)
+                {
+                    queues[i]?.Dispose();
+                }
+                queues.Clear();
+            }
+
+            commandQueues.Clear();
         }
 
         private static void DisposeResource<T>(ref T? resource) where T : IDisposable

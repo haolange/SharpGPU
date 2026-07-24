@@ -40,6 +40,7 @@ public partial class ExistingCollectionDescription : IStateSubObjectDescription,
     unsafe IntPtr IStateSubObjectDescriptionMarshal.__MarshalAlloc(Dictionary<StateSubObject, IntPtr> subObjectLookup)
     {
         __Native* native = (__Native*)Marshal.AllocHGlobal(sizeof(__Native));
+        *native = default;
 
         native->pExistingCollection = MarshallingHelpers.ToCallbackPtr<ID3D12StateObject>(ExistingCollection);
         native->NumExports = Exports?.Length ?? 0;
@@ -69,7 +70,7 @@ public partial class ExistingCollectionDescription : IStateSubObjectDescription,
                 Exports[i].__MarshalFree(ref nativeLibrary.pExports[i]);
             }
 
-            Marshal.FreeHGlobal((IntPtr)nativeLibrary.pExports);
+            UnsafeUtilities.Free(nativeLibrary.pExports);
         }
 
         Marshal.FreeHGlobal(pDesc);

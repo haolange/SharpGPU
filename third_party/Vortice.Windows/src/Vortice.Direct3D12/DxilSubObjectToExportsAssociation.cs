@@ -41,6 +41,7 @@ public partial class DxilSubObjectToExportsAssociation : IStateSubObjectDescript
     unsafe IntPtr IStateSubObjectDescriptionMarshal.__MarshalAlloc(Dictionary<StateSubObject, IntPtr> subObjectLookup)
     {
         __Native* native = (__Native*)Marshal.AllocHGlobal(sizeof(__Native));
+        *native = default;
         native->pSubobjectToAssociate = Marshal.StringToHGlobalUni(SubObjectToAssociate);
         native->NumExports = Exports?.Length ?? 0;
         if (native->NumExports > 0)

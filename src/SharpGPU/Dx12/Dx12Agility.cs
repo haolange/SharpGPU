@@ -9,6 +9,7 @@ namespace SharpGPU
     {
         internal const uint SDKVersion = 619;
         internal const string SDKPath = ".\\D3D12\\";
+        private static readonly Guid s_D3D12DebugClassId = new Guid("F2352AEB-DD84-49FE-B97B-A9DCFDCC1B4F");
 
         private static readonly object s_Lock = new object();
         private static bool s_Initialized;
@@ -38,6 +39,17 @@ namespace SharpGPU
             EnsureInitialized();
             deviceFactory = s_DeviceFactory;
             return deviceFactory != null;
+        }
+
+        internal static SharpGen.Runtime.Result GetDebugInterface(out Vortice.Direct3D12.Debug.ID3D12Debug? debug)
+        {
+            EnsureInitialized();
+            if (s_DeviceFactory != null)
+            {
+                return s_DeviceFactory.GetConfigurationInterface(s_D3D12DebugClassId, out debug);
+            }
+
+            return D3D12.D3D12GetDebugInterface(out debug);
         }
 
         internal static void EnsureInitialized()

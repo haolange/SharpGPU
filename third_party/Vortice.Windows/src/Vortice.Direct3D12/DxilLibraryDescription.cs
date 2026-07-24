@@ -46,6 +46,7 @@ public partial class DxilLibraryDescription : IStateSubObjectDescription, IState
     unsafe IntPtr IStateSubObjectDescriptionMarshal.__MarshalAlloc(Dictionary<StateSubObject, IntPtr> subObjectLookup)
     {
         __Native* native = (__Native*)Marshal.AllocHGlobal(sizeof(__Native));
+        *native = default;
 
         native->DXILLibrary.pShaderBytecode = UnsafeUtilities.AllocWithData(DxilLibrary.Span);
         native->DXILLibrary.BytecodeLength = (uint)DxilLibrary.Length;
@@ -76,7 +77,7 @@ public partial class DxilLibraryDescription : IStateSubObjectDescription, IState
                 Exports[i].__MarshalFree(ref nativeLibrary.pExports[i]);
             }
 
-            Marshal.FreeHGlobal((IntPtr)nativeLibrary.pExports);
+            UnsafeUtilities.Free(nativeLibrary.pExports);
         }
 
         Marshal.FreeHGlobal(pDesc);

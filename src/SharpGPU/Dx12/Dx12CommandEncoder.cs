@@ -1330,39 +1330,24 @@ namespace SharpGPU
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            Dx12ArgumentTable dx12ArgumentTable = resourceTable as Dx12ArgumentTable;
-            Dx12ArgumentTableLayout dx12ArgumentTableLayout = dx12ArgumentTable.ArgumentTableLayout;
-            Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-#if DEBUG
-            Debug.Assert(tableIndex == dx12ArgumentTableLayout.Index, "error resourceTable index");
-#endif
-
-            for (int i = 0; i < dx12ArgumentTable.NativeGpuDescriptorHandles.Length; ++i)
-            {
-                Dx12BindTypeAndParameterSlot? parameter = null;
-                ref Dx12BindInfo bindInfo = ref dx12ArgumentTableLayout.BindInfos[i];
-
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Compute, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
-                if (parameter.HasValue)
-                {
-#if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
-#endif
-                    dx12CommandBuffer.NativeCommandList.SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
-                }
-            }
+            Dx12PipelineLayout pipelineLayout = m_CachedPipeline?.Descriptor.PipelineLayout as Dx12PipelineLayout
+                ?? throw new InvalidOperationException("DX12 compute encoder requires a bound pipeline with a Dx12PipelineLayout.");
+            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
+                ?? throw new InvalidOperationException("DX12 compute encoder requires a Dx12CommandBuffer.");
+            Dx12ArgumentTableBinder.BindCompute(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
-#if DEBUG
-            Debug.Assert(offset + size <= dx12PipelineLayout.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({dx12PipelineLayout.PushConstantSize}).");
-#endif
-            dx12CommandBuffer.NativeCommandList.SetComputeRoot32BitConstants(dx12PipelineLayout.PushConstantRootParameterIndex, size / 4, data.ToPointer(), offset / 4);
+            Dx12PipelineLayout pipelineLayout = m_CachedPipeline?.Descriptor.PipelineLayout as Dx12PipelineLayout
+                ?? throw new InvalidOperationException("DX12 compute encoder requires a bound pipeline with a Dx12PipelineLayout.");
+            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
+                ?? throw new InvalidOperationException("DX12 compute encoder requires a Dx12CommandBuffer.");
+            if (!Dx12ArgumentTableBinder.ValidatePushConstantWrite(pipelineLayout, data, size, offset))
+            {
+                return;
+            }
+            commandBuffer.NativeCommandList.SetComputeRoot32BitConstants(pipelineLayout.PushConstantRootParameterIndex, size / 4, data.ToPointer(), offset / 4);
         }
 
         public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
@@ -1482,38 +1467,11 @@ namespace SharpGPU
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            Dx12ArgumentTable dx12ArgumentTable = resourceTable as Dx12ArgumentTable;
-            Dx12ArgumentTableLayout dx12ArgumentTableLayout = dx12ArgumentTable.ArgumentTableLayout;
-            Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-#if DEBUG
-            Debug.Assert(tableIndex == dx12ArgumentTableLayout.Index, "error resourceTable index");
-#endif
-
-            for (int i = 0; i < dx12ArgumentTable.NativeGpuDescriptorHandles.Length; ++i)
-            {
-                Dx12BindTypeAndParameterSlot? parameter = null;
-                ref Dx12BindInfo bindInfo = ref dx12ArgumentTableLayout.BindInfos[i];
-
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.RayTracing, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
-                if (!parameter.HasValue)
-                {
-                    // DX12 RT pass uses SetComputeRoot* APIs. Allow tables authored as Compute-stage descriptors.
-                    parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Compute, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
-                }
-                if (!parameter.HasValue)
-                {
-                    parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.All, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
-                }
-                if (parameter.HasValue)
-                {
-#if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
-#endif
-                    dx12CommandBuffer.NativeCommandList.SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
-                }
-            }
+            Dx12PipelineLayout pipelineLayout = m_CachedPipeline?.Descriptor.PipelineLayout as Dx12PipelineLayout
+                ?? throw new InvalidOperationException("DX12 ray-tracing encoder requires a bound pipeline with a Dx12PipelineLayout.");
+            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
+                ?? throw new InvalidOperationException("DX12 ray-tracing encoder requires a Dx12CommandBuffer.");
+            Dx12ArgumentTableBinder.BindCompute(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
         }
 
         public override void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct)
@@ -2150,57 +2108,24 @@ namespace SharpGPU
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            Dx12ArgumentTable dx12ArgumentTable = resourceTable as Dx12ArgumentTable;
-            Dx12ArgumentTableLayout dx12ArgumentTableLayout = dx12ArgumentTable.ArgumentTableLayout;
-            Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-
-#if DEBUG
-            Debug.Assert(tableIndex == dx12ArgumentTableLayout.Index, "error resourceTable index");
-#endif
-
-            for (int i = 0; i < dx12ArgumentTable.NativeGpuDescriptorHandles.Length; ++i)
-            {
-                Dx12BindTypeAndParameterSlot? parameter = null;
-                ref Dx12BindInfo bindInfo = ref dx12ArgumentTableLayout.BindInfos[i];
-
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.All, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
-                if (parameter.HasValue)
-                {
-#if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in graphics at index {0}.", i));
-#endif
-                    dx12CommandBuffer.NativeCommandList.SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
-                }
-
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Vertex, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
-                if (parameter.HasValue)
-                {
-#if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in vertex at index {0}.", i));
-#endif
-                    dx12CommandBuffer.NativeCommandList.SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
-                }
-
-                parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Fragment, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
-                if (parameter.HasValue)
-                {
-#if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type, String.Format("BindType is not equal in fragment at index {0}.", i));
-#endif
-                    dx12CommandBuffer.NativeCommandList.SetGraphicsRootDescriptorTable((uint)parameter.Value.Slot, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
-                }
-            }
+            Dx12PipelineLayout pipelineLayout = m_CachedPipeline?.Descriptor.PipelineLayout as Dx12PipelineLayout
+                ?? throw new InvalidOperationException("DX12 raster encoder requires a bound pipeline with a Dx12PipelineLayout.");
+            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
+                ?? throw new InvalidOperationException("DX12 raster encoder requires a Dx12CommandBuffer.");
+            Dx12ArgumentTableBinder.BindGraphics(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12PipelineLayout dx12PipelineLayout = m_CachedPipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
-#if DEBUG
-            Debug.Assert(offset + size <= dx12PipelineLayout.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({dx12PipelineLayout.PushConstantSize}).");
-#endif
-            dx12CommandBuffer.NativeCommandList.SetGraphicsRoot32BitConstants(dx12PipelineLayout.PushConstantRootParameterIndex, size / 4, data.ToPointer(), offset / 4);
+            Dx12PipelineLayout pipelineLayout = m_CachedPipeline?.Descriptor.PipelineLayout as Dx12PipelineLayout
+                ?? throw new InvalidOperationException("DX12 raster encoder requires a bound pipeline with a Dx12PipelineLayout.");
+            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
+                ?? throw new InvalidOperationException("DX12 raster encoder requires a Dx12CommandBuffer.");
+            if (!Dx12ArgumentTableBinder.ValidatePushConstantWrite(pipelineLayout, data, size, offset))
+            {
+                return;
+            }
+            commandBuffer.NativeCommandList.SetGraphicsRoot32BitConstants(pipelineLayout.PushConstantRootParameterIndex, size / 4, data.ToPointer(), offset / 4);
         }
 
         public override void SetIndexBuffer(RHIBuffer buffer, in uint offset)
@@ -2602,6 +2527,7 @@ namespace SharpGPU
         private ulong m_BackingMemoryGpuAddress;
         private ulong m_BackingMemorySize;
         private bool m_BackingMemoryInitialized;
+        private bool m_WorkGraphProgramSet;
         private Dx12Buffer m_NodeInputDescriptorUpload;
         private IntPtr m_NodeInputDescriptorUploadPtr;
         private ulong m_NodeInputDescriptorUploadGpuAddress;
@@ -2622,6 +2548,7 @@ namespace SharpGPU
             m_BackingMemoryGpuAddress = 0;
             m_BackingMemorySize = 0;
             m_BackingMemoryInitialized = false;
+            m_WorkGraphProgramSet = false;
 
             if (!string.IsNullOrWhiteSpace(descriptor.Name))
             {
@@ -2672,49 +2599,30 @@ namespace SharpGPU
             Dx12PipelineLayout dx12PipelineLayout = pipeline.Descriptor.PipelineLayout as Dx12PipelineLayout
                 ?? throw new InvalidOperationException("DX12 WorkGraph pipeline requires a Dx12PipelineLayout.");
             ((Dx12CommandBuffer)m_CommandBuffer!).NativeCommandList.SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
+            m_WorkGraphProgramSet = false;
         }
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            Dx12ArgumentTable dx12ArgumentTable = resourceTable as Dx12ArgumentTable
-                ?? throw new InvalidOperationException("DX12 WorkGraph encoder requires a Dx12ArgumentTable.");
-            Dx12ArgumentTableLayout dx12ArgumentTableLayout = dx12ArgumentTable.ArgumentTableLayout;
-            Dx12PipelineLayout dx12PipelineLayout = RequirePipeline().Descriptor.PipelineLayout as Dx12PipelineLayout
+            Dx12PipelineLayout pipelineLayout = RequirePipeline().Descriptor.PipelineLayout as Dx12PipelineLayout
                 ?? throw new InvalidOperationException("DX12 WorkGraph pipeline requires a Dx12PipelineLayout.");
-            Dx12CommandBuffer dx12CommandBuffer = (Dx12CommandBuffer)m_CommandBuffer!;
-
-#if DEBUG
-            Debug.Assert(tableIndex == dx12ArgumentTableLayout.Index, "error resourceTable index");
-#endif
-
-            for (int i = 0; i < dx12ArgumentTable.NativeGpuDescriptorHandles.Length; ++i)
-            {
-                ref Dx12BindInfo bindInfo = ref dx12ArgumentTableLayout.BindInfos[i];
-                Dx12BindTypeAndParameterSlot? parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.Compute, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
-                if (!parameter.HasValue)
-                {
-                    parameter = dx12PipelineLayout.QueryRootDescriptorParameterIndex(ERHIShaderStage.All, dx12ArgumentTableLayout.Index, bindInfo.Slot, bindInfo.Type);
-                }
-
-                if (parameter.HasValue)
-                {
-#if DEBUG
-                    Debug.Assert(parameter.Value.Type == bindInfo.Type);
-#endif
-                    dx12CommandBuffer.NativeCommandList.SetComputeRootDescriptorTable((uint)parameter.Value.Slot, dx12ArgumentTable.NativeGpuDescriptorHandles[i]);
-                }
-            }
+            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
+                ?? throw new InvalidOperationException("DX12 WorkGraph encoder requires a Dx12CommandBuffer.");
+            Dx12ArgumentTableBinder.BindCompute(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
-            Dx12PipelineLayout dx12PipelineLayout = RequirePipeline().Descriptor.PipelineLayout as Dx12PipelineLayout
+            Dx12PipelineLayout pipelineLayout = RequirePipeline().Descriptor.PipelineLayout as Dx12PipelineLayout
                 ?? throw new InvalidOperationException("DX12 WorkGraph pipeline requires a Dx12PipelineLayout.");
-#if DEBUG
-            Debug.Assert(offset + size <= dx12PipelineLayout.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({dx12PipelineLayout.PushConstantSize}).");
-#endif
-            ((Dx12CommandBuffer)m_CommandBuffer!).NativeCommandList.SetComputeRoot32BitConstants(
-                dx12PipelineLayout.PushConstantRootParameterIndex,
+            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
+                ?? throw new InvalidOperationException("DX12 WorkGraph encoder requires a Dx12CommandBuffer.");
+            if (!Dx12ArgumentTableBinder.ValidatePushConstantWrite(pipelineLayout, data, size, offset))
+            {
+                return;
+            }
+            commandBuffer.NativeCommandList.SetComputeRoot32BitConstants(
+                pipelineLayout.PushConstantRootParameterIndex,
                 size / 4,
                 data.ToPointer(),
                 offset / 4);
@@ -2749,6 +2657,7 @@ namespace SharpGPU
             m_BackingMemory = dx12Buffer;
             m_BackingMemoryGpuAddress = dx12Buffer.NativeResource.GPUVirtualAddress + byteOffset;
             m_BackingMemorySize = byteSize;
+            m_WorkGraphProgramSet = false;
         }
 
         public override void DispatchGraph(string entrypoint, uint numRecords, ulong inputRecordByteStride, RHIBuffer? inputRecordBuffer = null)
@@ -2793,18 +2702,22 @@ namespace SharpGPU
             };
             Unsafe.Write(m_NodeInputDescriptorUploadPtr.ToPointer(), nodeInput);
 
-            Vortice.Direct3D12.SetWorkGraphDescription workGraphDescription = new Vortice.Direct3D12.SetWorkGraphDescription
+            if (!m_WorkGraphProgramSet)
             {
-                ProgramIdentifier = pipeline.ProgramIdentifier,
-                Flags = m_BackingMemoryInitialized ? Vortice.Direct3D12.SetWorkGraphFlags.None : Vortice.Direct3D12.SetWorkGraphFlags.Initialize,
-                BackingMemory = new Vortice.Direct3D12.GpuVirtualAddressRange
+                Vortice.Direct3D12.SetWorkGraphDescription workGraphDescription = new Vortice.Direct3D12.SetWorkGraphDescription
                 {
-                    StartAddress = m_BackingMemoryGpuAddress,
-                    SizeInBytes = m_BackingMemorySize
-                }
-            };
-            m_CommandList10.SetWorkGraphProgram(in workGraphDescription);
-            m_BackingMemoryInitialized = true;
+                    ProgramIdentifier = pipeline.ProgramIdentifier,
+                    Flags = m_BackingMemoryInitialized ? Vortice.Direct3D12.SetWorkGraphFlags.None : Vortice.Direct3D12.SetWorkGraphFlags.Initialize,
+                    BackingMemory = new Vortice.Direct3D12.GpuVirtualAddressRange
+                    {
+                        StartAddress = m_BackingMemoryGpuAddress,
+                        SizeInBytes = m_BackingMemorySize
+                    }
+                };
+                m_CommandList10.SetWorkGraphProgram(in workGraphDescription);
+                m_BackingMemoryInitialized = true;
+                m_WorkGraphProgramSet = true;
+            }
 
             Vortice.Direct3D12.DispatchGraphDescription dispatchDescription = new Vortice.Direct3D12.DispatchGraphDescription
             {
@@ -2831,6 +2744,14 @@ namespace SharpGPU
             m_BackingMemory = null;
             m_BackingMemoryGpuAddress = 0;
             m_BackingMemorySize = 0;
+            m_WorkGraphProgramSet = false;
+        }
+
+        internal void ReleaseCommandListInterface()
+        {
+            Vortice.Direct3D12.ID3D12GraphicsCommandList10? commandList = m_CommandList10;
+            m_CommandList10 = null;
+            commandList?.Release();
         }
 
         protected override void Release()
@@ -2843,8 +2764,7 @@ namespace SharpGPU
 
             m_NodeInputDescriptorUpload?.Dispose();
             m_NodeInputDescriptorUpload = null;
-            m_CommandList10?.Release();
-            m_CommandList10 = null;
+            ReleaseCommandListInterface();
         }
 
         private Dx12WorkGraphPipeline RequirePipeline()

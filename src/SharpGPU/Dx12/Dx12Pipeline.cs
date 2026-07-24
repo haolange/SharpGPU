@@ -7,210 +7,324 @@ using System.Runtime.InteropServices;
 namespace SharpGPU
 {
 #pragma warning disable CS0169, CS0649, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
-    internal struct Dx12BindTypeAndParameterSlot
+    internal sealed class Dx12PipelineArgumentTablePlan
     {
-        public int Slot;
-        public ERHIBindType Type;
+        public uint TableIndex { get; }
+        public Dx12ArgumentTableLayout Layout { get; }
+        public uint[] RootParameterIndices { get; }
+
+        public Dx12PipelineArgumentTablePlan(
+            in uint tableIndex,
+            Dx12ArgumentTableLayout layout,
+            uint[] rootParameterIndices)
+        {
+            TableIndex = tableIndex;
+            Layout = layout;
+            RootParameterIndices = rootParameterIndices;
+        }
+    }
+
+    internal sealed class Dx12PipelineLayoutPlan
+    {
+        public Dx12PipelineArgumentTablePlan[] TablePlans { get; }
+        public int DescriptorTableParameterCount { get; }
+        public int TotalRootParameterCount { get; }
+        public uint PushConstantRootParameterIndex { get; }
+        public uint PushConstantSize { get; }
+
+        private readonly Dictionary<uint, Dx12PipelineArgumentTablePlan> m_TablePlanMap;
+
+        public Dx12PipelineLayoutPlan(in RHIPipelineLayoutDescriptor descriptor)
+        {
+            if ((descriptor.PushConstantSize & 3u) != 0)
+            {
+                throw new ArgumentException(
+                    $"DX12 push constant size {descriptor.PushConstantSize} must be four-byte aligned.",
+                    nameof(descriptor));
+            }
+
+            PushConstantSize = descriptor.PushConstantSize;
+            RHIArgumentTableLayout[] layouts = descriptor.ArgumentTableLayouts ?? Array.Empty<RHIArgumentTableLayout>();
+            TablePlans = new Dx12PipelineArgumentTablePlan[layouts.Length];
+            m_TablePlanMap = new Dictionary<uint, Dx12PipelineArgumentTablePlan>(layouts.Length);
+
+            int rootCursor = 0;
+            for (int tableIndex = 0; tableIndex < layouts.Length; ++tableIndex)
+            {
+                Dx12ArgumentTableLayout layout = layouts[tableIndex] as Dx12ArgumentTableLayout
+                    ?? throw new ArgumentException(
+                        $"DX12 pipeline layout table {tableIndex} must be a Dx12ArgumentTableLayout from the same backend.",
+                        nameof(descriptor));
+                if (m_TablePlanMap.ContainsKey(layout.Index))
+                {
+                    throw new ArgumentException(
+                        $"DX12 pipeline layout contains duplicate argument table space/index {layout.Index}.",
+                        nameof(descriptor));
+                }
+
+                uint[] rootParameterIndices = new uint[layout.Groups.Length];
+                for (int groupIndex = 0; groupIndex < rootParameterIndices.Length; ++groupIndex)
+                {
+                    rootParameterIndices[groupIndex] = checked((uint)rootCursor++);
+                }
+
+                Dx12PipelineArgumentTablePlan tablePlan = new Dx12PipelineArgumentTablePlan(
+                    layout.Index,
+                    layout,
+                    rootParameterIndices);
+                TablePlans[tableIndex] = tablePlan;
+                m_TablePlanMap.Add(layout.Index, tablePlan);
+            }
+
+            DescriptorTableParameterCount = rootCursor;
+            uint pushConstantDwordCount = descriptor.PushConstantSize / 4u;
+            ulong rootDwordCost = (ulong)DescriptorTableParameterCount + pushConstantDwordCount;
+            if (rootDwordCost > 64UL)
+            {
+                throw new ArgumentException(
+                    $"DX12 root signature costs {rootDwordCost} DWORDs ({DescriptorTableParameterCount} descriptor tables + {pushConstantDwordCount} push-constant DWORDs), exceeding the 64-DWORD limit.",
+                    nameof(descriptor));
+            }
+
+            bool hasPushConstants = descriptor.PushConstantSize != 0;
+            PushConstantRootParameterIndex = hasPushConstants ? checked((uint)rootCursor) : uint.MaxValue;
+            TotalRootParameterCount = checked(rootCursor + (hasPushConstants ? 1 : 0));
+        }
+
+        public Dx12PipelineArgumentTablePlan Resolve(
+            in uint tableIndex,
+            Dx12ArgumentTableLayout actualLayout)
+        {
+            if (!m_TablePlanMap.TryGetValue(tableIndex, out Dx12PipelineArgumentTablePlan? tablePlan))
+            {
+                throw new ArgumentException(
+                    $"DX12 pipeline layout does not declare argument table space/index {tableIndex}.",
+                    nameof(tableIndex));
+            }
+            if (!tablePlan.Layout.IsStructurallyCompatibleWith(actualLayout))
+            {
+                throw new ArgumentException(
+                    $"DX12 argument table space/index {tableIndex} is structurally incompatible with the pipeline layout.",
+                    nameof(actualLayout));
+            }
+
+            return tablePlan;
+        }
+    }
+
+    internal static class Dx12ArgumentTableBinder
+    {
+        public static int BindCompute(
+            Vortice.Direct3D12.ID3D12GraphicsCommandList7 commandList,
+            Dx12PipelineLayout pipelineLayout,
+            RHIArgumentTable argumentTable,
+            in uint tableIndex)
+        {
+            Dx12ArgumentTable dx12ArgumentTable = ResolveReadyTable(
+                pipelineLayout,
+                argumentTable,
+                tableIndex,
+                out Dx12PipelineArgumentTablePlan tablePlan);
+
+            for (int groupIndex = 0; groupIndex < tablePlan.RootParameterIndices.Length; ++groupIndex)
+            {
+                commandList.SetComputeRootDescriptorTable(
+                    tablePlan.RootParameterIndices[groupIndex],
+                    dx12ArgumentTable.GetGroupGpuHandle(groupIndex));
+            }
+
+            return tablePlan.RootParameterIndices.Length;
+        }
+
+        public static int BindGraphics(
+            Vortice.Direct3D12.ID3D12GraphicsCommandList7 commandList,
+            Dx12PipelineLayout pipelineLayout,
+            RHIArgumentTable argumentTable,
+            in uint tableIndex)
+        {
+            Dx12ArgumentTable dx12ArgumentTable = ResolveReadyTable(
+                pipelineLayout,
+                argumentTable,
+                tableIndex,
+                out Dx12PipelineArgumentTablePlan tablePlan);
+
+            for (int groupIndex = 0; groupIndex < tablePlan.RootParameterIndices.Length; ++groupIndex)
+            {
+                commandList.SetGraphicsRootDescriptorTable(
+                    tablePlan.RootParameterIndices[groupIndex],
+                    dx12ArgumentTable.GetGroupGpuHandle(groupIndex));
+            }
+
+            return tablePlan.RootParameterIndices.Length;
+        }
+
+        public static bool ValidatePushConstantWrite(
+            Dx12PipelineLayout pipelineLayout,
+            IntPtr data,
+            in uint size,
+            in uint offset)
+        {
+            if (size == 0)
+            {
+                return false;
+            }
+            if (data == IntPtr.Zero)
+            {
+                throw new ArgumentNullException(nameof(data), "DX12 push-constant data cannot be null when size is non-zero.");
+            }
+            if (((size | offset) & 3u) != 0)
+            {
+                throw new ArgumentException(
+                    $"DX12 push-constant write offset {offset} and size {size} must be four-byte aligned.");
+            }
+            if (offset > pipelineLayout.PushConstantSize || size > pipelineLayout.PushConstantSize - offset)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(size),
+                    $"DX12 push-constant range [{offset}, {(ulong)offset + size}) exceeds the declared size {pipelineLayout.PushConstantSize}.");
+            }
+
+            return true;
+        }
+
+        private static Dx12ArgumentTable ResolveReadyTable(
+            Dx12PipelineLayout pipelineLayout,
+            RHIArgumentTable argumentTable,
+            in uint tableIndex,
+            out Dx12PipelineArgumentTablePlan tablePlan)
+        {
+            Dx12ArgumentTable dx12ArgumentTable = argumentTable as Dx12ArgumentTable
+                ?? throw new ArgumentException("DX12 encoder requires a Dx12ArgumentTable from the same backend.", nameof(argumentTable));
+            if (pipelineLayout.IsDisposed)
+            {
+                throw new ObjectDisposedException(nameof(Dx12PipelineLayout));
+            }
+            if (!ReferenceEquals(pipelineLayout.Device, dx12ArgumentTable.Device))
+            {
+                throw new ArgumentException(
+                    "DX12 encoder cannot bind an argument table allocated from a different DX12 device.",
+                    nameof(argumentTable));
+            }
+            if (dx12ArgumentTable.ArgumentTableLayout.Index != tableIndex)
+            {
+                throw new ArgumentException(
+                    $"DX12 argument table reports space/index {dx12ArgumentTable.ArgumentTableLayout.Index}, but SetArgumentTable requested {tableIndex}.",
+                    nameof(tableIndex));
+            }
+
+            tablePlan = pipelineLayout.Plan.Resolve(tableIndex, dx12ArgumentTable.ArgumentTableLayout);
+            if (dx12ArgumentTable.GroupCount != tablePlan.RootParameterIndices.Length)
+            {
+                throw new InvalidOperationException(
+                    $"DX12 argument table space/index {tableIndex} has {dx12ArgumentTable.GroupCount} descriptor groups, but the pipeline plan expects {tablePlan.RootParameterIndices.Length}.");
+            }
+
+            dx12ArgumentTable.EnsureReadyForBinding();
+            return dx12ArgumentTable;
+        }
     }
 
     internal unsafe class Dx12PipelineLayout : RHIPipelineLayout
     {
-        public int ParameterCount
-        {
-            get
-            {
-                return m_ParameterCount;
-            }
-        }
-        public uint PushConstantRootParameterIndex
-        {
-            get
-            {
-                return m_PushConstantRootParameterIndex;
-            }
-        }
-        public uint PushConstantSize => m_PushConstantSize;
-        public Vortice.Direct3D12.ID3D12RootSignature NativeRootSignature
-        {
-            get
-            {
-                return m_NativeRootSignature;
-            }
-        }
-
-        private int m_ParameterCount;
-        private uint m_PushConstantRootParameterIndex;
-        private uint m_PushConstantSize;
-        private Vortice.Direct3D12.ID3D12RootSignature m_NativeRootSignature;
-        private Dictionary<int, Dx12BindTypeAndParameterSlot> m_AllParameterMap;
-        private Dictionary<int, Dx12BindTypeAndParameterSlot> m_VertexParameterMap;
-        private Dictionary<int, Dx12BindTypeAndParameterSlot> m_FragmentParameterMap;
-        private Dictionary<int, Dx12BindTypeAndParameterSlot> m_ComputeParameterMap;
+        public int ParameterCount => Plan.DescriptorTableParameterCount;
+        public uint PushConstantRootParameterIndex => Plan.PushConstantRootParameterIndex;
+        public uint PushConstantSize => Plan.PushConstantSize;
+        public Dx12PipelineLayoutPlan Plan { get; }
+        internal Dx12Device Device { get; }
+        public Vortice.Direct3D12.ID3D12RootSignature NativeRootSignature { get; private set; }
 
         public Dx12PipelineLayout(Dx12Device device, in RHIPipelineLayoutDescriptor descriptor)
         {
-            m_ParameterCount = 0;
-            m_PushConstantSize = descriptor.PushConstantSize;
-            m_AllParameterMap = new Dictionary<int, Dx12BindTypeAndParameterSlot>(5);
-            m_VertexParameterMap = new Dictionary<int, Dx12BindTypeAndParameterSlot>(5);
-            m_FragmentParameterMap = new Dictionary<int, Dx12BindTypeAndParameterSlot>(5);
-            m_ComputeParameterMap = new Dictionary<int, Dx12BindTypeAndParameterSlot>(5);
+            Device = device;
+            Plan = new Dx12PipelineLayoutPlan(descriptor);
+            Vortice.Direct3D12.RootParameter1[] rootParameters = new Vortice.Direct3D12.RootParameter1[Plan.TotalRootParameterCount];
 
-            for (int i = 0; i < descriptor.ArgumentTableLayouts.Length; ++i)
+            for (int tableIndex = 0; tableIndex < Plan.TablePlans.Length; ++tableIndex)
             {
-                Dx12ArgumentTableLayout resourceTableLayout = descriptor.ArgumentTableLayouts[i] as Dx12ArgumentTableLayout;
-                m_ParameterCount += resourceTableLayout.BindInfos.Length;
-            }
-
-            bool hasPushConstants = descriptor.PushConstantSize > 0;
-            int totalRootParameters = m_ParameterCount + (hasPushConstants ? 1 : 0);
-
-            Vortice.Direct3D12.DescriptorRange1* rootDescriptorRangePtr = stackalloc Vortice.Direct3D12.DescriptorRange1[m_ParameterCount];
-            Span<Vortice.Direct3D12.DescriptorRange1> rootDescriptorRangeViews = new Span<Vortice.Direct3D12.DescriptorRange1>(rootDescriptorRangePtr, m_ParameterCount);
-
-            Vortice.Direct3D12.RootParameter1* rootParameterPtr = stackalloc Vortice.Direct3D12.RootParameter1[totalRootParameters];
-            Span<Vortice.Direct3D12.RootParameter1> rootParameterViews = new Span<Vortice.Direct3D12.RootParameter1>(rootParameterPtr, totalRootParameters);
-
-            for (int i = 0; i < descriptor.ArgumentTableLayouts.Length; ++i)
-            {
-                Dx12ArgumentTableLayout resourceTableLayout = descriptor.ArgumentTableLayouts[i] as Dx12ArgumentTableLayout;
-
-                for (int j = 0; j < resourceTableLayout.BindInfos.Length; ++j)
+                Dx12PipelineArgumentTablePlan tablePlan = Plan.TablePlans[tableIndex];
+                Dx12ArgumentTableLayout layout = tablePlan.Layout;
+                for (int groupIndex = 0; groupIndex < layout.Groups.Length; ++groupIndex)
                 {
-                    ref Dx12BindInfo bindInfo = ref resourceTableLayout.BindInfos[j];
-
-                    ref Vortice.Direct3D12.DescriptorRange1 rootDescriptorRange = ref rootDescriptorRangeViews[i + j];
-                    rootDescriptorRange.RangeType = Dx12Utility.ConvertToDx12BindType(bindInfo.Type);
-                    rootDescriptorRange.NumDescriptors = bindInfo.IsBindless ? bindInfo.Count : 1;
-                    rootDescriptorRange.BaseShaderRegister = bindInfo.Slot;
-                    rootDescriptorRange.RegisterSpace = bindInfo.Index;
-                    rootDescriptorRange.Flags = Dx12Utility.GetDx12DescriptorRangeFalag(bindInfo.Type);
-                    rootDescriptorRange.OffsetInDescriptorsFromTableStart = Vortice.Direct3D12.D3D12.DescriptorRangeOffsetAppend;
-
-                    ref Vortice.Direct3D12.RootParameter1 rootParameterView = ref rootParameterViews[i + j];
-                    Vortice.Direct3D12.DescriptorRange1[] descriptorRanges = new Vortice.Direct3D12.DescriptorRange1[] { rootDescriptorRangePtr[i + j] };
-                    rootParameterView = new Vortice.Direct3D12.RootParameter1(new Vortice.Direct3D12.RootDescriptorTable1(descriptorRanges), Dx12Utility.ConvertToDx12ShaderType(bindInfo.Stage));
-
-                    Dx12BindTypeAndParameterSlot parameter;
+                    Dx12ArgumentTableGroupPlan group = layout.Groups[groupIndex];
+                    Vortice.Direct3D12.DescriptorRange1[] ranges = new Vortice.Direct3D12.DescriptorRange1[group.BindingIndices.Length];
+                    for (int rangeIndex = 0; rangeIndex < group.BindingIndices.Length; ++rangeIndex)
                     {
-                        parameter.Slot = i + j;
-                        parameter.Type = bindInfo.Type;
+                        ref readonly Dx12BindInfo bindInfo = ref layout.BindInfos[group.BindingIndices[rangeIndex]];
+                        ranges[rangeIndex] = new Vortice.Direct3D12.DescriptorRange1
+                        {
+                            RangeType = bindInfo.NativeRangeType,
+                            NumDescriptors = bindInfo.Count,
+                            BaseShaderRegister = bindInfo.Slot,
+                            RegisterSpace = layout.Index,
+                            Flags = Dx12Utility.GetDx12DescriptorRangeFlags(bindInfo.Type),
+                            OffsetInDescriptorsFromTableStart = checked((uint)bindInfo.DescriptorOffset),
+                        };
                     }
 
-                    if ((bindInfo.Stage & ERHIShaderStage.All) == ERHIShaderStage.All)
-                    {
-                        m_AllParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.Slot, Dx12Utility.GetDx12BindKey(bindInfo.Type)).GetHashCode(), parameter);
-                    }
-
-                    if ((bindInfo.Stage & ERHIShaderStage.Vertex) == ERHIShaderStage.Vertex)
-                    {
-                        m_VertexParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.Slot, Dx12Utility.GetDx12BindKey(bindInfo.Type)).GetHashCode(), parameter);
-                    }
-
-                    if ((bindInfo.Stage & ERHIShaderStage.Fragment) == ERHIShaderStage.Fragment)
-                    {
-                        m_FragmentParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.Slot, Dx12Utility.GetDx12BindKey(bindInfo.Type)).GetHashCode(), parameter);
-                    }
-
-                    if ((bindInfo.Stage & ERHIShaderStage.Compute) == ERHIShaderStage.Compute
-                        || (bindInfo.Stage & ERHIShaderStage.RayTracing) == ERHIShaderStage.RayTracing)
-                    {
-                        // DX12 RT pass uses SetComputeRoot* APIs; map RT-stage descriptors into compute parameter map.
-                        m_ComputeParameterMap.TryAdd(new uint3(bindInfo.Index << 8, bindInfo.Slot, Dx12Utility.GetDx12BindKey(bindInfo.Type)).GetHashCode(), parameter);
-                    }
+                    uint rootParameterIndex = tablePlan.RootParameterIndices[groupIndex];
+                    rootParameters[rootParameterIndex] = new Vortice.Direct3D12.RootParameter1(
+                        new Vortice.Direct3D12.RootDescriptorTable1(ranges),
+                        group.Visibility);
                 }
             }
 
-            if (hasPushConstants)
+            if (Plan.PushConstantSize != 0)
             {
-                m_PushConstantRootParameterIndex = (uint)m_ParameterCount;
-                ref Vortice.Direct3D12.RootParameter1 pushConstantParam = ref rootParameterViews[m_ParameterCount];
-                pushConstantParam = new Vortice.Direct3D12.RootParameter1(new Vortice.Direct3D12.RootConstants(0, 0, descriptor.PushConstantSize / 4), Vortice.Direct3D12.ShaderVisibility.All);
+                rootParameters[Plan.PushConstantRootParameterIndex] = new Vortice.Direct3D12.RootParameter1(
+                    new Vortice.Direct3D12.RootConstants(0, 0, Plan.PushConstantSize / 4u),
+                    Vortice.Direct3D12.ShaderVisibility.All);
             }
 
-            Vortice.Direct3D12.RootSignatureFlags rootSignatureFlag = Vortice.Direct3D12.RootSignatureFlags.None;
-            rootSignatureFlag |= Vortice.Direct3D12.RootSignatureFlags.DenyHullShaderRootAccess;
-            rootSignatureFlag |= Vortice.Direct3D12.RootSignatureFlags.DenyDomainShaderRootAccess;
-            rootSignatureFlag |= Vortice.Direct3D12.RootSignatureFlags.DenyGeometryShaderRootAccess;
-
+            Vortice.Direct3D12.RootSignatureFlags rootSignatureFlags = Vortice.Direct3D12.RootSignatureFlags.None;
+            rootSignatureFlags |= Vortice.Direct3D12.RootSignatureFlags.DenyHullShaderRootAccess;
+            rootSignatureFlags |= Vortice.Direct3D12.RootSignatureFlags.DenyDomainShaderRootAccess;
+            rootSignatureFlags |= Vortice.Direct3D12.RootSignatureFlags.DenyGeometryShaderRootAccess;
             if (descriptor.bLocalSignature)
             {
-                rootSignatureFlag |= Vortice.Direct3D12.RootSignatureFlags.LocalRootSignature;
+                rootSignatureFlags |= Vortice.Direct3D12.RootSignatureFlags.LocalRootSignature;
             }
             if (descriptor.bUseVertexLayout)
             {
-                rootSignatureFlag |= Vortice.Direct3D12.RootSignatureFlags.AllowInputAssemblerInputLayout;
+                rootSignatureFlags |= Vortice.Direct3D12.RootSignatureFlags.AllowInputAssemblerInputLayout;
             }
 
-            Vortice.Direct3D12.RootParameter1[] rootParameters = new Vortice.Direct3D12.RootParameter1[totalRootParameters];
-            for (int i = 0; i < totalRootParameters; ++i)
-            {
-                rootParameters[i] = rootParameterPtr[i];
-            }
-
-            Vortice.Direct3D12.VersionedRootSignatureDescription rootSignatureDesc = new Vortice.Direct3D12.VersionedRootSignatureDescription(
+            Vortice.Direct3D12.VersionedRootSignatureDescription rootSignatureDescription = new Vortice.Direct3D12.VersionedRootSignatureDescription(
                 new Vortice.Direct3D12.RootSignatureDescription1(
-                    rootSignatureFlag,
+                    rootSignatureFlags,
                     rootParameters,
                     Array.Empty<Vortice.Direct3D12.StaticSamplerDescription>()));
 
-            Vortice.Direct3D.Blob signature;
-            string rootSigError = Vortice.Direct3D12.D3D12.D3D12SerializeVersionedRootSignature(rootSignatureDesc, out signature);
-            Dx12Utility.CHECK_BOOL(string.IsNullOrEmpty(rootSigError));
-
-            Vortice.Direct3D12.ID3D12RootSignature rootSignature;
-            Dx12Utility.CHECK_HR(device.NativeDevice.CreateRootSignature(0, signature.BufferPointer, signature.BufferSize, out rootSignature));
-            signature.Release();
-            m_NativeRootSignature = rootSignature;
-        }
-
-        public Dx12BindTypeAndParameterSlot? QueryRootDescriptorParameterIndex(in ERHIShaderStage shaderStage, in uint layoutIndex, in uint slot, in ERHIBindType Type)
-        {
-            if ((shaderStage & ERHIShaderStage.Vertex) == ERHIShaderStage.Vertex)
+            Vortice.Direct3D.Blob? signature = null;
+            try
             {
-                //hasValue = m_VertexParameterMap.TryGetValue(new int2(slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                bool hasValue = m_VertexParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                return hasValue ? parameter : null;
-            }
-
-            if ((shaderStage & ERHIShaderStage.Fragment) == ERHIShaderStage.Fragment)
-            {
-                //hasValue = m_FragmentParameterMap.TryGetValue(new int2(slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                bool hasValue = m_FragmentParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                return hasValue ? parameter : null;
-            }
-
-            if ((shaderStage & ERHIShaderStage.Compute) == ERHIShaderStage.Compute)
-            {
-                //hasValue = m_ComputeParameterMap.TryGetValue(new int2(slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                bool hasValue = m_ComputeParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                return hasValue ? parameter : null;
-            }
-
-            if ((shaderStage & ERHIShaderStage.RayTracing) == ERHIShaderStage.RayTracing)
-            {
-                bool hasValue = m_ComputeParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                if (hasValue)
+                string rootSignatureError = Vortice.Direct3D12.D3D12.D3D12SerializeVersionedRootSignature(
+                    rootSignatureDescription,
+                    out signature);
+                if (!string.IsNullOrWhiteSpace(rootSignatureError))
                 {
-                    return parameter;
+                    throw new InvalidOperationException($"DX12 root-signature serialization failed: {rootSignatureError}");
+                }
+                if (signature == null)
+                {
+                    throw new InvalidOperationException("DX12 root-signature serialization returned no signature blob.");
                 }
 
-                hasValue = m_AllParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out parameter);
-                return hasValue ? parameter : null;
+                Dx12Utility.CHECK_HR(device.NativeDevice.CreateRootSignature(
+                    0,
+                    signature.BufferPointer,
+                    signature.BufferSize,
+                    out Vortice.Direct3D12.ID3D12RootSignature rootSignature));
+                NativeRootSignature = rootSignature;
             }
-
-            if ((shaderStage & ERHIShaderStage.All) == ERHIShaderStage.All)
+            finally
             {
-                bool hasValue = m_AllParameterMap.TryGetValue(new uint3(layoutIndex << 8, slot, Dx12Utility.GetDx12BindKey(Type)).GetHashCode(), out Dx12BindTypeAndParameterSlot parameter);
-                return hasValue ? parameter : null;
+                signature?.Release();
             }
-
-            return null;
         }
 
         protected override void Release()
         {
-            m_NativeRootSignature.Release();
+            NativeRootSignature.Release();
         }
     }
 
@@ -376,8 +490,8 @@ namespace SharpGPU
                 Console.WriteLine($"[Dx12ComputePipeline] Shader bytecode length={shaderBytes.Length}, magic=0x{shaderMagic:X8}");
                 Dx12PipelineDebug.DumpDeviceMessages(device, "[Dx12ComputePipeline]");
             }
-            Dx12Utility.CHECK_HR(hResult);
 #endif
+            Dx12Utility.CHECK_HR(hResult);
             m_NativePipelineState = nativePipelineState;
         }
 
@@ -547,8 +661,8 @@ namespace SharpGPU
                 Console.WriteLine($"[Dx12RaytracingPipeline] CreateStateObject failed. SharpGen.Runtime.Result=0x{hResult:X8}");
                 Dx12PipelineDebug.DumpDeviceMessages(device, "[Dx12RaytracingPipeline]");
             }
-            Dx12Utility.CHECK_HR(hResult);
 #endif
+            Dx12Utility.CHECK_HR(hResult);
             m_NativePipeline = nativePipeline;
             m_NativeStateObjectProperties = m_NativePipeline.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12StateObjectProperties>();
             if (m_NativeStateObjectProperties == null)
@@ -581,16 +695,30 @@ namespace SharpGPU
                     new[] { localRootParameter },
                     Array.Empty<Vortice.Direct3D12.StaticSamplerDescription>()));
 
-            Vortice.Direct3D.Blob signatureBlob;
-            string rootSigError = Vortice.Direct3D12.D3D12.D3D12SerializeVersionedRootSignature(rootSigDesc, out signatureBlob);
-            Dx12Utility.CHECK_BOOL(string.IsNullOrEmpty(rootSigError));
+            Vortice.Direct3D.Blob? signatureBlob = null;
+            try
+            {
+                string rootSigError = Vortice.Direct3D12.D3D12.D3D12SerializeVersionedRootSignature(rootSigDesc, out signatureBlob);
+                if (!string.IsNullOrWhiteSpace(rootSigError))
+                {
+                    throw new InvalidOperationException($"DX12 local root-signature serialization failed: {rootSigError}");
+                }
+                if (signatureBlob == null)
+                {
+                    throw new InvalidOperationException("DX12 local root-signature serialization returned no signature blob.");
+                }
 
-            Vortice.Direct3D12.ID3D12RootSignature localRootSignature = null;
-            SharpGen.Runtime.Result hResult = device.NativeDevice.CreateRootSignature(0, signatureBlob.BufferPointer, signatureBlob.BufferSize, out localRootSignature);
-            signatureBlob.Release();
-            Dx12Utility.CHECK_HR(hResult);
-
-            return localRootSignature;
+                Dx12Utility.CHECK_HR(device.NativeDevice.CreateRootSignature(
+                    0,
+                    signatureBlob.BufferPointer,
+                    signatureBlob.BufferSize,
+                    out Vortice.Direct3D12.ID3D12RootSignature localRootSignature));
+                return localRootSignature;
+            }
+            finally
+            {
+                signatureBlob?.Release();
+            }
         }
 
         protected override void Release()

@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics;
 
 namespace SharpGPU
@@ -16,12 +17,12 @@ namespace SharpGPU
         {
             get
             {
-                return m_NativeResource;
+                return m_NativeResource ?? throw new ObjectDisposedException(nameof(Dx12Texture));
             }
         }
 
         private Dx12Device m_Dx12Device;
-        private Vortice.Direct3D12.ID3D12Resource m_NativeResource;
+        private Vortice.Direct3D12.ID3D12Resource? m_NativeResource;
 
         public Dx12Texture(Dx12Device device, in RHITextureDescriptor descriptor)
         {
@@ -39,7 +40,7 @@ namespace SharpGPU
             textureDesc.SampleDescription = Dx12Utility.ConvertToDx12SampleCount(descriptor.SampleCount);
             textureDesc.Dimension = Dx12Utility.ConvertToDx12TextureDimension(descriptor.Dimension);
 
-            Vortice.Direct3D12.ID3D12Resource dx12Resource;
+            Vortice.Direct3D12.ID3D12Resource? dx12Resource;
             SharpGen.Runtime.Result hResult = m_Dx12Device.NativeDevice.CreateCommittedResource(
                 heapProperties,
                 Vortice.Direct3D12.HeapFlags.None,
@@ -47,9 +48,13 @@ namespace SharpGPU
                 Vortice.Direct3D12.ResourceStates.Common/*Dx12Utility.ConvertToDx12ResourceStateFormStorageMode(descriptor.StorageMode)*/,
                 null,
                 out dx12Resource);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
+            if (hResult.Failure || dx12Resource == null)
+            {
+                dx12Resource?.Release();
+                SharpGen.Runtime.Result removedReason = m_Dx12Device.NativeDevice.DeviceRemovedReason;
+                throw new InvalidOperationException($"Failed to create DX12 texture (Device={m_Dx12Device.Name}, Dimension={descriptor.Dimension}, Extent={descriptor.Extent}, Format={descriptor.Format}, Usage={descriptor.UsageFlag}, HRESULT=0x{(int)hResult:X8}, DeviceRemovedReason=0x{(int)removedReason:X8}).");
+            }
+
             m_NativeResource = dx12Resource;
         }
 
@@ -67,7 +72,9 @@ namespace SharpGPU
 
         protected override void Release()
         {
-            m_NativeResource.Release();
+            Vortice.Direct3D12.ID3D12Resource? nativeResource = m_NativeResource;
+            m_NativeResource = null;
+            nativeResource?.Release();
         }
     }
 #pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416

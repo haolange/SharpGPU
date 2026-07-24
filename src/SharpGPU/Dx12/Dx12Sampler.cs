@@ -1,38 +1,33 @@
 namespace SharpGPU
 {
 #pragma warning disable CA1416 
-    internal unsafe class Dx12Sampler : RHISampler
+    internal unsafe class Dx12Sampler : RHISampler, IDx12DescriptorView
     {
-        public Vortice.Direct3D12.ID3D12DescriptorHeap NativeDescriptorHeap
-        {
-            get
-            {
-                return m_NativeDescriptorHeap;
-            }
-        }
+        public Dx12Device Device => m_Dx12Device;
+        public Dx12DescriptorClass DescriptorClass => Dx12DescriptorClass.Sampler;
+
         public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuDescriptorHandle
         {
             get
             {
-                return m_NativeCpuDescriptorHandle;
+                return m_Descriptors.Staging.CpuHandle;
             }
         }
         public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuDescriptorHandle
         {
             get
             {
-                return m_NativeGpuDescriptorHandle;
+                return m_Descriptors.ShaderVisible.GpuHandle;
             }
         }
 
-        private int m_HeapIndex;
+        private bool m_HasDescriptors;
         private Dx12Device m_Dx12Device;
-        private Vortice.Direct3D12.ID3D12DescriptorHeap m_NativeDescriptorHeap;
-        private Vortice.Direct3D12.CpuDescriptorHandle m_NativeCpuDescriptorHandle;
-        private Vortice.Direct3D12.GpuDescriptorHandle m_NativeGpuDescriptorHandle;
+        private Dx12DescriptorPair m_Descriptors;
 
         public Dx12Sampler(Dx12Device device, in RHISamplerDescriptor descriptor)
         {
+            m_HasDescriptors = false;
             m_Dx12Device = device;
 
             Vortice.Direct3D12.SamplerDescription desc = new Vortice.Direct3D12.SamplerDescription();
@@ -46,17 +41,19 @@ namespace SharpGPU
             desc.AddressW = Dx12Utility.ConvertToDx12AddressMode(descriptor.AddressModeW);
             desc.ComparisonFunction = Dx12Utility.ConvertToDx12ComparisonMode(descriptor.ComparisonMode);
 
-            Dx12DescriptorInfo allocation = device.AllocateSamplerDescriptor(1);
-            m_HeapIndex = allocation.Index;
-            m_NativeDescriptorHeap = allocation.DescriptorHeap;
-            m_NativeCpuDescriptorHandle = allocation.CpuHandle;
-            m_NativeGpuDescriptorHandle = allocation.GpuHandle;
-            device.NativeDevice.CreateSampler(ref desc, m_NativeCpuDescriptorHandle);
+            m_Descriptors = device.AllocateSamplerDescriptorPair();
+            m_HasDescriptors = true;
+            device.NativeDevice.CreateSampler(ref desc, m_Descriptors.Staging.CpuHandle);
+            device.CopyDescriptorToShaderVisible(m_Descriptors);
         }
 
         protected override void Release()
         {
-            m_Dx12Device.FreeSamplerDescriptor(m_HeapIndex);
+            if (m_HasDescriptors)
+            {
+                m_Dx12Device.FreeDescriptorPair(m_Descriptors);
+                m_HasDescriptors = false;
+            }
         }
     }
 #pragma warning restore CA1416

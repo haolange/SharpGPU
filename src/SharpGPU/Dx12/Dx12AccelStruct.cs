@@ -50,19 +50,18 @@ namespace SharpGPU
         }
     }
 
-    internal unsafe class Dx12TopLevelAccelStruct : RHITopLevelAccelStruct
+    internal unsafe class Dx12TopLevelAccelStruct : RHITopLevelAccelStruct, IDx12DescriptorView
     {
-        public Dx12Device Dx12Device => m_Dx12Device;
-        public int DescriptionHeapIndex => m_DescriptionHeapIndex;
-        public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuDescriptorHandle => m_NativeCpuDescriptorHandle;
-        public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuDescriptorHandle => m_NativeGpuDescriptorHandle;
+        public Dx12Device Device => m_Dx12Device;
+        public Dx12DescriptorClass DescriptorClass => Dx12DescriptorClass.AccelerationStructure;
+        public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuDescriptorHandle => m_Descriptors.Staging.CpuHandle;
+        public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuDescriptorHandle => m_Descriptors.ShaderVisible.GpuHandle;
         public Vortice.Direct3D12.ID3D12Resource ResultBuffer => m_NativeResultBuffer;
         public Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription NativeAccelStructDescriptor => m_NativeAccelStructDescriptor;
 
         private Dx12Device m_Dx12Device;
         private int m_DescriptionHeapIndex;
-        private Vortice.Direct3D12.CpuDescriptorHandle m_NativeCpuDescriptorHandle;
-        private Vortice.Direct3D12.GpuDescriptorHandle m_NativeGpuDescriptorHandle;
+        private Dx12DescriptorPair m_Descriptors;
         private Vortice.Direct3D12.ID3D12Resource m_NativeResultBuffer;
         private Vortice.Direct3D12.ID3D12Resource m_NativeScratchBuffer;
         private Vortice.Direct3D12.ID3D12Resource m_NativeInstancesBuffer;
@@ -73,9 +72,6 @@ namespace SharpGPU
             m_Dx12Device = device;
             m_Descriptor = descriptor;
             m_DescriptionHeapIndex = -1;
-            m_NativeCpuDescriptorHandle = default;
-            m_NativeGpuDescriptorHandle = default;
-
             Span<RHIAccelStructInstance> asInstances = descriptor.Instances.Span;
             Vortice.Direct3D12.RaytracingInstanceDescription* nativeInstanceDescriptions = stackalloc Vortice.Direct3D12.RaytracingInstanceDescription[descriptor.Instances.Length];
 
@@ -120,17 +116,16 @@ namespace SharpGPU
             m_NativeScratchBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ScratchDataSizeInBytes, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess, Vortice.Direct3D12.ResourceStates.Common | Vortice.Direct3D12.ResourceStates.UnorderedAccess, Dx12RaytracingHelper.kDefaultHeapProps);
             m_NativeResultBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ResultDataMaxSizeInBytes, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess, Vortice.Direct3D12.ResourceStates.Common | Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure, Dx12RaytracingHelper.kDefaultHeapProps);
 
-            Dx12DescriptorInfo accelStructDescriptor = m_Dx12Device.AllocateCbvSrvUavDescriptor(1);
-            m_DescriptionHeapIndex = accelStructDescriptor.Index;
-            m_NativeCpuDescriptorHandle = accelStructDescriptor.CpuHandle;
-            m_NativeGpuDescriptorHandle = accelStructDescriptor.GpuHandle;
+            m_Descriptors = m_Dx12Device.AllocateCbvSrvUavDescriptorPair();
+            m_DescriptionHeapIndex = m_Descriptors.ShaderVisible.Index;
 
             Vortice.Direct3D12.ShaderResourceViewDescription accelStructSrvDesc = new Vortice.Direct3D12.ShaderResourceViewDescription();
             accelStructSrvDesc.Format = Vortice.DXGI.Format.Unknown;
             accelStructSrvDesc.ViewDimension = Vortice.Direct3D12.ShaderResourceViewDimension.RaytracingAccelerationStructure;
             accelStructSrvDesc.Shader4ComponentMapping = 5768;
             accelStructSrvDesc.RaytracingAccelerationStructure.Location = m_NativeResultBuffer.GPUVirtualAddress;
-            m_Dx12Device.NativeDevice.CreateShaderResourceView(null, accelStructSrvDesc, m_NativeCpuDescriptorHandle);
+            m_Dx12Device.NativeDevice.CreateShaderResourceView(null, accelStructSrvDesc, m_Descriptors.Staging.CpuHandle);
+            m_Dx12Device.CopyDescriptorToShaderVisible(m_Descriptors);
 
             m_NativeAccelStructDescriptor.Inputs = nativeAccelStructDescriptor;
             m_NativeAccelStructDescriptor.DestinationAccelerationStructureData = m_NativeResultBuffer.GPUVirtualAddress;
@@ -188,7 +183,7 @@ namespace SharpGPU
         {
             if (m_DescriptionHeapIndex >= 0)
             {
-                m_Dx12Device.FreeCbvSrvUavDescriptor(m_DescriptionHeapIndex);
+                m_Dx12Device.FreeDescriptorPair(m_Descriptors);
                 m_DescriptionHeapIndex = -1;
             }
             m_NativeResultBuffer.Release();
@@ -199,7 +194,6 @@ namespace SharpGPU
 
     internal unsafe class Dx12BottomLevelAccelStruct : RHIBottomLevelAccelStruct
     {
-        public Dx12Device Dx12Device => m_Dx12Device;
         public Vortice.Direct3D12.ID3D12Resource NativeResultBuffer => m_NativeResultBuffer;
         public Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription NativeAccelStructDescriptor => m_NativeAccelStructDescriptor;
 

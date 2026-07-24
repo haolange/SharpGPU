@@ -31,23 +31,37 @@ namespace SharpGPU
 
             uint factoryFlags = 0;
 
-            if(descriptor.EnableDebugLayer)
+            if (descriptor.EnableDebugLayer)
             {
-                if (Vortice.Direct3D12.D3D12.D3D12GetDebugInterface(out Vortice.Direct3D12.Debug.ID3D12Debug debug).Success)
+                SharpGen.Runtime.Result debugResult =
+                    Dx12Agility.GetDebugInterface(out Vortice.Direct3D12.Debug.ID3D12Debug? debug);
+                if (debugResult.Failure || debug == null)
+                {
+                    throw new InvalidOperationException(
+                        $"DX12 debug layer was requested but its Agility SDK configuration interface is unavailable (HRESULT=0x{(int)debugResult:X8}; {Dx12Agility.Diagnostic}).");
+                }
+
+                try
                 {
                     debug.EnableDebugLayer();
                     factoryFlags |= Vortice.DXGI.DXGI.CreateFactoryDebug;
 
                     if (descriptor.EnableValidatior)
                     {
-                        Vortice.Direct3D12.Debug.ID3D12Debug1 debug1 = debug.QueryInterfaceOrNull<Vortice.Direct3D12.Debug.ID3D12Debug1>();
-                        if (debug1 != null)
+                        Vortice.Direct3D12.Debug.ID3D12Debug1? debug1 =
+                            debug.QueryInterfaceOrNull<Vortice.Direct3D12.Debug.ID3D12Debug1>();
+                        try
                         {
-                            debug1.SetEnableGPUBasedValidation(true);
-                            debug1.Release();
+                            debug1?.SetEnableGPUBasedValidation(true);
+                        }
+                        finally
+                        {
+                            debug1?.Release();
                         }
                     }
-
+                }
+                finally
+                {
                     debug.Release();
                 }
             }

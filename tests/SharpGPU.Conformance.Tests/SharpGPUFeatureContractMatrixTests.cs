@@ -99,7 +99,8 @@ public sealed class SharpGPUFeatureContractMatrixTests
             });
 
             Dx12ArgumentTable dx12Table = Assert.IsType<Dx12ArgumentTable>(table);
-            Assert.Single(dx12Table.NativeGpuDescriptorHandles);
+            Assert.Equal(1, dx12Table.GroupCount);
+            Assert.NotEqual(default, dx12Table.GetGroupGpuHandle(0));
             table.SetBindElement(element, ERHIBindType.StorageBuffer, 0, 0);
             table.SetBindElement(element, ERHIBindType.StorageBuffer, 0, 1);
             table.SetBindElement(element, ERHIBindType.StorageBuffer, 0, 2);

@@ -68,6 +68,7 @@ namespace SharpGPU.Benchmarks
                 new("dx12_barrier_encode_real", "backend", "dx12", "none", CreateDx12BarrierEncode),
                 new("dx12_transfer_copy_encode_real", "backend", "dx12", "none", CreateDx12TransferCopyEncode),
                 new("dx12_argument_table_update_real", "backend", "dx12", "none", CreateDx12ArgumentTableUpdate),
+                new("dx12_argument_table_bind_real", "backend", "dx12", "none", CreateDx12ArgumentTableBind),
                 new("dx12_timestamp_write_resolve_encode_real", "backend", "dx12", "none", CreateDx12TimestampEncode),
                 new("dx12_workgraph_set_dispatch_encode_real", "backend", "dx12", "none", CreateDx12WorkGraphEncode),
                 new("dx12_workload_bindless_heavy_record_real", "workload", "dx12", "none", CreateDx12WorkloadBindlessHeavyRecord),
@@ -104,8 +105,14 @@ namespace SharpGPU.Benchmarks
                 samples[i] = Stopwatch.GetTimestamp() - start;
             }
             long allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
-            Array.Sort(samples);
+            long allocatedBytes = Math.Max(0, allocatedAfter - allocatedBefore);
+            if (prepared.RequireZeroAllocation && allocatedBytes != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Benchmark '{benchmarkCase.Name}' requires zero steady-state managed allocation, but allocated {allocatedBytes} bytes.");
+            }
 
+            Array.Sort(samples);
             return BenchmarkResult.Passed(
                 benchmarkCase,
                 options.Iterations,
@@ -114,7 +121,7 @@ namespace SharpGPU.Benchmarks
                 Percentile(samples, 0.95),
                 Percentile(samples, 0.99),
                 ToMicroseconds(samples[^1]),
-                Math.Max(0, allocatedAfter - allocatedBefore),
+                allocatedBytes,
                 prepared.AdapterName);
         }
 
@@ -358,6 +365,120 @@ namespace SharpGPU.Benchmarks
                 Cleanup = () =>
                 {
                     table.Dispose();
+                    view.Dispose();
+                    buffer.Dispose();
+                    layout.Dispose();
+                    context.Dispose();
+                },
+            };
+        }
+
+        private static PreparedBenchmark CreateDx12ArgumentTableBind(Options options)
+        {
+            if (!Dx12BenchmarkContext.TryCreate(options, out Dx12BenchmarkContext? context, out string skipReason))
+            {
+                return PreparedBenchmark.Skipped(skipReason);
+            }
+
+            RHIArgumentTableLayout layout = context.Device.CreateArgumentTableLayout(new RHIArgumentTableLayoutDescriptor
+            {
+                Index = 0,
+                Elements = new[]
+                {
+                    new RHIArgumentTableLayoutElement
+                    {
+                        Slot = 0,
+                        Count = 1,
+                        Type = ERHIBindType.StorageBuffer,
+                        Stage = ERHIShaderStage.Compute,
+                    },
+                    new RHIArgumentTableLayoutElement
+                    {
+                        Slot = 0,
+                        Count = 1,
+                        Type = ERHIBindType.Sampler,
+                        Stage = ERHIShaderStage.Compute,
+                    },
+                },
+            });
+            RHIBuffer buffer = CreateGpuBuffer(context.Device, 256, ERHIBufferUsage.UnorderedAccess);
+            RHIBufferView view = buffer.CreateBufferView(new RHIBufferViewDescriptor
+            {
+                Count = 64,
+                Offset = 0,
+                Stride = sizeof(uint),
+                ViewType = ERHIBufferViewType.UnorderedAccess,
+            });
+            RHISampler sampler = context.Device.CreateSampler(new RHISamplerDescriptor
+            {
+                LodMin = 0,
+                LodMax = 0,
+                Anisotropy = 1,
+                MinFilter = ERHIFilterMode.Point,
+                MagFilter = ERHIFilterMode.Point,
+                MipFilter = ERHIFilterMode.Point,
+                AddressModeU = ERHIAddressMode.ClampToEdge,
+                AddressModeV = ERHIAddressMode.ClampToEdge,
+                AddressModeW = ERHIAddressMode.ClampToEdge,
+                ComparisonMode = ERHIComparisonMode.Never,
+            });
+            RHIArgumentTable table = context.Device.CreateArgumentTable(new RHIArgumentTableDescriptor
+            {
+                Layout = layout,
+                Elements = new[]
+                {
+                    new RHIArgumentTableElement { BufferView = view },
+                    new RHIArgumentTableElement { Sampler = sampler },
+                },
+            });
+            RHIPipelineLayout pipelineLayout = context.Device.CreatePipelineLayout(new RHIPipelineLayoutDescriptor
+            {
+                ArgumentTableLayouts = new[] { layout },
+            });
+            RHIFunction function = CompileArgumentTableBenchmarkFunction(context.Device);
+            RHIComputePipeline pipeline = context.Device.CreateComputePipeline(new RHIComputePipelineDescriptor
+            {
+                ThreadSize = new SharpGPU.Mathematics.uint3(1, 1, 1),
+                ComputeFunction = function,
+                PipelineLayout = pipelineLayout,
+            });
+            RHICommandBuffer commandBuffer = context.CommandQueue.CreateCommandBuffer();
+            commandBuffer.Begin("SharpGPU.Benchmark.ArgumentTableBind");
+            RHIComputeEncoder encoder = commandBuffer.BeginComputePass(new RHIComputePassDescriptor
+            {
+                Name = "bench.argument-table-bind",
+            });
+            encoder.SetPipeline(pipeline);
+
+            Dx12ArgumentTable nativeTable = (Dx12ArgumentTable)table;
+            Dx12PipelineLayout nativePipelineLayout = (Dx12PipelineLayout)pipelineLayout;
+            Dx12CommandBuffer nativeCommandBuffer = (Dx12CommandBuffer)commandBuffer;
+            int rootTableCallCount = Dx12ArgumentTableBinder.BindCompute(
+                nativeCommandBuffer.NativeCommandList,
+                nativePipelineLayout,
+                table,
+                nativeTable.ArgumentTableLayout.Index);
+            if (rootTableCallCount != nativeTable.GroupCount)
+            {
+                throw new InvalidOperationException(
+                    $"DX12 ArgumentTable binder emitted {rootTableCallCount} root-table calls for {nativeTable.GroupCount} compiled groups.");
+            }
+
+            return new PreparedBenchmark
+            {
+                AdapterName = context.Device.Name,
+                RequireZeroAllocation = true,
+                Body = () => encoder.SetArgumentTable(table, nativeTable.ArgumentTableLayout.Index),
+                Cleanup = () =>
+                {
+                    commandBuffer.EndComputePass();
+                    commandBuffer.End();
+                    commandBuffer.Dispose();
+                    pipeline.Dispose();
+                    function.Dispose();
+                    pipelineLayout.Dispose();
+                    table.Dispose();
+                    sampler.Dispose();
                     view.Dispose();
                     buffer.Dispose();
                     layout.Dispose();
@@ -669,6 +790,49 @@ namespace SharpGPU.Benchmarks
             });
         }
 
+        private static RHIFunction CompileArgumentTableBenchmarkFunction(RHIDevice device)
+        {
+            ShaderCompileResult result = HLSLCrossCompiler.Compile(new ShaderCompileRequest
+            {
+                Source = """
+RWStructuredBuffer<uint> Output : register(u0, space0);
+
+[numthreads(1, 1, 1)]
+void main(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    Output[0] = dispatchThreadId.x;
+}
+""",
+                SourceName = "SharpGPU.ArgumentTableBenchmark.hlsl",
+                EntryPoint = "main",
+                Stage = ShaderStageKind.Compute,
+                ShaderModel = new ShaderModelVersion(6, 6),
+                Target = ShaderTargetKind.Dxil,
+            });
+            if (result.Bytecode.Length == 0)
+            {
+                throw new InvalidOperationException("DX12 ArgumentTable benchmark shader compilation produced no bytecode.");
+            }
+
+            IntPtr pointer = Marshal.AllocHGlobal(result.Bytecode.Length);
+            try
+            {
+                Marshal.Copy(result.Bytecode, 0, pointer, result.Bytecode.Length);
+                return device.CreateFunction(new RHIFunctionDescriptor
+                {
+                    ByteSize = checked((uint)result.Bytecode.Length),
+                    ByteCode = pointer,
+                    EntryName = "main",
+                    Type = ERHIFunctionType.Compute,
+                    PayloadKind = ERHIShaderPayloadKind.Dxil,
+                });
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(pointer);
+            }
+        }
+
         private static int CheckBaseline(string path, IReadOnlyList<BenchmarkResult> results)
         {
             if (!File.Exists(path))
@@ -892,6 +1056,7 @@ namespace SharpGPU.Benchmarks
         internal sealed class PreparedBenchmark : IDisposable
         {
             public Action? Body { get; init; }
+            public bool RequireZeroAllocation { get; init; }
             public Action? Cleanup { get; init; }
             public string? SkipReason { get; init; }
             public string? AdapterName { get; init; }
@@ -1164,15 +1329,15 @@ namespace SharpGPU.Benchmarks
 
             public void Dispose()
             {
+                foreach (RHICommandBuffer commandBuffer in CommandBuffers)
+                {
+                    commandBuffer.Dispose();
+                }
                 InputRecordBuffer.Dispose();
                 BackingMemory.Dispose();
                 Pipeline.Dispose();
                 FunctionLibrary.Dispose();
                 PipelineLayout.Dispose();
-                foreach (RHICommandBuffer commandBuffer in CommandBuffers)
-                {
-                    commandBuffer.Dispose();
-                }
             }
 
             private static byte[] CompileWorkGraphShader()
