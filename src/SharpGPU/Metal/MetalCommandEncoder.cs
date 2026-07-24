@@ -226,7 +226,6 @@ namespace SharpGPU
     {
         internal const ulong RtVisibleFunctionTableSlot = 29;
         internal const ulong RtIntersectionFunctionTableSlot = 30;
-        internal const ulong PushConstantBufferIndex = 31;
 
         internal static bool IsBufferBindingType(in ERHIBindType type)
         {
@@ -269,6 +268,42 @@ namespace SharpGPU
         internal static bool IsSamplerBindingType(in ERHIBindType type)
         {
             return type == ERHIBindType.Sampler;
+        }
+
+        internal static bool RequiresReferenceBuffers(ReadOnlySpan<MetalArgumentTableLayout> layouts)
+        {
+            if (layouts.Length > 1)
+            {
+                return true;
+            }
+
+            for (int index = 0; index < layouts.Length; ++index)
+            {
+                if (layouts[index].RequiresReferenceBuffer)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        internal static ulong GetPhysicalBindingIndex(in MetalBindInfo bind, in int arrayIndex)
+        {
+            if (arrayIndex < 0 || (uint)arrayIndex >= bind.Count)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(arrayIndex),
+                    arrayIndex,
+                    $"Metal binding slot={bind.Slot}, type={bind.Type} array index must be in [0, {bind.Count}).");
+            }
+
+            return checked((ulong)bind.Slot + (uint)arrayIndex);
+        }
+
+        internal static ulong GetReferenceByteOffset(in MetalBindInfo bind, in int arrayIndex)
+        {
+            return checked(GetPhysicalBindingIndex(bind, arrayIndex) * sizeof(ulong));
         }
 
         internal static MTLTextureType ConvertBindTypeToTextureType(in ERHIBindType type)
@@ -344,7 +379,11 @@ namespace SharpGPU
                     continue;
                 }
 
-                if (bind.Slot == RtVisibleFunctionTableSlot || bind.Slot == RtIntersectionFunctionTableSlot)
+                ulong end = checked((ulong)bind.Slot + bind.Count);
+                if ((ulong)bind.Slot <= RtVisibleFunctionTableSlot
+                    && RtVisibleFunctionTableSlot < end
+                    || (ulong)bind.Slot <= RtIntersectionFunctionTableSlot
+                    && RtIntersectionFunctionTableSlot < end)
                 {
                     return true;
                 }
@@ -377,6 +416,16 @@ namespace SharpGPU
 
         public virtual void ResetForPipeline(MetalPipelineLayout pipelineLayout)
         {
+            if (pipelineLayout is null)
+            {
+                throw new ArgumentNullException(nameof(pipelineLayout));
+            }
+
+            if (pipelineLayout.IsDisposed)
+            {
+                throw new ObjectDisposedException(nameof(pipelineLayout));
+            }
+
             m_PipelineLayout = pipelineLayout;
             m_BoundTables.Clear();
         }
@@ -387,6 +436,16 @@ namespace SharpGPU
             {
                 throw new ArgumentNullException(nameof(resourceTable));
             }
+            if (resourceTable.IsDisposed)
+            {
+                throw new ObjectDisposedException(nameof(resourceTable));
+            }
+
+            if (resourceTable.ArgumentTableLayout.IsDisposed)
+            {
+                throw new ObjectDisposedException(nameof(resourceTable), "Metal argument table layout is disposed.");
+            }
+
 
             MetalArgumentTableLayout layout = resourceTable.ArgumentTableLayout;
             if (layout.Index != tableIndex)
@@ -395,9 +454,10 @@ namespace SharpGPU
             }
 
             ValidateTableInPipelineLayout(layout);
+            resourceTable.ValidateRequiredBindings();
 
-            m_BoundTables[tableIndex] = resourceTable;
             OnArgumentTableUpdated(resourceTable, tableIndex);
+            m_BoundTables[tableIndex] = resourceTable;
         }
 
         public abstract void CommitCompute(in MTL4ComputeCommandEncoder encoder);
@@ -425,40 +485,46 @@ namespace SharpGPU
         {
             if (m_PipelineLayout == null)
             {
-                return;
+                throw new InvalidOperationException("Metal pipeline must be configured before binding argument tables.");
             }
 
-            RHIArgumentTableLayout[]? resourceTableLayouts = m_PipelineLayout.Descriptor.ArgumentTableLayouts;
-            if (resourceTableLayouts == null || resourceTableLayouts.Length == 0)
+            ReadOnlySpan<MetalArgumentTableLayout> resourceTableLayouts = m_PipelineLayout.ArgumentTableLayouts;
+            if (resourceTableLayouts.Length == 0)
             {
-                return;
+                throw new InvalidOperationException(
+                    $"Metal pipeline declares no argument tables; table {layout.Index} cannot be bound.");
             }
 
-            bool found = false;
             for (int i = 0; i < resourceTableLayouts.Length; ++i)
             {
-                if (resourceTableLayouts[i] is MetalArgumentTableLayout metalLayout && metalLayout.Index == layout.Index)
+                MetalArgumentTableLayout pipelineLayout = resourceTableLayouts[i];
+                if (pipelineLayout.Index != layout.Index)
                 {
-                    found = true;
-                    break;
+                    continue;
                 }
+
+                if (ReferenceEquals(pipelineLayout, layout) || pipelineLayout.StructurallyEquals(layout))
+                {
+                    return;
+                }
+
+                throw new InvalidOperationException(
+                    $"Metal argument table {layout.Index} is structurally incompatible with the current pipeline layout.");
             }
 
-            if (!found)
-            {
-                throw new InvalidOperationException($"Resource table index '{layout.Index}' is not part of the current Metal pipeline layout.");
-            }
+            throw new InvalidOperationException(
+                $"Metal argument table index {layout.Index} is not part of the current pipeline layout.");
         }
     }
 
     internal sealed class MetalArgumentTableBindingBackend : MetalBindingBackendBase
     {
-        // Single-set mode state (direct MTL4ArgumentTable resource binding)
+        // Direct MTL4ArgumentTable resource-binding state.
         private readonly SortedDictionary<uint, MTL4ArgumentTable> m_ArgumentTables;
         private readonly List<MTL4ArgumentTable> m_RetiredArgumentTables;
 
-        // Multi-set mode state (descriptor buffer per set → single root argument table)
-        private bool m_IsMultiSet;
+        // Reference-buffer state: one descriptor buffer per physical table and one root argument table.
+        private bool m_UsesReferenceBuffers;
         private MTL4ArgumentTable m_RootArgumentTable;
         private readonly SortedDictionary<uint, MTLBuffer> m_DescriptorBuffers;
         private readonly List<MTLBuffer> m_RetiredDescriptorBuffers;
@@ -501,18 +567,76 @@ namespace SharpGPU
             RetireDescriptorBuffers();
             m_RasterVertexBindings.Clear();
 
-            int layoutCount = pipelineLayout.ArgumentTableLayoutCount;
-            m_IsMultiSet = layoutCount > 1;
+            MetalArgumentTableLayout[] layouts = GetPipelineArgumentTableLayouts(pipelineLayout);
+            m_UsesReferenceBuffers = MetalBindingHelpers.RequiresReferenceBuffers(layouts);
+            MetalBufferBindingPlanner.ValidatePipelineBufferBudget(layouts, PipelineType);
 
-            if (m_IsMultiSet)
+            if (m_UsesReferenceBuffers)
             {
-                CreateRootArgumentTable(pipelineLayout);
+                for (int index = 0; index < layouts.Length; ++index)
+                {
+                    layouts[index].ValidateReferenceBufferRanges();
+                }
+
+                CreateRootArgumentTable(layouts);
             }
+            else if (PipelineType == MetalBindingPipelineType.Raster)
+            {
+                if (layouts.Length == 1)
+                {
+                    _ = GetOrCreateArgumentTable(layouts[0], layouts[0].Index);
+                }
+                else
+                {
+                    CreateRasterVertexOnlyArgumentTable();
+                }
+            }
+            else if (PipelineType == MetalBindingPipelineType.Raytracing && layouts.Length == 0)
+            {
+                CreateRayFunctionTableOnlyArgumentTable();
+            }
+        }
+
+        private static MetalArgumentTableLayout[] GetPipelineArgumentTableLayouts(MetalPipelineLayout pipelineLayout)
+        {
+            if (pipelineLayout.IsDisposed)
+            {
+                throw new ObjectDisposedException(nameof(pipelineLayout));
+            }
+
+            ReadOnlySpan<MetalArgumentTableLayout> sourceLayouts = pipelineLayout.ArgumentTableLayouts;
+            if (sourceLayouts.Length == 0)
+            {
+                return Array.Empty<MetalArgumentTableLayout>();
+            }
+
+            MetalArgumentTableLayout[] layouts = sourceLayouts.ToArray();
+            HashSet<uint> indices = new();
+            for (int index = 0; index < sourceLayouts.Length; ++index)
+            {
+                MetalArgumentTableLayout layout = layouts[index];
+                if (layout.IsDisposed)
+                {
+                    throw new ObjectDisposedException(
+                        nameof(pipelineLayout),
+                        $"Metal pipeline layout argument table {layout.Index} is disposed.");
+                }
+
+                if (!indices.Add(layout.Index))
+                {
+                    throw new InvalidOperationException(
+                        $"Metal pipeline layout contains duplicate argument table index {layout.Index}.");
+                }
+
+                layouts[index] = layout;
+            }
+
+            return layouts;
         }
 
         protected override void OnArgumentTableUpdated(MetalArgumentTable resourceTable, in uint tableIndex)
         {
-            if (m_IsMultiSet)
+            if (m_UsesReferenceBuffers)
             {
                 MTLBuffer descriptorBuffer = GetOrCreateDescriptorBuffer(resourceTable.ArgumentTableLayout, tableIndex);
                 PopulateDescriptorBuffer(descriptorBuffer, resourceTable, m_CommandQueue);
@@ -537,7 +661,7 @@ namespace SharpGPU
 
             m_RasterVertexBindings[slot] = new RasterVertexBinding(address, stride);
 
-            if (m_IsMultiSet)
+            if (m_UsesReferenceBuffers)
             {
                 if (m_RootArgumentTable.NativePtr != IntPtr.Zero)
                 {
@@ -555,7 +679,7 @@ namespace SharpGPU
 
         public override void CommitCompute(in MTL4ComputeCommandEncoder encoder)
         {
-            if (m_IsMultiSet)
+            if (m_UsesReferenceBuffers)
             {
                 encoder.SetArgumentTable(m_RootArgumentTable.NativePtr);
             }
@@ -570,7 +694,7 @@ namespace SharpGPU
 
         public override void CommitRaytracing(in MTL4ComputeCommandEncoder encoder, MetalFunctionTable? functionTable)
         {
-            if (m_IsMultiSet)
+            if (m_UsesReferenceBuffers)
             {
                 if (functionTable != null)
                 {
@@ -597,7 +721,7 @@ namespace SharpGPU
         {
             ulong stages = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Vertex | ERHISyncStageMask.Fragment);
 
-            if (m_IsMultiSet)
+            if (m_UsesReferenceBuffers)
             {
                 ApplyRasterVertexBufferBindingsToRoot();
                 encoder.SetArgumentTable(m_RootArgumentTable.NativePtr, stages);
@@ -621,7 +745,7 @@ namespace SharpGPU
             m_RasterVertexBindings.Clear();
         }
 
-        // Single-set mode: direct MTL4ArgumentTable
+        // Direct mode: one scalar-only physical table.
 
         private MTL4ArgumentTable GetOrCreateArgumentTable(MetalArgumentTableLayout layout, in uint tableIndex)
         {
@@ -630,20 +754,17 @@ namespace SharpGPU
                 return cachedTable;
             }
 
-            ulong maxBufferCount = 0;
+            ulong maxBufferCount =
+                MetalBufferBindingPlanner.GetDirectArgumentTableBufferBindCount(layout, PipelineType);
             ulong maxTextureCount = 0;
             ulong maxSamplerCount = 0;
-            MetalBindInfo[] binds = layout.BindInfos;
+            ReadOnlySpan<MetalBindInfo> binds = layout.BindInfos;
             for (int i = 0; i < binds.Length; ++i)
             {
                 ref readonly MetalBindInfo bind = ref binds[i];
                 ulong arrayCount = Math.Max(1UL, bind.Count);
                 ulong nextIndex = bind.Slot + arrayCount;
-                if (MetalBindingHelpers.IsBufferBindingType(bind.Type))
-                {
-                    maxBufferCount = Math.Max(maxBufferCount, nextIndex);
-                }
-                else if (MetalBindingHelpers.IsTextureBindingType(bind.Type))
+                if (MetalBindingHelpers.IsTextureBindingType(bind.Type))
                 {
                     maxTextureCount = Math.Max(maxTextureCount, nextIndex);
                 }
@@ -653,15 +774,9 @@ namespace SharpGPU
                 }
             }
 
-            if (PipelineType == MetalBindingPipelineType.Raytracing)
-            {
-                maxBufferCount = Math.Max(maxBufferCount, MetalBindingHelpers.RtIntersectionFunctionTableSlot + 1UL);
-                maxBufferCount = Math.Max(maxBufferCount, MetalBindingHelpers.RtVisibleFunctionTableSlot + 1UL);
-            }
-
             if (PipelineType == MetalBindingPipelineType.Raster)
             {
-                maxBufferCount = Math.Max(maxBufferCount, 31UL);
+                maxBufferCount = Math.Max(maxBufferCount, MetalBufferBindingPlanner.MaxBufferBindCount);
             }
 
             MTL4ArgumentTableDescriptor descriptor = MTL4ArgumentTableDescriptor.New();
@@ -672,8 +787,15 @@ namespace SharpGPU
             descriptor.SupportAttributeStrides = PipelineType == MetalBindingPipelineType.Raster;
 
             NSError error = default;
-            MTL4ArgumentTable argumentTable = Device.NativeDevice.NewArgumentTable(descriptor, ref error);
-            ObjectiveCRuntime.Release(descriptor.NativePtr);
+            MTL4ArgumentTable argumentTable;
+            try
+            {
+                argumentTable = Device.NativeDevice.NewArgumentTable(descriptor, ref error);
+            }
+            finally
+            {
+                ObjectiveCRuntime.Release(descriptor.NativePtr);
+            }
             if (argumentTable.NativePtr == IntPtr.Zero)
             {
                 string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
@@ -684,25 +806,68 @@ namespace SharpGPU
             return argumentTable;
         }
 
+        private void CreateRasterVertexOnlyArgumentTable()
+        {
+            CreateReservedBufferOnlyArgumentTable("raster vertex", supportsAttributeStrides: true);
+        }
+
+        private void CreateRayFunctionTableOnlyArgumentTable()
+        {
+            CreateReservedBufferOnlyArgumentTable("ray function-table", supportsAttributeStrides: false);
+        }
+
+        private void CreateReservedBufferOnlyArgumentTable(
+            string purpose,
+            in bool supportsAttributeStrides)
+        {
+            const uint tableIndex = 0;
+            if (m_ArgumentTables.ContainsKey(tableIndex))
+            {
+                return;
+            }
+
+            MTL4ArgumentTableDescriptor descriptor = MTL4ArgumentTableDescriptor.New();
+            descriptor.MaxBufferBindCount =
+                MetalBufferBindingPlanner.GetReservedBufferOnlyBindCount(PipelineType);
+            descriptor.MaxTextureBindCount = 1;
+            descriptor.MaxSamplerStateBindCount = 1;
+            descriptor.InitializeBindings = true;
+            descriptor.SupportAttributeStrides = supportsAttributeStrides;
+
+            NSError error = default;
+            MTL4ArgumentTable argumentTable;
+            try
+            {
+                argumentTable = Device.NativeDevice.NewArgumentTable(descriptor, ref error);
+            }
+            finally
+            {
+                ObjectiveCRuntime.Release(descriptor.NativePtr);
+            }
+
+            if (argumentTable.NativePtr == IntPtr.Zero)
+            {
+                string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
+                throw new InvalidOperationException(
+                    $"Failed to create Metal 4 {purpose} argument table: {errorText}");
+            }
+
+            m_ArgumentTables.Add(tableIndex, argumentTable);
+        }
+
         private void PopulateArgumentTable(MTL4ArgumentTable argumentTable, MetalArgumentTable table)
         {
-            MetalBindInfo[] binds = table.ArgumentTableLayout.BindInfos;
-            ulong samplerBindingCursor = 0;
+            table.ValidateRequiredBindings();
+            ReadOnlySpan<MetalBindInfo> binds = table.ArgumentTableLayout.BindInfos;
             for (int i = 0; i < binds.Length; ++i)
             {
                 ref readonly MetalBindInfo bind = ref binds[i];
-                int arrayCount = (int)Math.Max(1u, bind.Count);
-                ulong slotBase = bind.Slot;
-                if (bind.Type == ERHIBindType.Sampler)
-                {
-                    // MTL4 argument-table sampler bindings are densely indexed within sampler space.
-                    slotBase = samplerBindingCursor;
-                }
+                int arrayCount = checked((int)bind.Count);
 
                 for (int j = 0; j < arrayCount; ++j)
                 {
                     RHIArgumentTableElement element = table.GetElement(i, j);
-                    ulong slotIndex = slotBase + (ulong)j;
+                    ulong slotIndex = MetalBindingHelpers.GetPhysicalBindingIndex(bind, j);
 
                     switch (bind.Type)
                     {
@@ -714,6 +879,10 @@ namespace SharpGPU
                                 ulong offset = (ulong)Math.Max(0, bufferView.Descriptor.Offset);
                                 argumentTable.SetAddress(bufferView.Buffer.NativeBuffer.GpuAddress + offset, slotIndex);
                                 m_CommandQueue?.AddResidencyAllocation(bufferView.Buffer.NativeBuffer);
+                            }
+                            else
+                            {
+                                argumentTable.SetAddress(0, slotIndex);
                             }
 
                             break;
@@ -737,6 +906,10 @@ namespace SharpGPU
                                 argumentTable.SetTexture(textureView.ResourceID, slotIndex);
                                 m_CommandQueue?.AddResidencyAllocation(textureView.ParentTexture);
                             }
+                            else
+                            {
+                                argumentTable.SetTexture(default, slotIndex);
+                            }
 
                             break;
 
@@ -744,6 +917,10 @@ namespace SharpGPU
                             if (element.Sampler is MetalSampler sampler)
                             {
                                 argumentTable.SetSamplerState(sampler.NativeSampler.GpuResourceID, slotIndex);
+                            }
+                            else
+                            {
+                                argumentTable.SetSamplerState(default, slotIndex);
                             }
 
                             break;
@@ -754,14 +931,16 @@ namespace SharpGPU
                                 argumentTable.SetResource(topLevel.NativeAccelerationStructure.GpuResourceID, slotIndex);
                                 m_CommandQueue?.AddResidencyAllocation(topLevel.NativeAccelerationStructure);
                             }
+                            else
+                            {
+                                argumentTable.SetResource(default, slotIndex);
+                            }
 
                             break;
+                        default:
+                            throw new InvalidOperationException(
+                                $"Metal argument table {table.ArgumentTableLayout.Index} contains unsupported binding type {bind.Type}.");
                     }
-                }
-
-                if (bind.Type == ERHIBindType.Sampler)
-                {
-                    samplerBindingCursor += (ulong)arrayCount;
                 }
             }
         }
@@ -782,23 +961,18 @@ namespace SharpGPU
             }
         }
 
-        // Multi-set mode: descriptor buffer per set → single root argument table
+        // Reference-buffer mode: one packed buffer per physical table and one root argument table.
 
-        private void CreateRootArgumentTable(MetalPipelineLayout pipelineLayout)
+        private void CreateRootArgumentTable(ReadOnlySpan<MetalArgumentTableLayout> layouts)
         {
             // The root argument table holds one buffer slot per set (for descriptor buffer GPU addresses),
             // plus reserved slots for RT function tables and raster vertex buffers.
-            ulong maxBufferCount = (ulong)pipelineLayout.ArgumentTableLayoutCount;
-
-            if (PipelineType == MetalBindingPipelineType.Raytracing)
-            {
-                maxBufferCount = Math.Max(maxBufferCount, MetalBindingHelpers.RtIntersectionFunctionTableSlot + 1UL);
-                maxBufferCount = Math.Max(maxBufferCount, MetalBindingHelpers.RtVisibleFunctionTableSlot + 1UL);
-            }
+            ulong maxBufferCount =
+                MetalBufferBindingPlanner.GetReferenceRootBufferBindCount(layouts, PipelineType);
 
             if (PipelineType == MetalBindingPipelineType.Raster)
             {
-                maxBufferCount = Math.Max(maxBufferCount, 31UL);
+                maxBufferCount = Math.Max(maxBufferCount, MetalBufferBindingPlanner.MaxBufferBindCount);
             }
 
             MTL4ArgumentTableDescriptor descriptor = MTL4ArgumentTableDescriptor.New();
@@ -809,8 +983,14 @@ namespace SharpGPU
             descriptor.SupportAttributeStrides = PipelineType == MetalBindingPipelineType.Raster;
 
             NSError error = default;
-            m_RootArgumentTable = Device.NativeDevice.NewArgumentTable(descriptor, ref error);
-            ObjectiveCRuntime.Release(descriptor.NativePtr);
+            try
+            {
+                m_RootArgumentTable = Device.NativeDevice.NewArgumentTable(descriptor, ref error);
+            }
+            finally
+            {
+                ObjectiveCRuntime.Release(descriptor.NativePtr);
+            }
             if (m_RootArgumentTable.NativePtr == IntPtr.Zero)
             {
                 string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
@@ -830,7 +1010,7 @@ namespace SharpGPU
             // - Texture bindings: MTLResourceID._impl
             // - Sampler bindings: MTLResourceID._impl
             // - AccelStruct bindings: MTLResourceID._impl
-            ulong byteSize = (ulong)layout.TotalElementCount * 8UL;
+            ulong byteSize = checked(layout.ReferenceBufferElementCount * sizeof(ulong));
             byteSize = Math.Max(byteSize, 8UL);
 
             MTLBuffer buffer = Device.NativeDevice.NewBuffer(byteSize, MTLResourceOptions.ResourceStorageModeShared);
@@ -845,19 +1025,33 @@ namespace SharpGPU
 
         private static void PopulateDescriptorBuffer(MTLBuffer buffer, MetalArgumentTable table, MetalCommandQueue? commandQueue)
         {
+            table.ValidateRequiredBindings();
             IntPtr ptr = buffer.Contents;
-            MetalBindInfo[] binds = table.ArgumentTableLayout.BindInfos;
+            if (ptr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException(
+                    $"Metal descriptor buffer for table {table.ArgumentTableLayout.Index} is not CPU-addressable.");
+            }
+
+            ReadOnlySpan<MetalBindInfo> binds = table.ArgumentTableLayout.BindInfos;
+
+            for (ulong entryIndex = 0; entryIndex < table.ArgumentTableLayout.ReferenceBufferElementCount; ++entryIndex)
+            {
+                ulong entryByteOffset = checked(entryIndex * sizeof(ulong));
+                IntPtr entryAddress = GetDescriptorBufferEntryAddress(ptr, entryByteOffset);
+                Marshal.WriteInt64(entryAddress, 0);
+            }
 
             for (int i = 0; i < binds.Length; ++i)
             {
                 ref readonly MetalBindInfo bind = ref binds[i];
                 int arrayCount = (int)Math.Max(1u, bind.Count);
-                int baseOffset = table.ArgumentTableLayout.GetElementOffset(i);
 
                 for (int j = 0; j < arrayCount; ++j)
                 {
                     RHIArgumentTableElement element = table.GetElement(i, j);
-                    int entryByteOffset = (baseOffset + j) * 8;
+                    ulong entryByteOffset = MetalBindingHelpers.GetReferenceByteOffset(bind, j);
+                    IntPtr entryAddress = GetDescriptorBufferEntryAddress(ptr, entryByteOffset);
 
                     switch (bind.Type)
                     {
@@ -868,7 +1062,7 @@ namespace SharpGPU
                             {
                                 ulong bufOffset = (ulong)Math.Max(0, bufferView.Descriptor.Offset);
                                 ulong address = bufferView.Buffer.NativeBuffer.GpuAddress + bufOffset;
-                                Marshal.WriteInt64(ptr + entryByteOffset, (long)address);
+                                Marshal.WriteInt64(entryAddress, (long)address);
                                 commandQueue?.AddResidencyAllocation(bufferView.Buffer.NativeBuffer);
                             }
 
@@ -890,7 +1084,7 @@ namespace SharpGPU
                         case ERHIBindType.StorageTexture3D:
                             if (element.TextureView is MetalTextureView textureView)
                             {
-                                Marshal.WriteInt64(ptr + entryByteOffset, (long)textureView.ResourceID._impl);
+                                Marshal.WriteInt64(entryAddress, (long)textureView.ResourceID._impl);
                                 commandQueue?.AddResidencyAllocation(textureView.ParentTexture);
                             }
 
@@ -899,7 +1093,7 @@ namespace SharpGPU
                         case ERHIBindType.Sampler:
                             if (element.Sampler is MetalSampler sampler)
                             {
-                                Marshal.WriteInt64(ptr + entryByteOffset, (long)sampler.NativeSampler.GpuResourceID._impl);
+                                Marshal.WriteInt64(entryAddress, (long)sampler.NativeSampler.GpuResourceID._impl);
                             }
 
                             break;
@@ -907,15 +1101,25 @@ namespace SharpGPU
                         case ERHIBindType.AccelStruct:
                             if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
                             {
-                                Marshal.WriteInt64(ptr + entryByteOffset, (long)topLevel.NativeAccelerationStructure.GpuResourceID._impl);
+                                Marshal.WriteInt64(entryAddress, (long)topLevel.NativeAccelerationStructure.GpuResourceID._impl);
                                 commandQueue?.AddResidencyAllocation(topLevel.NativeAccelerationStructure);
                             }
 
                             break;
+                        default:
+                            throw new InvalidOperationException(
+                                $"Metal argument table {table.ArgumentTableLayout.Index} contains unsupported binding type {bind.Type}.");
                     }
                 }
             }
         }
+
+        private static IntPtr GetDescriptorBufferEntryAddress(IntPtr baseAddress, in ulong byteOffset)
+        {
+            long address = checked(baseAddress.ToInt64() + checked((long)byteOffset));
+            return new IntPtr(address);
+        }
+
 
         private void PopulateRayFunctionTablesOnRoot(MetalFunctionTable functionTable)
         {
@@ -1021,7 +1225,7 @@ namespace SharpGPU
                 m_RootArgumentTable = default;
             }
 
-            m_IsMultiSet = false;
+            m_UsesReferenceBuffers = false;
         }
 
         private void RetireDescriptorBuffers()
@@ -1042,7 +1246,7 @@ namespace SharpGPU
                 m_RootArgumentTable = default;
             }
 
-            m_IsMultiSet = false;
+            m_UsesReferenceBuffers = false;
         }
 
         private void ReleaseRetiredDescriptorBuffers()
@@ -1438,21 +1642,16 @@ namespace SharpGPU
                 throw new InvalidOperationException("Compute pipeline must be set before binding resource tables.");
             }
 
-            MetalArgumentTable table = (MetalArgumentTable)resourceTable;
+            MetalArgumentTable table = resourceTable as MetalArgumentTable
+                ?? throw new ArgumentException("Metal compute binding requires a MetalArgumentTable.", nameof(resourceTable));
             ((MetalCommandBuffer)m_CommandBuffer!).MarkArgumentTablesUsed();
             m_BindingBackend.SetArgumentTable(table, tableIndex);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
-#if DEBUG
-            MetalPipelineLayout metalLayout = m_CachedPipeline?.Descriptor.PipelineLayout as MetalPipelineLayout;
-            Debug.Assert(metalLayout == null || offset + size <= metalLayout.Descriptor.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({metalLayout?.Descriptor.PushConstantSize ?? 0}).");
-#endif
-            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
-            {
-                m_NativeEncoder4.SetBytes(data + (int)offset, size, MetalBindingHelpers.PushConstantBufferIndex);
-            }
+            throw new NotSupportedException(
+                "Metal 4 push constants require an explicit compiled buffer binding and are not supported by this backend.");
         }
 
         public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
@@ -1683,7 +1882,8 @@ namespace SharpGPU
                 throw new InvalidOperationException("Ray tracing pipeline must be set before binding resource tables.");
             }
 
-            MetalArgumentTable table = (MetalArgumentTable)resourceTable;
+            MetalArgumentTable table = resourceTable as MetalArgumentTable
+                ?? throw new ArgumentException("Metal ray tracing binding requires a MetalArgumentTable.", nameof(resourceTable));
             if (m_BindingBackend.UsesReservedRayFunctionTableSlots && MetalBindingHelpers.HasRayFunctionTableSlotConflict(table))
             {
                 throw new InvalidOperationException($"Ray tracing resource table conflicts with reserved Metal function-table slots ({MetalBindingHelpers.RtVisibleFunctionTableSlot}/{MetalBindingHelpers.RtIntersectionFunctionTableSlot}). Use another slot.");
@@ -1902,7 +2102,6 @@ namespace SharpGPU
         private string? m_PendingPassDebugGroup;
         private RHIRasterPassDescriptor m_PendingPassDescriptor;
         private bool m_HasPendingPassDescriptor;
-        private readonly Dictionary<uint, uint> m_VertexStrides;
 
         internal MetalRasterEncoder(MetalCommandBuffer commandBuffer)
         {
@@ -1915,7 +2114,6 @@ namespace SharpGPU
             m_PendingPassDebugGroup = null;
             m_PendingPassDescriptor = default;
             m_HasPendingPassDescriptor = false;
-            m_VertexStrides = new Dictionary<uint, uint>();
         }
 
         internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
@@ -2133,7 +2331,6 @@ namespace SharpGPU
             ConfigureBindingBackend(pipelineLayout);
             EnsureMtl4RenderEncoder();
             ApplyPendingPassDebugGroup();
-            BuildVertexStrideMap(metalPipeline);
 
             m_NativeEncoder4.SetRenderPipelineState(metalPipeline.NativePipelineState);
             if (metalPipeline.DepthStencilState.NativePtr != IntPtr.Zero)
@@ -2155,22 +2352,15 @@ namespace SharpGPU
                 throw new InvalidOperationException("Raster pipeline must be set before binding resource tables.");
             }
 
-            MetalArgumentTable table = (MetalArgumentTable)resourceTable;
+            MetalArgumentTable table = resourceTable as MetalArgumentTable
+                ?? throw new ArgumentException("Metal raster binding requires a MetalArgumentTable.", nameof(resourceTable));
             m_BindingBackend.SetArgumentTable(table, tableIndex);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
-#if DEBUG
-            MetalPipelineLayout metalLayout = m_CachedPipeline?.Descriptor.PipelineLayout as MetalPipelineLayout;
-            Debug.Assert(metalLayout == null || offset + size <= metalLayout.Descriptor.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({metalLayout?.Descriptor.PushConstantSize ?? 0}).");
-#endif
-            IntPtr offsetData = data + (int)offset;
-            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
-            {
-                m_NativeEncoder4.SetVertexBytes(offsetData, size, MetalBindingHelpers.PushConstantBufferIndex);
-                m_NativeEncoder4.SetFragmentBytes(offsetData, size, MetalBindingHelpers.PushConstantBufferIndex);
-            }
+            throw new NotSupportedException(
+                "Metal 4 push constants require an explicit compiled buffer binding and are not supported by this backend.");
         }
 
         public override void SetIndexBuffer(RHIBuffer buffer, in uint offset)
@@ -2194,8 +2384,13 @@ namespace SharpGPU
 
             MetalBuffer metalBuffer = (MetalBuffer)buffer;
             ulong address = metalBuffer.NativeBuffer.GpuAddress + offset;
-            m_VertexStrides.TryGetValue(slot, out uint stride);
-            m_BindingBackend?.SetRasterVertexBuffer(slot, address, stride);
+            MetalRasterPipeline rasterPipeline = m_CachedPipeline as MetalRasterPipeline
+                ?? throw new InvalidOperationException("Raster pipeline must be set before binding vertex buffers.");
+            MetalVertexBufferBinding binding = rasterPipeline.BufferBindingPlan.GetVertexBinding(slot);
+            m_BindingBackend?.SetRasterVertexBuffer(
+                checked((uint)binding.PhysicalIndex),
+                address,
+                binding.Stride);
             if (m_CommandBuffer?.CommandQueue is MetalCommandQueue queue)
             {
                 queue.AddResidencyAllocation(metalBuffer.NativeBuffer);
@@ -2311,7 +2506,6 @@ namespace SharpGPU
             m_PendingPassDescriptor = default;
             m_HasPendingPassDescriptor = false;
             m_PendingPassDebugGroup = null;
-            m_VertexStrides.Clear();
             m_CachedPipeline = null;
         }
 
@@ -2434,23 +2628,6 @@ namespace SharpGPU
 
             PushDebugGroup(m_PendingPassDebugGroup);
             m_PendingPassDebugGroup = null;
-        }
-
-        private void BuildVertexStrideMap(MetalRasterPipeline pipeline)
-        {
-            m_VertexStrides.Clear();
-            RHIVertexAssemblerDescriptor? vertexAssembler = pipeline.Descriptor.PrimitiveAssembler.VertexAssembler;
-            if (!vertexAssembler.HasValue)
-            {
-                return;
-            }
-
-            Span<RHIVertexLayoutDescriptor> layouts = vertexAssembler.Value.VertexLayouts.Span;
-            for (int i = 0; i < layouts.Length; ++i)
-            {
-                ref readonly RHIVertexLayoutDescriptor layout = ref layouts[i];
-                m_VertexStrides[layout.Index] = layout.Stride;
-            }
         }
 
         private MTLPrimitiveType ResolvePrimitiveType()

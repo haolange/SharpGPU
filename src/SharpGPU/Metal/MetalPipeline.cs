@@ -10,13 +10,59 @@ namespace SharpGPU
     internal sealed class MetalPipelineLayout : RHIPipelineLayout
     {
         public RHIPipelineLayoutDescriptor Descriptor => m_Descriptor;
-        internal int ArgumentTableLayoutCount => m_Descriptor.ArgumentTableLayouts?.Length ?? 0;
+        internal int ArgumentTableLayoutCount => m_ArgumentTableLayouts.Length;
+        internal ReadOnlySpan<MetalArgumentTableLayout> ArgumentTableLayouts => m_ArgumentTableLayouts;
 
         private readonly RHIPipelineLayoutDescriptor m_Descriptor;
+        private readonly MetalArgumentTableLayout[] m_ArgumentTableLayouts;
 
         public MetalPipelineLayout(in RHIPipelineLayoutDescriptor descriptor)
         {
+            if (descriptor.PushConstantSize != 0)
+            {
+                throw new NotSupportedException(
+                    "Metal 4 push constants are not supported until the compiled shader layout provides an explicit buffer index.");
+            }
+
+            RHIArgumentTableLayout[]? sourceLayouts = descriptor.ArgumentTableLayouts;
+            if (sourceLayouts is null || sourceLayouts.Length == 0)
+            {
+                m_ArgumentTableLayouts = Array.Empty<MetalArgumentTableLayout>();
+            }
+            else
+            {
+                m_ArgumentTableLayouts = new MetalArgumentTableLayout[sourceLayouts.Length];
+                HashSet<uint> indices = new();
+                for (int index = 0; index < sourceLayouts.Length; ++index)
+                {
+                    MetalArgumentTableLayout layout = sourceLayouts[index] as MetalArgumentTableLayout
+                        ?? throw new ArgumentException(
+                            $"Metal pipeline argument table {index} must be a {nameof(MetalArgumentTableLayout)}.",
+                            nameof(descriptor));
+                    if (layout.IsDisposed)
+                    {
+                        throw new ObjectDisposedException(
+                            nameof(descriptor),
+                            $"Metal pipeline argument table {layout.Index} is disposed.");
+                    }
+
+                    if (!indices.Add(layout.Index))
+                    {
+                        throw new ArgumentException(
+                            $"Metal pipeline contains duplicate argument table index {layout.Index}.",
+                            nameof(descriptor));
+                    }
+
+                    m_ArgumentTableLayouts[index] = layout;
+                }
+            }
+
             m_Descriptor = descriptor;
+            m_Descriptor.ArgumentTableLayouts = new RHIArgumentTableLayout[m_ArgumentTableLayouts.Length];
+            for (int index = 0; index < m_ArgumentTableLayouts.Length; ++index)
+            {
+                m_Descriptor.ArgumentTableLayouts[index] = m_ArgumentTableLayouts[index];
+            }
         }
 
         protected override void Release()
@@ -35,6 +81,10 @@ namespace SharpGPU
         {
             m_Descriptor = descriptor;
 
+            MetalPipelineLayout pipelineLayout = descriptor.PipelineLayout as MetalPipelineLayout
+                ?? throw new ArgumentException("Metal compute pipeline requires a MetalPipelineLayout.", nameof(descriptor));
+            MetalBufferBindingPlanner.ValidatePipelineBufferBudget(
+                pipelineLayout.ArgumentTableLayouts, MetalBindingPipelineType.Compute);
             MetalFunction computeFunction = (MetalFunction)descriptor.ComputeFunction;
             NSError error = default;
             m_NativePipelineState = device.NativeDevice.NewComputePipelineState(computeFunction.NativeFunction, ref error);
@@ -82,6 +132,10 @@ namespace SharpGPU
         {
             m_Descriptor = descriptor;
 
+            MetalPipelineLayout pipelineLayout = descriptor.PipelineLayout as MetalPipelineLayout
+                ?? throw new ArgumentException("Metal ray tracing pipeline requires a MetalPipelineLayout.", nameof(descriptor));
+            MetalBufferBindingPlanner.ValidatePipelineBufferBudget(
+                pipelineLayout.ArgumentTableLayouts, MetalBindingPipelineType.Raytracing);
             m_FunctionLibrary = descriptor.FunctionLibrary as MetalFunctionLibrary ?? throw new InvalidOperationException("Metal ray tracing pipeline requires a Metal function library.");
             m_RayGenerationEntryName = descriptor.RayGeneration.General.EntryName;
             if (string.IsNullOrWhiteSpace(m_RayGenerationEntryName))
@@ -372,6 +426,7 @@ namespace SharpGPU
         public MTLCullMode CullMode => m_CullMode;
         public MTLTriangleFillMode FillMode => m_FillMode;
         public MTLWinding Winding => m_Winding;
+        internal MetalRasterBufferBindingPlan BufferBindingPlan => m_BufferBindingPlan;
 
         private MTLRenderPipelineState m_NativePipelineState;
         private MTLDepthStencilState m_DepthStencilState;
@@ -379,12 +434,21 @@ namespace SharpGPU
         private readonly MTLCullMode m_CullMode;
         private readonly MTLTriangleFillMode m_FillMode;
         private readonly MTLWinding m_Winding;
+        private readonly MetalRasterBufferBindingPlan m_BufferBindingPlan;
 
         public MetalRasterPipeline(MetalDevice device, in RHIRasterPipelineDescriptor descriptor)
         {
             m_Descriptor = descriptor;
 
-            MetalFunction vertexFunction = (MetalFunction)descriptor.PrimitiveAssembler.VertexAssembler!.Value.VertexFunction;
+            MetalPipelineLayout pipelineLayout = descriptor.PipelineLayout as MetalPipelineLayout
+                ?? throw new ArgumentException("Metal raster pipeline requires a MetalPipelineLayout.", nameof(descriptor));
+            RHIVertexAssemblerDescriptor vertexAssembler = descriptor.PrimitiveAssembler.VertexAssembler
+                ?? throw new NotSupportedException("Metal raster mesh pipelines are not supported by the vertex-buffer binding planner.");
+            m_BufferBindingPlan = MetalBufferBindingPlanner.CompileRaster(
+                pipelineLayout.ArgumentTableLayouts,
+                vertexAssembler.VertexLayouts.Span);
+
+            MetalFunction vertexFunction = (MetalFunction)vertexAssembler.VertexFunction;
             MetalFunction fragmentFunction = (MetalFunction)descriptor.FragmentFunction;
 
             MTLRenderPipelineDescriptor nativeDescriptor = MTLRenderPipelineDescriptor.New();
@@ -397,7 +461,7 @@ namespace SharpGPU
 
             ConfigureColorAttachments(nativeDescriptor, descriptor);
             ConfigureDepthStencilAttachment(nativeDescriptor, descriptor.DepthFormat);
-            ConfigureVertexLayout(nativeDescriptor, descriptor);
+            ConfigureVertexLayout(nativeDescriptor, descriptor, m_BufferBindingPlan);
 
             NSError error = default;
             m_NativePipelineState = device.NativeDevice.NewRenderPipelineState(nativeDescriptor, ref error);
@@ -461,7 +525,10 @@ namespace SharpGPU
             }
         }
 
-        private static void ConfigureVertexLayout(MTLRenderPipelineDescriptor nativeDescriptor, in RHIRasterPipelineDescriptor descriptor)
+        private static void ConfigureVertexLayout(
+            MTLRenderPipelineDescriptor nativeDescriptor,
+            in RHIRasterPipelineDescriptor descriptor,
+            MetalRasterBufferBindingPlan bufferBindingPlan)
         {
             if (!descriptor.PrimitiveAssembler.VertexAssembler.HasValue)
             {
@@ -475,7 +542,8 @@ namespace SharpGPU
             for (int layoutIndex = 0; layoutIndex < layouts.Length; ++layoutIndex)
             {
                 ref RHIVertexLayoutDescriptor layout = ref layouts[layoutIndex];
-                MTLVertexBufferLayoutDescriptor nativeLayout = nativeVertexDescriptor.Layouts[(uint)layoutIndex];
+                MetalVertexBufferBinding binding = bufferBindingPlan.GetVertexBinding(layout.Index);
+                MTLVertexBufferLayoutDescriptor nativeLayout = nativeVertexDescriptor.Layouts[checked((uint)binding.PhysicalIndex)];
                 nativeLayout.Stride = layout.Stride;
                 nativeLayout.StepFunction = MetalUtility.ConvertToMetalVertexStepFunction(layout.StepMode);
                 nativeLayout.StepRate = Math.Max(1u, layout.StepRate);
@@ -487,7 +555,7 @@ namespace SharpGPU
                     MTLVertexAttributeDescriptor nativeAttribute = nativeVertexDescriptor.Attributes[attributeIndex++];
                     nativeAttribute.Format = MetalUtility.ConvertToMetalVertexFormat(element.Format);
                     nativeAttribute.Offset = element.Offset;
-                    nativeAttribute.BufferIndex = (ulong)layoutIndex;
+                    nativeAttribute.BufferIndex = binding.PhysicalIndex;
                 }
             }
 

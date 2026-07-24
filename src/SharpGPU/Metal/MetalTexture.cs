@@ -26,26 +26,33 @@ namespace SharpGPU
             m_Drawable = default;
 
             MTLTextureDescriptor nativeDescriptor = MTLTextureDescriptor.New();
-            nativeDescriptor.TextureType = MetalUtility.ConvertToMetalTextureType(descriptor.Dimension);
-            nativeDescriptor.PixelFormat = MetalUtility.ConvertToMetalPixelFormat(descriptor.Format);
-            nativeDescriptor.Width = descriptor.Extent.x;
-            nativeDescriptor.Height = descriptor.Extent.y;
-            nativeDescriptor.Depth = descriptor.Dimension == ERHITextureDimension.Texture3D ? descriptor.Extent.z : 1;
-            nativeDescriptor.ArrayLength = descriptor.Dimension switch
+            try
             {
-                ERHITextureDimension.Texture2DArray => descriptor.Extent.z,
-                ERHITextureDimension.Texture2DArrayMS => descriptor.Extent.z,
-                ERHITextureDimension.TextureCube => 6,
-                ERHITextureDimension.TextureCubeArray => descriptor.Extent.z,
-                _ => 1,
-            };
-            nativeDescriptor.MipmapLevelCount = descriptor.MipCount;
-            nativeDescriptor.SampleCount = (ulong)descriptor.SampleCount;
-            nativeDescriptor.Usage = MetalUtility.ConvertToMetalTextureUsage(descriptor.UsageFlag);
-            nativeDescriptor.StorageMode = MetalUtility.ConvertToMetalStorageMode(descriptor.StorageMode);
-            nativeDescriptor.CpuCacheMode = descriptor.StorageMode == ERHIStorageMode.HostUpload ? MTLCPUCacheMode.WriteCombined : MTLCPUCacheMode.DefaultCache;
+                nativeDescriptor.TextureType = MetalUtility.ConvertToMetalTextureType(descriptor.Dimension);
+                nativeDescriptor.PixelFormat = MetalUtility.ConvertToMetalPixelFormat(descriptor.Format);
+                nativeDescriptor.Width = descriptor.Extent.x;
+                nativeDescriptor.Height = descriptor.Extent.y;
+                nativeDescriptor.Depth = descriptor.Dimension == ERHITextureDimension.Texture3D ? descriptor.Extent.z : 1;
+                nativeDescriptor.ArrayLength = descriptor.Dimension switch
+                {
+                    ERHITextureDimension.Texture2DArray => descriptor.Extent.z,
+                    ERHITextureDimension.Texture2DArrayMS => descriptor.Extent.z,
+                    ERHITextureDimension.TextureCube => 6,
+                    ERHITextureDimension.TextureCubeArray => descriptor.Extent.z,
+                    _ => 1,
+                };
+                nativeDescriptor.MipmapLevelCount = descriptor.MipCount;
+                nativeDescriptor.SampleCount = (ulong)descriptor.SampleCount;
+                nativeDescriptor.Usage = MetalUtility.ConvertToMetalTextureUsage(descriptor.UsageFlag);
+                nativeDescriptor.StorageMode = MetalUtility.ConvertToMetalStorageMode(descriptor.StorageMode);
+                nativeDescriptor.CpuCacheMode = descriptor.StorageMode == ERHIStorageMode.HostUpload ? MTLCPUCacheMode.WriteCombined : MTLCPUCacheMode.DefaultCache;
 
-            m_NativeTexture = device.NativeDevice.NewTexture(nativeDescriptor);
+                m_NativeTexture = device.NativeDevice.NewTexture(nativeDescriptor);
+            }
+            finally
+            {
+                ObjectiveCRuntime.Release(nativeDescriptor.NativePtr);
+            }
             if (m_NativeTexture.NativePtr == IntPtr.Zero)
             {
                 throw new InvalidOperationException("Failed to create MTLTexture.");
@@ -117,7 +124,7 @@ namespace SharpGPU
 
         private readonly MetalTexture m_Texture;
         private readonly RHITextureViewDescriptor m_Descriptor;
-        private readonly uint m_PoolIndex;
+        private readonly MetalTextureViewIndexLease m_PoolLease;
         private MTLResourceID m_ResourceID;
 
         public MetalTextureView(MetalTexture texture, in RHITextureViewDescriptor descriptor)
@@ -127,30 +134,46 @@ namespace SharpGPU
 
             MetalDevice device = texture.MetalDevice;
             MTLTextureViewPool pool = device.TextureViewPool;
-            m_PoolIndex = device.AllocateTextureViewIndex();
+            m_PoolLease = device.AllocateTextureViewIndex();
 
-            bool fullView = descriptor.BaseMipLevel == 0 &&
-                            descriptor.BaseArraySlice == 0 &&
-                            descriptor.MipCount >= texture.Descriptor.MipCount &&
-                            descriptor.ArrayCount >= texture.Descriptor.Extent.z;
-
-            if (fullView)
+            try
             {
-                m_ResourceID = pool.SetTextureView(texture.NativeTexture.NativePtr, m_PoolIndex);
-                return;
-            }
+                bool fullView = descriptor.BaseMipLevel == 0 &&
+                                descriptor.BaseArraySlice == 0 &&
+                                descriptor.MipCount >= texture.Descriptor.MipCount &&
+                                descriptor.ArrayCount >= texture.Descriptor.Extent.z;
 
-            MTLTextureViewDescriptor viewDescriptor = MTLTextureViewDescriptor.New();
-            viewDescriptor.PixelFormat = MetalUtility.ConvertToMetalPixelFormat(texture.Descriptor.Format);
-            viewDescriptor.TextureType = MetalUtility.ConvertToMetalTextureType(texture.Descriptor.Dimension);
-            viewDescriptor.LevelRange = new NSRange { location = descriptor.BaseMipLevel, length = descriptor.MipCount };
-            viewDescriptor.SliceRange = new NSRange { location = descriptor.BaseArraySlice, length = descriptor.ArrayCount };
-            m_ResourceID = pool.SetTextureView(texture.NativeTexture.NativePtr, viewDescriptor.NativePtr, m_PoolIndex);
-            ObjectiveCRuntime.Release(viewDescriptor.NativePtr);
+                if (fullView)
+                {
+                    m_ResourceID = pool.SetTextureView(texture.NativeTexture.NativePtr, m_PoolLease.Index);
+                    return;
+                }
+
+                MTLTextureViewDescriptor viewDescriptor = MTLTextureViewDescriptor.New();
+                try
+                {
+                    viewDescriptor.PixelFormat = MetalUtility.ConvertToMetalPixelFormat(texture.Descriptor.Format);
+                    viewDescriptor.TextureType = MetalUtility.ConvertToMetalTextureType(texture.Descriptor.Dimension);
+                    viewDescriptor.LevelRange = new NSRange { location = descriptor.BaseMipLevel, length = descriptor.MipCount };
+                    viewDescriptor.SliceRange = new NSRange { location = descriptor.BaseArraySlice, length = descriptor.ArrayCount };
+                    m_ResourceID = pool.SetTextureView(texture.NativeTexture.NativePtr, viewDescriptor.NativePtr, m_PoolLease.Index);
+                }
+                finally
+                {
+                    ObjectiveCRuntime.Release(viewDescriptor.NativePtr);
+                }
+            }
+            catch
+            {
+                device.ReleaseTextureViewIndex(m_PoolLease);
+                throw;
+            }
         }
 
         protected override void Release()
         {
+            m_Texture.MetalDevice.ReleaseTextureViewIndex(m_PoolLease);
+            m_ResourceID = default;
         }
     }
 }

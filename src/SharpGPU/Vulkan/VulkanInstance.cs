@@ -14,9 +14,12 @@ namespace SharpGPU
 
         public VkInstance NativeInstance => m_VkInstance;
         public bool HasDebugUtils => m_HasDebugUtils;
+        public bool HasValidationLayerEnabled =>
+            m_HasValidationLayerEnabled;
 
         private VkInstance m_VkInstance;
         private bool m_HasDebugUtils;
+        private bool m_HasValidationLayerEnabled;
         private bool m_EnablePortabilityEnumeration;
         private List<VulkanDevice> m_Devices;
         private List<string> m_ValidationLayers;
@@ -208,68 +211,76 @@ namespace SharpGPU
 
         private void CreateVulkanInstance(in RHIInstanceDescriptor descriptor)
         {
-            byte* appName = "Hello Triangle".ToPointer();
-            byte* engineName = "No Engine".ToPointer();
-            VkApplicationInfo appInfo = new VkApplicationInfo()
-            {
-                sType = VkStructureType.ApplicationInfo,
-                pApplicationName = appName,
-                applicationVersion = new VkVersion(VulkanUtility.Version(1, 0, 0)),
-                pEngineName = engineName,
-                engineVersion = new VkVersion(VulkanUtility.Version(1, 0, 0)),
-                apiVersion = new VkVersion(VulkanUtility.Version(1, 3, 0)),
-            };
-
-            VkInstanceCreateInfo createInfo = default;
-            createInfo.sType = VkStructureType.InstanceCreateInfo;
-            createInfo.pApplicationInfo = &appInfo;
-            if (m_EnablePortabilityEnumeration)
-            {
-                createInfo.flags |= VkInstanceCreateFlags.EnumeratePortabilityKHR;
-            }
-
-            IntPtr* extensionsToBytesArray = stackalloc IntPtr[m_RequiredExtensions.Count];
-            for (int i = 0; i < m_RequiredExtensions.Count; ++i)
-            {
-                extensionsToBytesArray[i] = Marshal.StringToHGlobalAnsi(m_RequiredExtensions[i]);
-            }
-
+            byte* appName = null;
+            byte* engineName = null;
+            IntPtr* extensionsToBytesArray = stackalloc IntPtr[Math.Max(1, m_RequiredExtensions.Count)];
             IntPtr* layersToBytesArray = stackalloc IntPtr[Math.Max(1, m_ValidationLayers.Count)];
-            int layerPointerCount = m_ValidationLayers.Count;
-
-            createInfo.enabledExtensionCount = (uint)m_RequiredExtensions.Count;
-            createInfo.ppEnabledExtensionNames = (byte**)extensionsToBytesArray;
-
-#if DEBUG
-            if (m_ValidationLayers.Count > 0)
-            {
-                for (int i = 0; i < m_ValidationLayers.Count; ++i)
-                {
-                    layersToBytesArray[i] = Marshal.StringToHGlobalAnsi(m_ValidationLayers[i]);
-                }
-
-                createInfo.enabledLayerCount = (uint)m_ValidationLayers.Count;
-                createInfo.ppEnabledLayerNames = (byte**)layersToBytesArray;
-            }
-            else
-            {
-                createInfo.enabledLayerCount = 0;
-            }
-#else
-            createInfo.enabledLayerCount = 0;
-            createInfo.pNext = null;
-#endif
+            int extensionPointerCount = 0;
+            int layerPointerCount = 0;
 
             try
             {
+                appName = "Hello Triangle".ToPointer();
+                engineName = "No Engine".ToPointer();
+                VkApplicationInfo appInfo = new VkApplicationInfo()
+                {
+                    sType = VkStructureType.ApplicationInfo,
+                    pApplicationName = appName,
+                    applicationVersion = new VkVersion(VulkanUtility.Version(1, 0, 0)),
+                    pEngineName = engineName,
+                    engineVersion = new VkVersion(VulkanUtility.Version(1, 0, 0)),
+                    apiVersion = new VkVersion(VulkanUtility.Version(1, 3, 0)),
+                };
+
+                VkInstanceCreateInfo createInfo = default;
+                createInfo.sType = VkStructureType.InstanceCreateInfo;
+                createInfo.pApplicationInfo = &appInfo;
+                if (m_EnablePortabilityEnumeration)
+                {
+                    createInfo.flags |= VkInstanceCreateFlags.EnumeratePortabilityKHR;
+                }
+
+                for (int i = 0; i < m_RequiredExtensions.Count; ++i)
+                {
+                    extensionsToBytesArray[extensionPointerCount] = Marshal.StringToHGlobalAnsi(m_RequiredExtensions[i]);
+                    ++extensionPointerCount;
+                }
+
+                createInfo.enabledExtensionCount = (uint)extensionPointerCount;
+                createInfo.ppEnabledExtensionNames = (byte**)extensionsToBytesArray;
+
+#if DEBUG
+                if (m_ValidationLayers.Count > 0)
+                {
+                    for (int i = 0; i < m_ValidationLayers.Count; ++i)
+                    {
+                        layersToBytesArray[i] = Marshal.StringToHGlobalAnsi(m_ValidationLayers[i]);
+                        ++layerPointerCount;
+                    }
+
+                    createInfo.enabledLayerCount = (uint)layerPointerCount;
+                    createInfo.ppEnabledLayerNames = (byte**)layersToBytesArray;
+                }
+                else
+                {
+                    createInfo.enabledLayerCount = 0;
+                }
+#else
+                createInfo.enabledLayerCount = 0;
+                createInfo.pNext = null;
+#endif
+
                 fixed (VkInstance* instancePtr = &m_VkInstance)
                 {
                     VulkanUtility.CheckErrors(VulkanNative.vkCreateInstance(&createInfo, null, instancePtr));
                 }
+
+                m_HasValidationLayerEnabled =
+                    createInfo.enabledLayerCount > 0;
             }
             finally
             {
-                for (int i = 0; i < m_RequiredExtensions.Count; ++i)
+                for (int i = 0; i < extensionPointerCount; ++i)
                 {
                     if (extensionsToBytesArray[i] != IntPtr.Zero)
                     {
@@ -285,8 +296,15 @@ namespace SharpGPU
                     }
                 }
 
-                Marshal.FreeHGlobal((IntPtr)appName);
-                Marshal.FreeHGlobal((IntPtr)engineName);
+                if (appName != null)
+                {
+                    Marshal.FreeHGlobal((IntPtr)appName);
+                }
+
+                if (engineName != null)
+                {
+                    Marshal.FreeHGlobal((IntPtr)engineName);
+                }
             }
         }
 

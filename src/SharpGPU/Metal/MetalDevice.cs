@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using SharpMetal.Metal;
-using System.Threading;
 using SharpGPU.Collections;
 using SharpMetal.Foundation;
 using SharpMetal.ObjectiveCCore;
@@ -31,7 +30,7 @@ namespace SharpGPU
         private string? m_TimestampQueriesUnavailableReason;
         private string? m_MetalMLUnavailableReason;
         private MTLTextureViewPool m_TextureViewPool;
-        private int m_NextTextureViewIndex;
+        private readonly MetalTextureViewIndexAllocator m_TextureViewIndices = new();
         // Metal 4 ML package objects are retained for the device lifetime. Releasing argument
         // tables / intermediates heaps / pipeline libraries at per-program disposal time made
         // subsequent native ML dispatches observe zeroed outputs on macOS 26.5.
@@ -790,9 +789,14 @@ namespace SharpGPU
             }
         }
 
-        internal uint AllocateTextureViewIndex()
+        internal MetalTextureViewIndexLease AllocateTextureViewIndex()
         {
-            return (uint)Interlocked.Increment(ref m_NextTextureViewIndex) - 1;
+            return m_TextureViewIndices.Allocate();
+        }
+
+        internal void ReleaseTextureViewIndex(in MetalTextureViewIndexLease lease)
+        {
+            _ = m_TextureViewIndices.Release(lease);
         }
 
         internal void RemoveResidencyAllocation(in MTLAllocation allocation)
@@ -834,14 +838,17 @@ namespace SharpGPU
 
         private void CreateTextureViewPool()
         {
-            const ulong initialCapacity = 4096;
-
             MTLResourceViewPoolDescriptor poolDescriptor = MTLResourceViewPoolDescriptor.New();
-            poolDescriptor.ResourceViewCount = initialCapacity;
-
             NSError error = default;
-            m_TextureViewPool = m_NativeDevice.NewTextureViewPool(poolDescriptor, ref error);
-            ObjectiveCRuntime.Release(poolDescriptor.NativePtr);
+            try
+            {
+                poolDescriptor.ResourceViewCount = m_TextureViewIndices.Capacity;
+                m_TextureViewPool = m_NativeDevice.NewTextureViewPool(poolDescriptor, ref error);
+            }
+            finally
+            {
+                ObjectiveCRuntime.Release(poolDescriptor.NativePtr);
+            }
 
             if (m_TextureViewPool.NativePtr == IntPtr.Zero)
             {

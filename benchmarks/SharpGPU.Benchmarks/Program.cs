@@ -9,7 +9,9 @@ using System.Text.Json;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using SharpShader.Compilation;
 using SharpShader.HLSLCrossCompiler;
+using SharpShader.SharpGPU;
 
 namespace SharpGPU.Benchmarks
 {
@@ -62,6 +64,7 @@ namespace SharpGPU.Benchmarks
                 new("default_builder_buffer", "api", "none", "none", CreateDefaultBuilderBuffer),
                 new("scoped_helper_transfer", "api", "none", "none", CreateScopedHelperTransfer),
                 new("storage_queue_enqueue", "api", "none", "none", CreateStorageQueueEnqueue),
+                new("sharpshader_generated_binding_lookup", "api", "none", "none", CreateSharpShaderGeneratedBindingLookup),
                 new("dx12_command_begin_end_real", "backend", "dx12", "none", CreateDx12CommandBeginEnd),
                 new("dx12_transfer_pass_begin_end_real", "backend", "dx12", "none", CreateDx12TransferPassBeginEnd),
                 new("dx12_scoped_transfer_pass_real", "backend", "dx12", "none", CreateDx12ScopedTransferPass),
@@ -171,6 +174,55 @@ namespace SharpGPU.Benchmarks
             {
                 Body = () => queue.RequestBuffer(request),
                 Cleanup = queue.Dispose,
+            };
+        }
+
+        private static PreparedBenchmark CreateSharpShaderGeneratedBindingLookup(Options options)
+        {
+            ShaderBindingKey key = new(
+                4,
+                0,
+                ShaderBindingClass.ShaderResource);
+            ShaderInterfaceLayout logicalLayout = new(new[]
+            {
+                new ShaderLogicalBinding(
+                    key,
+                    "Input",
+                    aliases: null,
+                    new ShaderResourceShape(
+                        ShaderResourceKind.StructuredBuffer,
+                        ShaderResourceDimension.Buffer,
+                        ShaderResourceAccess.ReadOnly,
+                        structureStride: sizeof(uint)),
+                    ShaderStageMask.Compute,
+                    provenance: ShaderBindingProvenance.ExplicitSource),
+            });
+            ShaderBackendLayouts backendLayouts = new(
+                logicalLayout.Signature,
+                dx12: new Dx12ShaderBackendLayout(new[]
+                {
+                    new Dx12ShaderBindingMapping(
+                        key,
+                        key.Table,
+                        key.Slot,
+                        key.Type),
+                }));
+            SharpGpuArgumentTableLayoutPlan plan =
+                SharpGpuShaderInterfaceAdapter.CreateArgumentTableLayoutPlan(
+                    logicalLayout,
+                    backendLayouts,
+                    ERHIBackend.DirectX12);
+            SharpGpuBindingLocation sink = plan.GetBinding(key);
+            if (sink.LogicalBinding != key)
+            {
+                throw new InvalidOperationException(
+                    "SharpShader generated-binding benchmark preflight resolved the wrong logical key.");
+            }
+
+            return new PreparedBenchmark
+            {
+                RequireZeroAllocation = true,
+                Body = () => sink = plan.GetBinding(key),
             };
         }
 

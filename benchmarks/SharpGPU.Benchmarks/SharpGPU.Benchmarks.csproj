@@ -9,5 +9,6 @@
   <ItemGroup>
     <ProjectReference Include="../../../Runtime/Graphics/SharpGPU/SharpGPU.csproj" />
     <ProjectReference Include="../../../Runtime/Graphics/SharpShader/SharpShader.csproj" />
+    <ProjectReference Include="../../../Runtime/Graphics/SharpShader.SharpGPU/SharpShader.SharpGPU.csproj" />
   </ItemGroup>
 </Project>
