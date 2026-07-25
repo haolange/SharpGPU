@@ -384,7 +384,7 @@ internal static class ArtifactPath
     public static string Resolve(string fileName)
     {
         string root = FindRepositoryRoot();
-        return Path.Combine(root, "Engine", "Artifacts", "SharpGPU", fileName);
+        return Path.Combine(root, "docs", "Artifacts", "SharpGPU", fileName);
     }
 
     public static string RepositoryRoot => FindRepositoryRoot();

@@ -2,7 +2,7 @@
 
 This matrix describes the active SharpGPU public contract. Runtime facts come
 from `RHIDevice.Capabilities`; platform qualification outcomes come from the
-typed per-platform reports under `Engine/Artifacts/SharpGPU/`. Capability and
+typed per-platform reports under `docs/Artifacts/SharpGPU/`. Capability and
 qualification are deliberately separate: a successful native probe is not a
 substitute for a passed runtime scenario.
 
@@ -15,11 +15,11 @@ documented exception/status model.
 
 | Platform | Artifact | Current status |
 |---|---|---|
-| Windows x64 | `Engine/Artifacts/SharpGPU/feature-report-win-x64.json` | W12 regenerated schema revision 2 (no absolute workspace paths) |
-| Android ARM64 | `Engine/Artifacts/SharpGPU/feature-report-android-arm64.json` | W12 generated after API30/ARM64/Adreno650 device qualification; DirectStorage=NotApplicable; not a full-Android certification |
+| Windows x64 | `docs/Artifacts/SharpGPU/feature-report-win-x64.json` | W12 regenerated schema revision 2 (no absolute workspace paths) |
+| Android ARM64 | `docs/Artifacts/SharpGPU/feature-report-android-arm64.json` | W12 generated after API30/ARM64/Adreno650 device qualification; DirectStorage=NotApplicable; not a full-Android certification |
 | Linux x64 | none (do not invent placeholders) | `BLOCKED_PLATFORM` / Unverified until matching-host Vulkan qualification passes (`P13-LINUX`) |
-| macOS ARM64 | `Engine/Artifacts/SharpGPU/feature-report-macos-arm64.json` | P13-MACOS regenerated schema revision 2 on Apple M3 Max (Metal/Vulkan Passed; DX12 NotApplicable; no absolute workspace paths) |
-| iOS/iPadOS ARM64 | `Engine/Artifacts/SharpGPU/feature-report-ios-arm64.json` | P13-IOS regenerated schema revision 2 on physical iPhone 17 Pro (Metal install/lifecycle Passed; remote orientation Unverified; DirectStorage NotApplicable; no device serials) |
+| macOS ARM64 | `docs/Artifacts/SharpGPU/feature-report-macos-arm64.json` | P13-MACOS regenerated schema revision 2 on Apple M3 Max (Metal/Vulkan Passed; DX12 NotApplicable; no absolute workspace paths) |
+| iOS/iPadOS ARM64 | `docs/Artifacts/SharpGPU/feature-report-ios-arm64.json` | P13-IOS regenerated schema revision 2 on physical iPhone 17 Pro (Metal install/lifecycle Passed; remote orientation Unverified; DirectStorage NotApplicable; no device serials) |
 
 ## Hard Gate Categories (RFC-0021)
 

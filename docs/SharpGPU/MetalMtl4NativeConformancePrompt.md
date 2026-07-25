@@ -8,7 +8,7 @@ Implement and verify the native Metal 4 ML package path for SharpGPU.
 Confirmed state:
 - Windows cannot mark Metal conformance as verified.
 - Metal 4 exposes native entry points for machine learning encoding, tensors, and counter heaps.
-- Commit `0cef21f6` verified Metal timestamp/occlusion query contracts on macOS ARM64 and emits `Engine/Artifacts/SharpGPU/feature-report-macos-arm64.json`.
+- Commit `0cef21f6` verified Metal timestamp/occlusion query contracts on macOS ARM64 and emits `docs/Artifacts/SharpGPU/feature-report-macos-arm64.json`.
 - `IsPipelineStatsQueriesSupported=false` is correct when no Metal statistics counter set is available.
 - Metal ML is currently honest false/throws until SharpGPU has a native ML package program path.
 - SharpGPU public readiness requires honest capability probing, native path execution, and conformance JSON evidence.
