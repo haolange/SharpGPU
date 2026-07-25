@@ -1773,6 +1773,13 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DispatchComputeIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
         }
 
+        public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
+        {
+            Dx12ComputeIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12ComputeIndirectCommandBuffer ?? throw new InvalidOperationException("DX12 compute indirect dispatch requires a Dx12ComputeIndirectCommandBuffer.");
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
+        }
+
         internal override void EndPassCore()
         {
 #if DEBUG
@@ -1939,6 +1946,13 @@ namespace SharpGPU
                 Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
                 dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DispatchRayIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
             }
+        }
+
+        public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
+        {
+            Dx12RayTracingIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RayTracingIndirectCommandBuffer ?? throw new InvalidOperationException("DX12 ray-tracing indirect dispatch requires a Dx12RayTracingIndirectCommandBuffer.");
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
         }
 
         internal override void EndPassCore()
@@ -3561,11 +3575,9 @@ namespace SharpGPU
         {
             EnsureNativeRenderPassActive();
             Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
-            if (dx12Device.Capabilities.Mesh.Shader.Tier != ERHICapabilityTier.Unavailable)
-            {
-                Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-                dx12CommandBuffer.NativeCommandList.DispatchMesh(groupCountX, groupCountY, groupCountZ);
-            }
+            dx12Device.Capabilities.Mesh.Shader.Require("DX12 mesh shaders");
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            dx12CommandBuffer.NativeCommandList.DispatchMesh(groupCountX, groupCountY, groupCountZ);
         }
 
         internal override void DispatchMeshIndirectCore(RHIBuffer argsBuffer, in uint argsOffset)
@@ -3573,11 +3585,17 @@ namespace SharpGPU
             EnsureNativeRenderPassActive();
             Dx12Buffer dx12Buffer = Dx12EncoderGuards.RequireBuffer(argsBuffer);
             Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
-            if (dx12Device.Capabilities.Mesh.Shader.Tier != ERHICapabilityTier.Unavailable)
-            {
-                Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-                dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DispatchMeshIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
-            }
+            dx12Device.Capabilities.Mesh.Shader.Require("DX12 mesh shaders");
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DispatchMeshIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
+        }
+
+        internal override void ExecuteIndirectCommandBufferCore(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
+        {
+            EnsureNativeRenderPassActive();
+            Dx12RasterIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RasterIndirectCommandBuffer ?? throw new InvalidOperationException("DX12 raster indirect draw requires a Dx12RasterIndirectCommandBuffer.");
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
         }
 
         internal override void EndPassCore()

@@ -1167,6 +1167,14 @@ namespace SharpGPU
             VulkanNative.vkCmdDispatchIndirect(vkCmdBuf.NativeCommandBuffer, vkArgsBuffer.NativeBuffer, argsOffset);
         }
 
+        public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
+        {
+            VulkanEncoderGuards.RequireDevice(m_CommandBuffer).Capabilities.IndirectCommandBuffer.Execution.Require(
+                "Vulkan compute ExecuteIndirectCommandBuffer");
+            throw new NotSupportedException(
+                "Vulkan compute ExecuteIndirectCommandBuffer is unavailable.");
+        }
+
         internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
@@ -1709,6 +1717,14 @@ namespace SharpGPU
             VulkanNative.vkCmdDrawMeshTasksIndirectEXT(vkCmdBuf.NativeCommandBuffer, vkArgs.NativeBuffer, argsOffset, 1, 0);
         }
 
+        internal override void ExecuteIndirectCommandBufferCore(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
+        {
+            VulkanEncoderGuards.RequireDevice(m_CommandBuffer).Capabilities.IndirectCommandBuffer.Execution.Require(
+                "Vulkan raster ExecuteIndirectCommandBuffer");
+            throw new NotSupportedException(
+                "Vulkan raster ExecuteIndirectCommandBuffer is unavailable.");
+        }
+
         internal override void EndPassCore()
         {
             EndRenderingIfNeeded();
@@ -2157,6 +2173,14 @@ namespace SharpGPU
             VulkanNative.vkCmdTraceRaysIndirectKHR(vkCmdBuf.NativeCommandBuffer,
                 &rayGenRegion, &missRegion, &hitGroupRegion, &callableRegion,
                 indirectAddress);
+        }
+
+        public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
+        {
+            VulkanEncoderGuards.RequireDevice(m_CommandBuffer).Capabilities.IndirectCommandBuffer.Execution.Require(
+                "Vulkan ray-tracing ExecuteIndirectCommandBuffer");
+            throw new NotSupportedException(
+                "Vulkan ray-tracing ExecuteIndirectCommandBuffer is unavailable.");
         }
 
         internal override void EndPassCore()

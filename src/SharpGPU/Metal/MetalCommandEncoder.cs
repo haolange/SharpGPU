@@ -1880,6 +1880,18 @@ namespace SharpGPU
             ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
         }
 
+        public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
+        {
+            MetalComputeIndirectCommandBuffer metalICB = (MetalComputeIndirectCommandBuffer)indirectCmdBuffer;
+            MTLIndirectCommandBuffer nativeICB = metalICB.NativeIndirectCommandBuffer;
+            NSRange range = new NSRange { location = 0, length = metalICB.MaxCommandCount };
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder4.ExecuteCommandsInBuffer(nativeICB, range);
+            }
+        }
+
         internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
@@ -2195,6 +2207,18 @@ namespace SharpGPU
             m_NativeEncoder4.DispatchThreadgroupsWithIndirectBuffer(indirectBuffer.NativeBuffer.GpuAddress + argsOffset, threadsPerGroup);
 
             ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.RayTracing));
+        }
+
+        public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
+        {
+            MetalRayTracingIndirectCommandBuffer metalICB = (MetalRayTracingIndirectCommandBuffer)indirectCmdBuffer;
+            MTLIndirectCommandBuffer nativeICB = metalICB.NativeIndirectCommandBuffer;
+            NSRange range = new NSRange { location = 0, length = metalICB.MaxCommandCount };
+
+            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            {
+                m_NativeEncoder4.ExecuteCommandsInBuffer(nativeICB, range);
+            }
         }
 
         internal override void EndPassCore()
@@ -2571,14 +2595,40 @@ namespace SharpGPU
             m_NativeEncoder4.SetScissorRect(nativeRect);
         }
 
-        public override void SetScissors(in Memory<Rect> rects)
+        public override unsafe void SetScissors(in Memory<Rect> rects)
         {
+            RequireEncoderForState("SetScissors");
             if (rects.Length == 0)
             {
-                return;
+                throw new ArgumentException("At least one scissor rect is required.", nameof(rects));
             }
 
-            SetScissor(rects.Span[0]);
+            const int MaxMetalScissorRects = 16;
+            if (rects.Length > MaxMetalScissorRects)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(rects),
+                    $"Metal supports at most {MaxMetalScissorRects} scissor rects; got {rects.Length}.");
+            }
+
+            Span<Rect> rectSpan = rects.Span;
+            Span<MTLScissorRect> nativeRects = stackalloc MTLScissorRect[rectSpan.Length];
+            for (int i = 0; i < rectSpan.Length; ++i)
+            {
+                Rect rect = rectSpan[i];
+                nativeRects[i] = new MTLScissorRect
+                {
+                    x = (ulong)Math.Max(0, rect.left),
+                    y = (ulong)Math.Max(0, rect.top),
+                    width = (ulong)Math.Max(0, rect.right - rect.left),
+                    height = (ulong)Math.Max(0, rect.bottom - rect.top)
+                };
+            }
+
+            fixed (MTLScissorRect* ptr = nativeRects)
+            {
+                m_NativeEncoder4.SetScissorRects((IntPtr)ptr, (ulong)rectSpan.Length);
+            }
         }
 
         public override void SetViewport(in Viewport viewport)
@@ -2596,14 +2646,42 @@ namespace SharpGPU
             m_NativeEncoder4.SetViewport(nativeViewport);
         }
 
-        public override void SetViewports(in Memory<Viewport> viewports)
+        public override unsafe void SetViewports(in Memory<Viewport> viewports)
         {
+            RequireEncoderForState("SetViewports");
             if (viewports.Length == 0)
             {
-                return;
+                throw new ArgumentException("At least one viewport is required.", nameof(viewports));
             }
 
-            SetViewport(viewports.Span[0]);
+            const int MaxMetalViewports = 16;
+            if (viewports.Length > MaxMetalViewports)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(viewports),
+                    $"Metal supports at most {MaxMetalViewports} viewports; got {viewports.Length}.");
+            }
+
+            Span<Viewport> viewportSpan = viewports.Span;
+            Span<MTLViewport> nativeViewports = stackalloc MTLViewport[viewportSpan.Length];
+            for (int i = 0; i < viewportSpan.Length; ++i)
+            {
+                Viewport viewport = viewportSpan[i];
+                nativeViewports[i] = new MTLViewport
+                {
+                    originX = viewport.TopLeftX,
+                    originY = viewport.TopLeftY,
+                    width = viewport.Width,
+                    height = viewport.Height,
+                    znear = viewport.MinDepth,
+                    zfar = viewport.MaxDepth
+                };
+            }
+
+            fixed (MTLViewport* ptr = nativeViewports)
+            {
+                m_NativeEncoder4.SetViewports((IntPtr)ptr, (ulong)viewportSpan.Length);
+            }
         }
 
         public override void SetStencilRef(in uint value)
@@ -2759,6 +2837,8 @@ namespace SharpGPU
 
         internal override void DispatchMeshCore(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
+            MetalDevice device = ((MetalCommandQueue)((MetalCommandBuffer)m_CommandBuffer!).CommandQueue).MetalDevice;
+            device.Capabilities.Mesh.Shader.Require("Metal mesh shaders");
             m_BindingBackend?.CommitRaster(m_NativeEncoder4);
             m_NativeEncoder4.DrawMeshThreadgroups(new MTLSize(groupCountX, groupCountY, groupCountZ), new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
             MarkRasterStagesSeen();
@@ -2766,11 +2846,26 @@ namespace SharpGPU
 
         internal override void DispatchMeshIndirectCore(RHIBuffer argsBuffer, in uint argsOffset)
         {
+            MetalDevice device = ((MetalCommandQueue)((MetalCommandBuffer)m_CommandBuffer!).CommandQueue).MetalDevice;
+            device.Capabilities.Mesh.Shader.Require("Metal mesh shaders");
             MetalBuffer metalBuffer = (MetalBuffer)argsBuffer;
             m_BindingBackend?.CommitRaster(m_NativeEncoder4);
             ulong indirectAddress = metalBuffer.NativeBuffer.GpuAddress + argsOffset;
             m_NativeEncoder4.DrawMeshThreadgroupsWithIndirectBuffer(indirectAddress, new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
             MarkRasterStagesSeen();
+        }
+
+        internal override void ExecuteIndirectCommandBufferCore(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
+        {
+            if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            MetalRasterIndirectCommandBuffer metalICB = (MetalRasterIndirectCommandBuffer)indirectCmdBuffer;
+            MTLIndirectCommandBuffer nativeICB = metalICB.NativeIndirectCommandBuffer;
+            NSRange range = new NSRange { location = 0, length = metalICB.MaxCommandCount };
+            m_NativeEncoder4.ExecuteCommandsInBuffer(nativeICB, range);
         }
 
         internal override void EndPassCore()

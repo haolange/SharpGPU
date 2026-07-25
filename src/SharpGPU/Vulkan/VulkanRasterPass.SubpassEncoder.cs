@@ -504,6 +504,15 @@ namespace SharpGPU
                 0);
         }
 
+        internal override void ExecuteIndirectCommandBufferCore(
+            RHIRasterIndirectCommandBuffer indirectCmdBuffer)
+        {
+            GetDevice().Capabilities.IndirectCommandBuffer.Execution.Require(
+                "Vulkan raster ExecuteIndirectCommandBuffer");
+            throw new NotSupportedException(
+                "Vulkan raster ExecuteIndirectCommandBuffer is unavailable.");
+        }
+
         internal override void EndPassCore()
         {
             if (!m_RenderingActive)

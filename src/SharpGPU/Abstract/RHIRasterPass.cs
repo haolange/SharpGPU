@@ -261,12 +261,19 @@ namespace SharpGPU
             DispatchMeshIndirectCore(argsBuffer, argsOffset);
         }
 
+        public void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
+        {
+            ValidateDrawState();
+            ExecuteIndirectCommandBufferCore(indirectCmdBuffer);
+        }
+
         internal abstract void DrawCore(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance);
         internal abstract void DrawIndexedCore(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance);
         internal abstract void DrawIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
         internal abstract void DrawIndexedIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
         internal abstract void DispatchMeshCore(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         internal abstract void DispatchMeshIndirectCore(RHIBuffer argsBuffer, in uint argsOffset);
+        internal abstract void ExecuteIndirectCommandBufferCore(RHIRasterIndirectCommandBuffer indirectCmdBuffer);
         public void EndPass()
         {
             RHICommandBuffer commandBuffer = m_CommandBuffer ??

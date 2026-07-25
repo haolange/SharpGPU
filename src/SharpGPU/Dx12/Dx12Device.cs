@@ -557,6 +557,24 @@ namespace SharpGPU
             return new Dx12PipelineCache(this);
         }
 
+        public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
+        {
+            Capabilities.IndirectCommandBuffer.Execution.Require("DX12 indirect command buffer");
+            return new Dx12ComputeIndirectCommandBuffer(this, descriptor);
+        }
+
+        public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor)
+        {
+            Capabilities.IndirectCommandBuffer.Execution.Require("DX12 indirect command buffer");
+            return new Dx12RayTracingIndirectCommandBuffer(this, descriptor);
+        }
+
+        public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
+        {
+            Capabilities.IndirectCommandBuffer.Execution.Require("DX12 indirect command buffer");
+            return new Dx12RasterIndirectCommandBuffer(this, descriptor);
+        }
+
         public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
         {
             Capabilities.MachineLearning.Execution.Require("DX12 machine learning");
@@ -1292,6 +1310,12 @@ namespace SharpGPU
                         isWorkgraphSupported,
                         "D3D12_FEATURE_D3D12_OPTIONS21.WorkGraphsTier plus SharpGPU pipeline factory",
                         "Work Graphs are unavailable.")),
+                indirectCommandBuffer: new RHIIndirectCommandBufferCapabilities(
+                    execution: RHICapability.Available(
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.CoreApi,
+                        ERHICapabilityProbeKind.ApiVersion,
+                        "ID3D12GraphicsCommandList.ExecuteIndirect + command signature")),
                 compute: new RHIComputeCapabilities(
                     waveOperationStrategy,
                     waveOperations: Probe(

@@ -828,8 +828,8 @@ namespace SharpGPU
             {
                 device.Capabilities.Mesh.Shader.Require(
                     "DX12 mesh-shader pipelines");
-                throw new InvalidOperationException(
-                    "DX12 mesh capability is available without a native pipeline-state-stream implementation.");
+                throw new NotSupportedException(
+                    "DX12 mesh-shader pipeline-state-stream path is not implemented.");
             }
 
             m_PrimitiveTopology = Dx12Utility.ConvertToDx12PrimitiveTopology(descriptor.PrimitiveAssembler.PrimitiveTopology);

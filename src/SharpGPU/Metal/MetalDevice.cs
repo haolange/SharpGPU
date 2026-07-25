@@ -521,6 +521,8 @@ namespace SharpGPU
 
         public override RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor)
         {
+            ThrowIfDisposed();
+            Capabilities.RayTracing.Pipeline.Require("Metal ray-tracing pipelines");
             return new MetalRaytracingPipeline(this, descriptor);
         }
 
@@ -534,8 +536,7 @@ namespace SharpGPU
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
                 "Metal machine-learning pipelines");
-            throw new InvalidOperationException(
-                "Metal machine-learning capability is available without a pipeline implementation.");
+            return new MetalMLPipeline(this, descriptor);
         }
 
         public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
@@ -543,8 +544,7 @@ namespace SharpGPU
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
                 "Metal machine-learning binding sets");
-            throw new InvalidOperationException(
-                "Metal machine-learning capability is available without a binding-set implementation.");
+            return new MetalMLBindingSet(this, descriptor);
         }
 
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
@@ -552,8 +552,7 @@ namespace SharpGPU
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
                 "Metal machine-learning tensors");
-            throw new InvalidOperationException(
-                "Metal machine-learning capability is available without a tensor implementation.");
+            return new MetalTensor(this, descriptor);
         }
 
         public override RHIMLProgram CreateMLProgram(in RHIMLProgramDescriptor descriptor)
@@ -561,20 +560,71 @@ namespace SharpGPU
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
                 "Metal machine-learning programs");
-            throw new InvalidOperationException(
-                "Metal machine-learning capability is available without a program implementation.");
+
+            if (descriptor.Ops.Length > 1)
+            {
+                throw new NotSupportedException(
+                    "Metal ML MPSGraph package lowering currently supports one RHI ML op per native artifact. " +
+                    "Multi-op packages execute once but corrupt subsequent MTL4MachineLearningCommandEncoder dispatches on macOS 26.5; " +
+                    "compute-kernel and CPU fallbacks are intentionally rejected.");
+            }
+
+            try
+            {
+                MetalMpsGraphPackage package = MetalMpsGraphPackageBuilder.Build(this, descriptor);
+                RegisterMetalMLPackageDirectory(package.PackageDirectory);
+                RegisterMetalMLLibrary(package.Library);
+                return new MetalMLProgram(
+                    descriptor.Name,
+                    package.Library,
+                    MetalMpsGraphPackageBuilder.EntryName,
+                    package.PackageDirectory,
+                    package.BindingInfos);
+            }
+            catch (NotSupportedException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Metal ML program construction failed for '{descriptor.Name}': {ex.Message}", ex);
+            }
         }
+
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
         {
             ThrowIfDisposed();
             Capabilities.WorkGraph.Execution.Require("Metal work graphs");
-            throw new InvalidOperationException("Metal work-graph capability is available without an implementation.");
+            throw new NotSupportedException(
+                "Metal Work Graph execution is not exposed by SharpGPU.");
         }
 
         public override RHIPipelineCache CreatePipelineCache()
         {
             Capabilities.PipelineCache.NativeCache.Require("Metal pipeline cache");
-            throw new InvalidOperationException("Metal pipeline-cache capability is available without a factory implementation.");
+            throw new NotSupportedException(
+                "Metal pipeline cache is not exposed by SharpGPU.");
+        }
+
+        public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.IndirectCommandBuffer.Execution.Require("Metal compute indirect command buffer");
+            return new MetalComputeIndirectCommandBuffer(this, descriptor);
+        }
+
+        public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.IndirectCommandBuffer.Execution.Require("Metal ray-tracing indirect command buffer");
+            return new MetalRayTracingIndirectCommandBuffer(this, descriptor);
+        }
+
+        public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.IndirectCommandBuffer.Execution.Require("Metal raster indirect command buffer");
+            return new MetalRasterIndirectCommandBuffer(this, descriptor);
         }
 
         public override bool TryToggleGpuCapture(string savedPath, string reason)
@@ -925,7 +975,7 @@ namespace SharpGPU
                         "SharpGPU Metal factory surface")),
                 machineLearning: new RHIMachineLearningCapabilities(
                     execution: RHICapability.Unavailable(
-                        "Metal has no qualified stable native ML artifact and dispatch route.",
+                        "Metal ML remains Unavailable for stability until a qualified macOS probe passes.",
                         ERHICapabilityProbeKind.BackendContract,
                         "SharpGPU Metal stable native ML artifact and dispatch contract")),
                 workGraph: new RHIWorkGraphCapabilities(
@@ -933,6 +983,12 @@ namespace SharpGPU
                         "Metal Work Graph execution is not exposed by SharpGPU.",
                         ERHICapabilityProbeKind.BackendContract,
                         "SharpGPU Metal factory surface")),
+                indirectCommandBuffer: new RHIIndirectCommandBufferCapabilities(
+                    execution: RHICapability.Available(
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.NativeSpecialized,
+                        ERHICapabilityProbeKind.ApiVersion,
+                        "MTLIndirectCommandBuffer / ExecuteCommandsInBuffer")),
                 compute: new RHIComputeCapabilities(
                     ERHIWaveOperationStrategy.Basic,
                     waveOperations: RHICapability.Available(
@@ -1006,7 +1062,7 @@ namespace SharpGPU
 
         private bool TryProbeMetalMLSupport(out string? unavailableReason)
         {
-            unavailableReason = "Metal has no qualified stable native ML artifact and dispatch route.";
+            unavailableReason = "Metal ML remains Unavailable for stability until a qualified macOS probe passes.";
             return false;
         }
         internal void RegisterMetalMLPipelineState(in MTL4MachineLearningPipelineState pipelineState)

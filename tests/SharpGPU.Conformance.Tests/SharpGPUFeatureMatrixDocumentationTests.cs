@@ -19,6 +19,7 @@ public sealed class SharpGPUFeatureMatrixDocumentationTests
             "OcclusionQueries",
             "PipelineStatisticsQueries",
             "MachineLearning",
+            "IndirectCommandBuffer",
             "Raytracing",
             "MeshShading",
             "DescriptorIndexing",

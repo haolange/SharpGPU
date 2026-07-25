@@ -1,6 +1,7 @@
 // Copyright (c) CGBull. All rights reserved.
 
 using System;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using SharpGPU;
@@ -11,24 +12,47 @@ namespace SharpGPU.Conformance.Tests;
 public sealed class W11AdvancedSurfaceContractTests
 {
     [Fact]
-    public void PublicContract_ShouldNotExportRetiredIndirectCommandBufferFamilies()
+    public void PublicContract_ShouldExportIndirectCommandBufferFamiliesWithExactBackends()
     {
         Type[] exportedTypes = typeof(RHIDevice).Assembly.GetExportedTypes();
-        Assert.DoesNotContain(
+        Assert.Contains(
             exportedTypes,
-            type => type.Name.Contains(
-                "IndirectCommandBuffer",
-                StringComparison.Ordinal));
+            type => type.Name == nameof(RHIComputeIndirectCommandBuffer));
+        Assert.Contains(
+            exportedTypes,
+            type => type.Name == nameof(RHIRasterIndirectCommandBuffer));
+        Assert.Contains(
+            exportedTypes,
+            type => type.Name == nameof(RHIRayTracingIndirectCommandBuffer));
 
         MethodInfo[] deviceFactories = typeof(RHIDevice).GetMethods(
             BindingFlags.Public |
             BindingFlags.Instance |
             BindingFlags.DeclaredOnly);
-        Assert.DoesNotContain(
+        Assert.Contains(
             deviceFactories,
-            method => method.Name.Contains(
-                "IndirectCommandBuffer",
-                StringComparison.Ordinal));
+            method => method.Name == nameof(RHIDevice.CreateComputeIndirectCommandBuffer));
+        Assert.Contains(
+            deviceFactories,
+            method => method.Name == nameof(RHIDevice.CreateRasterIndirectCommandBuffer));
+        Assert.Contains(
+            deviceFactories,
+            method => method.Name == nameof(RHIDevice.CreateRayTracingIndirectCommandBuffer));
+
+        Assert.Equal(
+            typeof(RHICapability),
+            typeof(RHIIndirectCommandBufferCapabilities)
+                .GetProperty(nameof(RHIIndirectCommandBufferCapabilities.Execution))!
+                .PropertyType);
+
+        Type[] implementationTypes = typeof(RHIDevice).Assembly.GetTypes();
+        Assert.Contains(implementationTypes, type => type.Name == "Dx12ComputeIndirectCommandBuffer");
+        Assert.Contains(implementationTypes, type => type.Name == "MetalComputeIndirectCommandBuffer");
+        Assert.DoesNotContain(
+            implementationTypes,
+            type =>
+                type.Name.StartsWith("Vulkan", StringComparison.Ordinal) &&
+                type.Name.Contains("IndirectCommandBuffer", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -47,6 +71,7 @@ public sealed class W11AdvancedSurfaceContractTests
         Assert.Contains(nameof(RHIDevice.CreateTensor), factoryNames);
         Assert.Contains(nameof(RHIDevice.CreateMLProgram), factoryNames);
         Assert.Contains(nameof(RHIDevice.CreateWorkGraphPipeline), factoryNames);
+        Assert.Contains(nameof(RHIDevice.CreateComputeIndirectCommandBuffer), factoryNames);
 
         Type[] implementationTypes = typeof(RHIDevice).Assembly.GetTypes();
         Assert.Contains(
@@ -55,13 +80,53 @@ public sealed class W11AdvancedSurfaceContractTests
         Assert.Contains(
             implementationTypes,
             type => type.Name == "Dx12WorkGraphPipeline");
+        Assert.Contains(
+            implementationTypes,
+            type => type.Name == "MetalMLPipeline");
         Assert.DoesNotContain(
             implementationTypes,
             type =>
-                (type.Name.StartsWith("Vulkan", StringComparison.Ordinal) ||
-                 type.Name.StartsWith("Metal", StringComparison.Ordinal)) &&
-                (type.Name.Contains("ML", StringComparison.Ordinal) ||
+                type.Name.StartsWith("Vulkan", StringComparison.Ordinal) &&
+                (type.Name.Contains("MLPipeline", StringComparison.Ordinal) ||
+                 type.Name.Contains("MLBinding", StringComparison.Ordinal) ||
                  type.Name.Contains("WorkGraph", StringComparison.Ordinal)));
+        Assert.DoesNotContain(
+            implementationTypes,
+            type =>
+                type.Name.StartsWith("Metal", StringComparison.Ordinal) &&
+                type.Name.Contains("WorkGraph", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ProductSources_ShouldNotRetainAvailableWithoutImplementationPlaceholders()
+    {
+        string sharpGpuRoot = Path.GetFullPath(
+            Path.Combine(
+                AppContext.BaseDirectory,
+                "..",
+                "..",
+                "..",
+                "..",
+                "..",
+                "Runtime",
+                "Graphics",
+                "SharpGPU"));
+        Assert.True(
+            Directory.Exists(sharpGpuRoot),
+            $"SharpGPU root not found at '{sharpGpuRoot}'.");
+
+        string[] hits = Directory
+            .EnumerateFiles(sharpGpuRoot, "*.cs", SearchOption.AllDirectories)
+            .SelectMany(path => File.ReadAllLines(path).Select(line => (path, line)))
+            .Where(tuple =>
+                tuple.line.Contains("available without a", StringComparison.OrdinalIgnoreCase) ||
+                tuple.line.Contains("available without an", StringComparison.OrdinalIgnoreCase))
+            .Select(tuple => $"{Path.GetFileName(tuple.path)}: {tuple.line.Trim()}")
+            .ToArray();
+
+        Assert.True(
+            hits.Length == 0,
+            "Forbidden forever-throw placeholder copy remains:\n" + string.Join("\n", hits));
     }
 
     [Fact]
@@ -190,7 +255,16 @@ public sealed class W11AdvancedSurfaceContractTests
             nameof(RHIDevice.CreateTensor),
             nameof(RHIDevice.CreateMLProgram),
             nameof(RHIDevice.CreateWorkGraphPipeline),
+            nameof(RHIDevice.CreateComputeIndirectCommandBuffer),
+            nameof(RHIDevice.CreateRasterIndirectCommandBuffer),
+            nameof(RHIDevice.CreateRayTracingIndirectCommandBuffer),
         ];
+
+        Assert.Equal(
+            typeof(RHICapability),
+            typeof(RHIIndirectCommandBufferCapabilities)
+                .GetProperty(nameof(RHIIndirectCommandBufferCapabilities.Execution))!
+                .PropertyType);
 
         foreach (string backendTypeName in backendTypeNames)
         {

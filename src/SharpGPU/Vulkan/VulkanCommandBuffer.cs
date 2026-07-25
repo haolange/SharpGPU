@@ -530,8 +530,9 @@ namespace SharpGPU
             ThrowIfDisposed();
             ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.MachineLearning.Execution.Require(
                 "Vulkan machine-learning passes");
-            throw new InvalidOperationException(
-                "Vulkan machine-learning capability is available without an encoder implementation.");
+            throw new NotSupportedException(
+                "Vulkan machine-learning passes are unavailable: "
+                + ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.MachineLearning.Execution.UnavailableReason);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -540,8 +541,9 @@ namespace SharpGPU
             ThrowIfDisposed();
             ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.MachineLearning.Execution.Require(
                 "Vulkan machine-learning passes");
-            throw new InvalidOperationException(
-                "Vulkan machine-learning capability is available without an encoder implementation.");
+            throw new NotSupportedException(
+                "Vulkan machine-learning passes are unavailable: "
+                + ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.MachineLearning.Execution.UnavailableReason);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -582,8 +584,9 @@ namespace SharpGPU
             ThrowIfDisposed();
             ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.MachineLearning.Execution.Require(
                 "Vulkan machine-learning encoder");
-            throw new InvalidOperationException(
-                "Vulkan machine-learning capability is available without an encoder implementation.");
+            throw new NotSupportedException(
+                "Vulkan machine-learning encoder is unavailable: "
+                + ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.MachineLearning.Execution.UnavailableReason);
         }
 
         public override RHIWorkGraphEncoder BeginWorkGraphPass(in RHIWorkGraphPassDescriptor descriptor)
@@ -591,8 +594,9 @@ namespace SharpGPU
             ThrowIfDisposed();
             ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.WorkGraph.Execution.Require(
                 "Vulkan work-graph passes");
-            throw new InvalidOperationException(
-                "Vulkan work-graph capability is available without an encoder implementation.");
+            throw new NotSupportedException(
+                "Vulkan work-graph passes are unavailable: "
+                + ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.WorkGraph.Execution.UnavailableReason);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -601,8 +605,9 @@ namespace SharpGPU
             ThrowIfDisposed();
             ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.WorkGraph.Execution.Require(
                 "Vulkan work-graph passes");
-            throw new InvalidOperationException(
-                "Vulkan work-graph capability is available without an encoder implementation.");
+            throw new NotSupportedException(
+                "Vulkan work-graph passes are unavailable: "
+                + ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.WorkGraph.Execution.UnavailableReason);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -611,8 +616,9 @@ namespace SharpGPU
             ThrowIfDisposed();
             ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.WorkGraph.Execution.Require(
                 "Vulkan work-graph encoder");
-            throw new InvalidOperationException(
-                "Vulkan work-graph capability is available without an encoder implementation.");
+            throw new NotSupportedException(
+                "Vulkan work-graph encoder is unavailable: "
+                + ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.WorkGraph.Execution.UnavailableReason);
         }
         protected override void Release()
         {

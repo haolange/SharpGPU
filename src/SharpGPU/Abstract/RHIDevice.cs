@@ -240,6 +240,9 @@ namespace SharpGPU
         public abstract RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor);
         public abstract RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor);
         public abstract RHIPipelineCache CreatePipelineCache();
+        public abstract RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor);
+        public abstract RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor);
+        public abstract RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor);
         public abstract RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor);
         public abstract RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor);
         public abstract RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor);

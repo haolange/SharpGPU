@@ -1567,6 +1567,11 @@ namespace SharpGPU
                         "Vulkan Work Graph execution is not exposed by SharpGPU.",
                         ERHICapabilityProbeKind.BackendContract,
                         "SharpGPU Vulkan factory surface")),
+                indirectCommandBuffer: new RHIIndirectCommandBufferCapabilities(
+                    execution: RHICapability.Unavailable(
+                        "Vulkan device-generated / NV indirect commands are not exposed by SharpGPU.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Vulkan ICB factory surface")),
                 compute: new RHIComputeCapabilities(
                     ERHIWaveOperationStrategy.Basic,
                     waveOperations: RHICapability.Available(
@@ -1900,6 +1905,8 @@ namespace SharpGPU
 
         public override RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor)
         {
+            ThrowIfDisposed();
+            Capabilities.RayTracing.Pipeline.Require("Vulkan ray-tracing pipelines");
             return new VulkanRaytracingPipeline(this, descriptor);
         }
 
@@ -1914,13 +1921,47 @@ namespace SharpGPU
             return new VulkanPipelineCache(this);
         }
 
+        public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(
+            in RHIComputeIndirectCommandBufferDescription descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.IndirectCommandBuffer.Execution.Require(
+                "Vulkan compute indirect command buffer");
+            throw new NotSupportedException(
+                "Vulkan compute IndirectCommandBuffer is unavailable: "
+                + Capabilities.IndirectCommandBuffer.Execution.UnavailableReason);
+        }
+
+        public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(
+            in RHIRayTracingIndirectCommandBufferDescription descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.IndirectCommandBuffer.Execution.Require(
+                "Vulkan ray-tracing indirect command buffer");
+            throw new NotSupportedException(
+                "Vulkan ray-tracing IndirectCommandBuffer is unavailable: "
+                + Capabilities.IndirectCommandBuffer.Execution.UnavailableReason);
+        }
+
+        public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(
+            in RHIRasterIndirectCommandBufferDescription descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.IndirectCommandBuffer.Execution.Require(
+                "Vulkan raster indirect command buffer");
+            throw new NotSupportedException(
+                "Vulkan raster IndirectCommandBuffer is unavailable: "
+                + Capabilities.IndirectCommandBuffer.Execution.UnavailableReason);
+        }
+
         public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
         {
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
                 "Vulkan machine-learning pipelines");
-            throw new InvalidOperationException(
-                "Vulkan machine-learning capability is available without a pipeline implementation.");
+            throw new NotSupportedException(
+                "Vulkan machine-learning pipelines are unavailable: "
+                + Capabilities.MachineLearning.Execution.UnavailableReason);
         }
 
         public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
@@ -1928,8 +1969,9 @@ namespace SharpGPU
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
                 "Vulkan machine-learning binding sets");
-            throw new InvalidOperationException(
-                "Vulkan machine-learning capability is available without a binding-set implementation.");
+            throw new NotSupportedException(
+                "Vulkan machine-learning binding sets are unavailable: "
+                + Capabilities.MachineLearning.Execution.UnavailableReason);
         }
 
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
@@ -1937,8 +1979,9 @@ namespace SharpGPU
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
                 "Vulkan machine-learning tensors");
-            throw new InvalidOperationException(
-                "Vulkan machine-learning capability is available without a tensor implementation.");
+            throw new NotSupportedException(
+                "Vulkan machine-learning tensors are unavailable: "
+                + Capabilities.MachineLearning.Execution.UnavailableReason);
         }
 
         public override RHIMLProgram CreateMLProgram(in RHIMLProgramDescriptor descriptor)
@@ -1946,8 +1989,9 @@ namespace SharpGPU
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
                 "Vulkan machine-learning programs");
-            throw new InvalidOperationException(
-                "Vulkan machine-learning capability is available without a program implementation.");
+            throw new NotSupportedException(
+                "Vulkan machine-learning programs are unavailable: "
+                + Capabilities.MachineLearning.Execution.UnavailableReason);
         }
 
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
@@ -1955,8 +1999,9 @@ namespace SharpGPU
             ThrowIfDisposed();
             Capabilities.WorkGraph.Execution.Require(
                 "Vulkan work-graph pipelines");
-            throw new InvalidOperationException(
-                "Vulkan work-graph capability is available without a pipeline implementation.");
+            throw new NotSupportedException(
+                "Vulkan work-graph pipelines are unavailable: "
+                + Capabilities.WorkGraph.Execution.UnavailableReason);
         }
 
         public int GetQueueFamilyIndex(in ERHIPipelineType pipeline)

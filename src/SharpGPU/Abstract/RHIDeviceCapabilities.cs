@@ -520,6 +520,16 @@ namespace SharpGPU
         }
     }
 
+    public sealed class RHIIndirectCommandBufferCapabilities
+    {
+        public RHICapability Execution { get; }
+
+        public RHIIndirectCommandBufferCapabilities(RHICapability execution)
+        {
+            Execution = execution;
+        }
+    }
+
     public sealed class RHIComputeCapabilities
     {
         public ERHIWaveOperationStrategy WaveOperationStrategy { get; }
@@ -547,6 +557,7 @@ namespace SharpGPU
         public RHIMeshCapabilities Mesh { get; }
         public RHIMachineLearningCapabilities MachineLearning { get; }
         public RHIWorkGraphCapabilities WorkGraph { get; }
+        public RHIIndirectCommandBufferCapabilities IndirectCommandBuffer { get; }
         public RHIComputeCapabilities Compute { get; }
 
         internal static RHIDeviceCapabilities CreateUnprobed(string probeSource)
@@ -610,6 +621,7 @@ namespace SharpGPU
                 new RHIMeshCapabilities(unavailable),
                 new RHIMachineLearningCapabilities(unavailable),
                 new RHIWorkGraphCapabilities(unavailable),
+                new RHIIndirectCommandBufferCapabilities(unavailable),
                 new RHIComputeCapabilities(
                     waveOperationStrategy: ERHIWaveOperationStrategy.Pending,
                     waveOperations: unavailable));
@@ -627,6 +639,7 @@ namespace SharpGPU
             RHIMeshCapabilities mesh,
             RHIMachineLearningCapabilities machineLearning,
             RHIWorkGraphCapabilities workGraph,
+            RHIIndirectCommandBufferCapabilities indirectCommandBuffer,
             RHIComputeCapabilities compute)
         {
             Raster = raster ?? throw new ArgumentNullException(nameof(raster));
@@ -640,6 +653,7 @@ namespace SharpGPU
             Mesh = mesh ?? throw new ArgumentNullException(nameof(mesh));
             MachineLearning = machineLearning ?? throw new ArgumentNullException(nameof(machineLearning));
             WorkGraph = workGraph ?? throw new ArgumentNullException(nameof(workGraph));
+            IndirectCommandBuffer = indirectCommandBuffer ?? throw new ArgumentNullException(nameof(indirectCommandBuffer));
             Compute = compute ?? throw new ArgumentNullException(nameof(compute));
         }
     }

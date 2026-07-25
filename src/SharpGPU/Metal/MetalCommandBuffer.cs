@@ -19,6 +19,7 @@ namespace SharpGPU
         private readonly MetalComputeEncoder m_ComputeEncoder;
         private readonly MetalRasterEncoder m_RasterEncoder;
         private readonly MetalRaytracingEncoder m_RaytracingEncoder;
+        private readonly MetalMLEncoder m_MLEncoder;
 
         private MTL4CommandBuffer m_NativeCommandBuffer4;
         private MTL4CommandAllocator m_NativeCommandAllocator4;
@@ -41,6 +42,7 @@ namespace SharpGPU
             m_ComputeEncoder = new MetalComputeEncoder(this);
             m_RasterEncoder = new MetalRasterEncoder(this);
             m_RaytracingEncoder = new MetalRaytracingEncoder(this);
+            m_MLEncoder = new MetalMLEncoder(this);
 
             ResetState();
         }
@@ -118,20 +120,20 @@ namespace SharpGPU
 
         public override RHIMLEncoder BeginMLPass(in RHIMLPassDescriptor descriptor)
         {
-            ThrowIfDisposed();
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.MachineLearning);
             ((MetalCommandQueue)m_CommandQueue).MetalDevice.Capabilities.MachineLearning.Execution.Require(
                 "Metal machine-learning passes");
-            throw new InvalidOperationException(
-                "Metal machine-learning capability is available without an encoder implementation.");
+            m_MLEncoder.BeginPass(descriptor);
+            BeginEncoderBarrierState();
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.MachineLearning);
+            m_UsesMachineLearning = true;
+            return m_MLEncoder;
         }
 
         public override void EndMLPass()
         {
-            ThrowIfDisposed();
-            ((MetalCommandQueue)m_CommandQueue).MetalDevice.Capabilities.MachineLearning.Execution.Require(
-                "Metal machine-learning passes");
-            throw new InvalidOperationException(
-                "Metal machine-learning capability is available without an encoder implementation.");
+            m_MLEncoder.EndPass();
+            EndEncoderBarrierState();
         }
 
         public override RHIWorkGraphEncoder BeginWorkGraphPass(in RHIWorkGraphPassDescriptor descriptor)
@@ -139,8 +141,8 @@ namespace SharpGPU
             ThrowIfDisposed();
             ((MetalCommandQueue)m_CommandQueue).MetalDevice.Capabilities.WorkGraph.Execution.Require(
                 "Metal work-graph passes");
-            throw new InvalidOperationException(
-                "Metal work-graph capability is available without an encoder implementation.");
+            throw new NotSupportedException(
+                "Metal Work Graph execution is not exposed by SharpGPU.");
         }
 
         public override void EndWorkGraphPass()
@@ -148,8 +150,8 @@ namespace SharpGPU
             ThrowIfDisposed();
             ((MetalCommandQueue)m_CommandQueue).MetalDevice.Capabilities.WorkGraph.Execution.Require(
                 "Metal work-graph passes");
-            throw new InvalidOperationException(
-                "Metal work-graph capability is available without an encoder implementation.");
+            throw new NotSupportedException(
+                "Metal Work Graph execution is not exposed by SharpGPU.");
         }
 
         public override void End()
@@ -189,8 +191,7 @@ namespace SharpGPU
             ThrowIfDisposed();
             ((MetalCommandQueue)m_CommandQueue).MetalDevice.Capabilities.MachineLearning.Execution.Require(
                 "Metal machine-learning encoder");
-            throw new InvalidOperationException(
-                "Metal machine-learning capability is available without an encoder implementation.");
+            return m_MLEncoder;
         }
 
         public override RHIWorkGraphEncoder GetWorkGraphEncoder()
@@ -198,8 +199,8 @@ namespace SharpGPU
             ThrowIfDisposed();
             ((MetalCommandQueue)m_CommandQueue).MetalDevice.Capabilities.WorkGraph.Execution.Require(
                 "Metal work-graph encoder");
-            throw new InvalidOperationException(
-                "Metal work-graph capability is available without an encoder implementation.");
+            throw new NotSupportedException(
+                "Metal Work Graph execution is not exposed by SharpGPU.");
         }
         internal void SetPresentDrawable(in CAMetalDrawable drawable)
         {
@@ -327,6 +328,7 @@ namespace SharpGPU
             m_ComputeEncoder.Dispose();
             m_RasterEncoder.Dispose();
             m_RaytracingEncoder.Dispose();
+            m_MLEncoder.Dispose();
             m_NativeTransientBatch.Dispose();
             ReleaseNativeCommandObjects();
         }
