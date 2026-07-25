@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
+// TODO: follow-up — split VulkanUtility by domain; left intact in layout convergence.
+
 namespace SharpGPU
 {
 #pragma warning disable CA1416

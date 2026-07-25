@@ -190,7 +190,7 @@ public sealed class MetalRasterSubpassLoweringTests
     public void NativeTransientBatchIsBoundedByRecordingReuse()
     {
         List<IntPtr> released = new();
-        using MetalNativeTransientBatch batch =
+        using MetalTransientNativeBatch batch =
             new(released.Add);
 
         batch.RetainOwnership(new IntPtr(1));
@@ -270,7 +270,7 @@ public sealed class MetalRasterSubpassLoweringTests
     public void NativeTransientCheckpointRollsBackOnlyTheFailedAttempt()
     {
         List<IntPtr> released = new();
-        using MetalNativeTransientBatch batch =
+        using MetalTransientNativeBatch batch =
             new(released.Add);
 
         batch.RetainOwnership(new IntPtr(10));

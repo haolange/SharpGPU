@@ -87,23 +87,13 @@
 		<Compile Remove="Dx12/**/*.cs" />
 	</ItemGroup>
 
-	<ItemGroup Condition="'$(PkgMicrosoft_Direct3D_D3D12)' != '' and '$(Platform)' == 'x64'">
-		<None Include="$(PkgMicrosoft_Direct3D_D3D12)\build\native\bin\x64\D3D12Core.dll" Link="D3D12\D3D12Core.dll" CopyToOutputDirectory="PreserveNewest" />
-		<None Include="$(PkgMicrosoft_Direct3D_D3D12)\build\native\bin\x64\d3d12SDKLayers.dll" Link="D3D12\d3d12SDKLayers.dll" CopyToOutputDirectory="PreserveNewest" />
-	</ItemGroup>
-
-	<ItemGroup Condition="'$(PkgMicrosoft_Direct3D_D3D12)' != '' and '$(Platform)' == 'ARM64'">
-		<None Include="$(PkgMicrosoft_Direct3D_D3D12)\build\native\bin\ARM64\D3D12Core.dll" Link="D3D12\D3D12Core.dll" CopyToOutputDirectory="PreserveNewest" />
-		<None Include="$(PkgMicrosoft_Direct3D_D3D12)\build\native\bin\ARM64\d3d12SDKLayers.dll" Link="D3D12\d3d12SDKLayers.dll" CopyToOutputDirectory="PreserveNewest" />
-	</ItemGroup>
-
 	<ItemGroup>
 	  <ProjectReference Include="..\..\..\ThirdParty\Apple\SharpMetal\SharpMetal.csproj" />
 	  <ProjectReference Include="..\..\..\ThirdParty\Vortice.Windows\src\Vortice.Direct3D12\Vortice.Direct3D12.csproj" Condition="'$(InfinityBuildOS)' == 'Win'" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Include="..\..\..\..\..\docs\SharpGPU\PackageReadme.md" Pack="true" PackagePath="README.md" />
+		<None Include="..\..\..\..\..\docs\SharpGPU\PackageReadme.md" Pack="true" PackagePath="README.md" Visible="false" />
 	</ItemGroup>
 
 </Project>

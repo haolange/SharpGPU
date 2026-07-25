@@ -1,4 +1,407 @@
+using SharpGPU.Core;
+using SharpGPU.Mathematics;
 using System;
+
+namespace SharpGPU
+{
+    public struct RHIColorAttachmentDescriptor
+    {
+        public RHITextureSubresourceRange SubresourceRange;
+        public float4 ClearValue;
+        public ERHILoadAction LoadAction;
+        public ERHIStoreAction StoreAction;
+        public ERHIRasterAttachmentAccess Access;
+        public RHITexture RenderTarget;
+        public RHITextureSubresourceRange ResolveSubresourceRange;
+        public RHITexture? ResolveTarget;
+    }
+
+    public struct RHIDepthStencilAttachmentDescriptor
+    {
+        public RHITextureSubresourceRange SubresourceRange;
+        public float DepthClearValue;
+        public ERHILoadAction DepthLoadOp;
+        public ERHIStoreAction DepthStoreOp;
+        public int StencilClearValue;
+        public ERHILoadAction StencilLoadOp;
+        public ERHIStoreAction StencilStoreOp;
+        public RHITexture RenderTarget;
+        public RHITextureSubresourceRange ResolveSubresourceRange;
+        public EResolveMode DepthResolveMode;
+        public EResolveMode StencilResolveMode;
+        public RHITexture? ResolveTarget;
+    }
+
+    public struct RHIAttachmentIndexArray
+    {
+        public static readonly RHIAttachmentIndexArray Empty = new RHIAttachmentIndexArray(0);
+
+        public const int MaxAttachments = 8;
+
+        private int a0;
+
+        private int a1;
+
+        private int a2;
+
+        private int a3;
+
+        private int a4;
+
+        private int a5;
+
+        private int a6;
+
+        private int a7;
+
+        private int activeAttachments;
+
+        public int Length => activeAttachments;
+
+        public unsafe int this[int index]
+        {
+            get
+            {
+                if ((uint)index >= 8u)
+                {
+                    throw new IndexOutOfRangeException($"AttachmentIndexArray - index must be in range of [0, {8}[");
+                }
+
+                if ((uint)index >= activeAttachments)
+                {
+                    throw new IndexOutOfRangeException($"AttachmentIndexArray - index must be in range of [0, {activeAttachments}[");
+                }
+
+                fixed (RHIAttachmentIndexArray* ptr = &this)
+                {
+                    int* ptr2 = (int*)ptr;
+                    return ptr2[index];
+                }
+            }
+            set
+            {
+                if ((uint)index >= 8u)
+                {
+                    throw new IndexOutOfRangeException($"AttachmentIndexArray - index must be in range of [0, {8}[");
+                }
+
+                if ((uint)index >= activeAttachments)
+                {
+                    throw new IndexOutOfRangeException($"AttachmentIndexArray - index must be in range of [0, {activeAttachments}[");
+                }
+
+                fixed (RHIAttachmentIndexArray* ptr = &this)
+                {
+                    int* ptr2 = (int*)ptr;
+                    ptr2[index] = value;
+                }
+            }
+        }
+
+        public RHIAttachmentIndexArray(in int numAttachments)
+        {
+            if (numAttachments < 0 || numAttachments > 8)
+            {
+                throw new ArgumentException($"AttachmentIndexArray - numAttachments must be in range of [0, {8}[");
+            }
+
+            a0 = (a1 = (a2 = (a3 = (a4 = (a5 = (a6 = (a7 = -1)))))));
+            activeAttachments = numAttachments;
+        }
+
+        public RHIAttachmentIndexArray(int[] attachments) : this(attachments.Length)
+        {
+            for (int i = 0; i < activeAttachments; i++)
+            {
+                this[i] = attachments[i];
+            }
+        }
+    }
+
+    public struct RHISubPassDescriptor
+    {
+        public ERHISubPassFlags Flags;
+        public RHIAttachmentIndexArray ColorInputs;
+        public RHIAttachmentIndexArray ColorOutputs;
+        public RHIAttachmentIndexArray SampledFeedbackInputs;
+    }
+
+    public struct RHIRasterPassDescriptor
+    {
+        public string Name;
+        public uint ArrayLength;
+        public ERHISampleCount SampleCount;
+        public RHITimestampDescriptor? Timestamp;
+        public RHIOcclusionDescriptor? Occlusion;
+        public RHIStatisticsDescriptor? Statistics;
+        public RHITexture? ShadingRateTexture;
+        public Memory<RHIColorAttachmentDescriptor> ColorAttachments;
+        public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachment;
+        public Memory<RHISubPassDescriptor> SubPassDescriptors;
+    }
+
+    public abstract class RHIRasterEncoder : Disposal
+    {
+        protected RHICommandBuffer? m_CommandBuffer;
+        protected RHIRasterPipeline? m_CachedPipeline;
+        private RasterPassPlan? m_RasterPassPlan;
+        private int m_CurrentSubPassIndex = -1;
+        private int m_PipelineSubPassIndex = -1;
+
+        internal void BeginPass(in RHIRasterPassDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            if (m_RasterPassPlan != null)
+            {
+                throw new InvalidOperationException("A raster pass is already active on this encoder.");
+            }
+
+            RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+            m_RasterPassPlan = plan;
+            m_CurrentSubPassIndex = 0;
+            m_PipelineSubPassIndex = -1;
+            m_CachedPipeline = null;
+            try
+            {
+                BeginPassCore(plan);
+            }
+            catch
+            {
+                ClearRasterPassState();
+                throw;
+            }
+        }
+
+        internal abstract void BeginPassCore(RasterPassPlan plan);
+        public abstract void Barrier(in RHIBarrier barrier);
+        public abstract void Barriers(ReadOnlySpan<RHIBarrier> barriers);
+        public abstract void PushDebugGroup(string name);
+        public abstract void PopDebugGroup();
+        public abstract void WriteTimestamp(in uint index);
+        public abstract void BeginOcclusion(in uint index);
+        public abstract void EndOcclusion(in uint index);
+        public abstract void BeginStatistics(in uint index);
+        public abstract void EndStatistics(in uint index);
+        public void NextSubPass()
+        {
+            ThrowIfDisposed();
+            RasterPassPlan plan = RequireActiveRasterPass();
+            int nextSubPassIndex = m_CurrentSubPassIndex + 1;
+            if (nextSubPassIndex >= plan.SubPassCount)
+            {
+                throw new InvalidOperationException(
+                    $"Raster pass '{plan.Name}' has no subpass after index {m_CurrentSubPassIndex}.");
+            }
+
+            NextSubPassCore(plan, m_CurrentSubPassIndex, nextSubPassIndex);
+            m_CurrentSubPassIndex = nextSubPassIndex;
+            m_PipelineSubPassIndex = -1;
+            m_CachedPipeline = null;
+        }
+
+        internal abstract void NextSubPassCore(
+            RasterPassPlan plan,
+            int sourceSubPassIndex,
+            int destinationSubPassIndex);
+        public abstract void SetScissor(in Rect rect);
+        public abstract void SetScissors(in Memory<Rect> rects);
+        public abstract void SetViewport(in Viewport viewport);
+        public abstract void SetViewports(in Memory<Viewport> viewports);
+        public abstract void SetStencilRef(in uint value);
+        public abstract void SetBlendFactor(in float4 value);
+        public void SetPipeline(RHIRasterPipeline pipeline)
+        {
+            ThrowIfDisposed();
+            RasterPassPlan plan = RequireActiveRasterPass();
+            ValidatePipelineCompatibility(plan, m_CurrentSubPassIndex, pipeline);
+            SetPipelineCore(pipeline);
+            m_CachedPipeline = pipeline;
+            m_PipelineSubPassIndex = m_CurrentSubPassIndex;
+        }
+
+        internal abstract void SetPipelineCore(RHIRasterPipeline pipeline);
+        public abstract void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex);
+        public abstract void SetPushConstants(IntPtr data, in uint size, in uint offset = 0);
+        public abstract void SetIndexBuffer(RHIBuffer buffer, in uint offset);
+        public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset);
+        public abstract void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner);
+        public void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
+        {
+            ValidateDrawState();
+            DrawCore(vertexCount, instanceCount, firstVertex, firstInstance);
+        }
+
+        public void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
+        {
+            ValidateDrawState();
+            DrawIndexedCore(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
+        }
+
+        public void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        {
+            ValidateDrawState();
+            DrawIndirectCore(argsBuffer, offset, drawCount);
+        }
+
+        public void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        {
+            ValidateDrawState();
+            DrawIndexedIndirectCore(argsBuffer, offset, drawCount);
+        }
+
+        public void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
+        {
+            ValidateDrawState();
+            DispatchMeshCore(groupCountX, groupCountY, groupCountZ);
+        }
+
+        public void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
+        {
+            ValidateDrawState();
+            DispatchMeshIndirectCore(argsBuffer, argsOffset);
+        }
+
+        internal abstract void DrawCore(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance);
+        internal abstract void DrawIndexedCore(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance);
+        internal abstract void DrawIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
+        internal abstract void DrawIndexedIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
+        internal abstract void DispatchMeshCore(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
+        internal abstract void DispatchMeshIndirectCore(RHIBuffer argsBuffer, in uint argsOffset);
+        public void EndPass()
+        {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The raster encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Raster);
+            RasterPassPlan plan = RequireActiveRasterPass();
+            if (m_CurrentSubPassIndex != plan.SubPassCount - 1)
+            {
+                throw new InvalidOperationException(
+                    $"Raster pass '{plan.Name}' ended at subpass {m_CurrentSubPassIndex}, " +
+                    $"but {plan.SubPassCount} subpasses were declared.");
+            }
+
+            EndPassCore();
+            commandBuffer.MarkEncoderEndFromEncoder();
+            ClearRasterPassState();
+        }
+
+        internal abstract void EndPassCore();
+
+        internal int CurrentSubPassIndex => m_CurrentSubPassIndex;
+
+        private RasterPassPlan RequireActiveRasterPass()
+        {
+            return m_RasterPassPlan ??
+                throw new InvalidOperationException("No raster pass is active on this encoder.");
+        }
+
+        private void ValidateDrawState()
+        {
+            ThrowIfDisposed();
+            RasterPassPlan plan = RequireActiveRasterPass();
+            if (m_CachedPipeline == null || m_PipelineSubPassIndex != m_CurrentSubPassIndex)
+            {
+                throw new InvalidOperationException(
+                    $"A compatible raster pipeline must be set for subpass {m_CurrentSubPassIndex} before drawing.");
+            }
+            if (m_CachedPipeline.IsDisposed)
+            {
+                throw new ObjectDisposedException(m_CachedPipeline.GetType().FullName);
+            }
+
+            ValidatePipelineCompatibility(plan, m_CurrentSubPassIndex, m_CachedPipeline);
+        }
+
+        private static void ValidatePipelineCompatibility(
+            RasterPassPlan plan,
+            int subPassIndex,
+            RHIRasterPipeline pipeline)
+        {
+            if (pipeline == null)
+            {
+                throw new ArgumentNullException(nameof(pipeline));
+            }
+            if (pipeline.IsDisposed)
+            {
+                throw new ObjectDisposedException(pipeline.GetType().FullName);
+            }
+
+            RHIRasterPipelineDescriptor descriptor =
+                pipeline.DescriptorInternal;
+            ERHISampleCount pipelineSampleCount =
+                RHIRasterPipelineContract.ValidateSampleCount(
+                    descriptor.SampleCount,
+                    nameof(descriptor.SampleCount));
+            if (pipelineSampleCount != plan.SampleCount)
+            {
+                throw new ArgumentException(
+                    $"Raster pipeline sample count {pipelineSampleCount} does not match pass sample count {plan.SampleCount}.",
+                    nameof(pipeline));
+            }
+
+            ERHIPixelFormat[] colorFormats = descriptor.ColorFormats ??
+                throw new ArgumentException("Raster pipeline ColorFormats cannot be null.", nameof(pipeline));
+            if (colorFormats.Length != plan.ColorAttachmentCount)
+            {
+                throw new ArgumentException(
+                    $"Raster pipeline declares {colorFormats.Length} color formats, " +
+                    $"but the pass declares {plan.ColorAttachmentCount} color attachments.",
+                    nameof(pipeline));
+            }
+            for (int i = 0; i < colorFormats.Length; ++i)
+            {
+                ERHIPixelFormat attachmentFormat =
+                    plan.GetColorAttachment(i).RenderTarget.Descriptor.Format;
+                if (colorFormats[i] != attachmentFormat)
+                {
+                    throw new ArgumentException(
+                        $"Raster pipeline color format {colorFormats[i]} at index {i} " +
+                        $"does not match pass attachment format {attachmentFormat}.",
+                        nameof(pipeline));
+                }
+            }
+
+            if (descriptor.DepthFormat != plan.DepthStencilFormat)
+            {
+                throw new ArgumentException(
+                    $"Raster pipeline depth/stencil format {descriptor.DepthFormat} " +
+                    $"does not match pass format {plan.DepthStencilFormat}.",
+                    nameof(pipeline));
+            }
+
+            bool usesDualSourceColor =
+                RHIRasterPipelineContract.UsesDualSourceBlend(
+                    descriptor.RenderState.BlendState,
+                    colorFormats.Length);
+            RHIAttachmentInterfaceSignature pipelineSignature =
+                descriptor.AttachmentInterface.NormalizeForPipeline(
+                    colorFormats.Length,
+                    usesDualSourceColor);
+            RHIAttachmentInterfaceSignature passSignature =
+                plan.GetSubPass(subPassIndex).AttachmentInterface;
+            RHIRasterPipelineContract.ValidateDepthStencilCompatibility(
+                in descriptor,
+                in passSignature,
+                plan.DepthStencilAspects,
+                nameof(pipeline));
+            if (!passSignature.IsPassCompatibleWith(pipelineSignature))
+            {
+                throw new ArgumentException(
+                    $"Raster pipeline attachment interface {pipelineSignature} " +
+                    $"does not match subpass interface {passSignature}.",
+                    nameof(pipeline));
+            }
+        }
+
+        private void ClearRasterPassState()
+        {
+            m_RasterPassPlan = null;
+            m_CurrentSubPassIndex = -1;
+            m_PipelineSubPassIndex = -1;
+            m_CachedPipeline = null;
+        }
+    }
+}
 
 namespace SharpGPU
 {

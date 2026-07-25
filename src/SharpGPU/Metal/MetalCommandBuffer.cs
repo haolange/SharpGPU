@@ -11,10 +11,10 @@ namespace SharpGPU
         internal CAMetalDrawable PresentDrawable => m_PresentDrawable;
         internal bool UsesMachineLearning => m_UsesMachineLearning;
         internal bool UsesArgumentTables => m_UsesArgumentTables;
-        internal MetalNativeTransientBatch NativeTransientBatch =>
+        internal MetalTransientNativeBatch NativeTransientBatch =>
             m_NativeTransientBatch;
 
-        private readonly MetalNativeTransientBatch m_NativeTransientBatch;
+        private readonly MetalTransientNativeBatch m_NativeTransientBatch;
         private readonly MetalTransferEncoder m_TransferEncoder;
         private readonly MetalComputeEncoder m_ComputeEncoder;
         private readonly MetalRasterEncoder m_RasterEncoder;
@@ -36,7 +36,7 @@ namespace SharpGPU
         public MetalCommandBuffer(MetalCommandQueue commandQueue)
         {
             m_CommandQueue = commandQueue;
-            m_NativeTransientBatch = new MetalNativeTransientBatch();
+            m_NativeTransientBatch = new MetalTransientNativeBatch();
             m_TransferEncoder = new MetalTransferEncoder(this);
             m_ComputeEncoder = new MetalComputeEncoder(this);
             m_RasterEncoder = new MetalRasterEncoder(this);
