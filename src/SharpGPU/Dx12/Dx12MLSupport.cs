@@ -29,7 +29,7 @@ namespace SharpGPU
                 DataType = ConvertToDirectMLDataType(descriptor.DataType),
                 Flags = TensorFlags.None,
                 Sizes = descriptor.Dimensions.ToArray(),
-                Strides = RHIMLHelpers.HasExplicitStrides(descriptor) ? RHIMLHelpers.GetEffectiveStrides(descriptor) : null!,
+                Strides = RHIMLHelpers.GetEffectiveStrides(descriptor),
                 TotalTensorSizeInBytes = RHIMLHelpers.CalculateMinimumByteLength(descriptor),
                 GuaranteedBaseOffsetAlignment = 0,
             };
@@ -593,7 +593,7 @@ namespace SharpGPU
         private readonly BindingDescription? m_TemporaryBinding;
 
         private IDMLBindingTable? m_InitializerBindingTable;
-        private IDMLBindingTable[] m_ExecutionBindingTables;
+        private IDMLBindingTable?[] m_ExecutionBindingTables;
         private Dx12DescriptorInfo[] m_ExecutionDescriptorAllocations;
         private int[] m_ExecutionDescriptorCounts;
         private Dx12DescriptorInfo m_InitializerDescriptorAllocation;
@@ -619,7 +619,7 @@ namespace SharpGPU
 
             m_ProgramInputBindings = CreateTensorBindings(Inputs);
             m_ProgramOutputBindings = CreateTensorBindings(Outputs);
-            m_ExecutionBindingTables = new IDMLBindingTable[dx12Pipeline.StageCount];
+            m_ExecutionBindingTables = new IDMLBindingTable?[dx12Pipeline.StageCount];
             m_ExecutionDescriptorAllocations = new Dx12DescriptorInfo[dx12Pipeline.StageCount];
             m_ExecutionDescriptorCounts = new int[dx12Pipeline.StageCount];
             m_StagePersistentBindings = new BindingDescription?[dx12Pipeline.StageCount];
@@ -738,7 +738,8 @@ namespace SharpGPU
 
         internal void PrepareForExecution(int stageIndex)
         {
-            IDMLBindingTable bindingTable = m_ExecutionBindingTables[stageIndex];
+            IDMLBindingTable bindingTable = m_ExecutionBindingTables[stageIndex]
+                ?? throw new InvalidOperationException($"DX12 ML execution binding table for stage {stageIndex} is unavailable.");
             bindingTable.BindInputs(m_StageInputs[stageIndex]);
             bindingTable.BindOutputs(m_StageOutputs[stageIndex]);
             if (m_TemporaryBinding.HasValue)
@@ -754,7 +755,8 @@ namespace SharpGPU
 
         internal IDMLBindingTable GetExecutionBindingTable(int stageIndex)
         {
-            return m_ExecutionBindingTables[stageIndex];
+            return m_ExecutionBindingTables[stageIndex]
+                ?? throw new InvalidOperationException($"DX12 ML execution binding table for stage {stageIndex} is unavailable.");
         }
 
         internal void MarkInitialized()
@@ -885,7 +887,7 @@ namespace SharpGPU
 
             for (int i = 0; i < result.Length; ++i)
             {
-                if (result[i] == null!)
+                if (result[i] is null)
                 {
                     throw new InvalidOperationException($"DX12 ML binding set is missing a {kind} tensor at index {i}.");
                 }
@@ -923,7 +925,7 @@ namespace SharpGPU
             m_InitializerBindingTable = null;
 
             ReleaseExecutionBindingsAndDescriptors();
-            m_ExecutionBindingTables = Array.Empty<IDMLBindingTable>();
+            m_ExecutionBindingTables = Array.Empty<IDMLBindingTable?>();
             m_ExecutionDescriptorAllocations = Array.Empty<Dx12DescriptorInfo>();
             m_ExecutionDescriptorCounts = Array.Empty<int>();
 
@@ -954,7 +956,7 @@ namespace SharpGPU
             for (int i = 0; i < m_ExecutionDescriptorCounts.Length; ++i)
             {
                 m_ExecutionBindingTables[i]?.Release();
-                m_ExecutionBindingTables[i] = null!;
+                m_ExecutionBindingTables[i] = null;
 
                 if (m_ExecutionDescriptorCounts[i] > 0)
                 {

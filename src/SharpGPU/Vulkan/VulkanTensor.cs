@@ -3,7 +3,6 @@ using Vortice.Vulkan;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8618
     internal unsafe class VulkanTensor : RHITensor
     {
         public VkBuffer NativeBuffer => m_NativeBuffer;
@@ -89,7 +88,6 @@ namespace SharpGPU
             VulkanNative.vkFreeMemory(m_VulkanDevice.NativeDevice, m_NativeMemory, null);
         }
     }
-#pragma warning restore CS8618
 }
 
 

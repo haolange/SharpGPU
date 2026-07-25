@@ -1,38 +1,52 @@
 # SharpGPU Feature Matrix
 
-This matrix is the public-ready contract surface for SharpGPU feature claims.
-The source of truth for runtime evidence is the per-platform JSON written by
-`SharpGPU.Conformance.Tests` under `Engine/Artifacts/SharpGPU/`.
+This matrix describes the active SharpGPU public contract. Runtime facts come
+from `RHIDevice.Capabilities`; platform qualification outcomes come from the
+typed per-platform reports under `Engine/Artifacts/SharpGPU/`. Capability and
+qualification are deliberately separate: a successful native probe is not a
+substitute for a passed runtime scenario.
 
-Rows marked as `Device feature flag` map to `RHIDeviceFeature`. Rows marked as
-`API contract` are public SharpGPU APIs without a dedicated feature flag in v1.
+Rows marked `Typed capability` map to one domain of
+`RHIDeviceCapabilities`. Rows marked `API contract` are always present and must
+either execute through an accurately reported native strategy or fail with the
+documented exception/status model.
 
-## Verified Platform Artifacts
+## Platform Qualification Artifacts
 
-| Platform | Artifact | Verified evidence |
+| Platform | Artifact | Current status |
 |---|---|---|
-| Windows x64 / RTX 5090 | `Engine/Artifacts/SharpGPU/feature-report-win-x64.json` | DX12 WorkGraph dispatch/readback; DX12 Query, Bindless, StorageQueue, PipelineLibrary, DirectML contract matrix |
-| macOS ARM64 / Apple M3 Max | `Engine/Artifacts/SharpGPU/feature-report-macos-arm64.json` | Metal timestamp/occlusion native query contract; Metal ML false/throws contract; per-backend feature document schema |
+| Windows x64 | `Engine/Artifacts/SharpGPU/feature-report-win-x64.json` | W12 must regenerate the report with the typed schema after all applicable qualified gates pass |
+| Android ARM64 | `Engine/Artifacts/SharpGPU/feature-report-android-arm64.json` | Generated only after matching-device build/install/runtime qualification; no placeholder is permitted |
+| Linux x64 | none | `BLOCKED_PLATFORM` until matching-host Vulkan qualification passes |
+| macOS ARM64 | none | `BLOCKED_PLATFORM` until matching-host Metal qualification passes |
+| iOS/iPadOS ARM64 | none | `BLOCKED_PLATFORM` until matching-device Metal qualification passes |
 
 ## Public Contract Rows
 
-| Feature | Surface | Contract kind | Current conformance evidence | Unsupported behavior |
+| Feature | Surface | Contract kind | Required conformance evidence | Unsupported behavior |
 |---|---|---|---|---|
-| TimestampQueries | `RHIDeviceFeature.IsTimestampQueriesSupported`, `RHIQuery`, transfer/raster/compute timestamp encoding | Device feature flag | DX12 create + encode + submit + readback in `Dx12_TimestampQuery_ShouldCreateExecuteSubmitAndReadback`; Metal timestamp native counter heap contract is verified by macOS artifact | Feature false backends must throw `NotSupportedException` when creation/encoding is unavailable |
-| OcclusionQueries | `RHIDeviceFeature.IsOcclusionQueriesSupported`, `RHIQuery`, raster occlusion encoding | Device feature flag | Metal occlusion native render query contract is verified by macOS artifact; other backends are reported in per-platform feature JSON | Feature false backends must throw `NotSupportedException` when creation/encoding is unavailable |
-| PipelineStatisticsQueries | `RHIDeviceFeature.IsPipelineStatsQueriesSupported`, `RHIQuery`, statistics encoding | Device feature flag | Reported in per-platform feature JSON; Metal is false when a statistics counter set is unavailable | Feature false backends must throw `NotSupportedException` when creation/encoding is unavailable |
-| MachineLearning | `RHIDeviceFeature.IsMLSupported`, `RHIMLPipeline`, `RHIMLBindingSet`, `RHITensor`, `RHIMLEncoder` | Device feature flag | DX12 DirectML GEMM+ReLU end-to-end contract is native to `SharpGPU.Conformance.Tests`; Vulkan v1 false/throws and Metal ML false/throws are covered | Feature false backends must throw `NotSupportedException`; Vulkan v1 stays false until `VK_ARM_tensors`/`VK_ARM_data_graph` probing exists; Metal stays false until native ML package path exists |
-| Raytracing | `RHIDeviceFeature.IsRaytracingSupported`, acceleration structures, raytracing pipeline/pass | Device feature flag | DX12 false adapters now throw `NotSupportedException`; full create + dispatch + readback remains TODO(UNVERIFIED) before any backend is called verified | Feature false backends must throw `NotSupportedException` |
-| MeshShading | `RHIDeviceFeature.IsMeshShadingSupported`, mesh raster pipeline, mesh dispatch | Device feature flag | DX12 flag is forced false until the native mesh pipeline path is implemented and covered by conformance | Feature false backends must throw `NotSupportedException` |
-| Bindless | `RHIArgumentTableLayoutElement.Count > 1`, `RHIArgumentTable.SetBindElement(..., arrayIndex)` | API contract | DX12 bindless table create + array slot update in `Dx12_BindlessArgumentTable_ShouldCreateAndUpdateArraySlots` | Backend-specific missing bindless support must throw `NotSupportedException` rather than silently no-op |
-| StorageQueue | `RHIStorageQueue`, `RHIStorageBufferRequest`, `RHIStorageTextureRequest` | API contract | DX12 buffer request submit + mappable readback in `Dx12_StorageQueueBuffer_ShouldSubmitAndReadBackMappableDestination` | Unsupported CPU fallback paths, such as DX12 texture fallback without DirectStorage, throw `NotSupportedException` |
-| PipelineLibrary | `RHIPipelineLibrary` | API contract | DX12 create + serialize in `Dx12_PipelineLibrary_ShouldCreateAndSerialize`; raytracing state object store/load explicitly throws | Unsupported pipeline kinds must throw `NotSupportedException` |
-| WorkGraph | `RHIDeviceFeature.IsWorkgraphSupported`, `RHIWorkGraphPipeline`, `RHIWorkGraphEncoder` | Device feature flag | DX12 WorkGraph dispatch/readback conformance and workload encode benchmark; Vulkan/Metal false/throws conformance | Feature false backends must throw `NotSupportedException` |
+| TimestampQueries | `RHIDeviceCapabilities.Synchronization.TimestampQueries`, `RHIQuery`, timestamp encoding | Typed capability | create, encode, submit, resolve, and readback on every reported strategy | `CreateQuery`/encoding throws `NotSupportedException` when unavailable |
+| OcclusionQueries | `RHIDeviceCapabilities.Synchronization.OcclusionQueries`, `RHIQuery`, raster occlusion encoding | Typed capability | native raster query plus resolve/readback on every reported strategy | creation/encoding throws `NotSupportedException` when unavailable |
+| PipelineStatisticsQueries | `RHIDeviceCapabilities.Synchronization.PipelineStatisticsQueries`, `RHIQuery` | Typed capability | native statistics query plus resolve/readback | creation/encoding throws `NotSupportedException` when unavailable |
+| MachineLearning | `RHIDeviceCapabilities.MachineLearning.Execution`, `RHIMLPipeline`, `RHIMLBindingSet`, `RHITensor`, `RHIMLEncoder` | Typed capability | native operator compile/dispatch/readback; DX12 uses the DirectML qualified path | all ML factories throw `NotSupportedException` when unavailable; no CPU emulation |
+| Raytracing | `RHIDeviceCapabilities.RayTracing`, acceleration structures, raytracing pipeline/pass | Typed capability | native build/trace/readback before a backend may report an available tier | all ray-tracing factories throw `NotSupportedException` when unavailable |
+| MeshShading | `RHIDeviceCapabilities.Mesh.Shader`, mesh raster pipeline and dispatch | Typed capability | native mesh pipeline plus pixel/readback evidence | mesh factories/encoding throw `NotSupportedException` when unavailable |
+| Bindless | `RHIArgumentTableLayoutElement.Count`, `RHIArgumentTable.SetBindElement` | Typed capability + API contract | required/optional arrays, namespace mapping, cross-device/disposed validation, pool rollback, dispatch/readback | unsupported native descriptor semantics fail at layout/table creation; no typed dummy descriptors |
+| StorageQueue | `RHIDeviceCapabilities.Storage.NativeGpuFileIo`, `RHIStorageQueue` | Typed capability + API contract | DX12 DirectStorage file → GPU-local buffer/texture → fence → readback under `SharpGpuDirectStorageQualified` | non-native backends and missing DirectStorage support throw `NotSupportedException`; no FileStream/map/staging queue fallback |
+| PipelineCache | `RHIDeviceCapabilities.PipelineCache.NativeCache`, `RHIPipelineCache` | Typed capability + API contract | cold/warm/restart native hit, typed corrupt/incompatible import, full-key non-collision | unavailable native cache strategy throws `NotSupportedException`; caller owns opaque blobs |
+| WorkGraph | `RHIDeviceCapabilities.WorkGraph.Execution`, `RHIWorkGraphPipeline`, `RHIWorkGraphEncoder` | Typed capability | native create/dispatch/readback on each reported strategy | factory/encoding throws `NotSupportedException` when unavailable |
+| RasterSubPass | `RHIRasterPassDescriptor`, `RHISubPassDescriptor`, `NextSubPass` | Typed capability + API contract | immutable planner tests and backend multi-subpass pixel/readback qualification | inexpressible access/attachment contracts fail before native encoding; no public layout/bindings type |
+| Presentation | `RHIDeviceCapabilities.Presentation`, swapchain acquire/present/resize typed status | Typed capability + API contract | matching-window minimize/resize/out-of-date/surface-lost/device-lost scenarios | HAL reports status and never performs hidden recreate or `WaitIdle` |
 
-## Documentation Drift Guard
+## Contract Rules
 
-`SharpGPUFeatureMatrixDocumentationTests` asserts that every public feature row
-above remains present in this document. The behavioral truth still comes from
-conformance tests and generated per-platform feature JSON; this document must
-not claim a backend as verified unless the corresponding conformance path and
-artifact exist.
+- `Tier`, `Strategy`, `Limits`, `UnavailableReason`, and `Provenance` describe
+  the current device only.
+- `Passed`, `Failed`, `Unverified`, and `NotApplicable` belong only to platform
+  qualification reports.
+- Unknown enums, illegal combinations, and capability/factory disagreement
+  fail closed.
+- A `Qualified` category may not skip, silently return, or use a CPU fallback.
+
+`SharpGPUFeatureMatrixDocumentationTests` guards the public row names. Runtime
+truth still requires the corresponding conformance scenario and typed artifact.

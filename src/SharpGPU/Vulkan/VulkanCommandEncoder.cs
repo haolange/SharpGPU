@@ -9,7 +9,99 @@ using Viewport = SharpGPU.Mathematics.Viewport;
 
 namespace SharpGPU
 {
-#pragma warning disable CS0414, CS8600, CS8601, CS8602, CS8604, CS8618
+#pragma warning disable CS0414
+
+    internal static class VulkanEncoderGuards
+    {
+        internal static VulkanCommandBuffer RequireCommandBuffer(RHICommandBuffer? commandBuffer)
+        {
+            return commandBuffer as VulkanCommandBuffer
+                ?? throw new InvalidOperationException("Vulkan encoder operations require a VulkanCommandBuffer.");
+        }
+
+        internal static VulkanComputePipeline RequireComputePipeline(RHIComputePipeline? pipeline)
+        {
+            return pipeline as VulkanComputePipeline
+                ?? throw new InvalidOperationException("Vulkan compute operations require a bound VulkanComputePipeline.");
+        }
+
+        internal static VulkanRasterPipeline RequireRasterPipeline(RHIRasterPipeline? pipeline)
+        {
+            return pipeline as VulkanRasterPipeline
+                ?? throw new InvalidOperationException("Vulkan raster operations require a bound VulkanRasterPipeline.");
+        }
+
+        internal static VulkanBuffer RequireBuffer(RHIBuffer buffer)
+        {
+            return buffer as VulkanBuffer
+                ?? throw new ArgumentException("Vulkan buffer operations require a VulkanBuffer.", nameof(buffer));
+        }
+
+        internal static VulkanTexture RequireTexture(RHITexture texture)
+        {
+            return texture as VulkanTexture
+                ?? throw new ArgumentException("Vulkan texture operations require a VulkanTexture.", nameof(texture));
+        }
+
+        internal static VulkanQuery RequireQuery(RHIQuery query)
+        {
+            return query as VulkanQuery
+                ?? throw new ArgumentException("Vulkan query operations require a VulkanQuery.", nameof(query));
+        }
+
+        internal static VulkanCommandQueue RequireCommandQueue(RHICommandQueue? commandQueue)
+        {
+            return commandQueue as VulkanCommandQueue
+                ?? throw new InvalidOperationException("Vulkan encoder operations require a VulkanCommandQueue.");
+        }
+
+        internal static VulkanRaytracingPipeline RequireRaytracingPipeline(RHIRaytracingPipeline pipeline)
+        {
+            return pipeline as VulkanRaytracingPipeline
+                ?? throw new ArgumentException("Vulkan ray-tracing operations require a VulkanRaytracingPipeline.", nameof(pipeline));
+        }
+
+        internal static VulkanTopLevelAccelStruct RequireTopLevelAccelStruct(RHITopLevelAccelStruct accelStruct)
+        {
+            return accelStruct as VulkanTopLevelAccelStruct
+                ?? throw new ArgumentException("Vulkan TLAS build requires a VulkanTopLevelAccelStruct.", nameof(accelStruct));
+        }
+
+        internal static VulkanBottomLevelAccelStruct RequireBottomLevelAccelStruct(RHIBottomLevelAccelStruct accelStruct)
+        {
+            return accelStruct as VulkanBottomLevelAccelStruct
+                ?? throw new ArgumentException("Vulkan BLAS build requires a VulkanBottomLevelAccelStruct.", nameof(accelStruct));
+        }
+
+        internal static VulkanFunctionTable RequireFunctionTable(RHIFunctionTable functionTable)
+        {
+            return functionTable as VulkanFunctionTable
+                ?? throw new ArgumentException("Vulkan ray-tracing dispatch requires a VulkanFunctionTable.", nameof(functionTable));
+        }
+
+        internal static VulkanComputePipeline RequireCachedComputePipeline(RHIComputePipeline? cachedPipeline)
+        {
+            return cachedPipeline as VulkanComputePipeline
+                ?? throw new InvalidOperationException("Vulkan compute encoder requires a bound VulkanComputePipeline.");
+        }
+
+        internal static VulkanRasterPipeline RequireCachedRasterPipeline(RHIRasterPipeline? cachedPipeline)
+        {
+            return cachedPipeline as VulkanRasterPipeline
+                ?? throw new InvalidOperationException("Vulkan raster encoder requires a bound VulkanRasterPipeline.");
+        }
+
+        internal static VulkanRaytracingPipeline RequireCachedRaytracingPipeline(RHIRaytracingPipeline? cachedPipeline)
+        {
+            return cachedPipeline as VulkanRaytracingPipeline
+                ?? throw new InvalidOperationException("Vulkan ray-tracing encoder requires a bound VulkanRaytracingPipeline.");
+        }
+
+        internal static VulkanDevice RequireDevice(RHICommandBuffer? commandBuffer)
+        {
+            return RequireCommandQueue(RequireCommandBuffer(commandBuffer).CommandQueue).VulkanDevice;
+        }
+    }
 
     internal static unsafe class VulkanBarrierEmitter
     {
@@ -49,15 +141,46 @@ namespace SharpGPU
                 return;
             }
 
-            VulkanCommandQueue queue = commandBuffer.CommandQueue as VulkanCommandQueue
+            VulkanCommandQueue queue = VulkanEncoderGuards.RequireCommandQueue(commandBuffer.CommandQueue)
                 ?? throw new InvalidOperationException("Vulkan barrier emitter requires a Vulkan command queue.");
-            if (queue.VulkanDevice.UseSynchronization2)
+            for (int i = 0; i < barriers.Length; ++i)
             {
-                EmitBarriersSync2(commandBuffer, barriers, queue.VulkanDevice);
-                return;
+                RHIBarrierUtility.ValidateQueueOwnership(
+                    in barriers[i],
+                    queue.PipelineType);
+                if (barriers[i].Kind == ERHIBarrierKind.Texture)
+                {
+                    RHITextureBarrier textureBarrier =
+                        barriers[i].TextureBarrier;
+                    ValidateTextureLayoutContract(
+                        in textureBarrier);
+                }
             }
 
-            EmitBarriersSync1(commandBuffer, barriers, queue.PipelineType);
+            int layoutCheckpoint =
+                commandBuffer.CaptureImageLayoutCheckpoint();
+            try
+            {
+                if (queue.VulkanDevice.UseSynchronization2)
+                {
+                    EmitBarriersSync2(
+                        commandBuffer,
+                        barriers,
+                        queue.VulkanDevice);
+                    return;
+                }
+
+                EmitBarriersSync1(
+                    commandBuffer,
+                    barriers,
+                    queue.VulkanDevice);
+            }
+            catch
+            {
+                commandBuffer.RollbackImageLayouts(
+                    layoutCheckpoint);
+                throw;
+            }
         }
 
         internal static Sync1BucketPlan[] PlanSync1BucketsForTesting(ERHIPipelineType queuePipeline, RHIBarrier[] barriers)
@@ -108,9 +231,9 @@ namespace SharpGPU
                         memoryBarriers.Add(new VkMemoryBarrier2
                         {
                             sType = VkStructureType.MemoryBarrier2,
-                            srcStageMask = VulkanUtility.ConvertToVkPipelineStage2(globalBarrier.SyncBefore, queuePipeline),
+                            srcStageMask = AddRequiredStages2(VulkanUtility.ConvertToVkPipelineStage2(globalBarrier.SyncBefore, queuePipeline), globalBarrier.AccessBefore),
                             srcAccessMask = VulkanUtility.ConvertToVkAccessFlags2(globalBarrier.AccessBefore),
-                            dstStageMask = VulkanUtility.ConvertToVkPipelineStage2(globalBarrier.SyncAfter, queuePipeline),
+                            dstStageMask = AddRequiredStages2(VulkanUtility.ConvertToVkPipelineStage2(globalBarrier.SyncAfter, queuePipeline), globalBarrier.AccessAfter),
                             dstAccessMask = VulkanUtility.ConvertToVkAccessFlags2(globalBarrier.AccessAfter)
                         });
                         break;
@@ -119,21 +242,18 @@ namespace SharpGPU
                     case ERHIBarrierKind.Buffer:
                     {
                         RHIBufferBarrier bufferBarrier = barriers[i].BufferBarrier;
-                        VulkanBuffer vkBuffer = bufferBarrier.Resource as VulkanBuffer;
-                        if (vkBuffer == null)
-                        {
-                            throw new InvalidOperationException($"Vulkan buffer barrier resource is null at index {i}.");
-                        }
+                        VulkanBuffer vkBuffer = GetBuffer(device, bufferBarrier.Resource, i);
 
+                        ResolveQueueFamilyIndices(device, in barriers[i], out uint sourceFamily, out uint destinationFamily);
                         bufferBarriers.Add(new VkBufferMemoryBarrier2
                         {
                             sType = VkStructureType.BufferMemoryBarrier2,
-                            srcStageMask = VulkanUtility.ConvertToVkPipelineStage2(bufferBarrier.SyncBefore, queuePipeline),
+                            srcStageMask = AddRequiredStages2(VulkanUtility.ConvertToVkPipelineStage2(bufferBarrier.SyncBefore, queuePipeline), bufferBarrier.AccessBefore),
                             srcAccessMask = VulkanUtility.ConvertToVkAccessFlags2(bufferBarrier.AccessBefore),
-                            dstStageMask = VulkanUtility.ConvertToVkPipelineStage2(bufferBarrier.SyncAfter, queuePipeline),
+                            dstStageMask = AddRequiredStages2(VulkanUtility.ConvertToVkPipelineStage2(bufferBarrier.SyncAfter, queuePipeline), bufferBarrier.AccessAfter),
                             dstAccessMask = VulkanUtility.ConvertToVkAccessFlags2(bufferBarrier.AccessAfter),
-                            srcQueueFamilyIndex = unchecked((uint)(-1)),
-                            dstQueueFamilyIndex = unchecked((uint)(-1)),
+                            srcQueueFamilyIndex = sourceFamily,
+                            dstQueueFamilyIndex = destinationFamily,
                             buffer = vkBuffer.NativeBuffer,
                             offset = bufferBarrier.Range.Offset,
                             size = bufferBarrier.Range.Size == 0 ? RHIBufferRange.WholeSize : bufferBarrier.Range.Size
@@ -144,28 +264,46 @@ namespace SharpGPU
                     case ERHIBarrierKind.Texture:
                     {
                         RHITextureBarrier textureBarrier = barriers[i].TextureBarrier;
-                        VulkanTexture vkTexture = textureBarrier.Resource as VulkanTexture;
-                        if (vkTexture == null)
+                        VulkanTexture vkTexture = GetTexture(device, textureBarrier.Resource, i);
+
+                        VkImageLayout newLayout =
+                            VulkanUtility.ConvertToVkImageLayout(
+                                textureBarrier.LayoutAfter);
+                        if (IsPureLayoutAssertion(
+                                in textureBarrier))
                         {
-                            throw new InvalidOperationException($"Vulkan texture barrier resource is null at index {i}.");
+                            commandBuffer.ValidateDeclaredImageLayout(
+                                vkTexture,
+                                in textureBarrier.SubresourceRange,
+                                newLayout);
+                            commandBuffer.SetKnownImageLayout(
+                                vkTexture,
+                                in textureBarrier.SubresourceRange,
+                                newLayout);
+                            break;
                         }
 
-                        ResolveTextureLayouts(vkTexture, textureBarrier.LayoutBefore, textureBarrier.LayoutAfter, out VkImageLayout oldLayout, out VkImageLayout newLayout);
-                        imageBarriers.Add(new VkImageMemoryBarrier2
-                        {
-                            sType = VkStructureType.ImageMemoryBarrier2,
-                            srcStageMask = VulkanUtility.ConvertToVkPipelineStage2(textureBarrier.SyncBefore, queuePipeline),
-                            srcAccessMask = VulkanUtility.ConvertToVkAccessFlags2(textureBarrier.AccessBefore),
-                            dstStageMask = VulkanUtility.ConvertToVkPipelineStage2(textureBarrier.SyncAfter, queuePipeline),
-                            dstAccessMask = VulkanUtility.ConvertToVkAccessFlags2(textureBarrier.AccessAfter),
-                            oldLayout = oldLayout,
-                            newLayout = newLayout,
-                            srcQueueFamilyIndex = unchecked((uint)(-1)),
-                            dstQueueFamilyIndex = unchecked((uint)(-1)),
-                            image = vkTexture.NativeImage,
-                            subresourceRange = ConvertToVkSubresourceRange(textureBarrier.SubresourceRange, vkTexture.Descriptor.Format)
-                        });
-                        vkTexture.CurrentLayout = newLayout;
+                        ResolveQueueFamilyIndices(
+                            device,
+                            in barriers[i],
+                            out uint sourceFamily,
+                            out uint destinationFamily);
+                        AppendImageBarriersSync2(
+                            imageBarriers,
+                            commandBuffer,
+                            vkTexture,
+                            in textureBarrier,
+                            queuePipeline,
+                            sourceFamily,
+                            destinationFamily,
+                            newLayout);
+                        commandBuffer.SetKnownImageLayout(
+                            vkTexture,
+                            in textureBarrier.SubresourceRange,
+                            newLayout == VkImageLayout.Undefined
+                                ? VulkanUtility.ConvertToVkImageLayout(
+                                    textureBarrier.LayoutBefore)
+                                : newLayout);
                         break;
                     }
 
@@ -178,6 +316,12 @@ namespace SharpGPU
             VkBufferMemoryBarrier2[] bufferArray = bufferBarriers.Count == 0 ? Array.Empty<VkBufferMemoryBarrier2>() : bufferBarriers.ToArray();
             VkImageMemoryBarrier2[] imageArray = imageBarriers.Count == 0 ? Array.Empty<VkImageMemoryBarrier2>() : imageBarriers.ToArray();
 
+            if (memoryArray.Length == 0 &&
+                bufferArray.Length == 0 &&
+                imageArray.Length == 0)
+            {
+                return;
+            }
             fixed (VkMemoryBarrier2* memoryPtr = memoryArray)
             fixed (VkBufferMemoryBarrier2* bufferPtr = bufferArray)
             fixed (VkImageMemoryBarrier2* imagePtr = imageArray)
@@ -204,8 +348,9 @@ namespace SharpGPU
             }
         }
 
-        private static void EmitBarriersSync1(VulkanCommandBuffer commandBuffer, ReadOnlySpan<RHIBarrier> barriers, ERHIPipelineType queuePipeline)
+        private static void EmitBarriersSync1(VulkanCommandBuffer commandBuffer, ReadOnlySpan<RHIBarrier> barriers, VulkanDevice device)
         {
+            ERHIPipelineType queuePipeline = commandBuffer.CommandQueue.PipelineType;
             List<Sync1Bucket> buckets = new List<Sync1Bucket>(4);
 
             for (int i = 0; i < barriers.Length; ++i)
@@ -233,19 +378,16 @@ namespace SharpGPU
                     case ERHIBarrierKind.Buffer:
                     {
                         RHIBufferBarrier bufferBarrier = barriers[i].BufferBarrier;
-                        VulkanBuffer vkBuffer = bufferBarrier.Resource as VulkanBuffer;
-                        if (vkBuffer == null)
-                        {
-                            throw new InvalidOperationException($"Vulkan buffer barrier resource is null at index {i}.");
-                        }
+                        VulkanBuffer vkBuffer = GetBuffer(device, bufferBarrier.Resource, i);
 
+                        ResolveQueueFamilyIndices(device, in barriers[i], out uint sourceFamily, out uint destinationFamily);
                         bucket.BufferBarriers.Add(new VkBufferMemoryBarrier
                         {
                             sType = VkStructureType.BufferMemoryBarrier,
                             srcAccessMask = VulkanUtility.ConvertToVkAccessFlags(bufferBarrier.AccessBefore),
                             dstAccessMask = VulkanUtility.ConvertToVkAccessFlags(bufferBarrier.AccessAfter),
-                            srcQueueFamilyIndex = unchecked((uint)(-1)),
-                            dstQueueFamilyIndex = unchecked((uint)(-1)),
+                            srcQueueFamilyIndex = sourceFamily,
+                            dstQueueFamilyIndex = destinationFamily,
                             buffer = vkBuffer.NativeBuffer,
                             offset = bufferBarrier.Range.Offset,
                             size = bufferBarrier.Range.Size == 0 ? RHIBufferRange.WholeSize : bufferBarrier.Range.Size
@@ -256,26 +398,45 @@ namespace SharpGPU
                     case ERHIBarrierKind.Texture:
                     {
                         RHITextureBarrier textureBarrier = barriers[i].TextureBarrier;
-                        VulkanTexture vkTexture = textureBarrier.Resource as VulkanTexture;
-                        if (vkTexture == null)
+                        VulkanTexture vkTexture = GetTexture(device, textureBarrier.Resource, i);
+
+                        VkImageLayout newLayout =
+                            VulkanUtility.ConvertToVkImageLayout(
+                                textureBarrier.LayoutAfter);
+                        if (IsPureLayoutAssertion(
+                                in textureBarrier))
                         {
-                            throw new InvalidOperationException($"Vulkan texture barrier resource is null at index {i}.");
+                            commandBuffer.ValidateDeclaredImageLayout(
+                                vkTexture,
+                                in textureBarrier.SubresourceRange,
+                                newLayout);
+                            commandBuffer.SetKnownImageLayout(
+                                vkTexture,
+                                in textureBarrier.SubresourceRange,
+                                newLayout);
+                            break;
                         }
 
-                        ResolveTextureLayouts(vkTexture, textureBarrier.LayoutBefore, textureBarrier.LayoutAfter, out VkImageLayout oldLayout, out VkImageLayout newLayout);
-                        bucket.ImageBarriers.Add(new VkImageMemoryBarrier
-                        {
-                            sType = VkStructureType.ImageMemoryBarrier,
-                            srcAccessMask = VulkanUtility.ConvertToVkAccessFlags(textureBarrier.AccessBefore),
-                            dstAccessMask = VulkanUtility.ConvertToVkAccessFlags(textureBarrier.AccessAfter),
-                            oldLayout = oldLayout,
-                            newLayout = newLayout,
-                            srcQueueFamilyIndex = unchecked((uint)(-1)),
-                            dstQueueFamilyIndex = unchecked((uint)(-1)),
-                            image = vkTexture.NativeImage,
-                            subresourceRange = ConvertToVkSubresourceRange(textureBarrier.SubresourceRange, vkTexture.Descriptor.Format)
-                        });
-                        vkTexture.CurrentLayout = newLayout;
+                        ResolveQueueFamilyIndices(
+                            device,
+                            in barriers[i],
+                            out uint sourceFamily,
+                            out uint destinationFamily);
+                        AppendImageBarriersSync1(
+                            bucket.ImageBarriers,
+                            commandBuffer,
+                            vkTexture,
+                            in textureBarrier,
+                            sourceFamily,
+                            destinationFamily,
+                            newLayout);
+                        commandBuffer.SetKnownImageLayout(
+                            vkTexture,
+                            in textureBarrier.SubresourceRange,
+                            newLayout == VkImageLayout.Undefined
+                                ? VulkanUtility.ConvertToVkImageLayout(
+                                    textureBarrier.LayoutBefore)
+                                : newLayout);
                         break;
                     }
                 }
@@ -312,6 +473,36 @@ namespace SharpGPU
             }
         }
 
+        private static void ValidateTextureLayoutContract(
+            in RHITextureBarrier barrier)
+        {
+            if (barrier.LayoutAfter ==
+                ERHITextureLayout.Undefined)
+            {
+                throw new ArgumentException(
+                    "A Vulkan texture barrier LayoutAfter cannot " +
+                    "be Undefined.",
+                    nameof(barrier));
+            }
+            if (!Enum.IsDefined(barrier.LayoutBefore) ||
+                !Enum.IsDefined(barrier.LayoutAfter))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(barrier),
+                    "A Vulkan texture barrier contains an unknown " +
+                    "layout value.");
+            }
+        }
+        private static bool IsPureLayoutAssertion(
+            in RHITextureBarrier barrier) =>
+            barrier.LayoutBefore != ERHITextureLayout.Undefined &&
+            barrier.LayoutBefore == barrier.LayoutAfter &&
+            barrier.SyncBefore == ERHISyncStageMask.None &&
+            barrier.SyncAfter == ERHISyncStageMask.None &&
+            barrier.AccessBefore == ERHIAccessMask.None &&
+            barrier.AccessAfter == ERHIAccessMask.None &&
+            !barrier.SourceQueue.HasValue &&
+            !barrier.DestinationQueue.HasValue;
         private static Sync1Bucket GetOrAddSync1Bucket(List<Sync1Bucket> buckets, VkPipelineStageFlags srcStages, VkPipelineStageFlags dstStages)
         {
             for (int i = 0; i < buckets.Count; ++i)
@@ -331,43 +522,318 @@ namespace SharpGPU
             return bucket;
         }
 
-        private static bool TryGetSync1StagePair(in RHIBarrier barrier, ERHIPipelineType queuePipeline, out VkPipelineStageFlags srcStages, out VkPipelineStageFlags dstStages)
+        private static VulkanBuffer GetBuffer(
+            VulkanDevice device,
+            RHIBuffer resource,
+            int index)
         {
+            if (resource == null)
+            {
+                throw new ArgumentException($"Vulkan buffer barrier resource is null at index {index}.");
+            }
+            if (resource.IsDisposed)
+            {
+                throw new ObjectDisposedException(resource.GetType().FullName);
+            }
+
+            if (resource is not VulkanBuffer buffer ||
+                !ReferenceEquals(buffer.VulkanDevice, device))
+            {
+                throw new ArgumentException(
+                    $"Vulkan buffer barrier resource at index {index} was created by a different backend or device.");
+            }
+
+            return buffer;
+        }
+
+        private static VulkanTexture GetTexture(
+            VulkanDevice device,
+            RHITexture resource,
+            int index)
+        {
+            if (resource == null)
+            {
+                throw new ArgumentException($"Vulkan texture barrier resource is null at index {index}.");
+            }
+            if (resource.IsDisposed)
+            {
+                throw new ObjectDisposedException(resource.GetType().FullName);
+            }
+
+            if (resource is not VulkanTexture texture ||
+                !ReferenceEquals(texture.VulkanDevice, device))
+            {
+                throw new ArgumentException(
+                    $"Vulkan texture barrier resource at index {index} was created by a different backend or device.");
+            }
+
+            return texture;
+        }
+
+        private static void ResolveQueueFamilyIndices(
+            VulkanDevice device,
+            in RHIBarrier barrier,
+            out uint sourceFamily,
+            out uint destinationFamily)
+        {
+            const uint QueueFamilyIgnored = unchecked((uint)(-1));
+            sourceFamily = QueueFamilyIgnored;
+            destinationFamily = QueueFamilyIgnored;
+            if (!RHIBarrierUtility.TryGetQueueOwnership(
+                    in barrier,
+                    out ERHIPipelineType sourceQueue,
+                    out ERHIPipelineType destinationQueue))
+            {
+                return;
+            }
+
+            int resolvedSource = device.GetQueueFamilyIndex(sourceQueue);
+            int resolvedDestination = device.GetQueueFamilyIndex(destinationQueue);
+            if (resolvedSource < 0 || resolvedDestination < 0)
+            {
+                throw new NotSupportedException(
+                    $"Vulkan cannot lower the requested {sourceQueue}->{destinationQueue} queue ownership transfer because a queue family is unavailable.");
+            }
+
+            if (resolvedSource != resolvedDestination)
+            {
+                sourceFamily = checked((uint)resolvedSource);
+                destinationFamily = checked((uint)resolvedDestination);
+            }
+        }
+
+        private static bool TryGetSync1StagePair(
+            in RHIBarrier barrier,
+            ERHIPipelineType queuePipeline,
+            out VkPipelineStageFlags srcStages,
+            out VkPipelineStageFlags dstStages)
+        {
+            ERHISyncStageMask syncBefore;
+            ERHISyncStageMask syncAfter;
+            ERHIAccessMask accessBefore;
+            ERHIAccessMask accessAfter;
             switch (barrier.Kind)
             {
                 case ERHIBarrierKind.Global:
-                    srcStages = VulkanUtility.ConvertToVkPipelineStage(barrier.GlobalBarrier.SyncBefore, queuePipeline);
-                    dstStages = VulkanUtility.ConvertToVkPipelineStage(barrier.GlobalBarrier.SyncAfter, queuePipeline);
-                    return true;
+                    syncBefore = barrier.GlobalBarrier.SyncBefore;
+                    syncAfter = barrier.GlobalBarrier.SyncAfter;
+                    accessBefore = barrier.GlobalBarrier.AccessBefore;
+                    accessAfter = barrier.GlobalBarrier.AccessAfter;
+                    break;
                 case ERHIBarrierKind.Buffer:
-                    srcStages = VulkanUtility.ConvertToVkPipelineStage(barrier.BufferBarrier.SyncBefore, queuePipeline);
-                    dstStages = VulkanUtility.ConvertToVkPipelineStage(barrier.BufferBarrier.SyncAfter, queuePipeline);
-                    return true;
+                    syncBefore = barrier.BufferBarrier.SyncBefore;
+                    syncAfter = barrier.BufferBarrier.SyncAfter;
+                    accessBefore = barrier.BufferBarrier.AccessBefore;
+                    accessAfter = barrier.BufferBarrier.AccessAfter;
+                    break;
                 case ERHIBarrierKind.Texture:
-                    srcStages = VulkanUtility.ConvertToVkPipelineStage(barrier.TextureBarrier.SyncBefore, queuePipeline);
-                    dstStages = VulkanUtility.ConvertToVkPipelineStage(barrier.TextureBarrier.SyncAfter, queuePipeline);
-                    return true;
+                    syncBefore = barrier.TextureBarrier.SyncBefore;
+                    syncAfter = barrier.TextureBarrier.SyncAfter;
+                    accessBefore = barrier.TextureBarrier.AccessBefore;
+                    accessAfter = barrier.TextureBarrier.AccessAfter;
+                    break;
                 default:
                     srcStages = 0;
                     dstStages = 0;
                     return false;
             }
+
+            srcStages = AddRequiredStages(
+                VulkanUtility.ConvertToVkPipelineStage(
+                    syncBefore,
+                    queuePipeline),
+                accessBefore);
+            dstStages = AddRequiredStages(
+                VulkanUtility.ConvertToVkPipelineStage(
+                    syncAfter,
+                    queuePipeline),
+                accessAfter);
+            return true;
         }
 
-        private static void ResolveTextureLayouts(VulkanTexture vkTexture, ERHITextureLayout layoutBefore, ERHITextureLayout layoutAfter, out VkImageLayout oldLayout, out VkImageLayout newLayout)
+        private static VkPipelineStageFlags AddRequiredStages(
+            VkPipelineStageFlags stages,
+            ERHIAccessMask access)
         {
-            oldLayout = VulkanUtility.ConvertToVkImageLayout(layoutBefore);
-            if (oldLayout == VkImageLayout.Undefined)
+            if ((access &
+                 (ERHIAccessMask.RenderTargetRead |
+                  ERHIAccessMask.RenderTargetWrite)) != 0)
             {
-                oldLayout = vkTexture.CurrentLayout;
+                stages |= VkPipelineStageFlags.ColorAttachmentOutput;
             }
-
-            newLayout = VulkanUtility.ConvertToVkImageLayout(layoutAfter);
-            if (newLayout == VkImageLayout.Undefined)
+            if ((access &
+                 (ERHIAccessMask.DepthStencilRead |
+                  ERHIAccessMask.DepthStencilWrite)) != 0)
             {
-                newLayout = oldLayout;
+                stages |=
+                    VkPipelineStageFlags.EarlyFragmentTests |
+                    VkPipelineStageFlags.LateFragmentTests;
             }
+            if ((access &
+                 (ERHIAccessMask.TransferRead |
+                  ERHIAccessMask.TransferWrite |
+                  ERHIAccessMask.ResolveRead |
+                  ERHIAccessMask.ResolveWrite)) != 0)
+            {
+                stages |= VkPipelineStageFlags.Transfer;
+            }
+            return stages;
         }
+
+        private static VkPipelineStageFlags2 AddRequiredStages2(
+            VkPipelineStageFlags2 stages,
+            ERHIAccessMask access)
+        {
+            if ((access &
+                 (ERHIAccessMask.RenderTargetRead |
+                  ERHIAccessMask.RenderTargetWrite)) != 0)
+            {
+                stages |=
+                    VkPipelineStageFlags2.ColorAttachmentOutput;
+            }
+            if ((access &
+                 (ERHIAccessMask.DepthStencilRead |
+                  ERHIAccessMask.DepthStencilWrite)) != 0)
+            {
+                stages |=
+                    VkPipelineStageFlags2.EarlyFragmentTests |
+                    VkPipelineStageFlags2.LateFragmentTests;
+            }
+            if ((access &
+                 (ERHIAccessMask.TransferRead |
+                  ERHIAccessMask.TransferWrite |
+                  ERHIAccessMask.ResolveRead |
+                  ERHIAccessMask.ResolveWrite)) != 0)
+            {
+                stages |= VkPipelineStageFlags2.Transfer;
+            }
+            return stages;
+        }
+
+        private static void AppendImageBarriersSync2(
+            List<VkImageMemoryBarrier2> destination,
+            VulkanCommandBuffer commandBuffer,
+            VulkanTexture texture,
+            in RHITextureBarrier barrier,
+            ERHIPipelineType queuePipeline,
+            uint sourceFamily,
+            uint destinationFamily,
+            VkImageLayout newLayout)
+        {
+            VkImageLayout declaredOldLayout =
+                VulkanUtility.ConvertToVkImageLayout(
+                    barrier.LayoutBefore);
+            commandBuffer.ValidateDeclaredImageLayout(
+                texture,
+                in barrier.SubresourceRange,
+                declaredOldLayout);
+            destination.Add(CreateImageBarrier2(
+                texture,
+                in barrier,
+                in barrier.SubresourceRange,
+                queuePipeline,
+                sourceFamily,
+                destinationFamily,
+                declaredOldLayout,
+                newLayout));
+        }
+        private static VkImageMemoryBarrier2 CreateImageBarrier2(
+            VulkanTexture texture,
+            in RHITextureBarrier barrier,
+            in RHITextureSubresourceRange range,
+            ERHIPipelineType queuePipeline,
+            uint sourceFamily,
+            uint destinationFamily,
+            VkImageLayout oldLayout,
+            VkImageLayout newLayout) =>
+            new()
+            {
+                sType = VkStructureType.ImageMemoryBarrier2,
+                srcStageMask =
+                    AddRequiredStages2(
+                        VulkanUtility.ConvertToVkPipelineStage2(
+                            barrier.SyncBefore,
+                            queuePipeline),
+                        barrier.AccessBefore),
+                srcAccessMask =
+                    VulkanUtility.ConvertToVkAccessFlags2(
+                        barrier.AccessBefore),
+                dstStageMask =
+                    AddRequiredStages2(
+                        VulkanUtility.ConvertToVkPipelineStage2(
+                            barrier.SyncAfter,
+                            queuePipeline),
+                        barrier.AccessAfter),
+                dstAccessMask =
+                    VulkanUtility.ConvertToVkAccessFlags2(
+                        barrier.AccessAfter),
+                oldLayout = oldLayout,
+                newLayout = newLayout == VkImageLayout.Undefined
+                    ? oldLayout
+                    : newLayout,
+                srcQueueFamilyIndex = sourceFamily,
+                dstQueueFamilyIndex = destinationFamily,
+                image = texture.NativeImage,
+                subresourceRange =
+                    ConvertToVkSubresourceRange(
+                        in range,
+                        texture.Descriptor.Format),
+            };
+
+        private static void AppendImageBarriersSync1(
+            List<VkImageMemoryBarrier> destination,
+            VulkanCommandBuffer commandBuffer,
+            VulkanTexture texture,
+            in RHITextureBarrier barrier,
+            uint sourceFamily,
+            uint destinationFamily,
+            VkImageLayout newLayout)
+        {
+            VkImageLayout declaredOldLayout =
+                VulkanUtility.ConvertToVkImageLayout(
+                    barrier.LayoutBefore);
+            commandBuffer.ValidateDeclaredImageLayout(
+                texture,
+                in barrier.SubresourceRange,
+                declaredOldLayout);
+            destination.Add(CreateImageBarrier(
+                texture,
+                in barrier,
+                in barrier.SubresourceRange,
+                sourceFamily,
+                destinationFamily,
+                declaredOldLayout,
+                newLayout));
+        }
+        private static VkImageMemoryBarrier CreateImageBarrier(
+            VulkanTexture texture,
+            in RHITextureBarrier barrier,
+            in RHITextureSubresourceRange range,
+            uint sourceFamily,
+            uint destinationFamily,
+            VkImageLayout oldLayout,
+            VkImageLayout newLayout) =>
+            new()
+            {
+                sType = VkStructureType.ImageMemoryBarrier,
+                srcAccessMask =
+                    VulkanUtility.ConvertToVkAccessFlags(
+                        barrier.AccessBefore),
+                dstAccessMask =
+                    VulkanUtility.ConvertToVkAccessFlags(
+                        barrier.AccessAfter),
+                oldLayout = oldLayout,
+                newLayout = newLayout == VkImageLayout.Undefined
+                    ? oldLayout
+                    : newLayout,
+                srcQueueFamilyIndex = sourceFamily,
+                dstQueueFamilyIndex = destinationFamily,
+                image = texture.NativeImage,
+                subresourceRange =
+                    ConvertToVkSubresourceRange(
+                        in range,
+                        texture.Descriptor.Format),
+            };
 
         private static VkImageSubresourceRange ConvertToVkSubresourceRange(in RHITextureSubresourceRange range, ERHIPixelFormat format)
         {
@@ -406,25 +872,25 @@ namespace SharpGPU
 
         public override void Barrier(in RHIBarrier barrier)
         {
-            VulkanBarrierEmitter.EmitBarrier((VulkanCommandBuffer)m_CommandBuffer!, barrier);
+            VulkanBarrierEmitter.EmitBarrier(VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer)!, barrier);
         }
 
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            VulkanBarrierEmitter.EmitBarriers((VulkanCommandBuffer)m_CommandBuffer!, barriers);
+            VulkanBarrierEmitter.EmitBarriers(VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer)!, barriers);
         }
 
         public override void PushDebugGroup(string name)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
             vkQueue.VulkanDevice.VulkanInstance.CmdBeginDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer, name);
         }
 
         public override void PopDebugGroup()
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
             vkQueue.VulkanDevice.VulkanInstance.CmdEndDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer);
         }
 
@@ -432,8 +898,8 @@ namespace SharpGPU
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
-                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-                VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
+                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
                 VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.AllCommands, vkQuery.NativeQueryPool, index);
             }
@@ -441,16 +907,16 @@ namespace SharpGPU
 
         public override void ResolveQuery(RHIQuery query, in uint startIndex, in uint queriesCount)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanQuery vkQuery = query as VulkanQuery;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanQuery vkQuery = VulkanEncoderGuards.RequireQuery(query);
             VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, startIndex, queriesCount);
         }
 
         public override void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanBuffer vkSrc = srcBuffer as VulkanBuffer;
-            VulkanBuffer vkDst = dstBuffer as VulkanBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanBuffer vkSrc = VulkanEncoderGuards.RequireBuffer(srcBuffer);
+            VulkanBuffer vkDst = VulkanEncoderGuards.RequireBuffer(dstBuffer);
 
             VkBufferCopy region = new VkBufferCopy()
             {
@@ -464,9 +930,9 @@ namespace SharpGPU
 
         public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanBuffer vkSrcBuffer = src.Buffer as VulkanBuffer;
-            VulkanTexture vkDstTexture = dst.Texture as VulkanTexture;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanBuffer vkSrcBuffer = VulkanEncoderGuards.RequireBuffer(src.Buffer);
+            VulkanTexture vkDstTexture = VulkanEncoderGuards.RequireTexture(dst.Texture);
 
             VkBufferImageCopy region = new VkBufferImageCopy()
             {
@@ -489,9 +955,9 @@ namespace SharpGPU
 
         public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanTexture vkSrcTexture = src.Texture as VulkanTexture;
-            VulkanBuffer vkDstBuffer = dst.Buffer as VulkanBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanTexture vkSrcTexture = VulkanEncoderGuards.RequireTexture(src.Texture);
+            VulkanBuffer vkDstBuffer = VulkanEncoderGuards.RequireBuffer(dst.Buffer);
 
             VkBufferImageCopy region = new VkBufferImageCopy()
             {
@@ -514,9 +980,9 @@ namespace SharpGPU
 
         public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanTexture vkSrc = src.Texture as VulkanTexture;
-            VulkanTexture vkDst = dst.Texture as VulkanTexture;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanTexture vkSrc = VulkanEncoderGuards.RequireTexture(src.Texture);
+            VulkanTexture vkDst = VulkanEncoderGuards.RequireTexture(dst.Texture);
 
             VkImageCopy region = new VkImageCopy()
             {
@@ -542,7 +1008,7 @@ namespace SharpGPU
             VulkanNative.vkCmdCopyImage(vkCmdBuf.NativeCommandBuffer, vkSrc.NativeImage, VkImageLayout.TransferSrcOptimal, vkDst.NativeImage, VkImageLayout.TransferDstOptimal, 1, &region);
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
@@ -582,25 +1048,25 @@ namespace SharpGPU
 
         public override void Barrier(in RHIBarrier barrier)
         {
-            VulkanBarrierEmitter.EmitBarrier((VulkanCommandBuffer)m_CommandBuffer!, barrier);
+            VulkanBarrierEmitter.EmitBarrier(VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer)!, barrier);
         }
 
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            VulkanBarrierEmitter.EmitBarriers((VulkanCommandBuffer)m_CommandBuffer!, barriers);
+            VulkanBarrierEmitter.EmitBarriers(VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer)!, barriers);
         }
 
         public override void PushDebugGroup(string name)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
             vkQueue.VulkanDevice.VulkanInstance.CmdBeginDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer, name);
         }
 
         public override void PopDebugGroup()
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
             vkQueue.VulkanDevice.VulkanInstance.CmdEndDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer);
         }
 
@@ -608,8 +1074,8 @@ namespace SharpGPU
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
-                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-                VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
+                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
                 VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.ComputeShader, vkQuery.NativeQueryPool, index);
             }
@@ -619,8 +1085,8 @@ namespace SharpGPU
         {
             if (m_PassDescriptor.Statistics.HasValue)
             {
-                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery;
+                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
                 VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 0);
             }
@@ -630,8 +1096,8 @@ namespace SharpGPU
         {
             if (m_PassDescriptor.Statistics.HasValue)
             {
-                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery;
+                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
                 VulkanNative.vkCmdEndQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index);
             }
         }
@@ -639,40 +1105,65 @@ namespace SharpGPU
         public override void SetPipeline(RHIComputePipeline pipeline)
         {
             m_CachedPipeline = pipeline;
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanComputePipeline vkPipeline = pipeline as VulkanComputePipeline;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanComputePipeline vkPipeline = VulkanEncoderGuards.RequireComputePipeline(pipeline);
             VulkanNative.vkCmdBindPipeline(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.Compute, vkPipeline.NativePipeline);
         }
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanArgumentTable vkArgumentTable = resourceTable as VulkanArgumentTable;
-            VulkanComputePipeline vkPipeline = m_CachedPipeline as VulkanComputePipeline;
-            VkDescriptorSet set = vkArgumentTable.NativeDescriptorSet;
-            VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.Compute, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
+            VulkanComputePipeline pipeline =
+                VulkanEncoderGuards.RequireCachedComputePipeline(m_CachedPipeline)
+                ?? throw new InvalidOperationException(
+                    "A live Vulkan compute pipeline must be set before "
+                    + "binding an argument table.");
+            if (pipeline.IsDisposed)
+            {
+                throw new ObjectDisposedException(nameof(VulkanComputePipeline));
+            }
+            VulkanArgumentTable table =
+                pipeline.VulkanPipelineLayout.ResolveReadyTable(
+                    resourceTable,
+                    tableIndex);
+            VulkanCommandBuffer commandBuffer =
+                VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VkDescriptorSet set = table.NativeDescriptorSet;
+            VulkanNative.vkCmdBindDescriptorSets(
+                commandBuffer.NativeCommandBuffer,
+                VkPipelineBindPoint.Compute,
+                pipeline.VulkanPipelineLayout.NativePipelineLayout,
+                tableIndex,
+                1,
+                &set,
+                0,
+                null);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanComputePipeline vkPipeline = m_CachedPipeline as VulkanComputePipeline;
-#if DEBUG
-            Debug.Assert(offset + size <= vkPipeline.VulkanPipelineLayout.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({vkPipeline.VulkanPipelineLayout.PushConstantSize}).");
-#endif
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanComputePipeline vkPipeline = VulkanEncoderGuards.RequireComputePipeline(m_CachedPipeline);
+            if (offset + size > vkPipeline.VulkanPipelineLayout.PushConstantSize)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(offset),
+                    offset,
+                    $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({vkPipeline.VulkanPipelineLayout.PushConstantSize}).");
+            }
+
             VulkanNative.vkCmdPushConstants(vkCmdBuf.NativeCommandBuffer, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, VkShaderStageFlags.All, offset, size, data.ToPointer());
         }
 
         public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             VulkanNative.vkCmdDispatch(vkCmdBuf.NativeCommandBuffer, groupCountX, groupCountY, groupCountZ);
         }
 
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanBuffer vkArgsBuffer = argsBuffer as VulkanBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanBuffer vkArgsBuffer = VulkanEncoderGuards.RequireBuffer(argsBuffer);
             VulkanNative.vkCmdDispatchIndirect(vkCmdBuf.NativeCommandBuffer, vkArgsBuffer.NativeBuffer, argsOffset);
         }
 
@@ -681,7 +1172,7 @@ namespace SharpGPU
             // Vulkan indirect command buffers are handled via VkIndirectCommandsLayoutNV (not yet supported)
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
@@ -712,8 +1203,15 @@ namespace SharpGPU
             m_CommandBuffer = cmdBuffer;
         }
 
-        internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
+        internal override void BeginPassCore(RasterPassPlan plan)
         {
+            if (plan.SubPassCount > 1)
+            {
+                throw new NotSupportedException(
+                    "The selected Vulkan dynamic-rendering strategy cannot lower multiple ordered subpasses.");
+            }
+
+            RHIRasterPassDescriptor descriptor = plan.DescriptorSnapshot;
             m_PassDescriptor = descriptor;
             m_HasIssuedDraw = false;
 #if DEBUG
@@ -733,8 +1231,8 @@ namespace SharpGPU
                 return;
             }
 
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
             ClearActiveAttachmentViews();
             DestroyActiveAttachmentInfos();
 
@@ -750,7 +1248,7 @@ namespace SharpGPU
             for (int i = 0; i < colorAttachmentCount; ++i)
             {
                 ref RHIColorAttachmentDescriptor colorDesc = ref m_PassDescriptor.ColorAttachments.Span[i];
-                VulkanTexture vkTexture = colorDesc.RenderTarget as VulkanTexture;
+                VulkanTexture vkTexture = VulkanEncoderGuards.RequireTexture(colorDesc.RenderTarget);
 
                 VkImageViewCreateInfo viewInfo = new VkImageViewCreateInfo()
                 {
@@ -761,10 +1259,10 @@ namespace SharpGPU
                     subresourceRange = new VkImageSubresourceRange()
                     {
                         aspectMask = VkImageAspectFlags.Color,
-                        baseMipLevel = colorDesc.MipLevel,
-                        levelCount = 1,
-                        baseArrayLayer = colorDesc.ArraySlice,
-                        layerCount = 1,
+                        baseMipLevel = colorDesc.SubresourceRange.BaseMipLevel,
+                        levelCount = colorDesc.SubresourceRange.MipLevelCount,
+                        baseArrayLayer = colorDesc.SubresourceRange.BaseArrayLayer,
+                        layerCount = colorDesc.SubresourceRange.ArrayLayerCount,
                     },
                 };
 
@@ -791,8 +1289,8 @@ namespace SharpGPU
 
                 if (renderWidth == 0)
                 {
-                    renderWidth = vkTexture.Descriptor.Extent.x;
-                    renderHeight = vkTexture.Descriptor.Extent.y;
+                    renderWidth = Math.Max(1u, vkTexture.Descriptor.Extent.x >> checked((int)colorDesc.SubresourceRange.BaseMipLevel));
+                    renderHeight = Math.Max(1u, vkTexture.Descriptor.Extent.y >> checked((int)colorDesc.SubresourceRange.BaseMipLevel));
                 }
             }
 
@@ -802,7 +1300,7 @@ namespace SharpGPU
             if (m_PassDescriptor.DepthStencilAttachment.HasValue)
             {
                 RHIDepthStencilAttachmentDescriptor depthDesc = m_PassDescriptor.DepthStencilAttachment.Value;
-                VulkanTexture vkDepthTexture = depthDesc.RenderTarget as VulkanTexture;
+                VulkanTexture vkDepthTexture = VulkanEncoderGuards.RequireTexture(depthDesc.RenderTarget);
 
                 VkImageViewCreateInfo depthViewInfo = new VkImageViewCreateInfo()
                 {
@@ -813,10 +1311,10 @@ namespace SharpGPU
                     subresourceRange = new VkImageSubresourceRange()
                     {
                         aspectMask = VulkanUtility.GetVkImageAspect(vkDepthTexture.Descriptor.Format),
-                        baseMipLevel = depthDesc.MipLevel,
-                        levelCount = 1,
-                        baseArrayLayer = depthDesc.ArraySlice,
-                        layerCount = 1,
+                        baseMipLevel = depthDesc.SubresourceRange.BaseMipLevel,
+                        levelCount = depthDesc.SubresourceRange.MipLevelCount,
+                        baseArrayLayer = depthDesc.SubresourceRange.BaseArrayLayer,
+                        layerCount = depthDesc.SubresourceRange.ArrayLayerCount,
                     },
                 };
 
@@ -842,8 +1340,8 @@ namespace SharpGPU
 
                 if (renderWidth == 0)
                 {
-                    renderWidth = vkDepthTexture.Descriptor.Extent.x;
-                    renderHeight = vkDepthTexture.Descriptor.Extent.y;
+                    renderWidth = Math.Max(1u, vkDepthTexture.Descriptor.Extent.x >> checked((int)depthDesc.SubresourceRange.BaseMipLevel));
+                    renderHeight = Math.Max(1u, vkDepthTexture.Descriptor.Extent.y >> checked((int)depthDesc.SubresourceRange.BaseMipLevel));
                 }
             }
 
@@ -855,7 +1353,7 @@ namespace SharpGPU
                     offset = new VkOffset2D() { x = 0, y = 0 },
                     extent = new VkExtent2D() { width = renderWidth, height = renderHeight },
                 },
-                layerCount = 1,
+                layerCount = m_PassDescriptor.ArrayLength,
                 colorAttachmentCount = (uint)colorAttachmentCount,
                 pColorAttachments = colorAttachmentCount > 0 ? colorAttachments : null,
                 pDepthAttachment = pDepthAttachment,
@@ -864,7 +1362,7 @@ namespace SharpGPU
 
             try
             {
-                VulkanNative.vkCmdBeginRendering(vkCmdBuf.NativeCommandBuffer, &renderingInfo);
+                VulkanNative.vkCmdBeginRendering(vkCmdBuf.NativeCommandBuffer, &renderingInfo, vkQueue.VulkanDevice.UseDynamicRenderingKhrCommands);
                 m_RenderingActive = true;
             }
             catch
@@ -882,8 +1380,13 @@ namespace SharpGPU
                 return;
             }
 
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanNative.vkCmdEndRendering(vkCmdBuf.NativeCommandBuffer);
+            VulkanCommandBuffer vkCmdBuf =
+                VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer)!;
+            VulkanCommandQueue vkQueue =
+                (VulkanCommandQueue)vkCmdBuf.CommandQueue;
+            VulkanNative.vkCmdEndRendering(
+                vkCmdBuf.NativeCommandBuffer,
+                vkQueue.VulkanDevice.UseDynamicRenderingKhrCommands);
             m_RenderingActive = false;
             ClearActiveAttachmentViews();
             DestroyActiveAttachmentInfos();
@@ -905,7 +1408,7 @@ namespace SharpGPU
         public override void Barrier(in RHIBarrier barrier)
         {
             EndRenderingIfNeeded();
-            VulkanBarrierEmitter.EmitBarrier((VulkanCommandBuffer)m_CommandBuffer!, barrier);
+            VulkanBarrierEmitter.EmitBarrier(VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer)!, barrier);
 
             if (!m_HasIssuedDraw)
             {
@@ -916,7 +1419,7 @@ namespace SharpGPU
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
             EndRenderingIfNeeded();
-            VulkanBarrierEmitter.EmitBarriers((VulkanCommandBuffer)m_CommandBuffer!, barriers);
+            VulkanBarrierEmitter.EmitBarriers(VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer)!, barriers);
 
             if (!m_HasIssuedDraw)
             {
@@ -926,15 +1429,15 @@ namespace SharpGPU
 
         public override void PushDebugGroup(string name)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
             vkQueue.VulkanDevice.VulkanInstance.CmdBeginDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer, name);
         }
 
         public override void PopDebugGroup()
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
             vkQueue.VulkanDevice.VulkanInstance.CmdEndDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer);
         }
 
@@ -942,8 +1445,8 @@ namespace SharpGPU
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
-                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-                VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
+                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
                 VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.AllGraphics, vkQuery.NativeQueryPool, index);
             }
@@ -953,8 +1456,8 @@ namespace SharpGPU
         {
             if (m_PassDescriptor.Occlusion.HasValue)
             {
-                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-                VulkanQuery vkQuery = m_PassDescriptor.Occlusion.Value.Query as VulkanQuery;
+                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                VulkanQuery vkQuery = m_PassDescriptor.Occlusion.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
                 VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, VkQueryControlFlags.Precise);
             }
@@ -964,8 +1467,8 @@ namespace SharpGPU
         {
             if (m_PassDescriptor.Occlusion.HasValue)
             {
-                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-                VulkanQuery vkQuery = m_PassDescriptor.Occlusion.Value.Query as VulkanQuery;
+                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                VulkanQuery vkQuery = m_PassDescriptor.Occlusion.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
                 VulkanNative.vkCmdEndQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index);
             }
         }
@@ -974,8 +1477,8 @@ namespace SharpGPU
         {
             if (m_PassDescriptor.Statistics.HasValue)
             {
-                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery;
+                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
                 VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 0);
             }
@@ -985,20 +1488,24 @@ namespace SharpGPU
         {
             if (m_PassDescriptor.Statistics.HasValue)
             {
-                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery;
+                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
                 VulkanNative.vkCmdEndQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index);
             }
         }
 
-        public override void NextSubPass()
+        internal override void NextSubPassCore(
+            RasterPassPlan plan,
+            int sourceSubPassIndex,
+            int destinationSubPassIndex)
         {
-            // Dynamic rendering does not use subpasses
+            throw new NotSupportedException(
+                "The selected Vulkan dynamic-rendering strategy cannot express ordered subpass advancement.");
         }
 
         public override void SetScissor(in Rect rect)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             VkRect2D scissor = new VkRect2D()
             {
                 offset = new VkOffset2D() { x = (int)rect.left, y = (int)rect.top },
@@ -1009,7 +1516,7 @@ namespace SharpGPU
 
         public override void SetScissors(in Memory<Rect> rects)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             VkRect2D* scissors = stackalloc VkRect2D[rects.Length];
             for (int i = 0; i < rects.Length; ++i)
             {
@@ -1025,7 +1532,7 @@ namespace SharpGPU
 
         public override void SetViewport(in Viewport viewport)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             VkViewport vkViewport = new VkViewport()
             {
                 x = viewport.TopLeftX,
@@ -1040,7 +1547,7 @@ namespace SharpGPU
 
         public override void SetViewports(in Memory<Viewport> viewports)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             VkViewport* vkViewports = stackalloc VkViewport[viewports.Length];
             for (int i = 0; i < viewports.Length; ++i)
             {
@@ -1060,13 +1567,13 @@ namespace SharpGPU
 
         public override void SetStencilRef(in uint value)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             VulkanNative.vkCmdSetStencilReference(vkCmdBuf.NativeCommandBuffer, VkStencilFaceFlags.FrontAndBack, value);
         }
 
         public override void SetBlendFactor(in float4 value)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             float* blendConstants = stackalloc float[4];
             blendConstants[0] = value.x;
             blendConstants[1] = value.y;
@@ -1075,37 +1582,62 @@ namespace SharpGPU
             VulkanNative.vkCmdSetBlendConstants(vkCmdBuf.NativeCommandBuffer, blendConstants);
         }
 
-        public override void SetPipeline(RHIRasterPipeline pipeline)
+        internal override void SetPipelineCore(RHIRasterPipeline pipeline)
         {
             m_CachedPipeline = pipeline;
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanRasterPipeline vkPipeline = pipeline as VulkanRasterPipeline;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanRasterPipeline vkPipeline = VulkanEncoderGuards.RequireRasterPipeline(pipeline);
             VulkanNative.vkCmdBindPipeline(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.Graphics, vkPipeline.NativePipeline);
         }
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanArgumentTable vkArgumentTable = resourceTable as VulkanArgumentTable;
-            VulkanRasterPipeline vkPipeline = m_CachedPipeline as VulkanRasterPipeline;
-            VkDescriptorSet set = vkArgumentTable.NativeDescriptorSet;
-            VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.Graphics, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
+            VulkanRasterPipeline pipeline =
+                VulkanEncoderGuards.RequireCachedRasterPipeline(m_CachedPipeline)
+                ?? throw new InvalidOperationException(
+                    "A live Vulkan raster pipeline must be set before "
+                    + "binding an argument table.");
+            if (pipeline.IsDisposed)
+            {
+                throw new ObjectDisposedException(nameof(VulkanRasterPipeline));
+            }
+            VulkanArgumentTable table =
+                pipeline.VulkanPipelineLayout.ResolveReadyTable(
+                    resourceTable,
+                    tableIndex);
+            VulkanCommandBuffer commandBuffer =
+                VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VkDescriptorSet set = table.NativeDescriptorSet;
+            VulkanNative.vkCmdBindDescriptorSets(
+                commandBuffer.NativeCommandBuffer,
+                VkPipelineBindPoint.Graphics,
+                pipeline.VulkanPipelineLayout.NativePipelineLayout,
+                tableIndex,
+                1,
+                &set,
+                0,
+                null);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanRasterPipeline vkPipeline = m_CachedPipeline as VulkanRasterPipeline;
-#if DEBUG
-            Debug.Assert(offset + size <= vkPipeline.VulkanPipelineLayout.PushConstantSize, $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({vkPipeline.VulkanPipelineLayout.PushConstantSize}).");
-#endif
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanRasterPipeline vkPipeline = VulkanEncoderGuards.RequireRasterPipeline(m_CachedPipeline);
+            if (offset + size > vkPipeline.VulkanPipelineLayout.PushConstantSize)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(offset),
+                    offset,
+                    $"Push constant range [{offset}..{offset + size}) exceeds declared PushConstantSize ({vkPipeline.VulkanPipelineLayout.PushConstantSize}).");
+            }
+
             VulkanNative.vkCmdPushConstants(vkCmdBuf.NativeCommandBuffer, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, VkShaderStageFlags.All, offset, size, data.ToPointer());
         }
 
         public override void SetIndexBuffer(RHIBuffer buffer, in uint offset)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanBuffer vkBuffer = buffer as VulkanBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanBuffer vkBuffer = VulkanEncoderGuards.RequireBuffer(buffer);
             VkIndexType indexType = buffer.Descriptor.Format switch
             {
                 ERHIBufferFormat.UInt16 => VkIndexType.Uint16,
@@ -1116,8 +1648,8 @@ namespace SharpGPU
 
         public override void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanBuffer vkBuffer = buffer as VulkanBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanBuffer vkBuffer = VulkanEncoderGuards.RequireBuffer(buffer);
             VkBuffer nativeBuffer = vkBuffer.NativeBuffer;
             ulong bufferOffset = offset;
             VulkanNative.vkCmdBindVertexBuffers(vkCmdBuf.NativeCommandBuffer, slot, 1, &nativeBuffer, &bufferOffset);
@@ -1131,63 +1663,63 @@ namespace SharpGPU
             _ = shadingRateCombiner;
         }
 
-        public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
+        internal override void DrawCore(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
         {
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             VulkanNative.vkCmdDraw(vkCmdBuf.NativeCommandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
         }
 
-        public override void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
+        internal override void DrawIndexedCore(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
         {
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             VulkanNative.vkCmdDrawIndexed(vkCmdBuf.NativeCommandBuffer, indexCount, instanceCount, firstIndex, (int)baseVertex, firstInstance);
         }
 
-        public override void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        internal override void DrawIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanBuffer vkArgs = argsBuffer as VulkanBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanBuffer vkArgs = VulkanEncoderGuards.RequireBuffer(argsBuffer);
             VulkanNative.vkCmdDrawIndirect(vkCmdBuf.NativeCommandBuffer, vkArgs.NativeBuffer, offset, drawCount, 20);
         }
 
-        public override void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        internal override void DrawIndexedIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanBuffer vkArgs = argsBuffer as VulkanBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanBuffer vkArgs = VulkanEncoderGuards.RequireBuffer(argsBuffer);
             VulkanNative.vkCmdDrawIndexedIndirect(vkCmdBuf.NativeCommandBuffer, vkArgs.NativeBuffer, offset, drawCount, 20);
         }
 
-        public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
+        internal override void DispatchMeshCore(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             VulkanNative.vkCmdDrawMeshTasksEXT(vkCmdBuf.NativeCommandBuffer, groupCountX, groupCountY, groupCountZ);
         }
 
-        public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
+        internal override void DispatchMeshIndirectCore(RHIBuffer argsBuffer, in uint argsOffset)
         {
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanBuffer vkArgs = argsBuffer as VulkanBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanBuffer vkArgs = VulkanEncoderGuards.RequireBuffer(argsBuffer);
             VulkanNative.vkCmdDrawMeshTasksIndirectEXT(vkCmdBuf.NativeCommandBuffer, vkArgs.NativeBuffer, argsOffset, 1, 0);
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
+        internal override void ExecuteIndirectCommandBufferCore(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
         {
             // Requires VK_NV_device_generated_commands
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             EndRenderingIfNeeded();
 
@@ -1198,6 +1730,9 @@ namespace SharpGPU
 #if DEBUG
             PopDebugGroup();
 #endif
+            m_CachedPipeline = null;
+            m_PassDescriptor = default;
+            m_HasIssuedDraw = false;
         }
 
         protected override void Release() { }
@@ -1227,25 +1762,25 @@ namespace SharpGPU
 
         public override void Barrier(in RHIBarrier barrier)
         {
-            VulkanBarrierEmitter.EmitBarrier((VulkanCommandBuffer)m_CommandBuffer!, barrier);
+            VulkanBarrierEmitter.EmitBarrier(VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer)!, barrier);
         }
 
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            VulkanBarrierEmitter.EmitBarriers((VulkanCommandBuffer)m_CommandBuffer!, barriers);
+            VulkanBarrierEmitter.EmitBarriers(VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer)!, barriers);
         }
 
         public override void PushDebugGroup(string name)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
             vkQueue.VulkanDevice.VulkanInstance.CmdBeginDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer, name);
         }
 
         public override void PopDebugGroup()
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
             vkQueue.VulkanDevice.VulkanInstance.CmdEndDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer);
         }
 
@@ -1253,8 +1788,8 @@ namespace SharpGPU
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
-                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-                VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
+                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
                 VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.RayTracingShaderKHR, vkQuery.NativeQueryPool, index);
             }
@@ -1264,8 +1799,8 @@ namespace SharpGPU
         {
             if (m_PassDescriptor.Statistics.HasValue)
             {
-                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery;
+                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
                 VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 0);
             }
@@ -1275,8 +1810,8 @@ namespace SharpGPU
         {
             if (m_PassDescriptor.Statistics.HasValue)
             {
-                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery;
+                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
                 VulkanNative.vkCmdEndQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index);
             }
         }
@@ -1284,8 +1819,8 @@ namespace SharpGPU
         public override void SetPipeline(RHIRaytracingPipeline pipeline)
         {
             m_CachedPipeline = pipeline;
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanRaytracingPipeline vkPipeline = pipeline as VulkanRaytracingPipeline;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanRaytracingPipeline vkPipeline = VulkanEncoderGuards.RequireRaytracingPipeline(pipeline);
             if (vkPipeline.NativePipeline.Handle != 0)
             {
                 VulkanNative.vkCmdBindPipeline(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.RayTracingKHR, vkPipeline.NativePipeline);
@@ -1294,17 +1829,38 @@ namespace SharpGPU
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanArgumentTable vkArgumentTable = resourceTable as VulkanArgumentTable;
-            VulkanRaytracingPipeline vkPipeline = m_CachedPipeline as VulkanRaytracingPipeline;
-            VkDescriptorSet set = vkArgumentTable.NativeDescriptorSet;
-            VulkanNative.vkCmdBindDescriptorSets(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.RayTracingKHR, vkPipeline.VulkanPipelineLayout.NativePipelineLayout, tableIndex, 1, &set, 0, null);
+            VulkanRaytracingPipeline pipeline =
+                VulkanEncoderGuards.RequireCachedRaytracingPipeline(m_CachedPipeline)
+                ?? throw new InvalidOperationException(
+                    "A live Vulkan ray-tracing pipeline must be set before "
+                    + "binding an argument table.");
+            if (pipeline.IsDisposed)
+            {
+                throw new ObjectDisposedException(
+                    nameof(VulkanRaytracingPipeline));
+            }
+            VulkanArgumentTable table =
+                pipeline.VulkanPipelineLayout.ResolveReadyTable(
+                    resourceTable,
+                    tableIndex);
+            VulkanCommandBuffer commandBuffer =
+                VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VkDescriptorSet set = table.NativeDescriptorSet;
+            VulkanNative.vkCmdBindDescriptorSets(
+                commandBuffer.NativeCommandBuffer,
+                VkPipelineBindPoint.RayTracingKHR,
+                pipeline.VulkanPipelineLayout.NativePipelineLayout,
+                tableIndex,
+                1,
+                &set,
+                0,
+                null);
         }
 
         public override void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanTopLevelAccelStruct vkTLAS = topLevelAccelStruct as VulkanTopLevelAccelStruct;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanTopLevelAccelStruct vkTLAS = VulkanEncoderGuards.RequireTopLevelAccelStruct(topLevelAccelStruct);
 
             // Get instance buffer device address
             VkBufferDeviceAddressInfo instanceAddrInfo = new VkBufferDeviceAddressInfo()
@@ -1312,7 +1868,7 @@ namespace SharpGPU
                 sType = VkStructureType.BufferDeviceAddressInfo,
                 buffer = vkTLAS.NativeInstanceBuffer,
             };
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
             ulong instanceBufferAddress = VulkanNative.vkGetBufferDeviceAddress(vkQueue.VulkanDevice.NativeDevice, &instanceAddrInfo) + topLevelAccelStruct.Descriptor.Offset;
 
             VkAccelerationStructureGeometryKHR geometry = new VkAccelerationStructureGeometryKHR()
@@ -1362,9 +1918,9 @@ namespace SharpGPU
 
         public override void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanBottomLevelAccelStruct vkBLAS = bottomLevelAccelStruct as VulkanBottomLevelAccelStruct;
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanBottomLevelAccelStruct vkBLAS = VulkanEncoderGuards.RequireBottomLevelAccelStruct(bottomLevelAccelStruct);
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
 
             RHIBottomLevelAccelStructDescriptor descriptor = bottomLevelAccelStruct.Descriptor;
             int geometryCount = descriptor.Geometries.Length;
@@ -1513,7 +2069,7 @@ namespace SharpGPU
 
         private static void InsertAccelerationStructureBuildBarrier(VulkanCommandBuffer vkCmdBuf)
         {
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue)
                 ?? throw new InvalidOperationException("Vulkan AS barrier requires a Vulkan command queue.");
             VulkanDevice device = vkQueue.VulkanDevice;
 
@@ -1572,8 +2128,8 @@ namespace SharpGPU
             Debug.Assert(m_CachedPipeline != null, "Raytracing pipeline must be set before Dispatch");
             Debug.Assert(functionTable != null, "FunctionTable must not be null for raytracing Dispatch");
 
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanFunctionTable vkFuncTable = functionTable as VulkanFunctionTable;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanFunctionTable vkFuncTable = VulkanEncoderGuards.RequireFunctionTable(functionTable);
 
             VkStridedDeviceAddressRegionKHR rayGenRegion = vkFuncTable.RayGenRegion;
             VkStridedDeviceAddressRegionKHR missRegion = vkFuncTable.MissRegion;
@@ -1591,16 +2147,16 @@ namespace SharpGPU
             Debug.Assert(functionTable != null, "FunctionTable must not be null for raytracing DispatchIndirect");
             Debug.Assert(argsBuffer != null, "Args buffer must not be null for DispatchIndirect");
 
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanFunctionTable vkFuncTable = functionTable as VulkanFunctionTable;
-            VulkanBuffer vkArgsBuffer = argsBuffer as VulkanBuffer;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanFunctionTable vkFuncTable = VulkanEncoderGuards.RequireFunctionTable(functionTable);
+            VulkanBuffer vkArgsBuffer = VulkanEncoderGuards.RequireBuffer(argsBuffer);
 
             VkStridedDeviceAddressRegionKHR rayGenRegion = vkFuncTable.RayGenRegion;
             VkStridedDeviceAddressRegionKHR missRegion = vkFuncTable.MissRegion;
             VkStridedDeviceAddressRegionKHR hitGroupRegion = vkFuncTable.HitGroupRegion;
             VkStridedDeviceAddressRegionKHR callableRegion = vkFuncTable.CallableRegion;
 
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
             VkBufferDeviceAddressInfo addrInfo = new VkBufferDeviceAddressInfo()
             {
                 sType = VkStructureType.BufferDeviceAddressInfo,
@@ -1617,7 +2173,7 @@ namespace SharpGPU
         {
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
@@ -1658,25 +2214,25 @@ namespace SharpGPU
 
         public override void Barrier(in RHIBarrier barrier)
         {
-            VulkanBarrierEmitter.EmitBarrier((VulkanCommandBuffer)m_CommandBuffer!, barrier);
+            VulkanBarrierEmitter.EmitBarrier(VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer)!, barrier);
         }
 
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            VulkanBarrierEmitter.EmitBarriers((VulkanCommandBuffer)m_CommandBuffer!, barriers);
+            VulkanBarrierEmitter.EmitBarriers(VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer)!, barriers);
         }
 
         public override void PushDebugGroup(string name)
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
             vkQueue.VulkanDevice.VulkanInstance.CmdBeginDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer, name);
         }
 
         public override void PopDebugGroup()
         {
-            VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-            VulkanCommandQueue vkQueue = vkCmdBuf.CommandQueue as VulkanCommandQueue;
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
             vkQueue.VulkanDevice.VulkanInstance.CmdEndDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer);
         }
 
@@ -1684,8 +2240,8 @@ namespace SharpGPU
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
-                VulkanCommandBuffer vkCmdBuf = m_CommandBuffer as VulkanCommandBuffer;
-                VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery;
+                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
                 VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
                 VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.ComputeShader, vkQuery.NativeQueryPool, index);
             }
@@ -1693,13 +2249,13 @@ namespace SharpGPU
 
         public override void SetPipeline(RHIMLPipeline pipeline)
         {
-            m_CachedPipeline = pipeline as VulkanMLPipeline
+            m_CachedPipeline = pipeline as VulkanMLPipeline ?? throw new InvalidOperationException("Vulkan ML encoder requires a VulkanMLPipeline.")
                 ?? throw new InvalidOperationException($"Vulkan ML encoder expects {nameof(VulkanMLPipeline)} but got {pipeline?.GetType().Name ?? "<null>"}.");
         }
 
         public override void SetBindingSet(RHIMLBindingSet bindingSet)
         {
-            m_CachedBindingSet = bindingSet as VulkanMLBindingSet
+            m_CachedBindingSet = bindingSet as VulkanMLBindingSet ?? throw new InvalidOperationException("Vulkan ML encoder requires a VulkanMLBindingSet.")
                 ?? throw new InvalidOperationException($"Vulkan ML encoder expects {nameof(VulkanMLBindingSet)} but got {bindingSet?.GetType().Name ?? "<null>"}.");
         }
 
@@ -1717,7 +2273,7 @@ namespace SharpGPU
             // the application's ML compiler toolchain.
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
@@ -1733,7 +2289,7 @@ namespace SharpGPU
         protected override void Release() { }
     }
 
-#pragma warning restore CS0414, CS8600, CS8601, CS8602, CS8604, CS8618
+#pragma warning restore CS0414
 
     // ========== WorkGraph Encoder ==========
     internal sealed class VulkanWorkGraphEncoder : RHIWorkGraphEncoder
@@ -1797,7 +2353,7 @@ namespace SharpGPU
             throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
         }

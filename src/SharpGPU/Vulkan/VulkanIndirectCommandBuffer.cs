@@ -2,7 +2,6 @@ using Vortice.Vulkan;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8618
     internal unsafe class VulkanComputeIndirectCommandBuffer : RHIComputeIndirectCommandBuffer
     {
         public VkBuffer NativeArgumentBuffer => m_NativeArgumentBuffer;
@@ -173,7 +172,6 @@ namespace SharpGPU
             VulkanNative.vkFreeMemory(m_VulkanDevice.NativeDevice, m_NativeArgumentMemory, null);
         }
     }
-#pragma warning restore CS8618
 }
 
 

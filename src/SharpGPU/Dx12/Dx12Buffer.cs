@@ -4,37 +4,38 @@ using SharpGPU.Mathematics;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
+#pragma warning disable CA1416
     internal unsafe class Dx12Buffer : RHIBuffer
     {
         public Dx12Device Dx12Device
         {
             get
             {
-                return m_Dx12Device;
+                ThrowIfDisposed(); return m_Dx12Device;
             }
         }
         public Vortice.Direct3D12.ID3D12Resource NativeResource
         {
             get
             {
-                return m_NativeResource;
+                ThrowIfDisposed(); return m_NativeResource;
             }
         }
 
         private Dx12Device m_Dx12Device;
         private Vortice.Direct3D12.ID3D12Resource m_NativeResource;
+        private RHIHeapPlacement? m_Placement;
 
         public Dx12Buffer(Dx12Device device, in RHIBufferDescriptor descriptor)
         {
             m_Dx12Device = device;
-            //m_State = RHIUtility.ConvertToBufferStateFormStorageMode(descriptor.StorageMode);
             m_Descriptor = descriptor;
 
-            Vortice.Direct3D12.ResourceDescription resourceDesc = Vortice.Direct3D12.ResourceDescription.Buffer((ulong)descriptor.ByteSize, Dx12Utility.ConvertToDx12BufferFlag(descriptor.UsageFlag));
+            Vortice.Direct3D12.ResourceDescription resourceDesc =
+                Dx12MemoryUtility.BuildBufferDescription(descriptor);
             Vortice.Direct3D12.HeapProperties heapProperties = new Vortice.Direct3D12.HeapProperties(Dx12Utility.ConvertToDx12HeapTypeByStorage(descriptor.StorageMode));
 
-            Vortice.Direct3D12.ID3D12Resource dx12Resource;
+            Vortice.Direct3D12.ID3D12Resource? dx12Resource;
             SharpGen.Runtime.Result hResult = m_Dx12Device.NativeDevice.CreateCommittedResource(
                 heapProperties,
                 Vortice.Direct3D12.HeapFlags.None,
@@ -42,45 +43,88 @@ namespace SharpGPU
                 Dx12Utility.ConvertToDx12ResourceStateFormStorageMode(descriptor.StorageMode),
                 null,
                 out dx12Resource);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            m_NativeResource = dx12Resource;
+            m_NativeResource = Dx12Utility.RequireCreatedObject(
+                dx12Resource,
+                hResult,
+                "ID3D12Device.CreateCommittedResource(buffer)");
+        }
+
+        internal Dx12Buffer(
+            Dx12Device device,
+            in RHIBufferDescriptor descriptor,
+            Dx12Heap heap,
+            ulong heapOffset,
+            RHIHeapPlacement placement)
+        {
+            m_Dx12Device = device;
+            m_Descriptor = descriptor;
+            m_AllocationMode = ERHIResourceAllocationMode.Placed;
+            Vortice.Direct3D12.ResourceDescription resourceDescription =
+                Dx12MemoryUtility.BuildBufferDescription(descriptor);
+            SharpGen.Runtime.Result result = device.NativeDevice.CreatePlacedResource(
+                heap.NativeHeap,
+                heapOffset,
+                resourceDescription,
+                Dx12Utility.ConvertToDx12ResourceStateFormStorageMode(descriptor.StorageMode),
+                out Vortice.Direct3D12.ID3D12Resource? resource);
+            Dx12Utility.CHECK_HR(result);
+            m_NativeResource = resource ?? throw new RHIException(
+                ERHIErrorCode.NativeFailure,
+                ERHIBackend.DirectX12,
+                result.Code,
+                "CreatePlacedResource returned a null DX12 buffer.",
+                ERHIDeviceState.Operational);
+            m_Placement = placement;
         }
 
         public override IntPtr Map(in uint readBegin, in uint readEnd)
         {
-#if DEBUG
-            Debug.Assert(m_Descriptor.StorageMode != ERHIStorageMode.GPULocal, "StorageMode is GPULocal it can't use Map()");
-#endif
+            ThrowIfDisposed();
+            if (m_Descriptor.StorageMode == ERHIStorageMode.GPULocal)
+            {
+                throw new InvalidOperationException("A GPU-local DX12 buffer cannot be mapped.");
+            }
+            uint byteSize = checked((uint)m_Descriptor.ByteSize);
+            if (readBegin > byteSize || (readEnd != 0 && (readEnd < readBegin || readEnd > byteSize)))
+            {
+                throw new ArgumentOutOfRangeException(nameof(readEnd), "The read range must be within the buffer.");
+            }
 
             void* data = null;
             Vortice.Direct3D12.Range range = new Vortice.Direct3D12.Range(readBegin, math.min(readEnd, (uint)m_Descriptor.ByteSize));
             SharpGen.Runtime.Result hResult = m_NativeResource.Map(0, range, &data);
-#if DEBUG
             Dx12Utility.CHECK_HR(hResult);
-#endif
             return new IntPtr(data);
         }
 
         public override void UnMap(in uint writeBegin, in uint writeEnd)
         {
-#if DEBUG
-            Debug.Assert(m_Descriptor.StorageMode != ERHIStorageMode.GPULocal, "StorageMode is GPULocal it can't use UnMap()");
-#endif
+            ThrowIfDisposed();
+            if (m_Descriptor.StorageMode == ERHIStorageMode.GPULocal)
+            {
+                throw new InvalidOperationException("A GPU-local DX12 buffer cannot be unmapped.");
+            }
+            uint byteSize = checked((uint)m_Descriptor.ByteSize);
+            if (writeBegin > byteSize || (writeEnd != 0 && (writeEnd < writeBegin || writeEnd > byteSize)))
+            {
+                throw new ArgumentOutOfRangeException(nameof(writeEnd), "The write range must be within the buffer.");
+            }
             Vortice.Direct3D12.Range range = new Vortice.Direct3D12.Range(writeBegin, math.min(writeEnd, (uint)m_Descriptor.ByteSize));
             m_NativeResource.Unmap(0, range);
         }
 
         public override RHIBufferView CreateBufferView(in RHIBufferViewDescriptor descriptor)
         {
+            ThrowIfDisposed();
             return new Dx12BufferView(this, descriptor);
         }
 
         protected override void Release()
         {
             m_NativeResource.Release();
+            m_Placement?.Dispose();
+            m_Placement = null;
         }
     }
-#pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416
+#pragma warning restore CA1416
 }

@@ -3,13 +3,14 @@ using System.Diagnostics;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
+#pragma warning disable CA1416
     internal unsafe class Dx12Texture : RHITexture
     {
         public Dx12Device Dx12Device
         {
             get
             {
+                ThrowIfDisposed();
                 return m_Dx12Device;
             }
         }
@@ -20,9 +21,11 @@ namespace SharpGPU
                 return m_NativeResource ?? throw new ObjectDisposedException(nameof(Dx12Texture));
             }
         }
+        internal RHISparseTextureMemoryRequirements? SparseRequirements { get; }
 
         private Dx12Device m_Dx12Device;
         private Vortice.Direct3D12.ID3D12Resource? m_NativeResource;
+        private RHIHeapPlacement? m_Placement;
 
         public Dx12Texture(Dx12Device device, in RHITextureDescriptor descriptor)
         {
@@ -30,15 +33,8 @@ namespace SharpGPU
             m_Descriptor = descriptor;
 
             Vortice.Direct3D12.HeapProperties heapProperties = new Vortice.Direct3D12.HeapProperties(Vortice.Direct3D12.HeapType.Default/*Dx12Utility.ConvertToDx12ResourceFlagByUsage(descriptor.StorageMode)*/);
-            Vortice.Direct3D12.ResourceDescription textureDesc = new Vortice.Direct3D12.ResourceDescription();
-            textureDesc.MipLevels = (ushort)descriptor.MipCount;
-            textureDesc.Format = Dx12Utility.ConvertToDx12Format(descriptor.Format);
-            textureDesc.Width = descriptor.Extent.x;
-            textureDesc.Height = descriptor.Extent.y;
-            textureDesc.DepthOrArraySize = (ushort)descriptor.Extent.z;
-            textureDesc.Flags = Dx12Utility.ConvertToDx12TextureFlag(descriptor.UsageFlag);
-            textureDesc.SampleDescription = Dx12Utility.ConvertToDx12SampleCount(descriptor.SampleCount);
-            textureDesc.Dimension = Dx12Utility.ConvertToDx12TextureDimension(descriptor.Dimension);
+            Vortice.Direct3D12.ResourceDescription textureDesc =
+                Dx12MemoryUtility.BuildTextureDescription(descriptor);
 
             Vortice.Direct3D12.ID3D12Resource? dx12Resource;
             SharpGen.Runtime.Result hResult = m_Dx12Device.NativeDevice.CreateCommittedResource(
@@ -58,15 +54,78 @@ namespace SharpGPU
             m_NativeResource = dx12Resource;
         }
 
+        internal Dx12Texture(
+            Dx12Device device,
+            in RHITextureDescriptor descriptor,
+            Dx12Heap heap,
+            ulong heapOffset,
+            RHIHeapPlacement placement)
+        {
+            m_Dx12Device = device;
+            m_Descriptor = descriptor;
+            m_AllocationMode = ERHIResourceAllocationMode.Placed;
+            Vortice.Direct3D12.ResourceDescription resourceDescription =
+                Dx12MemoryUtility.BuildTextureDescription(descriptor);
+            SharpGen.Runtime.Result result = device.NativeDevice.CreatePlacedResource(
+                heap.NativeHeap,
+                heapOffset,
+                resourceDescription,
+                Vortice.Direct3D12.ResourceStates.Common,
+                out Vortice.Direct3D12.ID3D12Resource? resource);
+            Dx12Utility.CHECK_HR(result);
+            m_NativeResource = resource ?? throw new RHIException(
+                ERHIErrorCode.NativeFailure,
+                ERHIBackend.DirectX12,
+                result.Code,
+                "CreatePlacedResource returned a null DX12 texture.",
+                ERHIDeviceState.Operational);
+            m_Placement = placement;
+        }
+
+        internal Dx12Texture(
+            Dx12Device device,
+            in RHITextureDescriptor descriptor,
+            bool createSparse)
+        {
+            if (!createSparse)
+            {
+                throw new ArgumentException(
+                    "The sparse texture constructor requires sparse creation.",
+                    nameof(createSparse));
+            }
+
+            m_Dx12Device = device;
+            m_Descriptor = descriptor;
+            m_AllocationMode = ERHIResourceAllocationMode.Sparse;
+            m_NativeResource =
+                Dx12SparseMemoryUtility.CreateReservedTexture(device, descriptor);
+            try
+            {
+                SparseRequirements =
+                    Dx12SparseMemoryUtility.QueryRequirements(
+                        device,
+                        descriptor,
+                        m_NativeResource);
+            }
+            catch
+            {
+                m_NativeResource.Release();
+                m_NativeResource = null;
+                throw;
+            }
+        }
+
         public Dx12Texture(Dx12Device device, in RHITextureDescriptor Descriptor, in Vortice.Direct3D12.ID3D12Resource nativeResource)
         {
             m_Dx12Device = device;
             m_Descriptor = Descriptor;
             m_NativeResource = nativeResource;
+            m_AllocationMode = ERHIResourceAllocationMode.External;
         }
 
         public override RHITextureView CreateTextureView(in RHITextureViewDescriptor descriptor)
         {
+            ThrowIfDisposed();
             return new Dx12TextureView(this, descriptor);
         }
 
@@ -75,7 +134,9 @@ namespace SharpGPU
             Vortice.Direct3D12.ID3D12Resource? nativeResource = m_NativeResource;
             m_NativeResource = null;
             nativeResource?.Release();
+            m_Placement?.Dispose();
+            m_Placement = null;
         }
     }
-#pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416
+#pragma warning restore CA1416
 }

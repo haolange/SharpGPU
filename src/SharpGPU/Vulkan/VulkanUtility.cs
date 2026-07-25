@@ -9,7 +9,7 @@ using System.Runtime.CompilerServices;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8600, CS8602, CA1416
+#pragma warning disable CA1416
     internal enum EOSPlatform
     {
         Windows,
@@ -79,10 +79,27 @@ namespace SharpGPU
 
         public static void CheckErrors(VkResult result)
         {
-            if (result != VkResult.Success)
+            if (result == VkResult.Success)
             {
-                throw new InvalidOperationException(result.ToString());
+                return;
             }
+
+            ERHIErrorCode errorCode = result switch
+            {
+                VkResult.ErrorOutOfHostMemory or VkResult.ErrorOutOfDeviceMemory => ERHIErrorCode.OutOfMemory,
+                VkResult.ErrorDeviceLost => ERHIErrorCode.DeviceLost,
+                VkResult.ErrorSurfaceLostKHR => ERHIErrorCode.SurfaceLost,
+                _ => ERHIErrorCode.NativeFailure
+            };
+            ERHIDeviceState deviceState = result == VkResult.ErrorDeviceLost
+                ? ERHIDeviceState.Lost
+                : ERHIDeviceState.Operational;
+            throw new RHIException(
+                errorCode,
+                ERHIBackend.Vulkan,
+                (int)result,
+                result.ToString(),
+                deviceState);
         }
 
         public static uint FindMemoryType(VkPhysicalDeviceMemoryProperties memProperties, uint typeFilter, VkMemoryPropertyFlags properties)
@@ -425,7 +442,9 @@ namespace SharpGPU
             return result;
         }
 
-        public static VkImageUsageFlags ConvertToVkImageUsage(in ERHITextureUsage usage)
+        public static VkImageUsageFlags ConvertToVkImageUsage(
+            in ERHITextureUsage usage,
+            bool attachmentFeedbackLoopLayoutSupported = false)
         {
             VkImageUsageFlags result = 0;
 
@@ -436,11 +455,25 @@ namespace SharpGPU
             if ((usage & ERHITextureUsage.DepthStencil) == ERHITextureUsage.DepthStencil)
                 result |= VkImageUsageFlags.DepthStencilAttachment;
             if ((usage & ERHITextureUsage.RenderTarget) == ERHITextureUsage.RenderTarget)
-                result |= VkImageUsageFlags.ColorAttachment;
+                result |= VkImageUsageFlags.ColorAttachment |
+                          VkImageUsageFlags.InputAttachment;
             if ((usage & ERHITextureUsage.ShaderResource) == ERHITextureUsage.ShaderResource)
                 result |= VkImageUsageFlags.Sampled;
-            if ((usage & ERHITextureUsage.UnorderedAccess) == ERHITextureUsage.UnorderedAccess)
+            if ((usage & (ERHITextureUsage.UnorderedAccess |
+                          ERHITextureUsage.RasterizerOrdered)) != 0)
                 result |= VkImageUsageFlags.Storage;
+            bool isFeedbackCandidate =
+                (usage & ERHITextureUsage.RenderTarget) ==
+                    ERHITextureUsage.RenderTarget &&
+                ((usage & ERHITextureUsage.ShaderResource) ==
+                     ERHITextureUsage.ShaderResource ||
+                 (usage & ERHITextureUsage.RasterizerOrdered) ==
+                     ERHITextureUsage.RasterizerOrdered);
+            if (attachmentFeedbackLoopLayoutSupported &&
+                isFeedbackCandidate)
+            {
+                result |= VkImageUsageFlags.AttachmentFeedbackLoopEXT;
+            }
 
             return result;
         }
@@ -539,18 +572,25 @@ namespace SharpGPU
 
         public static VkMemoryPropertyFlags ConvertToVkMemoryProperty(in ERHIStorageMode storageMode)
         {
-            switch (storageMode)
+            return storageMode switch
             {
-                case ERHIStorageMode.GPULocal:
-                    return VkMemoryPropertyFlags.DeviceLocal;
-                case ERHIStorageMode.Readback:
-                    return VkMemoryPropertyFlags.HostVisible | VkMemoryPropertyFlags.HostCached;
-                case ERHIStorageMode.GPUUpload:
-                case ERHIStorageMode.HostUpload:
-                    return VkMemoryPropertyFlags.HostVisible | VkMemoryPropertyFlags.HostCoherent;
-                default:
-                    return VkMemoryPropertyFlags.DeviceLocal;
-            }
+                ERHIStorageMode.GPULocal =>
+                    VkMemoryPropertyFlags.DeviceLocal,
+                ERHIStorageMode.Readback =>
+                    VkMemoryPropertyFlags.HostVisible |
+                    VkMemoryPropertyFlags.HostCached,
+                ERHIStorageMode.GPUUpload or
+                ERHIStorageMode.HostUpload =>
+                    VkMemoryPropertyFlags.HostVisible |
+                    VkMemoryPropertyFlags.HostCoherent,
+                ERHIStorageMode.Memoryless =>
+                    VkMemoryPropertyFlags.DeviceLocal |
+                    VkMemoryPropertyFlags.LazilyAllocated,
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(storageMode),
+                    storageMode,
+                    "Unknown Vulkan storage mode."),
+            };
         }
 
         private static VkPipelineStageFlags GetSync1QueueDefaultStages(in ERHIPipelineType queuePipeline)
@@ -773,6 +813,8 @@ namespace SharpGPU
         {
             switch (layout)
             {
+                case ERHITextureLayout.Common:
+                    return VkImageLayout.General;
                 case ERHITextureLayout.Present:
                     return VkImageLayout.PresentSrcKHR;
                 case ERHITextureLayout.RenderTarget:
@@ -1119,35 +1161,46 @@ namespace SharpGPU
                 case ERHIBindType.StorageTexture3D:
                     return VkDescriptorType.StorageImage;
                 default:
-                    return VkDescriptorType.SampledImage;
+                    throw new ArgumentOutOfRangeException(
+                        nameof(bindType),
+                        bindType,
+                        "Vulkan descriptor bind type is unsupported.");
             }
         }
 
-        public static VkShaderStageFlags ConvertToVkShaderStage(in ERHIShaderStage stage)
+        public static VkShaderStageFlags ConvertToVkShaderStages(in ERHIShaderStageMask stages)
         {
+            if (stages == ERHIShaderStageMask.None || (stages & ~ERHIShaderStageMask.All) != 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(stages),
+                    stages,
+                    "Vulkan argument-table shader-stage visibility must be a non-empty known mask.");
+            }
+
             VkShaderStageFlags result = 0;
 
-            if ((stage & ERHIShaderStage.All) == ERHIShaderStage.All)
+            if (stages == ERHIShaderStageMask.All)
                 return VkShaderStageFlags.All;
-            if ((stage & ERHIShaderStage.AllGraphics) == ERHIShaderStage.AllGraphics)
+            if (stages == ERHIShaderStageMask.AllGraphics)
                 return VkShaderStageFlags.AllGraphics;
 
-            if ((stage & ERHIShaderStage.Vertex) == ERHIShaderStage.Vertex)
+            if ((stages & ERHIShaderStageMask.Vertex) != 0)
                 result |= VkShaderStageFlags.Vertex;
-            if ((stage & ERHIShaderStage.Fragment) == ERHIShaderStage.Fragment)
+            if ((stages & ERHIShaderStageMask.Fragment) != 0)
                 result |= VkShaderStageFlags.Fragment;
-            if ((stage & ERHIShaderStage.Compute) == ERHIShaderStage.Compute)
+            if ((stages & ERHIShaderStageMask.Compute) != 0)
                 result |= VkShaderStageFlags.Compute;
-            if ((stage & ERHIShaderStage.Task) == ERHIShaderStage.Task)
+            if ((stages & ERHIShaderStageMask.Task) != 0)
                 result |= VkShaderStageFlags.TaskEXT;
-            if ((stage & ERHIShaderStage.Mesh) == ERHIShaderStage.Mesh)
+            if ((stages & ERHIShaderStageMask.Mesh) != 0)
                 result |= VkShaderStageFlags.MeshEXT;
-            if ((stage & ERHIShaderStage.RayTracing) == ERHIShaderStage.RayTracing)
+            if ((stages & ERHIShaderStageMask.RayTracing) != 0)
                 result |= VkShaderStageFlags.RaygenKHR | VkShaderStageFlags.MissKHR | VkShaderStageFlags.ClosestHitKHR | VkShaderStageFlags.AnyHitKHR | VkShaderStageFlags.IntersectionKHR;
-            if ((stage & ERHIShaderStage.MachineLearning) == ERHIShaderStage.MachineLearning)
+            if ((stages & ERHIShaderStageMask.MachineLearning) != 0)
                 result |= VkShaderStageFlags.Compute;
 
-            return result == 0 ? VkShaderStageFlags.All : result;
+            return result;
         }
 
         public static VkQueryType ConvertToVkQueryType(in ERHIQueryType queryType)
@@ -1159,7 +1212,7 @@ namespace SharpGPU
                 case ERHIQueryType.Statistics:
                     return VkQueryType.PipelineStatistics;
                 case ERHIQueryType.TimestampTransfer:
-                case ERHIQueryType.TimestampGenerice:
+                case ERHIQueryType.Timestamp:
                     return VkQueryType.Timestamp;
                 default:
                     return VkQueryType.Timestamp;
@@ -1229,5 +1282,5 @@ namespace SharpGPU
             }
         }
     }
-#pragma warning restore CS8600, CS8602, CA1416
+#pragma warning restore CA1416
 }

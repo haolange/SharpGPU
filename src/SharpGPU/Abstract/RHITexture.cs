@@ -1,3 +1,4 @@
+using System;
 using SharpGPU.Core;
 using SharpGPU.Mathematics;
 
@@ -20,11 +21,21 @@ namespace SharpGPU
         {
             get
             {
+                ThrowIfDisposed();
                 return m_Descriptor;
+            }
+        }
+        public ERHIResourceAllocationMode AllocationMode
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return m_AllocationMode;
             }
         }
 
         protected RHITextureDescriptor m_Descriptor;
+        protected ERHIResourceAllocationMode m_AllocationMode = ERHIResourceAllocationMode.Committed;
 
         public abstract RHITextureView CreateTextureView(in RHITextureViewDescriptor descriptor);
     }

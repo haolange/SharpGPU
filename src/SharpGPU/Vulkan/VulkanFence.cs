@@ -3,7 +3,6 @@ using Vortice.Vulkan;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8618
     internal unsafe class VulkanFence : RHIFence
     {
         public VkFence NativeFence => m_NativeFence;
@@ -12,15 +11,38 @@ namespace SharpGPU
         {
             get
             {
+                ThrowIfSynchronizationDisposed();
+                if (IsSignalKnownComplete)
+                {
+                    return EFenceStatus.Success;
+                }
+
+                if (!IsSignalPending)
+                {
+                    return EFenceStatus.NotReady;
+                }
+
                 VkResult result = VulkanNative.vkGetFenceStatus(m_VulkanDevice.NativeDevice, m_NativeFence);
-                return result == VkResult.Success ? EFenceStatus.Success : EFenceStatus.NotReady;
+                if (result == VkResult.Success)
+                {
+                    MarkSignaled();
+                    return EFenceStatus.Success;
+                }
+
+                if (result == VkResult.NotReady)
+                {
+                    return EFenceStatus.NotReady;
+                }
+
+                VulkanUtility.CheckErrors(result);
+                return EFenceStatus.Undefined;
             }
         }
 
         private VulkanDevice m_VulkanDevice;
         private VkFence m_NativeFence;
 
-        public VulkanFence(VulkanDevice device)
+        public VulkanFence(VulkanDevice device) : base(device)
         {
             m_VulkanDevice = device;
 
@@ -38,18 +60,58 @@ namespace SharpGPU
 
         public override void Reset()
         {
-            fixed (VkFence* fencePtr = &m_NativeFence)
+            if (IsSignalPending)
             {
-                VulkanUtility.CheckErrors(VulkanNative.vkResetFences(m_VulkanDevice.NativeDevice, 1, fencePtr));
+                _ = Status;
+            }
+
+            if (!BeginReset())
+            {
+                return;
+            }
+
+            try
+            {
+                fixed (VkFence* fencePtr = &m_NativeFence)
+                {
+                    VulkanUtility.CheckErrors(VulkanNative.vkResetFences(m_VulkanDevice.NativeDevice, 1, fencePtr));
+                }
+
+                CompleteReset();
+            }
+            catch
+            {
+                RollbackReset();
+                throw;
             }
         }
 
-        public override void Wait()
+        public override EFenceStatus Wait(ulong timeoutNanoseconds = ulong.MaxValue)
         {
+            EnsureWaitable();
+            if (IsSignalKnownComplete)
+            {
+                return EFenceStatus.Success;
+            }
+
             fixed (VkFence* fencePtr = &m_NativeFence)
             {
-                VulkanUtility.CheckErrors(VulkanNative.vkWaitForFences(m_VulkanDevice.NativeDevice, 1, fencePtr, true, ulong.MaxValue));
+                VkResult result = VulkanNative.vkWaitForFences(
+                    m_VulkanDevice.NativeDevice,
+                    1,
+                    fencePtr,
+                    true,
+                    timeoutNanoseconds);
+                if (result == VkResult.Timeout)
+                {
+                    return EFenceStatus.NotReady;
+                }
+
+                VulkanUtility.CheckErrors(result);
             }
+
+            MarkSignaled();
+            return EFenceStatus.Success;
         }
 
         protected override void Release()
@@ -57,7 +119,6 @@ namespace SharpGPU
             VulkanNative.vkDestroyFence(m_VulkanDevice.NativeDevice, m_NativeFence, null);
         }
     }
-#pragma warning restore CS8618
 }
 
 

@@ -62,7 +62,8 @@ namespace SharpGPU
         ResolveSource = 8,
         ResolveDestination = 9,
         Present = 10,
-        ShadingRateSurface = 11
+        ShadingRateSurface = 11,
+        Common = 12
     }
 
     [Flags]
@@ -137,6 +138,8 @@ namespace SharpGPU
         public ERHISyncStageMask SyncAfter;
         public ERHIAccessMask AccessBefore;
         public ERHIAccessMask AccessAfter;
+        public ERHIPipelineType? SourceQueue;
+        public ERHIPipelineType? DestinationQueue;
     }
 
     public struct RHITextureBarrier
@@ -149,6 +152,8 @@ namespace SharpGPU
         public ERHISyncStageMask SyncAfter;
         public ERHIAccessMask AccessBefore;
         public ERHIAccessMask AccessAfter;
+        public ERHIPipelineType? SourceQueue;
+        public ERHIPipelineType? DestinationQueue;
     }
 
     public struct RHIBarrier
@@ -182,7 +187,9 @@ namespace SharpGPU
                                         ERHISyncStageMask syncBefore,
                                         ERHISyncStageMask syncAfter,
                                         ERHIAccessMask accessBefore,
-                                        ERHIAccessMask accessAfter)
+                                        ERHIAccessMask accessAfter,
+                                        ERHIPipelineType? sourceQueue = null,
+                                        ERHIPipelineType? destinationQueue = null)
         {
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_Kind = ERHIBarrierKind.Buffer;
@@ -192,6 +199,8 @@ namespace SharpGPU
             barrier.m_Buffer.SyncAfter = syncAfter;
             barrier.m_Buffer.AccessBefore = accessBefore;
             barrier.m_Buffer.AccessAfter = accessAfter;
+            barrier.m_Buffer.SourceQueue = sourceQueue;
+            barrier.m_Buffer.DestinationQueue = destinationQueue;
             return barrier;
         }
 
@@ -202,7 +211,9 @@ namespace SharpGPU
                                          ERHISyncStageMask syncBefore,
                                          ERHISyncStageMask syncAfter,
                                          ERHIAccessMask accessBefore,
-                                         ERHIAccessMask accessAfter)
+                                         ERHIAccessMask accessAfter,
+                                         ERHIPipelineType? sourceQueue = null,
+                                         ERHIPipelineType? destinationQueue = null)
         {
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_Kind = ERHIBarrierKind.Texture;
@@ -214,12 +225,112 @@ namespace SharpGPU
             barrier.m_Texture.SyncAfter = syncAfter;
             barrier.m_Texture.AccessBefore = accessBefore;
             barrier.m_Texture.AccessAfter = accessAfter;
+            barrier.m_Texture.SourceQueue = sourceQueue;
+            barrier.m_Texture.DestinationQueue = destinationQueue;
             return barrier;
         }
     }
 
     internal static class RHIBarrierUtility
     {
+        internal static void ValidateQueueOwnership(in RHIBarrier barrier, ERHIPipelineType recordingQueue)
+        {
+            switch (barrier.Kind)
+            {
+                case ERHIBarrierKind.Global:
+                    return;
+                case ERHIBarrierKind.Buffer:
+                    ValidateQueueOwnership(
+                        barrier.BufferBarrier.SourceQueue,
+                        barrier.BufferBarrier.DestinationQueue,
+                        recordingQueue);
+                    return;
+                case ERHIBarrierKind.Texture:
+                    ValidateQueueOwnership(
+                        barrier.TextureBarrier.SourceQueue,
+                        barrier.TextureBarrier.DestinationQueue,
+                        recordingQueue);
+                    return;
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(barrier),
+                        barrier.Kind,
+                        "Unknown RHI barrier kind.");
+            }
+        }
+
+        internal static bool TryGetQueueOwnership(
+            in RHIBarrier barrier,
+            out ERHIPipelineType sourceQueue,
+            out ERHIPipelineType destinationQueue)
+        {
+            ERHIPipelineType? source = null;
+            ERHIPipelineType? destination = null;
+            if (barrier.Kind == ERHIBarrierKind.Buffer)
+            {
+                source = barrier.BufferBarrier.SourceQueue;
+                destination = barrier.BufferBarrier.DestinationQueue;
+            }
+            else if (barrier.Kind == ERHIBarrierKind.Texture)
+            {
+                source = barrier.TextureBarrier.SourceQueue;
+                destination = barrier.TextureBarrier.DestinationQueue;
+            }
+
+            if (!source.HasValue || !destination.HasValue)
+            {
+                sourceQueue = default;
+                destinationQueue = default;
+                return false;
+            }
+
+            sourceQueue = source.Value;
+            destinationQueue = destination.Value;
+            return true;
+        }
+
+        private static void ValidateQueueOwnership(
+            ERHIPipelineType? sourceQueue,
+            ERHIPipelineType? destinationQueue,
+            ERHIPipelineType recordingQueue)
+        {
+            if (sourceQueue.HasValue != destinationQueue.HasValue)
+            {
+                throw new ArgumentException(
+                    "Queue ownership transfer requires both source and destination queues.");
+            }
+
+            if (!sourceQueue.HasValue)
+            {
+                return;
+            }
+
+            ValidateQueueType(sourceQueue.Value, nameof(sourceQueue));
+            ValidateQueueType(destinationQueue!.Value, nameof(destinationQueue));
+            ValidateQueueType(recordingQueue, nameof(recordingQueue));
+            if (sourceQueue.Value == destinationQueue.Value)
+            {
+                throw new ArgumentException(
+                    "Queue ownership transfer requires different logical source and destination queues.");
+            }
+
+            if (recordingQueue != sourceQueue.Value && recordingQueue != destinationQueue.Value)
+            {
+                throw new InvalidOperationException(
+                    $"A {sourceQueue.Value}->{destinationQueue.Value} ownership barrier cannot be recorded on the {recordingQueue} queue.");
+            }
+        }
+
+        private static void ValidateQueueType(ERHIPipelineType queue, string parameterName)
+        {
+            if (queue != ERHIPipelineType.Transfer &&
+                queue != ERHIPipelineType.Compute &&
+                queue != ERHIPipelineType.Graphics)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, queue, "Unknown logical queue type.");
+            }
+        }
+
         internal static ERHISyncStageMask ConvertToSyncStageMask(ERHIPipelineType pipeline)
         {
             switch (pipeline)

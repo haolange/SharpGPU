@@ -5,29 +5,48 @@ using System.Runtime.InteropServices;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8618
     internal unsafe class VulkanFunction : RHIFunction
     {
         public VkShaderModule NativeShaderModule => m_NativeShaderModule;
+        internal VulkanDevice VulkanDevice => m_VulkanDevice;
+        internal ReadOnlySpan<byte> Bytecode => m_Bytecode;
 
         private VulkanDevice m_VulkanDevice;
         private VkShaderModule m_NativeShaderModule;
+        private readonly byte[] m_Bytecode;
 
         public VulkanFunction(VulkanDevice device, in RHIFunctionDescriptor descriptor)
         {
             m_VulkanDevice = device;
             m_Descriptor = descriptor;
-
-            VkShaderModuleCreateInfo createInfo = new VkShaderModuleCreateInfo()
+            if (descriptor.ByteCode == IntPtr.Zero || descriptor.ByteSize == 0)
             {
-                sType = VkStructureType.ShaderModuleCreateInfo,
-                codeSize = (nuint)descriptor.ByteSize,
-                pCode = (uint*)descriptor.ByteCode,
-            };
+                throw new ArgumentException(
+                    "Vulkan shader bytecode is empty.",
+                    nameof(descriptor));
+            }
+            int byteCount = checked((int)descriptor.ByteSize);
+            m_Bytecode = new byte[byteCount];
+            Marshal.Copy(descriptor.ByteCode, m_Bytecode, 0, byteCount);
 
-            fixed (VkShaderModule* modulePtr = &m_NativeShaderModule)
+            fixed (byte* bytecode = m_Bytecode)
             {
-                VulkanUtility.CheckErrors(VulkanNative.vkCreateShaderModule(device.NativeDevice, &createInfo, null, modulePtr));
+                VkShaderModuleCreateInfo createInfo = new VkShaderModuleCreateInfo()
+                {
+                    sType = VkStructureType.ShaderModuleCreateInfo,
+                    codeSize = (nuint)m_Bytecode.Length,
+                    pCode = (uint*)bytecode,
+                };
+
+                fixed (VkShaderModule* modulePtr = &m_NativeShaderModule)
+                {
+                    VulkanUtility.CheckErrors(
+                        VulkanNative.vkCreateShaderModule(
+                            device.NativeDevice,
+                            &createInfo,
+                            null,
+                            modulePtr));
+                }
             }
         }
 
@@ -51,25 +70,45 @@ namespace SharpGPU
     internal unsafe class VulkanFunctionLibrary : RHIFunctionLibrary
     {
         public VkShaderModule NativeShaderModule => m_NativeShaderModule;
+        internal VulkanDevice VulkanDevice => m_VulkanDevice;
+        internal ReadOnlySpan<byte> Bytecode => m_Bytecode;
 
         private VulkanDevice m_VulkanDevice;
         private VkShaderModule m_NativeShaderModule;
+        private readonly byte[] m_Bytecode;
 
         public VulkanFunctionLibrary(VulkanDevice device, in RHIFunctionLibraryDescriptor descriptor)
         {
             m_VulkanDevice = device;
             m_Descriptor = descriptor;
-
-            VkShaderModuleCreateInfo createInfo = new VkShaderModuleCreateInfo()
+            if (descriptor.ByteCode == IntPtr.Zero || descriptor.ByteSize == 0)
             {
-                sType = VkStructureType.ShaderModuleCreateInfo,
-                codeSize = (nuint)descriptor.ByteSize,
-                pCode = (uint*)descriptor.ByteCode,
-            };
+                throw new ArgumentException(
+                    "Vulkan shader bytecode is empty.",
+                    nameof(descriptor));
+            }
+            int byteCount = checked((int)descriptor.ByteSize);
+            m_Bytecode = new byte[byteCount];
+            Marshal.Copy(descriptor.ByteCode, m_Bytecode, 0, byteCount);
 
-            fixed (VkShaderModule* modulePtr = &m_NativeShaderModule)
+            fixed (byte* bytecode = m_Bytecode)
             {
-                VulkanUtility.CheckErrors(VulkanNative.vkCreateShaderModule(device.NativeDevice, &createInfo, null, modulePtr));
+                VkShaderModuleCreateInfo createInfo = new VkShaderModuleCreateInfo()
+                {
+                    sType = VkStructureType.ShaderModuleCreateInfo,
+                    codeSize = (nuint)m_Bytecode.Length,
+                    pCode = (uint*)bytecode,
+                };
+
+                fixed (VkShaderModule* modulePtr = &m_NativeShaderModule)
+                {
+                    VulkanUtility.CheckErrors(
+                        VulkanNative.vkCreateShaderModule(
+                            device.NativeDevice,
+                            &createInfo,
+                            null,
+                            modulePtr));
+                }
             }
         }
 
@@ -103,7 +142,7 @@ namespace SharpGPU
         private readonly List<VulkanSbtRecord> m_HitRecords;
         private readonly List<VulkanSbtRecord> m_CallableRecords;
 
-        private VulkanRaytracingPipeline m_CachedPipeline;
+        private VulkanRaytracingPipeline? m_CachedPipeline;
         private VulkanSbtRecord m_RayGenerationRecord;
         private bool m_HasRayGenerationRecord;
 
@@ -282,6 +321,12 @@ namespace SharpGPU
             return new VulkanSbtRecord(record.GroupIndex, CloneLocalData(record.LocalData));
         }
 
+        private VulkanRaytracingPipeline RequireCachedPipeline()
+        {
+            return m_CachedPipeline
+                ?? throw new InvalidOperationException("Function table has not been generated yet.");
+        }
+
         private void RebuildSbt()
         {
             if (!m_HasRayGenerationRecord)
@@ -289,9 +334,10 @@ namespace SharpGPU
                 throw new InvalidOperationException("Ray generation record is not set.");
             }
 
+            VulkanRaytracingPipeline pipeline = RequireCachedPipeline();
             QueryRtProperties(out m_HandleSize, out m_HandleAlignment, out m_BaseAlignment);
             m_AlignedHandleSize = AlignUp(m_HandleSize, m_HandleAlignment);
-            m_LocalDataStrideInBytes = m_CachedPipeline.Descriptor.LocalDataStrideInBytes;
+            m_LocalDataStrideInBytes = pipeline.Descriptor.LocalDataStrideInBytes;
             m_EntryStride = AlignUp(m_AlignedHandleSize + m_LocalDataStrideInBytes, m_HandleAlignment);
             if (m_EntryStride == 0)
             {
@@ -400,14 +446,15 @@ namespace SharpGPU
 
         private void FetchShaderGroupHandles()
         {
-            uint groupCount = m_CachedPipeline.ShaderGroupCount;
+            VulkanRaytracingPipeline pipeline = RequireCachedPipeline();
+            uint groupCount = pipeline.ShaderGroupCount;
             uint handleStorageSize = groupCount * m_HandleSize;
             m_GroupHandles = new byte[handleStorageSize];
             fixed (byte* handlesPtr = m_GroupHandles)
             {
                 VulkanUtility.CheckErrors(VulkanNative.vkGetRayTracingShaderGroupHandlesKHR(
                     m_VulkanDevice.NativeDevice,
-                    m_CachedPipeline.NativePipeline,
+                    pipeline.NativePipeline,
                     0,
                     groupCount,
                     (nuint)handleStorageSize,
@@ -468,24 +515,26 @@ namespace SharpGPU
 
         private int GetSectionGroupCount(in ERHIRayShaderTableSection section)
         {
+            VulkanRaytracingPipeline pipeline = RequireCachedPipeline();
             return section switch
             {
-                ERHIRayShaderTableSection.RayGeneration => m_CachedPipeline.RayGenerationGroupCount,
-                ERHIRayShaderTableSection.Miss => m_CachedPipeline.MissGroupCount,
-                ERHIRayShaderTableSection.Hit => m_CachedPipeline.HitGroupCount,
-                ERHIRayShaderTableSection.Callable => m_CachedPipeline.CallableGroupCount,
+                ERHIRayShaderTableSection.RayGeneration => pipeline.RayGenerationGroupCount,
+                ERHIRayShaderTableSection.Miss => pipeline.MissGroupCount,
+                ERHIRayShaderTableSection.Hit => pipeline.HitGroupCount,
+                ERHIRayShaderTableSection.Callable => pipeline.CallableGroupCount,
                 _ => 0,
             };
         }
 
         private uint GetAbsoluteGroupIndex(in ERHIRayShaderTableSection section, in int sectionGroupIndex)
         {
+            VulkanRaytracingPipeline pipeline = RequireCachedPipeline();
             return section switch
             {
-                ERHIRayShaderTableSection.RayGeneration => (uint)(m_CachedPipeline.RayGenerationGroupBase + sectionGroupIndex),
-                ERHIRayShaderTableSection.Miss => (uint)(m_CachedPipeline.MissGroupBase + sectionGroupIndex),
-                ERHIRayShaderTableSection.Hit => (uint)(m_CachedPipeline.HitGroupBase + sectionGroupIndex),
-                ERHIRayShaderTableSection.Callable => (uint)(m_CachedPipeline.CallableGroupBase + sectionGroupIndex),
+                ERHIRayShaderTableSection.RayGeneration => (uint)(pipeline.RayGenerationGroupBase + sectionGroupIndex),
+                ERHIRayShaderTableSection.Miss => (uint)(pipeline.MissGroupBase + sectionGroupIndex),
+                ERHIRayShaderTableSection.Hit => (uint)(pipeline.HitGroupBase + sectionGroupIndex),
+                ERHIRayShaderTableSection.Callable => (uint)(pipeline.CallableGroupBase + sectionGroupIndex),
                 _ => throw new ArgumentOutOfRangeException(nameof(section)),
             };
         }
@@ -617,7 +666,6 @@ namespace SharpGPU
             }
         }
     }
-#pragma warning restore CS8618
 }
 
 

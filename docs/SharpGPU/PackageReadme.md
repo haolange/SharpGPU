@@ -11,5 +11,5 @@ Start with:
 
 Current focus:
 - DX12 WorkGraph dispatch/readback conformance.
-- Feature contract matrix for Query, ML, RT, Mesh, Bindless, StorageQueue, PipelineLibrary, and WorkGraph.
+- Feature contract matrix for Query, ML, RT, Mesh, Bindless, StorageQueue, PipelineCache, and WorkGraph.
 - Backend encode and workload benchmarks with regression gates.

@@ -2,10 +2,11 @@ using Vortice.Vulkan;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8618
     internal unsafe class VulkanBufferView : RHIBufferView
     {
-        public VulkanBuffer VulkanBuffer => m_VulkanBuffer;
+        public VulkanBuffer VulkanBuffer { get { ThrowIfDisposed(); return m_VulkanBuffer; } }
+        public RHIBufferViewDescriptor Descriptor { get { ThrowIfDisposed(); return m_Descriptor; } }
+        internal VulkanDevice Device { get { ThrowIfDisposed(); return m_VulkanBuffer.VulkanDevice; } }
 
         private VulkanBuffer m_VulkanBuffer;
         private RHIBufferViewDescriptor m_Descriptor;
@@ -18,6 +19,7 @@ namespace SharpGPU
 
         public VkDescriptorBufferInfo GetDescriptorBufferInfo()
         {
+            ThrowIfDisposed();
             return new VkDescriptorBufferInfo()
             {
                 buffer = m_VulkanBuffer.NativeBuffer,
@@ -32,6 +34,5 @@ namespace SharpGPU
         {
         }
     }
-#pragma warning restore CS8618
 }
 

@@ -39,11 +39,11 @@ public sealed class Dx12WorkGraphConformanceTests
         ResetTrace();
         TraceStep("start");
 
-        using RHIInstance? instance = RHIInstance.Create(new RHIInstanceDescriptor
+        using RHIInstance instance = RHIInstance.Create(new RHIInstanceDescriptor
         {
             Backend = ERHIBackend.DirectX12,
             EnableDebugLayer = false,
-            EnableValidatior = false,
+            EnableValidation = false,
             ComputeQueueRequestCount = 0,
             TransferQueueRequestCount = 0,
             GraphicsQueueRequestCount = 1,
@@ -51,7 +51,7 @@ public sealed class Dx12WorkGraphConformanceTests
 
         TraceStep("instance-created");
         Assert.NotNull(instance);
-        Assert.True(instance!.DeviceCount > 0, "DX12 instance did not enumerate any adapters.");
+        Assert.True(instance.DeviceCount > 0, "DX12 instance did not enumerate any adapters.");
 
         RHIDevice[] devices = Enumerable.Range(0, instance.DeviceCount)
             .Select(index => instance.GetDevice(index))
@@ -59,15 +59,15 @@ public sealed class Dx12WorkGraphConformanceTests
         SharpGPUFeatureReport[] reports = devices
             .Select((device, index) => SharpGPUFeatureReport.FromDevice(ERHIBackend.DirectX12, index, device))
             .ToArray();
-        WriteFeatureReport(reports);
 
         RHIDevice? rtx5090 = devices.FirstOrDefault(IsRtx5090);
-        if (rtx5090 != null && rtx5090.Feature?.IsWorkgraphSupported != true)
+        if (rtx5090 != null && rtx5090.Capabilities.WorkGraph.Execution.Tier == ERHICapabilityTier.Unavailable)
         {
             Assert.Fail("RTX 5090 adapter was found but DX12 WorkGraph is not exposed.\n" + BuildDiagnostic(reports, rtx5090));
         }
 
-        RHIDevice? selectedDevice = rtx5090 ?? devices.FirstOrDefault(device => device.Feature?.IsWorkgraphSupported == true);
+        RHIDevice? selectedDevice = rtx5090 ?? devices.FirstOrDefault(
+            device => device.Capabilities.WorkGraph.Execution.Tier != ERHICapabilityTier.Unavailable);
         if (selectedDevice == null)
         {
             foreach (RHIDevice device in devices)
@@ -78,7 +78,9 @@ public sealed class Dx12WorkGraphConformanceTests
             return;
         }
 
-        Assert.True(selectedDevice.Feature?.IsWorkgraphSupported == true, BuildDiagnostic(reports, selectedDevice));
+        Assert.NotEqual(
+            ERHICapabilityTier.Unavailable,
+            selectedDevice.Capabilities.WorkGraph.Execution.Tier);
         TraceStep("device-selected");
 
         RHICommandQueue commandQueue = selectedDevice.GetCommandQueue(ERHIPipelineType.Graphics, 0)
@@ -98,7 +100,9 @@ public sealed class Dx12WorkGraphConformanceTests
 
         fence.Reset();
         TraceStep("submit-begin");
-        commandQueue.Submit(commandBuffer, fence, null!, null!);
+        commandQueue.Submit(new RHIQueueSubmitDescriptor(
+            new RHICommandBuffer[] { commandBuffer },
+            completionFence: fence));
         TraceStep("submit-end");
         WaitForFenceOrFail(fence, TimeSpan.FromSeconds(30), selectedDevice, reports);
         TraceStep("fence-complete");
@@ -121,7 +125,7 @@ public sealed class Dx12WorkGraphConformanceTests
                     Slot = 0,
                     Count = 1,
                     Type = ERHIBindType.StorageBuffer,
-                    Stage = ERHIShaderStage.Compute,
+                    Stages = ERHIShaderStageMask.Compute,
                 },
             },
         });
@@ -393,48 +397,6 @@ public sealed class Dx12WorkGraphConformanceTests
     {
         return device.VendorId.IntValue == (uint)ERHIVendorType.Nvidia
             && (device.Name?.Contains("RTX 5090", StringComparison.OrdinalIgnoreCase) == true);
-    }
-
-    private void WriteFeatureReport(SharpGPUFeatureReport[] reports)
-    {
-        string path = ArtifactPath.Resolve("feature-report-win-x64.json");
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        List<SharpGPUFeatureReport> mergedReports = new();
-        if (File.Exists(path))
-        {
-            try
-            {
-                mergedReports.AddRange(ReadExistingReportBackends(path).Where(report => report.Backend != ERHIBackend.DirectX12.ToString()));
-            }
-            catch (JsonException)
-            {
-                mergedReports.Clear();
-            }
-        }
-
-        mergedReports.AddRange(reports);
-        SharpGPUFeatureReportDocument document = new(SharpGPUEnvironmentReport.Capture(), mergedReports);
-        File.WriteAllText(path, JsonSerializer.Serialize(document, JsonOptions.Indented));
-        m_Output.WriteLine(path);
-    }
-
-    private static IEnumerable<SharpGPUFeatureReport> ReadExistingReportBackends(string path)
-    {
-        string json = File.ReadAllText(path);
-        try
-        {
-            SharpGPUFeatureReportDocument? document = JsonSerializer.Deserialize<SharpGPUFeatureReportDocument>(json);
-            if (document?.Backends != null)
-            {
-                return document.Backends;
-            }
-        }
-        catch (JsonException)
-        {
-        }
-
-        SharpGPUFeatureReport[]? legacyReports = JsonSerializer.Deserialize<SharpGPUFeatureReport[]>(json);
-        return legacyReports ?? Array.Empty<SharpGPUFeatureReport>();
     }
 
     private static string BuildDiagnostic(SharpGPUFeatureReport[] reports, RHIDevice selectedDevice)

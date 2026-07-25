@@ -31,6 +31,20 @@ namespace SharpGPU
         }
     }
 
+    internal static class MetalEncoderStateValidation
+    {
+        internal static void RequireActive(
+            IntPtr nativeEncoder,
+            string operation)
+        {
+            if (nativeEncoder == IntPtr.Zero)
+            {
+                throw new InvalidOperationException(
+                    $"Metal {operation} requires an active native encoder.");
+            }
+        }
+    }
+
     internal static class MetalBarrierHelper
     {
         // TODO: ThirdParty SharpMetal bindings still expose pre-Metal4 barrier APIs.
@@ -51,12 +65,15 @@ namespace SharpGPU
         {
             if (encoderPtr == IntPtr.Zero)
             {
-                return;
+                throw new InvalidOperationException(
+                    "Metal encoder barrier emission requires a live MTL4 command encoder.");
             }
 
             if (!IsValidMetal4StageMask(afterStages) || !IsValidMetal4StageMask(beforeStages))
             {
-                return;
+                throw new ArgumentOutOfRangeException(
+                    nameof(afterStages),
+                    "Metal encoder barrier emission received an invalid MTL4 stage mask.");
             }
 
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(encoderPtr);
@@ -67,12 +84,15 @@ namespace SharpGPU
         {
             if (encoderPtr == IntPtr.Zero)
             {
-                return;
+                throw new InvalidOperationException(
+                    "Metal queue barrier emission requires a live MTL4 command encoder.");
             }
 
             if (!IsValidMetal4StageMask(afterStages) || !IsValidMetal4StageMask(beforeStages))
             {
-                return;
+                throw new ArgumentOutOfRangeException(
+                    nameof(afterStages),
+                    "Metal queue barrier emission received an invalid MTL4 stage mask.");
             }
 
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(encoderPtr);
@@ -89,12 +109,21 @@ namespace SharpGPU
             MetalBarrierBatchPlan plan = default;
             for (int i = 0; i < barriers.Length; ++i)
             {
+                RHIBarrierUtility.ValidateQueueOwnership(
+                    in barriers[i],
+                    commandBuffer.CommandQueue.PipelineType);
+                ValidateBarrierResource(
+                    ((MetalCommandQueue)commandBuffer.CommandQueue).MetalDevice,
+                    in barriers[i],
+                    i);
                 if (!TryGetStagePair(barriers[i], out ulong afterStages, out ulong beforeStages))
                 {
                     continue;
                 }
 
-                if (commandBuffer.IsIntraEncoderBarrier(afterStages))
+                bool transfersQueueOwnership = RHIBarrierUtility.TryGetQueueOwnership(
+                    in barriers[i], out _, out _);
+                if (!transfersQueueOwnership && commandBuffer.IsIntraEncoderBarrier(afterStages))
                 {
                     plan.IntraAfterStages |= afterStages;
                     plan.IntraBeforeStages |= beforeStages;
@@ -121,7 +150,9 @@ namespace SharpGPU
                     continue;
                 }
 
-                if (afterStages != 0 && (seenStages & afterStages) != 0)
+                bool transfersQueueOwnership = RHIBarrierUtility.TryGetQueueOwnership(
+                    in barriers[i], out _, out _);
+                if (!transfersQueueOwnership && afterStages != 0 && (seenStages & afterStages) != 0)
                 {
                     plan.IntraAfterStages |= afterStages;
                     plan.IntraBeforeStages |= beforeStages;
@@ -148,6 +179,51 @@ namespace SharpGPU
             if (plan.QueueAfterStages != 0 && plan.QueueBeforeStages != 0)
             {
                 ApplyQueueBarrier(encoderPtr, plan.QueueAfterStages, plan.QueueBeforeStages);
+            }
+        }
+
+        private static void ValidateBarrierResource(
+            MetalDevice device,
+            in RHIBarrier barrier,
+            int index)
+        {
+            if (barrier.Kind == ERHIBarrierKind.Buffer)
+            {
+                RHIBuffer resource = barrier.BufferBarrier.Resource;
+                if (resource == null)
+                {
+                    throw new ArgumentException($"Metal buffer barrier resource is null at index {index}.");
+                }
+                if (resource.IsDisposed)
+                {
+                    throw new ObjectDisposedException(resource.GetType().FullName);
+                }
+                if (resource is not MetalBuffer buffer ||
+                    !ReferenceEquals(buffer.MetalDevice, device))
+                {
+                    throw new ArgumentException(
+                        $"Metal buffer barrier resource at index {index} was created by a different backend or device.");
+                }
+                return;
+            }
+
+            if (barrier.Kind == ERHIBarrierKind.Texture)
+            {
+                RHITexture resource = barrier.TextureBarrier.Resource;
+                if (resource == null)
+                {
+                    throw new ArgumentException($"Metal texture barrier resource is null at index {index}.");
+                }
+                if (resource.IsDisposed)
+                {
+                    throw new ObjectDisposedException(resource.GetType().FullName);
+                }
+                if (resource is not MetalTexture texture ||
+                    !ReferenceEquals(texture.MetalDevice, device))
+                {
+                    throw new ArgumentException(
+                        $"Metal texture barrier resource at index {index} was created by a different backend or device.");
+                }
             }
         }
 
@@ -202,6 +278,22 @@ namespace SharpGPU
         }
     }
 
+    internal readonly struct MetalRasterOrderedBindingSnapshot
+    {
+        internal bool IsBound { get; }
+        internal MTLResourceID ResourceId { get; }
+        internal MTLAllocation ResidencyAllocation { get; }
+
+        internal MetalRasterOrderedBindingSnapshot(
+            in MTLResourceID resourceId,
+            in MTLAllocation residencyAllocation)
+        {
+            IsBound = resourceId._impl != 0;
+            ResourceId = resourceId;
+            ResidencyAllocation = residencyAllocation;
+        }
+    }
+
     internal enum MetalBindingPipelineType : byte
     {
         Compute = 0,
@@ -214,8 +306,14 @@ namespace SharpGPU
         bool UsesReservedRayFunctionTableSlots { get; }
 
         void ResetForPipeline(MetalPipelineLayout pipelineLayout);
+        void ResetForRasterPipeline(
+            MetalPipelineLayout pipelineLayout,
+            in MetalPrivateRasterBindingPlan privateRasterPlan);
         void SetArgumentTable(MetalArgumentTable resourceTable, in uint tableIndex);
         void SetRasterVertexBuffer(in uint slot, in ulong address, in ulong stride);
+        void SetRasterOrderedTextures(
+            ReadOnlySpan<MetalRasterOrderedBindingSnapshot> snapshots,
+            in byte activeMask);
 
         void CommitCompute(in MTL4ComputeCommandEncoder encoder);
         void CommitRaytracing(in MTL4ComputeCommandEncoder encoder, MetalFunctionTable? functionTable);
@@ -401,8 +499,6 @@ namespace SharpGPU
         protected MetalDevice Device => m_Device;
         protected MetalBindingPipelineType PipelineType => m_PipelineType;
 
-        protected readonly SortedDictionary<uint, MetalArgumentTable> m_BoundTables;
-
         private readonly MetalDevice m_Device;
         private readonly MetalBindingPipelineType m_PipelineType;
         private MetalPipelineLayout? m_PipelineLayout;
@@ -411,7 +507,6 @@ namespace SharpGPU
         {
             m_Device = device;
             m_PipelineType = pipelineType;
-            m_BoundTables = new SortedDictionary<uint, MetalArgumentTable>();
         }
 
         public virtual void ResetForPipeline(MetalPipelineLayout pipelineLayout)
@@ -425,9 +520,15 @@ namespace SharpGPU
             {
                 throw new ObjectDisposedException(nameof(pipelineLayout));
             }
+            if (pipelineLayout.Device is not null
+                && !ReferenceEquals(pipelineLayout.Device, m_Device))
+            {
+                throw new ArgumentException(
+                    "Metal pipeline layout belongs to a different Metal device.",
+                    nameof(pipelineLayout));
+            }
 
             m_PipelineLayout = pipelineLayout;
-            m_BoundTables.Clear();
         }
 
         public virtual void SetArgumentTable(MetalArgumentTable resourceTable, in uint tableIndex)
@@ -446,7 +547,20 @@ namespace SharpGPU
                 throw new ObjectDisposedException(nameof(resourceTable), "Metal argument table layout is disposed.");
             }
 
-
+            if (resourceTable.Device is not null
+                && !ReferenceEquals(resourceTable.Device, m_Device))
+            {
+                throw new ArgumentException(
+                    "Metal argument table belongs to a different Metal device.",
+                    nameof(resourceTable));
+            }
+            if (resourceTable.ArgumentTableLayout.Device is not null
+                && !ReferenceEquals(resourceTable.ArgumentTableLayout.Device, m_Device))
+            {
+                throw new ArgumentException(
+                    "Metal argument table layout belongs to a different Metal device.",
+                    nameof(resourceTable));
+            }
             MetalArgumentTableLayout layout = resourceTable.ArgumentTableLayout;
             if (layout.Index != tableIndex)
             {
@@ -457,7 +571,6 @@ namespace SharpGPU
             resourceTable.ValidateRequiredBindings();
 
             OnArgumentTableUpdated(resourceTable, tableIndex);
-            m_BoundTables[tableIndex] = resourceTable;
         }
 
         public abstract void CommitCompute(in MTL4ComputeCommandEncoder encoder);
@@ -473,8 +586,27 @@ namespace SharpGPU
         {
         }
 
+        public virtual void ResetForRasterPipeline(
+            MetalPipelineLayout pipelineLayout,
+            in MetalPrivateRasterBindingPlan privateRasterPlan)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} does not support raster-private bindings.");
+        }
+
         public virtual void SetRasterVertexBuffer(in uint slot, in ulong address, in ulong stride)
         {
+        }
+
+        public virtual void SetRasterOrderedTextures(
+            ReadOnlySpan<MetalRasterOrderedBindingSnapshot> snapshots,
+            in byte activeMask)
+        {
+            if (activeMask != 0)
+            {
+                throw new InvalidOperationException(
+                    $"{GetType().Name} does not support raster-ordered texture bindings.");
+            }
         }
 
         protected virtual void DisposeBackend()
@@ -521,18 +653,17 @@ namespace SharpGPU
     {
         // Direct MTL4ArgumentTable resource-binding state.
         private readonly SortedDictionary<uint, MTL4ArgumentTable> m_ArgumentTables;
-        private readonly List<MTL4ArgumentTable> m_RetiredArgumentTables;
 
         // Reference-buffer state: one descriptor buffer per physical table and one root argument table.
         private bool m_UsesReferenceBuffers;
         private MTL4ArgumentTable m_RootArgumentTable;
         private readonly SortedDictionary<uint, MTLBuffer> m_DescriptorBuffers;
-        private readonly List<MTLBuffer> m_RetiredDescriptorBuffers;
-        private readonly List<MTL4ArgumentTable> m_RetiredRootArgumentTables;
 
         // Shared state
         private readonly SortedDictionary<uint, RasterVertexBinding> m_RasterVertexBindings;
         private readonly MetalCommandQueue? m_CommandQueue;
+        private readonly MetalNativeTransientBatch m_NativeTransients;
+        private MetalPrivateRasterBindingPlan m_PrivateRasterPlan;
 
         private readonly struct RasterVertexBinding
         {
@@ -546,16 +677,21 @@ namespace SharpGPU
             }
         }
 
-        internal MetalArgumentTableBindingBackend(MetalDevice device, in MetalBindingPipelineType pipelineType, MetalCommandQueue? commandQueue = null)
+        internal MetalArgumentTableBindingBackend(
+            MetalDevice device,
+            in MetalBindingPipelineType pipelineType,
+            MetalNativeTransientBatch nativeTransients,
+            MetalCommandQueue? commandQueue = null)
             : base(device, pipelineType)
         {
             m_ArgumentTables = new SortedDictionary<uint, MTL4ArgumentTable>();
-            m_RetiredArgumentTables = new List<MTL4ArgumentTable>();
             m_DescriptorBuffers = new SortedDictionary<uint, MTLBuffer>();
-            m_RetiredDescriptorBuffers = new List<MTLBuffer>();
-            m_RetiredRootArgumentTables = new List<MTL4ArgumentTable>();
             m_RasterVertexBindings = new SortedDictionary<uint, RasterVertexBinding>();
             m_CommandQueue = commandQueue;
+            m_NativeTransients =
+                nativeTransients ??
+                throw new ArgumentNullException(nameof(nativeTransients));
+            m_PrivateRasterPlan = default;
         }
 
         public override bool UsesReservedRayFunctionTableSlots => PipelineType == MetalBindingPipelineType.Raytracing;
@@ -563,6 +699,27 @@ namespace SharpGPU
         public override void ResetForPipeline(MetalPipelineLayout pipelineLayout)
         {
             base.ResetForPipeline(pipelineLayout);
+            m_PrivateRasterPlan = default;
+            ResetForPipelineCore(pipelineLayout);
+        }
+
+        public override void ResetForRasterPipeline(
+            MetalPipelineLayout pipelineLayout,
+            in MetalPrivateRasterBindingPlan privateRasterPlan)
+        {
+            if (PipelineType != MetalBindingPipelineType.Raster)
+            {
+                throw new InvalidOperationException(
+                    "Raster-private bindings require a raster binding backend.");
+            }
+
+            base.ResetForPipeline(pipelineLayout);
+            m_PrivateRasterPlan = privateRasterPlan;
+            ResetForPipelineCore(pipelineLayout);
+        }
+
+        private void ResetForPipelineCore(MetalPipelineLayout pipelineLayout)
+        {
             RetireArgumentTables();
             RetireDescriptorBuffers();
             m_RasterVertexBindings.Clear();
@@ -677,6 +834,76 @@ namespace SharpGPU
             }
         }
 
+        public override void SetRasterOrderedTextures(
+            ReadOnlySpan<MetalRasterOrderedBindingSnapshot> snapshots,
+            in byte activeMask)
+        {
+            if (PipelineType != MetalBindingPipelineType.Raster)
+            {
+                throw new InvalidOperationException(
+                    "Raster-ordered bindings require a raster binding backend.");
+            }
+            if (activeMask != m_PrivateRasterPlan.RasterOrderedMask)
+            {
+                throw new InvalidOperationException(
+                    $"Active raster-ordered mask 0x{activeMask:X2} does not " +
+                    $"match the pipeline mask " +
+                    $"0x{m_PrivateRasterPlan.RasterOrderedMask:X2}.");
+            }
+            if (activeMask == 0)
+            {
+                return;
+            }
+            if (snapshots.Length < RHIAttachmentIndexArray.MaxAttachments)
+            {
+                throw new ArgumentException(
+                    "Metal raster-ordered snapshots must cover all logical attachment indices.",
+                    nameof(snapshots));
+            }
+
+            for (int logicalAttachment = 0;
+                 logicalAttachment < RHIAttachmentIndexArray.MaxAttachments;
+                 ++logicalAttachment)
+            {
+                byte logicalBit =
+                    checked((byte)(1 << logicalAttachment));
+                if ((activeMask & logicalBit) == 0)
+                {
+                    continue;
+                }
+
+                ref readonly MetalRasterOrderedBindingSnapshot snapshot =
+                    ref snapshots[logicalAttachment];
+                if (!snapshot.IsBound)
+                {
+                    throw new InvalidOperationException(
+                        $"Metal raster-ordered logical attachment {logicalAttachment} " +
+                        "was not captured at BeginRasterPass.");
+                }
+                uint nativeIndex =
+                    m_PrivateRasterPlan.GetRasterOrderedTextureIndex(
+                        logicalAttachment);
+                if (m_UsesReferenceBuffers)
+                {
+                    m_RootArgumentTable.SetTexture(
+                        snapshot.ResourceId,
+                        nativeIndex);
+                }
+                else
+                {
+                    foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in
+                             m_ArgumentTables)
+                    {
+                        pair.Value.SetTexture(
+                            snapshot.ResourceId,
+                            nativeIndex);
+                    }
+                }
+                m_CommandQueue?.AddResidencyAllocation(
+                    snapshot.ResidencyAllocation);
+            }
+        }
+
         public override void CommitCompute(in MTL4ComputeCommandEncoder encoder)
         {
             if (m_UsesReferenceBuffers)
@@ -740,8 +967,6 @@ namespace SharpGPU
         {
             ReleaseArgumentTables();
             ReleaseDescriptorBuffers();
-            ReleaseRetiredArgumentTables();
-            ReleaseRetiredDescriptorBuffers();
             m_RasterVertexBindings.Clear();
         }
 
@@ -777,6 +1002,9 @@ namespace SharpGPU
             if (PipelineType == MetalBindingPipelineType.Raster)
             {
                 maxBufferCount = Math.Max(maxBufferCount, MetalBufferBindingPlanner.MaxBufferBindCount);
+                maxTextureCount = Math.Max(
+                    maxTextureCount,
+                    m_PrivateRasterPlan.RequiredTextureBindingCount);
             }
 
             MTL4ArgumentTableDescriptor descriptor = MTL4ArgumentTableDescriptor.New();
@@ -829,7 +1057,11 @@ namespace SharpGPU
             MTL4ArgumentTableDescriptor descriptor = MTL4ArgumentTableDescriptor.New();
             descriptor.MaxBufferBindCount =
                 MetalBufferBindingPlanner.GetReservedBufferOnlyBindCount(PipelineType);
-            descriptor.MaxTextureBindCount = 1;
+            descriptor.MaxTextureBindCount = Math.Max(
+                1UL,
+                PipelineType == MetalBindingPipelineType.Raster
+                    ? m_PrivateRasterPlan.RequiredTextureBindingCount
+                    : 0UL);
             descriptor.MaxSamplerStateBindCount = 1;
             descriptor.InitializeBindings = true;
             descriptor.SupportAttributeStrides = supportsAttributeStrides;
@@ -866,7 +1098,7 @@ namespace SharpGPU
 
                 for (int j = 0; j < arrayCount; ++j)
                 {
-                    RHIArgumentTableElement element = table.GetElement(i, j);
+                    MetalArgumentBindingSnapshot binding = table.GetBindingSnapshot(i, j);
                     ulong slotIndex = MetalBindingHelpers.GetPhysicalBindingIndex(bind, j);
 
                     switch (bind.Type)
@@ -874,11 +1106,10 @@ namespace SharpGPU
                         case ERHIBindType.Buffer:
                         case ERHIBindType.StorageBuffer:
                         case ERHIBindType.UniformBuffer:
-                            if (element.BufferView is MetalBufferView bufferView)
+                            if (binding.IsBound)
                             {
-                                ulong offset = (ulong)Math.Max(0, bufferView.Descriptor.Offset);
-                                argumentTable.SetAddress(bufferView.Buffer.NativeBuffer.GpuAddress + offset, slotIndex);
-                                m_CommandQueue?.AddResidencyAllocation(bufferView.Buffer.NativeBuffer);
+                                argumentTable.SetAddress(binding.BufferAddress, slotIndex);
+                                m_CommandQueue?.AddResidencyAllocation(binding.ResidencyAllocation);
                             }
                             else
                             {
@@ -901,10 +1132,10 @@ namespace SharpGPU
                         case ERHIBindType.StorageTextureCube:
                         case ERHIBindType.StorageTextureCubeArray:
                         case ERHIBindType.StorageTexture3D:
-                            if (element.TextureView is MetalTextureView textureView)
+                            if (binding.IsBound)
                             {
-                                argumentTable.SetTexture(textureView.ResourceID, slotIndex);
-                                m_CommandQueue?.AddResidencyAllocation(textureView.ParentTexture);
+                                argumentTable.SetTexture(binding.ResourceId, slotIndex);
+                                m_CommandQueue?.AddResidencyAllocation(binding.ResidencyAllocation);
                             }
                             else
                             {
@@ -914,9 +1145,9 @@ namespace SharpGPU
                             break;
 
                         case ERHIBindType.Sampler:
-                            if (element.Sampler is MetalSampler sampler)
+                            if (binding.IsBound)
                             {
-                                argumentTable.SetSamplerState(sampler.NativeSampler.GpuResourceID, slotIndex);
+                                argumentTable.SetSamplerState(binding.ResourceId, slotIndex);
                             }
                             else
                             {
@@ -926,10 +1157,10 @@ namespace SharpGPU
                             break;
 
                         case ERHIBindType.AccelStruct:
-                            if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
+                            if (binding.IsBound)
                             {
-                                argumentTable.SetResource(topLevel.NativeAccelerationStructure.GpuResourceID, slotIndex);
-                                m_CommandQueue?.AddResidencyAllocation(topLevel.NativeAccelerationStructure);
+                                argumentTable.SetResource(binding.ResourceId, slotIndex);
+                                m_CommandQueue?.AddResidencyAllocation(binding.ResidencyAllocation);
                             }
                             else
                             {
@@ -977,7 +1208,11 @@ namespace SharpGPU
 
             MTL4ArgumentTableDescriptor descriptor = MTL4ArgumentTableDescriptor.New();
             descriptor.MaxBufferBindCount = Math.Max(1UL, maxBufferCount);
-            descriptor.MaxTextureBindCount = 1UL;
+            descriptor.MaxTextureBindCount = Math.Max(
+                1UL,
+                PipelineType == MetalBindingPipelineType.Raster
+                    ? m_PrivateRasterPlan.RequiredTextureBindingCount
+                    : 0UL);
             descriptor.MaxSamplerStateBindCount = 1UL;
             descriptor.InitializeBindings = true;
             descriptor.SupportAttributeStrides = PipelineType == MetalBindingPipelineType.Raster;
@@ -1049,7 +1284,7 @@ namespace SharpGPU
 
                 for (int j = 0; j < arrayCount; ++j)
                 {
-                    RHIArgumentTableElement element = table.GetElement(i, j);
+                    MetalArgumentBindingSnapshot binding = table.GetBindingSnapshot(i, j);
                     ulong entryByteOffset = MetalBindingHelpers.GetReferenceByteOffset(bind, j);
                     IntPtr entryAddress = GetDescriptorBufferEntryAddress(ptr, entryByteOffset);
 
@@ -1058,12 +1293,10 @@ namespace SharpGPU
                         case ERHIBindType.Buffer:
                         case ERHIBindType.StorageBuffer:
                         case ERHIBindType.UniformBuffer:
-                            if (element.BufferView is MetalBufferView bufferView)
+                            if (binding.IsBound)
                             {
-                                ulong bufOffset = (ulong)Math.Max(0, bufferView.Descriptor.Offset);
-                                ulong address = bufferView.Buffer.NativeBuffer.GpuAddress + bufOffset;
-                                Marshal.WriteInt64(entryAddress, (long)address);
-                                commandQueue?.AddResidencyAllocation(bufferView.Buffer.NativeBuffer);
+                                Marshal.WriteInt64(entryAddress, (long)binding.BufferAddress);
+                                commandQueue?.AddResidencyAllocation(binding.ResidencyAllocation);
                             }
 
                             break;
@@ -1082,27 +1315,27 @@ namespace SharpGPU
                         case ERHIBindType.StorageTextureCube:
                         case ERHIBindType.StorageTextureCubeArray:
                         case ERHIBindType.StorageTexture3D:
-                            if (element.TextureView is MetalTextureView textureView)
+                            if (binding.IsBound)
                             {
-                                Marshal.WriteInt64(entryAddress, (long)textureView.ResourceID._impl);
-                                commandQueue?.AddResidencyAllocation(textureView.ParentTexture);
+                                Marshal.WriteInt64(entryAddress, (long)binding.ResourceId._impl);
+                                commandQueue?.AddResidencyAllocation(binding.ResidencyAllocation);
                             }
 
                             break;
 
                         case ERHIBindType.Sampler:
-                            if (element.Sampler is MetalSampler sampler)
+                            if (binding.IsBound)
                             {
-                                Marshal.WriteInt64(entryAddress, (long)sampler.NativeSampler.GpuResourceID._impl);
+                                Marshal.WriteInt64(entryAddress, (long)binding.ResourceId._impl);
                             }
 
                             break;
 
                         case ERHIBindType.AccelStruct:
-                            if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
+                            if (binding.IsBound)
                             {
-                                Marshal.WriteInt64(entryAddress, (long)topLevel.NativeAccelerationStructure.GpuResourceID._impl);
-                                commandQueue?.AddResidencyAllocation(topLevel.NativeAccelerationStructure);
+                                Marshal.WriteInt64(entryAddress, (long)binding.ResourceId._impl);
+                                commandQueue?.AddResidencyAllocation(binding.ResidencyAllocation);
                             }
 
                             break;
@@ -1187,24 +1420,12 @@ namespace SharpGPU
             {
                 if (pair.Value.NativePtr != IntPtr.Zero)
                 {
-                    m_RetiredArgumentTables.Add(pair.Value);
+                    m_NativeTransients.RetainOwnership(
+                        pair.Value.NativePtr);
                 }
             }
 
             m_ArgumentTables.Clear();
-        }
-
-        private void ReleaseRetiredArgumentTables()
-        {
-            foreach (MTL4ArgumentTable argumentTable in m_RetiredArgumentTables)
-            {
-                if (argumentTable.NativePtr != IntPtr.Zero)
-                {
-                    ObjectiveCRuntime.Release(argumentTable.NativePtr);
-                }
-            }
-
-            m_RetiredArgumentTables.Clear();
         }
 
         private void ReleaseDescriptorBuffers()
@@ -1234,7 +1455,8 @@ namespace SharpGPU
             {
                 if (pair.Value.NativePtr != IntPtr.Zero)
                 {
-                    m_RetiredDescriptorBuffers.Add(pair.Value);
+                    m_NativeTransients.RetainOwnership(
+                        pair.Value.NativePtr);
                 }
             }
 
@@ -1242,34 +1464,12 @@ namespace SharpGPU
 
             if (m_RootArgumentTable.NativePtr != IntPtr.Zero)
             {
-                m_RetiredRootArgumentTables.Add(m_RootArgumentTable);
+                m_NativeTransients.RetainOwnership(
+                    m_RootArgumentTable.NativePtr);
                 m_RootArgumentTable = default;
             }
 
             m_UsesReferenceBuffers = false;
-        }
-
-        private void ReleaseRetiredDescriptorBuffers()
-        {
-            foreach (MTLBuffer buffer in m_RetiredDescriptorBuffers)
-            {
-                if (buffer.NativePtr != IntPtr.Zero)
-                {
-                    ObjectiveCRuntime.Release(buffer.NativePtr);
-                }
-            }
-
-            m_RetiredDescriptorBuffers.Clear();
-
-            foreach (MTL4ArgumentTable argumentTable in m_RetiredRootArgumentTables)
-            {
-                if (argumentTable.NativePtr != IntPtr.Zero)
-                {
-                    ObjectiveCRuntime.Release(argumentTable.NativePtr);
-                }
-            }
-
-            m_RetiredRootArgumentTables.Clear();
         }
     }
 
@@ -1460,7 +1660,7 @@ namespace SharpGPU
             ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
             {
@@ -1542,11 +1742,7 @@ namespace SharpGPU
 
         internal void WaitForFence(in MTLFence fence)
         {
-            if (fence.NativePtr == IntPtr.Zero || m_NativeEncoder4.NativePtr == IntPtr.Zero)
-            {
-                return;
-            }
-
+            ValidateFenceAndEncoder(fence, nameof(WaitForFence));
             ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.WaitForFence(fence, stage);
@@ -1554,11 +1750,7 @@ namespace SharpGPU
 
         internal void SignalFence(in MTLFence fence)
         {
-            if (fence.NativePtr == IntPtr.Zero || m_NativeEncoder4.NativePtr == IntPtr.Zero)
-            {
-                return;
-            }
-
+            ValidateFenceAndEncoder(fence, nameof(SignalFence));
             ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.UpdateFence(fence, stage);
@@ -1572,10 +1764,13 @@ namespace SharpGPU
 
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            if (barriers.Length == 0 || m_NativeEncoder4.NativePtr == IntPtr.Zero)
+            if (barriers.Length == 0)
             {
                 return;
             }
+            MetalEncoderStateValidation.RequireActive(
+                m_NativeEncoder4.NativePtr,
+                "barrier emission");
 
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             MetalBarrierHelper.MetalBarrierBatchPlan plan = MetalBarrierHelper.PlanBarriers(commandBuffer, barriers);
@@ -1595,10 +1790,9 @@ namespace SharpGPU
 
         public override void PopDebugGroup()
         {
-            if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
-            {
-                return;
-            }
+            MetalEncoderStateValidation.RequireActive(
+                m_NativeEncoder4.NativePtr,
+                "debug-group pop");
 
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.PopDebugGroup();
@@ -1696,7 +1890,7 @@ namespace SharpGPU
             }
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
@@ -1715,10 +1909,19 @@ namespace SharpGPU
             m_PassDescriptor = default;
         }
 
-        protected override void Release()
+        internal void ResetForRecording()
         {
             m_BindingBackend?.Dispose();
             m_BindingBackend = null;
+            m_NativeEncoder4 = default;
+            m_PendingPassDebugGroup = null;
+            m_PassDescriptor = default;
+            m_CachedPipeline = null;
+        }
+
+        protected override void Release()
+        {
+            ResetForRecording();
         }
 
         private void ConfigureBindingBackend(MetalPipelineLayout pipelineLayout)
@@ -1728,7 +1931,11 @@ namespace SharpGPU
             if (m_BindingBackend == null)
             {
                 MetalCommandQueue? queue = commandBuffer.CommandQueue as MetalCommandQueue;
-                m_BindingBackend = new MetalArgumentTableBindingBackend(m_MetalDevice, MetalBindingPipelineType.Compute, queue);
+                m_BindingBackend = new MetalArgumentTableBindingBackend(
+                    m_MetalDevice,
+                    MetalBindingPipelineType.Compute,
+                    commandBuffer.NativeTransientBatch,
+                    queue);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
@@ -1756,6 +1963,23 @@ namespace SharpGPU
 
             PushDebugGroup(m_PendingPassDebugGroup);
             m_PendingPassDebugGroup = null;
+        }
+
+        private void ValidateFenceAndEncoder(
+            in MTLFence fence,
+            string operation)
+        {
+            if (fence.NativePtr == IntPtr.Zero)
+            {
+                throw new ArgumentException(
+                    $"Metal {operation} requires a valid native fence.",
+                    nameof(fence));
+            }
+            if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException(
+                    $"Metal {operation} requires an active compute encoder.");
+            }
         }
 
         private bool HasNativeEncoder => m_NativeEncoder4.NativePtr != IntPtr.Zero;
@@ -1812,10 +2036,13 @@ namespace SharpGPU
 
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            if (barriers.Length == 0 || m_NativeEncoder4.NativePtr == IntPtr.Zero)
+            if (barriers.Length == 0)
             {
                 return;
             }
+            MetalEncoderStateValidation.RequireActive(
+                m_NativeEncoder4.NativePtr,
+                "barrier emission");
 
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             MetalBarrierHelper.MetalBarrierBatchPlan plan = MetalBarrierHelper.PlanBarriers(commandBuffer, barriers);
@@ -1835,10 +2062,9 @@ namespace SharpGPU
 
         public override void PopDebugGroup()
         {
-            if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
-            {
-                return;
-            }
+            MetalEncoderStateValidation.RequireActive(
+                m_NativeEncoder4.NativePtr,
+                "debug-group pop");
 
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.PopDebugGroup();
@@ -1993,7 +2219,7 @@ namespace SharpGPU
             }
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
@@ -2014,11 +2240,7 @@ namespace SharpGPU
 
         internal void WaitForFence(in MTLFence fence)
         {
-            if (fence.NativePtr == IntPtr.Zero || m_NativeEncoder4.NativePtr == IntPtr.Zero)
-            {
-                return;
-            }
-
+            ValidateFenceAndEncoder(fence, nameof(WaitForFence));
             ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.RayTracing);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.WaitForFence(fence, stage);
@@ -2026,20 +2248,25 @@ namespace SharpGPU
 
         internal void SignalFence(in MTLFence fence)
         {
-            if (fence.NativePtr == IntPtr.Zero || m_NativeEncoder4.NativePtr == IntPtr.Zero)
-            {
-                return;
-            }
-
+            ValidateFenceAndEncoder(fence, nameof(SignalFence));
             ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.RayTracing);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.UpdateFence(fence, stage);
         }
 
-        protected override void Release()
+        internal void ResetForRecording()
         {
             m_BindingBackend?.Dispose();
             m_BindingBackend = null;
+            m_NativeEncoder4 = default;
+            m_PendingPassDebugGroup = null;
+            m_PassDescriptor = default;
+            m_CachedPipeline = null;
+        }
+
+        protected override void Release()
+        {
+            ResetForRecording();
         }
 
         private void ConfigureBindingBackend(MetalPipelineLayout pipelineLayout)
@@ -2049,7 +2276,11 @@ namespace SharpGPU
             if (m_BindingBackend == null)
             {
                 MetalCommandQueue? queue = commandBuffer.CommandQueue as MetalCommandQueue;
-                m_BindingBackend = new MetalArgumentTableBindingBackend(m_MetalDevice, MetalBindingPipelineType.Raytracing, queue);
+                m_BindingBackend = new MetalArgumentTableBindingBackend(
+                    m_MetalDevice,
+                    MetalBindingPipelineType.Raytracing,
+                    commandBuffer.NativeTransientBatch,
+                    queue);
             }
 
             m_BindingBackend.ResetForPipeline(pipelineLayout);
@@ -2086,6 +2317,23 @@ namespace SharpGPU
             m_PendingPassDebugGroup = null;
         }
 
+        private void ValidateFenceAndEncoder(
+            in MTLFence fence,
+            string operation)
+        {
+            if (fence.NativePtr == IntPtr.Zero)
+            {
+                throw new ArgumentException(
+                    $"Metal {operation} requires a valid native fence.",
+                    nameof(fence));
+            }
+            if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException(
+                    $"Metal {operation} requires an active ray-tracing encoder.");
+            }
+        }
+
         private bool HasNativeEncoder => m_NativeEncoder4.NativePtr != IntPtr.Zero;
     }
 
@@ -2102,6 +2350,14 @@ namespace SharpGPU
         private string? m_PendingPassDebugGroup;
         private RHIRasterPassDescriptor m_PendingPassDescriptor;
         private bool m_HasPendingPassDescriptor;
+        private MetalRasterPassLowering? m_RasterLowering;
+        private MTLLogicalToPhysicalColorAttachmentMap[] m_ColorAttachmentMaps;
+        private readonly MetalRasterOrderedBindingSnapshot[]
+            m_RasterOrderedBindings;
+        private uint m_RenderTargetWidth;
+        private uint m_RenderTargetHeight;
+        private ERHISampleCount m_RasterSampleCount;
+        private int m_CurrentSubPassIndex;
 
         internal MetalRasterEncoder(MetalCommandBuffer commandBuffer)
         {
@@ -2114,10 +2370,58 @@ namespace SharpGPU
             m_PendingPassDebugGroup = null;
             m_PendingPassDescriptor = default;
             m_HasPendingPassDescriptor = false;
+            m_RasterLowering = null;
+            m_ColorAttachmentMaps =
+                Array.Empty<MTLLogicalToPhysicalColorAttachmentMap>();
+            m_RasterOrderedBindings =
+                new MetalRasterOrderedBindingSnapshot[
+                    RHIAttachmentIndexArray.MaxAttachments];
+            m_RenderTargetWidth = 0;
+            m_RenderTargetHeight = 0;
+            m_RasterSampleCount = ERHISampleCount.None;
+            m_CurrentSubPassIndex = 0;
         }
 
-        internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
+        internal override void BeginPassCore(RasterPassPlan plan)
         {
+            RHIRasterPassDescriptor descriptor = plan.DescriptorSnapshot;
+            MetalCommandBuffer commandBuffer =
+                (MetalCommandBuffer)m_CommandBuffer!;
+            MetalDevice device =
+                ((MetalCommandQueue)commandBuffer.CommandQueue).MetalDevice;
+            MetalNativeTransientBatch nativeTransients =
+                commandBuffer.NativeTransientBatch;
+            int transientCheckpoint =
+                nativeTransients.CaptureCheckpoint();
+            try
+            {
+                m_RasterLowering = MetalRasterPassLowering.Compile(
+                    plan,
+                    device.RasterCapabilities);
+                m_RenderTargetWidth = plan.Width;
+                m_RenderTargetHeight = plan.Height;
+                m_RasterSampleCount = plan.SampleCount;
+                CaptureRasterOrderedBindings(
+                    plan,
+                    m_RasterLowering.RasterOrderedAttachmentMask);
+                ReleaseColorAttachmentMaps();
+                m_ColorAttachmentMaps = CreateColorAttachmentMaps(
+                    plan,
+                    m_RasterLowering);
+            }
+            catch
+            {
+                ReleaseColorAttachmentMaps();
+                Array.Clear(m_RasterOrderedBindings);
+                m_RasterLowering = null;
+                m_RenderTargetWidth = 0;
+                m_RenderTargetHeight = 0;
+                m_RasterSampleCount = ERHISampleCount.None;
+                nativeTransients.RollbackTo(transientCheckpoint);
+                throw;
+            }
+
+            m_CurrentSubPassIndex = 0;
             m_NativeEncoder4 = default;
             m_PendingPassDescriptor = descriptor;
             m_HasPendingPassDescriptor = true;
@@ -2145,11 +2449,7 @@ namespace SharpGPU
 
         internal void WaitForFence(in MTLFence fence)
         {
-            if (fence.NativePtr == IntPtr.Zero || m_NativeEncoder4.NativePtr == IntPtr.Zero)
-            {
-                return;
-            }
-
+            ValidateFenceAndEncoder(fence, nameof(WaitForFence));
             ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Vertex | ERHISyncStageMask.Fragment);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.WaitForFence(fence, stage);
@@ -2157,11 +2457,7 @@ namespace SharpGPU
 
         internal void SignalFence(in MTLFence fence)
         {
-            if (fence.NativePtr == IntPtr.Zero || m_NativeEncoder4.NativePtr == IntPtr.Zero)
-            {
-                return;
-            }
-
+            ValidateFenceAndEncoder(fence, nameof(SignalFence));
             ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Vertex | ERHISyncStageMask.Fragment);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.UpdateFence(fence, stage);
@@ -2175,10 +2471,13 @@ namespace SharpGPU
 
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            if (barriers.Length == 0 || m_NativeEncoder4.NativePtr == IntPtr.Zero)
+            if (barriers.Length == 0)
             {
                 return;
             }
+            MetalEncoderStateValidation.RequireActive(
+                m_NativeEncoder4.NativePtr,
+                "barrier emission");
 
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
             MetalBarrierHelper.MetalBarrierBatchPlan plan = MetalBarrierHelper.PlanBarriers(commandBuffer, barriers);
@@ -2198,10 +2497,9 @@ namespace SharpGPU
 
         public override void PopDebugGroup()
         {
-            if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
-            {
-                return;
-            }
+            MetalEncoderStateValidation.RequireActive(
+                m_NativeEncoder4.NativePtr,
+                "debug-group pop");
 
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.PopDebugGroup();
@@ -2258,9 +2556,28 @@ namespace SharpGPU
             }
         }
 
-        public override void NextSubPass()
+        internal override void NextSubPassCore(
+            RasterPassPlan plan,
+            int sourceSubPassIndex,
+            int destinationSubPassIndex)
         {
-            return;
+            RequireEncoderForState(nameof(NextSubPass));
+            if (sourceSubPassIndex != m_CurrentSubPassIndex ||
+                destinationSubPassIndex != sourceSubPassIndex + 1)
+            {
+                throw new InvalidOperationException(
+                    "Metal subpass advancement is not sequential.");
+            }
+
+            ulong fragmentStages =
+                MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Fragment);
+            new MTL4CommandEncoder(m_NativeEncoder4.NativePtr)
+                .BarrierAfterEncoderStages(
+                    fragmentStages,
+                    fragmentStages,
+                    MTL4VisibilityOptions.Device);
+            ApplyColorAttachmentMap(destinationSubPassIndex);
+            m_CurrentSubPassIndex = destinationSubPassIndex;
         }
 
         public override void SetScissor(in Rect rect)
@@ -2323,12 +2640,14 @@ namespace SharpGPU
             m_NativeEncoder4.SetBlendColor(value.x, value.y, value.z, value.w);
         }
 
-        public override void SetPipeline(RHIRasterPipeline pipeline)
+        internal override void SetPipelineCore(RHIRasterPipeline pipeline)
         {
             m_CachedPipeline = pipeline;
             MetalRasterPipeline metalPipeline = (MetalRasterPipeline)pipeline;
-            MetalPipelineLayout pipelineLayout = pipeline.Descriptor.PipelineLayout as MetalPipelineLayout ?? throw new InvalidOperationException("Raster pipeline layout must be a MetalPipelineLayout.");
-            ConfigureBindingBackend(pipelineLayout);
+            MetalPipelineLayout pipelineLayout = pipeline.DescriptorInternal.PipelineLayout as MetalPipelineLayout ?? throw new InvalidOperationException("Raster pipeline layout must be a MetalPipelineLayout.");
+            ConfigureBindingBackend(
+                pipelineLayout,
+                metalPipeline.PrivateRasterBindingPlan);
             EnsureMtl4RenderEncoder();
             ApplyPendingPassDebugGroup();
 
@@ -2401,7 +2720,7 @@ namespace SharpGPU
         {
         }
 
-        public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
+        internal override void DrawCore(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
         {
             MTLPrimitiveType primitiveType = ResolvePrimitiveType();
             m_BindingBackend?.CommitRaster(m_NativeEncoder4);
@@ -2409,7 +2728,7 @@ namespace SharpGPU
             MarkRasterStagesSeen();
         }
 
-        public override void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
+        internal override void DrawIndexedCore(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
         {
             if (m_IndexBuffer.NativePtr == IntPtr.Zero)
             {
@@ -2425,7 +2744,7 @@ namespace SharpGPU
             MarkRasterStagesSeen();
         }
 
-        public override void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        internal override void DrawIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
             MetalBuffer metalBuffer = (MetalBuffer)argsBuffer;
             MTLPrimitiveType primitiveType = ResolvePrimitiveType();
@@ -2439,7 +2758,7 @@ namespace SharpGPU
             MarkRasterStagesSeen();
         }
 
-        public override void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        internal override void DrawIndexedIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
             MetalBuffer metalBuffer = (MetalBuffer)argsBuffer;
             MTLPrimitiveType primitiveType = ResolvePrimitiveType();
@@ -2460,14 +2779,14 @@ namespace SharpGPU
             MarkRasterStagesSeen();
         }
 
-        public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
+        internal override void DispatchMeshCore(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
             m_BindingBackend?.CommitRaster(m_NativeEncoder4);
             m_NativeEncoder4.DrawMeshThreadgroups(new MTLSize(groupCountX, groupCountY, groupCountZ), new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
             MarkRasterStagesSeen();
         }
 
-        public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
+        internal override void DispatchMeshIndirectCore(RHIBuffer argsBuffer, in uint argsOffset)
         {
             MetalBuffer metalBuffer = (MetalBuffer)argsBuffer;
             m_BindingBackend?.CommitRaster(m_NativeEncoder4);
@@ -2476,7 +2795,7 @@ namespace SharpGPU
             MarkRasterStagesSeen();
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
+        internal override void ExecuteIndirectCommandBufferCore(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
         {
             if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
             {
@@ -2489,7 +2808,7 @@ namespace SharpGPU
             m_NativeEncoder4.ExecuteCommandsInBuffer(nativeICB, range);
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             if (m_HasPendingPassDescriptor && m_PendingPassDescriptor.Timestamp.HasValue)
             {
@@ -2503,29 +2822,70 @@ namespace SharpGPU
                 m_NativeEncoder4 = default;
             }
 
+            ReleaseColorAttachmentMaps();
+            m_RasterLowering = null;
+            m_CurrentSubPassIndex = 0;
             m_PendingPassDescriptor = default;
             m_HasPendingPassDescriptor = false;
             m_PendingPassDebugGroup = null;
             m_CachedPipeline = null;
         }
 
-        protected override void Release()
+        internal void ResetForRecording()
         {
             m_BindingBackend?.Dispose();
             m_BindingBackend = null;
+            m_NativeEncoder4 = default;
+            m_IndexBuffer = default;
+            m_IndexBufferOffset = 0;
+            m_IndexType = MTLIndexType.UInt16;
+            m_PendingPassDebugGroup = null;
+            m_PendingPassDescriptor = default;
+            m_HasPendingPassDescriptor = false;
+            m_RasterLowering = null;
+            ReleaseColorAttachmentMaps();
+            Array.Clear(m_RasterOrderedBindings);
+            m_RenderTargetWidth = 0;
+            m_RenderTargetHeight = 0;
+            m_RasterSampleCount = ERHISampleCount.None;
+            m_CurrentSubPassIndex = 0;
+            m_CachedPipeline = null;
         }
 
-        private void ConfigureBindingBackend(MetalPipelineLayout pipelineLayout)
+        protected override void Release()
+        {
+            ResetForRecording();
+        }
+
+        private void ConfigureBindingBackend(
+            MetalPipelineLayout pipelineLayout,
+            in MetalPrivateRasterBindingPlan privateRasterPlan)
         {
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
 
             if (m_BindingBackend == null)
             {
-                MetalCommandQueue? queue = commandBuffer.CommandQueue as MetalCommandQueue;
-                m_BindingBackend = new MetalArgumentTableBindingBackend(((MetalCommandQueue)commandBuffer.CommandQueue).MetalDevice, MetalBindingPipelineType.Raster, queue);
+                MetalCommandQueue? queue =
+                    commandBuffer.CommandQueue as MetalCommandQueue;
+                m_BindingBackend = new MetalArgumentTableBindingBackend(
+                    ((MetalCommandQueue)commandBuffer.CommandQueue).MetalDevice,
+                    MetalBindingPipelineType.Raster,
+                    commandBuffer.NativeTransientBatch,
+                    queue);
             }
 
-            m_BindingBackend.ResetForPipeline(pipelineLayout);
+            m_BindingBackend.ResetForRasterPipeline(
+                pipelineLayout,
+                privateRasterPlan);
+            MetalRasterPassLowering lowering =
+                m_RasterLowering ??
+                throw new InvalidOperationException(
+                    "Metal raster lowering is unavailable while setting a pipeline.");
+            ref readonly MetalRasterSubPassLowering subPass =
+                ref lowering.SubPasses.Span[m_CurrentSubPassIndex];
+            m_BindingBackend.SetRasterOrderedTextures(
+                m_RasterOrderedBindings,
+                subPass.RasterOrderedMask);
         }
 
         private void EnsureMtl4RenderEncoder()
@@ -2541,22 +2901,65 @@ namespace SharpGPU
             }
 
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
-            MTL4RenderPassDescriptor passDescriptor4 = BuildMtl4RenderPassDescriptor(commandBuffer, m_PendingPassDescriptor);
-            m_NativeEncoder4 = commandBuffer.EnsureMtl4CommandBuffer().RenderCommandEncoder(passDescriptor4);
+            MTL4RenderPassDescriptor passDescriptor4 =
+                BuildMtl4RenderPassDescriptor(
+                    commandBuffer,
+                    m_PendingPassDescriptor);
+            try
+            {
+                m_NativeEncoder4 =
+                    commandBuffer.EnsureMtl4CommandBuffer()
+                        .RenderCommandEncoder(passDescriptor4);
+            }
+            finally
+            {
+                ObjectiveCRuntime.Release(passDescriptor4.NativePtr);
+            }
             if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
             {
-                throw new InvalidOperationException("Failed to create MTL4RenderCommandEncoder.");
+                throw new InvalidOperationException(
+                    "Failed to create MTL4RenderCommandEncoder.");
+            }
+            ApplyColorAttachmentMap(0);
+        }
+
+        private MTL4RenderPassDescriptor BuildMtl4RenderPassDescriptor(MetalCommandBuffer commandBuffer, in RHIRasterPassDescriptor descriptor)
+        {
+            MTL4RenderPassDescriptor passDescriptor =
+                MTL4RenderPassDescriptor.New();
+            try
+            {
+                MetalRasterPassLowering lowering =
+                    m_RasterLowering ??
+                    throw new InvalidOperationException(
+                        "Metal raster lowering is unavailable.");
+                if (lowering.RequiresColorAttachmentMapping)
+                {
+                    passDescriptor.SupportColorAttachmentMapping = true;
+                }
+                passDescriptor.RenderTargetWidth = m_RenderTargetWidth;
+                passDescriptor.RenderTargetHeight = m_RenderTargetHeight;
+                passDescriptor.DefaultRasterSampleCount =
+                    checked((ulong)m_RasterSampleCount);
+                PopulateRenderPassDescriptor(
+                    commandBuffer,
+                    descriptor,
+                    lowering.OrdinaryAttachmentMask,
+                    passDescriptor);
+                return passDescriptor;
+            }
+            catch
+            {
+                ObjectiveCRuntime.Release(passDescriptor.NativePtr);
+                throw;
             }
         }
 
-        private static MTL4RenderPassDescriptor BuildMtl4RenderPassDescriptor(MetalCommandBuffer commandBuffer, in RHIRasterPassDescriptor descriptor)
-        {
-            MTL4RenderPassDescriptor passDescriptor = MTL4RenderPassDescriptor.New();
-            PopulateRenderPassDescriptor(commandBuffer, descriptor, passDescriptor);
-            return passDescriptor;
-        }
-
-        private static void PopulateRenderPassDescriptor(MetalCommandBuffer commandBuffer, in RHIRasterPassDescriptor descriptor, MTL4RenderPassDescriptor passDescriptor)
+        private static void PopulateRenderPassDescriptor(
+            MetalCommandBuffer commandBuffer,
+            in RHIRasterPassDescriptor descriptor,
+            in byte ordinaryAttachmentMask,
+            MTL4RenderPassDescriptor passDescriptor)
         {
             passDescriptor.RenderTargetArrayLength = descriptor.ArrayLength;
 
@@ -2570,12 +2973,23 @@ namespace SharpGPU
 
             for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
             {
-                ref RHIColorAttachmentDescriptor colorAttachment = ref descriptor.ColorAttachments.Span[i];
-                MetalTexture colorTexture = (MetalTexture)colorAttachment.RenderTarget;
+                byte logicalBit = checked((byte)(1 << i));
+                if ((ordinaryAttachmentMask & logicalBit) == 0)
+                {
+                    continue;
+                }
+
+                ref RHIColorAttachmentDescriptor colorAttachment =
+                    ref descriptor.ColorAttachments.Span[i];
+                MetalTexture colorTexture =
+                    colorAttachment.RenderTarget as MetalTexture ??
+                    throw new ArgumentException(
+                        $"Metal color attachment {i} must be a MetalTexture.",
+                        nameof(descriptor));
                 MTLRenderPassColorAttachmentDescriptor nativeColor = passDescriptor.ColorAttachments[(uint)i];
                 nativeColor.Texture = colorTexture.NativeTexture;
-                nativeColor.Level = colorAttachment.MipLevel;
-                nativeColor.Slice = colorAttachment.ArraySlice;
+                nativeColor.Level = colorAttachment.SubresourceRange.BaseMipLevel;
+                nativeColor.Slice = colorAttachment.SubresourceRange.BaseArrayLayer;
                 nativeColor.LoadAction = MetalUtility.ConvertToMetalLoadAction(colorAttachment.LoadAction);
                 nativeColor.StoreAction = MetalUtility.ConvertToMetalStoreAction(colorAttachment.StoreAction);
                 nativeColor.ClearColor = new MTLClearColor(colorAttachment.ClearValue.x, colorAttachment.ClearValue.y, colorAttachment.ClearValue.z, colorAttachment.ClearValue.w);
@@ -2584,8 +2998,8 @@ namespace SharpGPU
                 {
                     MetalTexture resolveTexture = (MetalTexture)colorAttachment.ResolveTarget;
                     nativeColor.ResolveTexture = resolveTexture.NativeTexture;
-                    nativeColor.ResolveLevel = colorAttachment.ResolveMipLevel;
-                    nativeColor.ResolveSlice = colorAttachment.ResolveArraySlice;
+                    nativeColor.ResolveLevel = colorAttachment.ResolveSubresourceRange.BaseMipLevel;
+                    nativeColor.ResolveSlice = colorAttachment.ResolveSubresourceRange.BaseArrayLayer;
                 }
 
                 if (i == 0 && colorTexture.HasBackingDrawable)
@@ -2604,19 +3018,242 @@ namespace SharpGPU
 
             MTLRenderPassDepthAttachmentDescriptor depthAttachment = passDescriptor.DepthAttachment;
             depthAttachment.Texture = depthTexture.NativeTexture;
-            depthAttachment.Level = depthStencil.MipLevel;
-            depthAttachment.Slice = depthStencil.ArraySlice;
+            depthAttachment.Level = depthStencil.SubresourceRange.BaseMipLevel;
+            depthAttachment.Slice = depthStencil.SubresourceRange.BaseArrayLayer;
             depthAttachment.LoadAction = MetalUtility.ConvertToMetalLoadAction(depthStencil.DepthLoadOp);
             depthAttachment.StoreAction = MetalUtility.ConvertToMetalStoreAction(depthStencil.DepthStoreOp);
             depthAttachment.ClearDepth = depthStencil.DepthClearValue;
 
             MTLRenderPassStencilAttachmentDescriptor stencilAttachment = passDescriptor.StencilAttachment;
             stencilAttachment.Texture = depthTexture.NativeTexture;
-            stencilAttachment.Level = depthStencil.MipLevel;
-            stencilAttachment.Slice = depthStencil.ArraySlice;
+            stencilAttachment.Level = depthStencil.SubresourceRange.BaseMipLevel;
+            stencilAttachment.Slice = depthStencil.SubresourceRange.BaseArrayLayer;
             stencilAttachment.LoadAction = MetalUtility.ConvertToMetalLoadAction(depthStencil.StencilLoadOp);
             stencilAttachment.StoreAction = MetalUtility.ConvertToMetalStoreAction(depthStencil.StencilStoreOp);
             stencilAttachment.ClearStencil = (uint)depthStencil.StencilClearValue;
+
+            if (depthStencil.ResolveTarget != null)
+            {
+                MetalTexture resolveTexture =
+                    (MetalTexture)depthStencil.ResolveTarget;
+                depthAttachment.ResolveTexture = resolveTexture.NativeTexture;
+                depthAttachment.ResolveLevel =
+                    depthStencil.ResolveSubresourceRange.BaseMipLevel;
+                depthAttachment.ResolveSlice =
+                    depthStencil.ResolveSubresourceRange.BaseArrayLayer;
+                depthAttachment.DepthResolveFilter =
+                    ConvertDepthResolveFilter(depthStencil.DepthResolveMode);
+                stencilAttachment.ResolveTexture = resolveTexture.NativeTexture;
+                stencilAttachment.ResolveLevel =
+                    depthStencil.ResolveSubresourceRange.BaseMipLevel;
+                stencilAttachment.ResolveSlice =
+                    depthStencil.ResolveSubresourceRange.BaseArrayLayer;
+                stencilAttachment.StencilResolveFilter =
+                    ConvertStencilResolveFilter(
+                        depthStencil.StencilResolveMode);
+            }
+        }
+
+        private MTLLogicalToPhysicalColorAttachmentMap[]
+            CreateColorAttachmentMaps(
+                RasterPassPlan plan,
+                MetalRasterPassLowering lowering)
+        {
+            if (!lowering.RequiresColorAttachmentMapping)
+            {
+                return Array.Empty<
+                    MTLLogicalToPhysicalColorAttachmentMap>();
+            }
+
+            MetalCommandBuffer commandBuffer =
+                (MetalCommandBuffer)m_CommandBuffer!;
+            MTLLogicalToPhysicalColorAttachmentMap[] maps =
+                new MTLLogicalToPhysicalColorAttachmentMap[
+                    plan.SubPassCount];
+            for (int subPassIndex = 0;
+                 subPassIndex < maps.Length;
+                 ++subPassIndex)
+            {
+                MTLLogicalToPhysicalColorAttachmentMap map =
+                    MTLLogicalToPhysicalColorAttachmentMap.New();
+                if (map.NativePtr == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException(
+                        "Failed to create a Metal color-attachment map.");
+                }
+
+                bool ownershipTransferred = false;
+                try
+                {
+                    ref readonly MetalRasterSubPassLowering subPass =
+                        ref lowering.SubPasses.Span[subPassIndex];
+                    for (int mappingIndex = 0;
+                         mappingIndex <
+                             RHIAttachmentIndexArray.MaxAttachments;
+                         ++mappingIndex)
+                    {
+                        map.SetPhysicalIndex(
+                            subPass.GetPhysicalAttachmentForMappingIndex(
+                                mappingIndex),
+                            checked((ulong)mappingIndex));
+                    }
+                    commandBuffer.NativeTransientBatch.RetainOwnership(
+                        map.NativePtr);
+                    ownershipTransferred = true;
+                    maps[subPassIndex] = map;
+                }
+                finally
+                {
+                    if (!ownershipTransferred)
+                    {
+                        ObjectiveCRuntime.Release(map.NativePtr);
+                    }
+                }
+            }
+            return maps;
+        }
+
+        private void ApplyColorAttachmentMap(int subPassIndex)
+        {
+            if (m_RasterLowering?.RequiresColorAttachmentMapping != true)
+            {
+                return;
+            }
+            m_NativeEncoder4.SetColorAttachmentMap(
+                m_ColorAttachmentMaps[subPassIndex].NativePtr);
+        }
+
+        private void ReleaseColorAttachmentMaps()
+        {
+            // Native map ownership belongs to the command-buffer recording
+            // transient batch. The managed wrappers carry no ownership.
+            m_ColorAttachmentMaps =
+                Array.Empty<MTLLogicalToPhysicalColorAttachmentMap>();
+        }
+
+        private void CaptureRasterOrderedBindings(
+            RasterPassPlan plan,
+            in byte rasterOrderedMask)
+        {
+            Array.Clear(m_RasterOrderedBindings);
+            if (rasterOrderedMask == 0)
+            {
+                return;
+            }
+
+            MetalCommandBuffer commandBuffer =
+                (MetalCommandBuffer)m_CommandBuffer!;
+            for (int logicalAttachment = 0;
+                 logicalAttachment < plan.ColorAttachmentCount;
+                 ++logicalAttachment)
+            {
+                byte logicalBit =
+                    checked((byte)(1 << logicalAttachment));
+                if ((rasterOrderedMask & logicalBit) == 0)
+                {
+                    continue;
+                }
+
+                ref readonly RHIColorAttachmentDescriptor attachment =
+                    ref plan.GetColorAttachment(logicalAttachment);
+                MetalTexture texture =
+                    attachment.RenderTarget as MetalTexture ??
+                    throw new ArgumentException(
+                        $"Metal raster-ordered attachment {logicalAttachment} " +
+                        "must be a MetalTexture.",
+                        nameof(plan));
+                MTLTexture nativeTexture = texture.NativeTexture;
+                MTLTexture boundTexture = nativeTexture;
+                RHITextureSubresourceRange range =
+                    attachment.SubresourceRange;
+                RHITextureDescriptor textureDescriptor =
+                    texture.Descriptor;
+                uint fullLayerCount =
+                    Math.Max(1u, textureDescriptor.Extent.z);
+                bool isFullView =
+                    range.BaseMipLevel == 0 &&
+                    range.MipLevelCount == textureDescriptor.MipCount &&
+                    range.BaseArrayLayer == 0 &&
+                    range.ArrayLayerCount == fullLayerCount;
+                if (!isFullView)
+                {
+                    boundTexture = nativeTexture.NewTextureView(
+                        MetalUtility.ConvertToMetalPixelFormat(
+                            textureDescriptor.Format),
+                        MetalUtility.ConvertToMetalTextureType(
+                            textureDescriptor.Dimension),
+                        new NSRange
+                        {
+                            location = range.BaseMipLevel,
+                            length = range.MipLevelCount
+                        },
+                        new NSRange
+                        {
+                            location = range.BaseArrayLayer,
+                            length = range.ArrayLayerCount
+                        });
+                    if (boundTexture.NativePtr == IntPtr.Zero)
+                    {
+                        throw new InvalidOperationException(
+                            $"Failed to create a Metal texture view for " +
+                            $"raster-ordered attachment {logicalAttachment}.");
+                    }
+                    try
+                    {
+                        commandBuffer.NativeTransientBatch.RetainOwnership(
+                            boundTexture.NativePtr);
+                    }
+                    catch
+                    {
+                        ObjectiveCRuntime.Release(boundTexture.NativePtr);
+                        throw;
+                    }
+                }
+
+                m_RasterOrderedBindings[logicalAttachment] =
+                    new MetalRasterOrderedBindingSnapshot(
+                        boundTexture.GpuResourceID,
+                        new MTLAllocation(nativeTexture.NativePtr));
+            }
+        }
+
+        private void ValidateFenceAndEncoder(
+            in MTLFence fence,
+            string operation)
+        {
+            if (fence.NativePtr == IntPtr.Zero)
+            {
+                throw new ArgumentException(
+                    $"Metal {operation} requires a valid native fence.",
+                    nameof(fence));
+            }
+            if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
+            {
+                throw new InvalidOperationException(
+                    $"Metal {operation} requires an active raster encoder.");
+            }
+        }
+
+        private static MTLMultisampleDepthResolveFilter
+            ConvertDepthResolveFilter(EResolveMode mode)
+        {
+            return mode switch
+            {
+                EResolveMode.Min => MTLMultisampleDepthResolveFilter.Min,
+                EResolveMode.Max => MTLMultisampleDepthResolveFilter.Max,
+                _ => MTLMultisampleDepthResolveFilter.Sample0,
+            };
+        }
+
+        private static MTLMultisampleStencilResolveFilter
+            ConvertStencilResolveFilter(EResolveMode mode)
+        {
+            if (mode != EResolveMode.None && mode != EResolveMode.Sample0)
+            {
+                throw new NotSupportedException(
+                    $"Metal cannot exactly express stencil resolve mode {mode}.");
+            }
+            return MTLMultisampleStencilResolveFilter.Sample0;
         }
 
         private void ApplyPendingPassDebugGroup()
@@ -2792,7 +3429,7 @@ namespace SharpGPU
             ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.MachineLearning));
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
@@ -2915,7 +3552,7 @@ namespace SharpGPU
             throw new NotSupportedException("WorkGraph is not supported on the Metal backend.");
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             throw new NotSupportedException("WorkGraph is not supported on the Metal backend.");
         }

@@ -67,7 +67,7 @@ namespace SharpGPU
     {
         internal static bool HasExplicitStrides(in RHIMLTensorDescriptor descriptor)
         {
-            return descriptor.Strides.HasValue && descriptor.Strides.Value.Length > 0;
+            return descriptor.Strides is Memory<uint> strides && strides.Length > 0;
         }
 
         public static uint GetElementSize(in ERHIMLDataType dataType)
@@ -108,9 +108,9 @@ namespace SharpGPU
             }
 
             uint elementSize = GetElementSize(descriptor.DataType);
-            if (HasExplicitStrides(descriptor))
+            if (descriptor.Strides is Memory<uint> explicitStrides && explicitStrides.Length > 0)
             {
-                ReadOnlySpan<uint> strides = descriptor.Strides.Value.Span;
+                ReadOnlySpan<uint> strides = explicitStrides.Span;
                 if (strides.Length != dimensions.Length)
                 {
                     throw new InvalidOperationException($"Tensor stride rank mismatch. dimensions={dimensions.Length}, strides={strides.Length}.");
@@ -135,9 +135,9 @@ namespace SharpGPU
 
         public static uint[] GetEffectiveStrides(in RHIMLTensorDescriptor descriptor)
         {
-            if (HasExplicitStrides(descriptor))
+            if (descriptor.Strides is Memory<uint> explicitStrides && explicitStrides.Length > 0)
             {
-                return descriptor.Strides.Value.ToArray();
+                return explicitStrides.ToArray();
             }
 
             ReadOnlySpan<uint> dimensions = descriptor.Dimensions.Span;
@@ -156,7 +156,9 @@ namespace SharpGPU
         {
             RHIMLTensorDescriptor clone = descriptor;
             clone.Dimensions = descriptor.Dimensions.ToArray();
-            clone.Strides = HasExplicitStrides(descriptor) ? descriptor.Strides.Value.ToArray() : null;
+            clone.Strides =
+                descriptor.Strides is Memory<uint> explicitStrides && explicitStrides.Length > 0
+                    ? explicitStrides.ToArray() : null;
             clone.BackingBuffer = null;
             clone.BackingBufferOffset = 0;
             return clone;

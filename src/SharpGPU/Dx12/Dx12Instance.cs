@@ -3,21 +3,17 @@ using System.Collections.Generic;
 
 namespace SharpGPU
 {
-#pragma warning disable CA1416, CS8602, CS8618
+#pragma warning disable CA1416
     internal unsafe class Dx12Instance : RHIInstance
     {
-        public Vortice.DXGI.IDXGIFactory7 DXGIFactory
-        {
-            get
-            {
-                return m_DXGIFactory;
-            }
-        }
+        public Vortice.DXGI.IDXGIFactory7 DXGIFactory =>
+            m_DXGIFactory ?? throw new ObjectDisposedException(GetType().FullName);
+
         public override int DeviceCount => m_Devices.Count;
         public override ERHIBackend BackendType => ERHIBackend.DirectX12;
 
-        private List<Dx12Device> m_Devices;
-        private Vortice.DXGI.IDXGIFactory7 m_DXGIFactory;
+        private List<Dx12Device> m_Devices = new List<Dx12Device>();
+        private Vortice.DXGI.IDXGIFactory7? m_DXGIFactory;
 
         public Dx12Instance(in RHIInstanceDescriptor descriptor)
         {
@@ -28,6 +24,9 @@ namespace SharpGPU
         private void CreateDX12Factory(in RHIInstanceDescriptor descriptor)
         {
             Dx12Agility.EnsureInitialized();
+            Dx12DeviceLossDiagnostics.Configure(
+                descriptor.EnableDebugLayer ||
+                descriptor.EnableValidation);
 
             uint factoryFlags = 0;
 
@@ -46,7 +45,7 @@ namespace SharpGPU
                     debug.EnableDebugLayer();
                     factoryFlags |= Vortice.DXGI.DXGI.CreateFactoryDebug;
 
-                    if (descriptor.EnableValidatior)
+                    if (descriptor.EnableValidation)
                     {
                         Vortice.Direct3D12.Debug.ID3D12Debug1? debug1 =
                             debug.QueryInterfaceOrNull<Vortice.Direct3D12.Debug.ID3D12Debug1>();
@@ -66,12 +65,12 @@ namespace SharpGPU
                 }
             }
 
-            Vortice.DXGI.IDXGIFactory7 factory;
+            Vortice.DXGI.IDXGIFactory7? factory;
             SharpGen.Runtime.Result hResult = Vortice.DXGI.DXGI.CreateDXGIFactory2((factoryFlags & Vortice.DXGI.DXGI.CreateFactoryDebug) != 0, out factory);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            m_DXGIFactory = factory;
+            m_DXGIFactory = Dx12Utility.RequireCreatedObject(
+                factory,
+                hResult,
+                "CreateDXGIFactory2");
         }
 
         private void EnumerateAdapters(in RHIInstanceDescriptor descriptor)
@@ -80,7 +79,7 @@ namespace SharpGPU
 
             for (uint i = 0; ; ++i)
             {
-                SharpGen.Runtime.Result hResult = m_DXGIFactory.EnumAdapters1(i, out Vortice.DXGI.IDXGIAdapter1 adapter);
+                SharpGen.Runtime.Result hResult = DXGIFactory.EnumAdapters1(i, out Vortice.DXGI.IDXGIAdapter1 adapter);
                 if (hResult.Failure)
                 {
                     break;
@@ -113,11 +112,11 @@ namespace SharpGPU
         {
             for(int i = 0; i < m_Devices.Count; ++i)
             {
-                m_Devices?[i].Dispose();
+                m_Devices[i].Dispose();
             }
 
             DXGIFactory.Release();
         }
     }
-#pragma warning restore CA1416, CS8602, CS8618
+#pragma warning restore CA1416
 }

@@ -1,36 +1,64 @@
 using System;
+using System.Diagnostics;
+using System.Threading;
 
 namespace SharpGPU.Core
 {
     public class Disposal : IDisposable
     {
-        public bool IsDisposed => m_IsDisposed;
+        public bool IsDisposed => Volatile.Read(ref m_DisposeState) != 0;
 
-        private bool m_IsDisposed;
+        private int m_DisposeState;
 
+#if DEBUG
         ~Disposal()
         {
-            Shutdown();
+            if (!IsDisposed)
+            {
+                Trace.TraceError(
+                    "Undisposed SharpGPU object detected: {0}. Native ownership is not released from the finalizer.",
+                    GetType().FullName ?? GetType().Name);
+            }
         }
+#endif
 
         protected virtual void Release()
         {
         }
 
-        private void Shutdown()
+        protected virtual void ValidateCanDispose()
         {
-            if (!m_IsDisposed)
-            {
-                Release();
-            }
+        }
 
-            m_IsDisposed = true;
+        protected void ThrowIfDisposed()
+        {
+            if (IsDisposed)
+            {
+                throw new ObjectDisposedException(GetType().FullName);
+            }
         }
 
         public void Dispose()
         {
-            Shutdown();
-            GC.SuppressFinalize(this);
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            ValidateCanDispose();
+            if (Interlocked.Exchange(ref m_DisposeState, 1) != 0)
+            {
+                return;
+            }
+
+            try
+            {
+                Release();
+            }
+            finally
+            {
+                GC.SuppressFinalize(this);
+            }
         }
     }
 }

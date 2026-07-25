@@ -12,12 +12,14 @@ namespace SharpGPU
         public RHIPipelineLayoutDescriptor Descriptor => m_Descriptor;
         internal int ArgumentTableLayoutCount => m_ArgumentTableLayouts.Length;
         internal ReadOnlySpan<MetalArgumentTableLayout> ArgumentTableLayouts => m_ArgumentTableLayouts;
+        internal MetalDevice? Device { get; }
 
         private readonly RHIPipelineLayoutDescriptor m_Descriptor;
         private readonly MetalArgumentTableLayout[] m_ArgumentTableLayouts;
 
         public MetalPipelineLayout(in RHIPipelineLayoutDescriptor descriptor)
         {
+            InitializePipelineCacheIdentity(descriptor);
             if (descriptor.PushConstantSize != 0)
             {
                 throw new NotSupportedException(
@@ -63,6 +65,25 @@ namespace SharpGPU
             {
                 m_Descriptor.ArgumentTableLayouts[index] = m_ArgumentTableLayouts[index];
             }
+        }
+
+        internal MetalPipelineLayout(
+            MetalDevice device,
+            in RHIPipelineLayoutDescriptor descriptor)
+            : this(descriptor)
+        {
+            for (int index = 0; index < m_ArgumentTableLayouts.Length; ++index)
+            {
+                MetalArgumentTableLayout layout = m_ArgumentTableLayouts[index];
+                if (!ReferenceEquals(layout.Device, device))
+                {
+                    throw new ArgumentException(
+                        $"Metal pipeline argument table {layout.Index} belongs to a different Metal device.",
+                        nameof(descriptor));
+                }
+            }
+
+            Device = device;
         }
 
         protected override void Release()
@@ -427,6 +448,8 @@ namespace SharpGPU
         public MTLTriangleFillMode FillMode => m_FillMode;
         public MTLWinding Winding => m_Winding;
         internal MetalRasterBufferBindingPlan BufferBindingPlan => m_BufferBindingPlan;
+        internal MetalPrivateRasterBindingPlan PrivateRasterBindingPlan =>
+            m_PrivateRasterBindingPlan;
 
         private MTLRenderPipelineState m_NativePipelineState;
         private MTLDepthStencilState m_DepthStencilState;
@@ -435,10 +458,12 @@ namespace SharpGPU
         private readonly MTLTriangleFillMode m_FillMode;
         private readonly MTLWinding m_Winding;
         private readonly MetalRasterBufferBindingPlan m_BufferBindingPlan;
+        private readonly MetalPrivateRasterBindingPlan
+            m_PrivateRasterBindingPlan;
 
         public MetalRasterPipeline(MetalDevice device, in RHIRasterPipelineDescriptor descriptor)
         {
-            m_Descriptor = descriptor;
+            m_Descriptor = RHIRasterPipelineContract.SnapshotAndValidate(in descriptor);
 
             MetalPipelineLayout pipelineLayout = descriptor.PipelineLayout as MetalPipelineLayout
                 ?? throw new ArgumentException("Metal raster pipeline requires a MetalPipelineLayout.", nameof(descriptor));
@@ -447,28 +472,88 @@ namespace SharpGPU
             m_BufferBindingPlan = MetalBufferBindingPlanner.CompileRaster(
                 pipelineLayout.ArgumentTableLayouts,
                 vertexAssembler.VertexLayouts.Span);
+            m_PrivateRasterBindingPlan =
+                MetalPrivateRasterBindingPlan.Compile(
+                    device,
+                    pipelineLayout,
+                    in m_Descriptor.AttachmentInterface);
 
             MetalFunction vertexFunction = (MetalFunction)vertexAssembler.VertexFunction;
-            MetalFunction fragmentFunction = (MetalFunction)descriptor.FragmentFunction;
+            MetalFunction fragmentFunction = descriptor.FragmentFunction as MetalFunction
+                ?? throw new ArgumentException(
+                    "Metal raster pipeline requires a MetalFunction fragment shader.",
+                    nameof(descriptor));
 
-            MTLRenderPipelineDescriptor nativeDescriptor = MTLRenderPipelineDescriptor.New();
-            nativeDescriptor.VertexFunction = vertexFunction.NativeFunction;
-            nativeDescriptor.FragmentFunction = fragmentFunction.NativeFunction;
-            nativeDescriptor.SampleCount = (ulong)descriptor.SampleCount;
+            MTL4LibraryFunctionDescriptor vertexFunctionDescriptor =
+                MTL4LibraryFunctionDescriptor.New();
+            vertexFunctionDescriptor.Library = vertexFunction.NativeLibrary;
+            vertexFunctionDescriptor.Name =
+                new NSString(vertexFunction.Descriptor.EntryName);
+            MTL4LibraryFunctionDescriptor fragmentFunctionDescriptor =
+                MTL4LibraryFunctionDescriptor.New();
+            fragmentFunctionDescriptor.Library = fragmentFunction.NativeLibrary;
+            fragmentFunctionDescriptor.Name =
+                new NSString(fragmentFunction.Descriptor.EntryName);
+
+            MTL4RenderPipelineDescriptor nativeDescriptor =
+                MTL4RenderPipelineDescriptor.New();
+            nativeDescriptor.VertexFunctionDescriptor =
+                vertexFunctionDescriptor;
+            nativeDescriptor.FragmentFunctionDescriptor =
+                fragmentFunctionDescriptor;
+            nativeDescriptor.RasterSampleCount = (ulong)descriptor.SampleCount;
             nativeDescriptor.InputPrimitiveTopology = MetalUtility.ConvertToMetalPrimitiveTopologyClass(descriptor.PrimitiveAssembler.PrimitiveTopology);
-            nativeDescriptor.SetAlphaToCoverageEnabled(descriptor.RenderState.BlendState.AlphaToCoverage);
-            nativeDescriptor.SetRasterizationEnabled(true);
+            nativeDescriptor.AlphaToCoverageState =
+                descriptor.RenderState.BlendState.AlphaToCoverage
+                    ? MTL4AlphaToCoverageState.Enabled
+                    : MTL4AlphaToCoverageState.Disabled;
+            nativeDescriptor.RasterizationEnabled = true;
+            nativeDescriptor.ColorAttachmentMappingState =
+                MTL4LogicalToPhysicalColorAttachmentMappingState.Inherited;
 
             ConfigureColorAttachments(nativeDescriptor, descriptor);
             ConfigureDepthStencilAttachment(nativeDescriptor, descriptor.DepthFormat);
             ConfigureVertexLayout(nativeDescriptor, descriptor, m_BufferBindingPlan);
 
+            MTL4PipelineOptions pipelineOptions = MTL4PipelineOptions.New();
+            MTL4PipelineDescriptor pipelineDescriptor = nativeDescriptor;
+            pipelineDescriptor.Options = pipelineOptions;
+
+            NSError compilerError = default;
+            MTL4CompilerDescriptor compilerDescriptor =
+                MTL4CompilerDescriptor.New();
+            MTL4Compiler compiler =
+                device.NativeDevice.NewCompiler(
+                    compilerDescriptor,
+                    ref compilerError);
+            ObjectiveCRuntime.Release(compilerDescriptor);
+            if (compiler.NativePtr == IntPtr.Zero)
+            {
+                string errorText = compilerError.NativePtr != IntPtr.Zero
+                    ? compilerError.LocalizedDescription.ToString()
+                    : "unknown error";
+                throw new InvalidOperationException(
+                    $"Failed to create MTL4Compiler for raster pipeline: {errorText}");
+            }
+
+            MTL4CompilerTaskOptions taskOptions =
+                MTL4CompilerTaskOptions.New();
             NSError error = default;
-            m_NativePipelineState = device.NativeDevice.NewRenderPipelineState(nativeDescriptor, ref error);
+            m_NativePipelineState = compiler.NewRenderPipelineState(
+                pipelineDescriptor,
+                taskOptions,
+                ref error);
+            ObjectiveCRuntime.Release(taskOptions);
+            ObjectiveCRuntime.Release(compiler);
+            ObjectiveCRuntime.Release(pipelineOptions);
+            ObjectiveCRuntime.Release(nativeDescriptor.NativePtr);
+            ObjectiveCRuntime.Release(fragmentFunctionDescriptor);
+            ObjectiveCRuntime.Release(vertexFunctionDescriptor);
             if (m_NativePipelineState.NativePtr == IntPtr.Zero)
             {
                 string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
-                throw new InvalidOperationException($"Failed to create MTLRenderPipelineState: {errorText}");
+                throw new InvalidOperationException(
+                    $"Failed to create MTL4 raster pipeline state: {errorText}");
             }
 
             m_DepthStencilState = CreateDepthStencilState(device, descriptor.RenderState.DepthStencilState);
@@ -478,18 +563,53 @@ namespace SharpGPU
             m_Winding = MetalUtility.ConvertToMetalWinding(descriptor.RenderState.RasterizerState.FrontCounterClockwise);
         }
 
-        private static void ConfigureColorAttachments(MTLRenderPipelineDescriptor nativeDescriptor, in RHIRasterPipelineDescriptor descriptor)
+        private static void ConfigureColorAttachments(
+            MTL4RenderPipelineDescriptor nativeDescriptor,
+            in RHIRasterPipelineDescriptor descriptor)
         {
-            for (int i = 0; i < descriptor.ColorFormats.Length; ++i)
+            RHIAttachmentInterfaceSignature signature =
+                descriptor.AttachmentInterface;
+            for (int outputLocation = 0;
+                 outputLocation < signature.ColorOutputLocationCount;
+                 ++outputLocation)
             {
-                MTLRenderPipelineColorAttachmentDescriptor nativeColor = nativeDescriptor.ColorAttachments[(uint)i];
-                nativeColor.PixelFormat = MetalUtility.ConvertToMetalPixelFormat(descriptor.ColorFormats[i]);
+                int logicalAttachment =
+                    signature.GetColorOutputLogicalAttachment(
+                        outputLocation);
+                if (logicalAttachment ==
+                    RHIAttachmentInterfaceSignature
+                        .UnboundLogicalAttachment)
+                {
+                    continue;
+                }
 
-                RHIBlendDescriptor blend = GetBlendDescriptor(descriptor.RenderState.BlendState, i);
-                nativeColor.SetBlendingEnabled(blend.BlendEnable);
+                byte logicalBit =
+                    checked((byte)(1 << logicalAttachment));
+                if ((signature.RasterOrderedReadWriteMask &
+                     logicalBit) != 0)
+                {
+                    // ROG textures use only the backend-private fragment
+                    // texture range and never an ordinary color target.
+                    continue;
+                }
+
+                MTL4RenderPipelineColorAttachmentDescriptor nativeColor =
+                    nativeDescriptor.ColorAttachments.Object(
+                        checked((uint)outputLocation));
+                nativeColor.PixelFormat =
+                    MetalUtility.ConvertToMetalPixelFormat(
+                        descriptor.ColorFormats[logicalAttachment]);
+
+                RHIBlendDescriptor blend =
+                    GetBlendDescriptor(
+                        descriptor.RenderState.BlendState,
+                        outputLocation);
+                nativeColor.BlendingState = blend.BlendEnable
+                    ? MTL4BlendState.Enabled
+                    : MTL4BlendState.Disabled;
                 nativeColor.SourceRGBBlendFactor = MetalUtility.ConvertToMetalBlendFactor(blend.SrcBlendColor);
                 nativeColor.DestinationRGBBlendFactor = MetalUtility.ConvertToMetalBlendFactor(blend.DstBlendColor);
-                nativeColor.RgbBlendOperation = MetalUtility.ConvertToMetalBlendOperation(blend.BlendOpColor);
+                nativeColor.RGBBlendOperation = MetalUtility.ConvertToMetalBlendOperation(blend.BlendOpColor);
                 nativeColor.SourceAlphaBlendFactor = MetalUtility.ConvertToMetalBlendFactor(blend.SrcBlendAlpha);
                 nativeColor.DestinationAlphaBlendFactor = MetalUtility.ConvertToMetalBlendFactor(blend.DstBlendAlpha);
                 nativeColor.AlphaBlendOperation = MetalUtility.ConvertToMetalBlendOperation(blend.BlendOpAlpha);
@@ -512,7 +632,7 @@ namespace SharpGPU
             }
         }
 
-        private static void ConfigureDepthStencilAttachment(MTLRenderPipelineDescriptor nativeDescriptor, in ERHIPixelFormat depthFormat)
+        private static void ConfigureDepthStencilAttachment(MTL4RenderPipelineDescriptor nativeDescriptor, in ERHIPixelFormat depthFormat)
         {
             if (depthFormat != ERHIPixelFormat.Unknown)
             {
@@ -526,7 +646,7 @@ namespace SharpGPU
         }
 
         private static void ConfigureVertexLayout(
-            MTLRenderPipelineDescriptor nativeDescriptor,
+            MTL4RenderPipelineDescriptor nativeDescriptor,
             in RHIRasterPipelineDescriptor descriptor,
             MetalRasterBufferBindingPlan bufferBindingPlan)
         {
@@ -635,105 +755,6 @@ namespace SharpGPU
         }
     }
 
-    internal sealed class MetalPipelineLibrary : RHIPipelineLibrary
-    {
-        private readonly MetalDevice m_MetalDevice;
-        private MTLBinaryArchive m_NativeBinaryArchive;
-
-        public MetalPipelineLibrary(MetalDevice device, in RHIPipelineLibraryDescriptor descriptor) : base(descriptor)
-        {
-            m_MetalDevice = device;
-
-            // Create MTLBinaryArchive for pipeline caching
-            MTLBinaryArchiveDescriptor archiveDesc = MTLBinaryArchiveDescriptor.New();
-            NSError error = default;
-            m_NativeBinaryArchive = device.NativeDevice.NewBinaryArchive(archiveDesc, ref error);
-            ObjectiveCRuntime.Release(archiveDesc);
-
-            if (m_NativeBinaryArchive.NativePtr == IntPtr.Zero)
-            {
-                string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
-                throw new InvalidOperationException($"MetalPipelineLibrary: failed to create MTLBinaryArchive — {errorText}");
-            }
-        }
-
-        public override void StoreComputePipeline(string name, RHIComputePipeline computePipeline)
-        {
-            MetalComputePipeline metalPipeline = (MetalComputePipeline)computePipeline;
-            MTLComputePipelineDescriptor desc = MTLComputePipelineDescriptor.New();
-            desc.Label = new NSString(name);
-
-            NSError error = default;
-            m_NativeBinaryArchive.AddComputePipelineFunctions(desc, ref error);
-            ObjectiveCRuntime.Release(desc);
-        }
-
-        public override void StoreRaytracingPipeline(string name, RHIRaytracingPipeline raytracingPipeline)
-        {
-            throw new NotSupportedException("MTLBinaryArchive does not support raytracing pipeline serialization.");
-        }
-
-        public override void StoreRasterPipeline(string name, RHIRasterPipeline rasterPipeline)
-        {
-            MetalRasterPipeline metalPipeline = (MetalRasterPipeline)rasterPipeline;
-            MTLRenderPipelineDescriptor desc = MTLRenderPipelineDescriptor.New();
-            desc.Label = new NSString(name);
-
-            NSError error = default;
-            m_NativeBinaryArchive.AddRenderPipelineFunctions(desc, ref error);
-            ObjectiveCRuntime.Release(desc);
-        }
-
-        public override RHIComputePipeline LoadComputePipeline(RHIComputePipelineDescriptor computePipelineDescriptor)
-        {
-            // Create compute pipeline with binary archive hint.
-            // If cache miss, the pipeline compiles normally and can be stored afterwards.
-            return m_MetalDevice.CreateComputePipeline(computePipelineDescriptor);
-        }
-
-        public override RHIRaytracingPipeline LoadRaytracingPipeline(RHIRaytracingPipelineDescriptor raytracingPipelineDescriptor)
-        {
-            throw new NotSupportedException("MTLBinaryArchive does not support raytracing pipeline serialization.");
-        }
-
-        public override RHIRasterPipeline LoadRasterPipeline(RHIRasterPipelineDescriptor rasterPipelineDescriptor)
-        {
-            // Create raster pipeline with binary archive hint.
-            // If cache miss, the pipeline compiles normally and can be stored afterwards.
-            return m_MetalDevice.CreateRasterPipeline(rasterPipelineDescriptor);
-        }
-
-        public override RHIPipelineLibraryResult Serialize()
-        {
-            // Serialize the binary archive to a temporary URL and read back the bytes
-            NSString tempPath = new NSString($"/tmp/metallib_archive_{System.Diagnostics.Process.GetCurrentProcess().Id}.metallib");
-            NSURL url = NSURL.FileURLWithPath(tempPath);
-            NSError error = default;
-            m_NativeBinaryArchive.SerializeToURL(url, ref error);
-
-            if (error.NativePtr != IntPtr.Zero)
-            {
-                throw new InvalidOperationException($"MetalPipelineLibrary.Serialize: failed — {error.LocalizedDescription}");
-            }
-
-            // Read the serialized data
-            byte[] data = System.IO.File.ReadAllBytes(tempPath.ToString());
-            RHIPipelineLibraryResult result;
-            result.ByteSize = (uint)data.Length;
-            result.ByteCode = System.Runtime.InteropServices.Marshal.AllocHGlobal(data.Length);
-            System.Runtime.InteropServices.Marshal.Copy(data, 0, result.ByteCode, data.Length);
-            return result;
-        }
-
-        protected override void Release()
-        {
-            if (m_NativeBinaryArchive.NativePtr != IntPtr.Zero)
-            {
-                ObjectiveCRuntime.Release(m_NativeBinaryArchive);
-                m_NativeBinaryArchive = default;
-            }
-        }
-    }
     internal sealed class MetalWorkGraphPipeline : RHIWorkGraphPipeline
     {
         internal MetalWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
@@ -941,7 +962,7 @@ namespace SharpGPU
                 ?? throw new InvalidOperationException("Metal ML pipeline binding metadata is unavailable.");
             if (slotsByName.Count == 0 && tensorSlots.Count == bindingInfos.Length)
             {
-                if (TryResolveUnnamedBindingSlotsByAccess(bindingInfos, readOnlyTensorSlots, writableTensorSlots, out ulong[]? accessSlots))
+                if (TryResolveUnnamedBindingSlotsByAccess(bindingInfos, readOnlyTensorSlots, writableTensorSlots, out ulong[]? accessSlots) && accessSlots != null)
                 {
                     return accessSlots;
                 }

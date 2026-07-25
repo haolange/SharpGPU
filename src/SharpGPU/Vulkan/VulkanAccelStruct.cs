@@ -4,7 +4,6 @@ using System.Runtime.InteropServices;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8618
     internal unsafe class VulkanTopLevelAccelStruct : RHITopLevelAccelStruct
     {
         [StructLayout(LayoutKind.Sequential)]
@@ -16,7 +15,8 @@ namespace SharpGPU
             public ulong accelerationStructureReference;
         }
 
-        public VkAccelerationStructureKHR NativeAccelerationStructure => m_NativeAccelStruct;
+        public VkAccelerationStructureKHR NativeAccelerationStructure { get { ThrowIfDisposed(); return m_NativeAccelStruct; } }
+        internal VulkanDevice Device { get { ThrowIfDisposed(); return m_VulkanDevice; } }
         public VkBuffer NativeBuffer => m_NativeBuffer;
         public VkDeviceMemory NativeMemory => m_NativeMemory;
         public VkBuffer NativeScratchBuffer => m_NativeScratchBuffer;
@@ -350,7 +350,7 @@ namespace SharpGPU
                         ?? throw new InvalidOperationException("Curve geometry requires a Vulkan control-point buffer.");
                     VulkanBuffer radiusBuffer = curveGeometry.RadiusBuffer as VulkanBuffer
                         ?? throw new InvalidOperationException("Curve geometry requires a Vulkan radius buffer.");
-                    VulkanBuffer curveIndexBuffer = curveGeometry.IndexBuffer as VulkanBuffer;
+                    VulkanBuffer? curveIndexBuffer = curveGeometry.IndexBuffer as VulkanBuffer;
                     if (curveGeometry.IndexBuffer != null && curveIndexBuffer == null)
                     {
                         throw new InvalidOperationException("Curve index buffer is not a Vulkan buffer.");
@@ -662,5 +662,4 @@ namespace SharpGPU
             VulkanUtility.CheckErrors(VulkanNative.vkBindBufferMemory(device.NativeDevice, buffer, memory, 0));
         }
     }
-#pragma warning restore CS8618
 }

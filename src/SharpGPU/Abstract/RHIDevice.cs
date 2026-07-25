@@ -2,6 +2,7 @@ using System;
 using SharpGPU.Core;
 using SharpGPU.Collections;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace SharpGPU
 {
@@ -54,100 +55,6 @@ namespace SharpGPU
         }
     }
 
-    public class RHIDeviceFeature
-    {
-        public readonly bool IsFlipProjection;
-        public readonly bool IsHDRPresentSupported;
-        public readonly bool IsUnifiedMemorySupported;
-        public readonly bool IsRootConstantSupport;
-        public readonly bool IsIndirectRootConstantSupport;
-        public readonly bool IsPixelShaderUAVSupported;
-        public readonly bool IsRasterizerOrderedSupported;
-        public readonly bool IsAnisotropyTextureSupported;
-        public readonly bool IsDepthbufferFetchSupported;
-        public readonly bool IsFramebufferFetchSupported;
-        public readonly bool IsTimestampQueriesSupported;
-        public readonly bool IsOcclusionQueriesSupported;
-        public readonly bool IsPipelineStatsQueriesSupported;
-        public readonly bool IsAtomicUInt64Supported;
-        public readonly bool IsWorkgraphSupported;
-        public readonly bool IsMeshShadingSupported;
-        public readonly bool IsDrawIndirectSupported;
-        public readonly bool IsDrawMultiIndirectSupported;
-        public readonly bool IsRaytracingSupported;
-        public readonly bool IsRaytracingInlineSupported;
-        public readonly bool IsVariableRateShadingSupported;
-        public readonly bool IsHiddenSurfaceRemovalSupported;
-        public readonly bool IsBarycentricCoordSupported;
-        public readonly bool IsProgrammableSamplePositionSupported;
-        public readonly bool IsMLSupported;
-        public readonly ERHIMatrixMajorons MatrixMajorons;
-        public readonly ERHIDepthValueRange DepthValueRange;
-        public readonly ERHIMultiviewStrategy MultiviewStrategy;
-        public readonly ERHIWaveOperationStrategy WaveOperationStrategy;
-
-        internal RHIDeviceFeature(in bool isFlipProjection,
-                                in bool isHDRPresentSupported,
-                                in bool isUnifiedMemorySupported,
-                                in bool isRootConstantSupport,
-                                in bool isIndirectRootConstantSupport,
-                                in bool isPixelShaderUAVSupported,
-                                in bool isRasterizerOrderedSupported,
-                                in bool isAnisotropyTextureSupported,
-                                in bool isDepthbufferFetchSupported,
-                                in bool isFramebufferFetchSupported,
-                                in bool isTimestampQueriesSupported,
-                                in bool isOcclusionQueriesSupported,
-                                in bool isPipelineStatsQueriesSupported,
-                                in bool isAtomicUInt64Supported,
-                                in bool isWorkgraphSupported,
-                                in bool isMeshShadingSupported,
-                                in bool isDrawIndirectSupported,
-                                in bool isDrawMultiIndirectSupported,
-                                in bool isRaytracingSupported,
-                                in bool isRaytracingInlineSupported,
-                                in bool isVariableRateShadingSupported,
-                                in bool isHiddenSurfaceRemovalSupported,
-                                in bool isBarycentricCoordSupported,
-                                in bool isProgrammableSamplePositionSupported,
-                                in bool isMLSupported,
-                                in ERHIMatrixMajorons matrixMajorons,
-                                in ERHIDepthValueRange depthValueRange,
-                                in ERHIMultiviewStrategy multiviewStrategy,
-                                in ERHIWaveOperationStrategy waveOperationStrategy)
-        {
-            IsFlipProjection = isFlipProjection;
-            IsHDRPresentSupported = isHDRPresentSupported;
-            IsUnifiedMemorySupported = isUnifiedMemorySupported;
-            IsRootConstantSupport = isRootConstantSupport;
-            IsIndirectRootConstantSupport = isIndirectRootConstantSupport;
-            IsPixelShaderUAVSupported = isPixelShaderUAVSupported;
-            IsRasterizerOrderedSupported = isRasterizerOrderedSupported;
-            IsAnisotropyTextureSupported = isAnisotropyTextureSupported;
-            IsDepthbufferFetchSupported = isDepthbufferFetchSupported;
-            IsFramebufferFetchSupported = isFramebufferFetchSupported;
-            IsTimestampQueriesSupported = isTimestampQueriesSupported;
-            IsOcclusionQueriesSupported = isOcclusionQueriesSupported;
-            IsPipelineStatsQueriesSupported = isPipelineStatsQueriesSupported;
-            IsAtomicUInt64Supported = isAtomicUInt64Supported;
-            IsWorkgraphSupported = isWorkgraphSupported;
-            IsMeshShadingSupported = isMeshShadingSupported;
-            IsDrawIndirectSupported = isDrawIndirectSupported;
-            IsDrawMultiIndirectSupported = isDrawMultiIndirectSupported;
-            IsRaytracingSupported = isRaytracingSupported;
-            IsRaytracingInlineSupported = isRaytracingInlineSupported;
-            IsVariableRateShadingSupported = isVariableRateShadingSupported;
-            IsHiddenSurfaceRemovalSupported = isHiddenSurfaceRemovalSupported;
-            IsBarycentricCoordSupported = isBarycentricCoordSupported;
-            IsProgrammableSamplePositionSupported = isProgrammableSamplePositionSupported;
-            IsMLSupported = isMLSupported;
-            MatrixMajorons = matrixMajorons;
-            DepthValueRange = depthValueRange;
-            MultiviewStrategy = multiviewStrategy;
-            WaveOperationStrategy = waveOperationStrategy;
-        }
-    }
-
     public struct RHIVendorId
     {
         public uint IntValue;
@@ -177,10 +84,14 @@ namespace SharpGPU
         /// </summary>
         public abstract ERHIBackend BackendType { get; }
         public RHIDeviceLimit? Limit => m_Limit;
-        public RHIDeviceFeature? Feature => m_Feature;
+        public RHIDeviceCapabilities Capabilities => m_Capabilities;
         public int ComputeQueueCount => m_ComputeQueueCount;
         public int TransferQueueCount => m_TransferQueueCount;
         public int GraphicsQueueCount => m_GraphicsQueueCount;
+        public ERHIDeviceState State =>
+            (ERHIDeviceState)Volatile.Read(ref m_DeviceState);
+        public RHIException? DeviceLossDiagnostic =>
+            Volatile.Read(ref m_DeviceLossDiagnostic);
 
         protected string? m_Name;
         protected RHIVendorId m_VendorId;
@@ -188,11 +99,77 @@ namespace SharpGPU
         protected string m_DriverVersion = "Unknown";
         protected ERHIDeviceType m_Type;
         protected RHIDeviceLimit? m_Limit;
-        protected RHIDeviceFeature? m_Feature;
+        protected RHIDeviceCapabilities m_Capabilities = RHIDeviceCapabilities.CreateUnprobed("RHIDevice subclass default");
         protected int m_ComputeQueueCount;
         protected int m_TransferQueueCount;
         protected int m_GraphicsQueueCount;
         protected Dictionary<ERHIPipelineType, TArray<RHICommandQueue>>? m_CommandQueueMap;
+        private readonly object m_DeviceStateLock = new();
+        private int m_DeviceState =
+            (int)ERHIDeviceState.Operational;
+        private RHIException? m_DeviceLossDiagnostic;
+
+        internal RHIException MarkDeviceLost(
+            RHIException diagnostic)
+        {
+            ArgumentNullException.ThrowIfNull(diagnostic);
+            if (diagnostic.ErrorCode != ERHIErrorCode.DeviceLost)
+            {
+                throw new ArgumentException(
+                    "A device-loss transition requires a DeviceLost diagnostic.",
+                    nameof(diagnostic));
+            }
+            if (diagnostic.Backend != BackendType)
+            {
+                throw new ArgumentException(
+                    "The device-loss diagnostic belongs to a different backend.",
+                    nameof(diagnostic));
+            }
+            if (diagnostic.DeviceState is
+                ERHIDeviceState.Unknown or
+                ERHIDeviceState.Operational)
+            {
+                throw new ArgumentException(
+                    "A device-loss diagnostic must carry Lost, Removed, or Reset state.",
+                    nameof(diagnostic));
+            }
+
+            lock (m_DeviceStateLock)
+            {
+                if ((ERHIDeviceState)m_DeviceState !=
+                    ERHIDeviceState.Operational)
+                {
+                    return m_DeviceLossDiagnostic ??
+                        throw new InvalidOperationException(
+                            "The device is unavailable without a loss diagnostic.");
+                }
+
+                m_DeviceLossDiagnostic = diagnostic;
+                Volatile.Write(
+                    ref m_DeviceState,
+                    (int)diagnostic.DeviceState);
+                return diagnostic;
+            }
+        }
+
+        internal void ThrowIfDeviceUnavailable()
+        {
+            ThrowIfDisposed();
+            ERHIDeviceState state = State;
+            if (state == ERHIDeviceState.Operational)
+            {
+                return;
+            }
+
+            RHIException? diagnostic = DeviceLossDiagnostic;
+            if (diagnostic == null)
+            {
+                throw new InvalidOperationException(
+                    $"The {BackendType} device entered '{state}' without a diagnostic.");
+            }
+
+            throw diagnostic;
+        }
 
         public abstract RHICommandQueue? GetCommandQueue(in ERHIPipelineType pipeline, in int index);
         public abstract RHISwapChain CreateSwapChain(in RHISwapChainDescriptor descriptor);
@@ -201,8 +178,55 @@ namespace SharpGPU
         public abstract RHIStorageQueue CreateStorageQueue();
         public abstract RHIQuery CreateQuery(in RHIQueryDescriptor descriptor);
         public abstract RHIHeap CreateHeap(in RHIHeapDescription descriptor);
+        public virtual RHIResourceMemoryRequirements GetBufferMemoryRequirements(in RHIBufferDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            throw new NotSupportedException($"{BackendType} does not expose exact buffer memory requirements.");
+        }
+        public virtual RHIResourceMemoryRequirements GetTextureMemoryRequirements(in RHITextureDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            throw new NotSupportedException($"{BackendType} does not expose exact texture memory requirements.");
+        }
         public abstract RHIBuffer CreateBuffer(in RHIBufferDescriptor descriptor);
+        public virtual RHIBuffer CreatePlacedBuffer(
+            RHIHeap heap,
+            ulong heapOffset,
+            in RHIBufferDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            throw new NotSupportedException($"{BackendType} does not expose placed buffers.");
+        }
         public abstract RHITexture CreateTexture(in RHITextureDescriptor descriptor);
+        public virtual RHITexture CreatePlacedTexture(
+            RHIHeap heap,
+            ulong heapOffset,
+            in RHITextureDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            throw new NotSupportedException($"{BackendType} does not expose placed textures.");
+        }
+        public virtual RHISparseTextureMemoryRequirements GetSparseTextureMemoryRequirements(
+            in RHITextureDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            throw new NotSupportedException($"{BackendType} does not expose sparse texture requirements.");
+        }
+        public virtual RHITexture CreateSparseTexture(in RHITextureDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            throw new NotSupportedException($"{BackendType} does not expose sparse textures.");
+        }
+        public virtual RHIMemoryBudget QueryMemoryBudget(ERHIStorageMode storageMode)
+        {
+            ThrowIfDisposed();
+            throw new NotSupportedException($"{BackendType} does not expose an exact native memory budget.");
+        }
+        public virtual void RequestResidency(in RHIResidencyRequestDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            throw new NotSupportedException($"{BackendType} does not expose residency requests with explicit completion.");
+        }
         public abstract RHISampler CreateSampler(in RHISamplerDescriptor descriptor);
         public abstract RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
         public abstract RHIBottomLevelAccelStruct CreateBottomAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor);
@@ -215,7 +239,7 @@ namespace SharpGPU
         public abstract RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor);
         public abstract RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor);
         public abstract RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor);
-        public abstract RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor);
+        public abstract RHIPipelineCache CreatePipelineCache();
         public abstract RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor);
         public abstract RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor);
         public abstract RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor);

@@ -67,11 +67,29 @@ public sealed class Dx12ArgumentTableBindingTests
 
         Assert.Throws<ArgumentOutOfRangeException>(() => CreateLayout(
             0,
-            Binding(0, ERHIBindType.Buffer, stage: ERHIShaderStage.MachineLearning)));
+            Binding(
+                0,
+                ERHIBindType.Buffer,
+                requirement: (ERHIArgumentBindingRequirement)byte.MaxValue)));
+
+        Assert.Throws<NotSupportedException>(() => CreateLayout(
+            0,
+            Binding(
+                0,
+                ERHIBindType.Sampler,
+                requirement: ERHIArgumentBindingRequirement.Optional)));
 
         Assert.Throws<ArgumentOutOfRangeException>(() => CreateLayout(
             0,
-            Binding(0, ERHIBindType.Buffer, stage: ERHIShaderStage.Vertex | ERHIShaderStage.Fragment)));
+            Binding(0, ERHIBindType.Buffer, stages: (ERHIShaderStageMask)(1 << 15))));
+
+        using Dx12ArgumentTableLayout combinedVisibility = CreateLayout(
+            0,
+            Binding(0, ERHIBindType.Buffer, stages: ERHIShaderStageMask.Vertex | ERHIShaderStageMask.Fragment),
+            Binding(1, ERHIBindType.Texture2D, stages: ERHIShaderStageMask.MachineLearning));
+        Assert.All(
+            combinedVisibility.BindInfos,
+            bindInfo => Assert.Equal(Vortice.Direct3D12.ShaderVisibility.All, bindInfo.NativeVisibility));
 
         Assert.Throws<ArgumentException>(() => CreateLayout(
             0,
@@ -85,8 +103,8 @@ public sealed class Dx12ArgumentTableBindingTests
 
         using Dx12ArgumentTableLayout disjointVisibility = CreateLayout(
             0,
-            Binding(0, ERHIBindType.Buffer, stage: ERHIShaderStage.Vertex),
-            Binding(0, ERHIBindType.Texture2D, stage: ERHIShaderStage.Fragment));
+            Binding(0, ERHIBindType.Buffer, stages: ERHIShaderStageMask.Vertex),
+            Binding(0, ERHIBindType.Texture2D, stages: ERHIShaderStageMask.Fragment));
         Assert.Equal(2, disjointVisibility.Groups.Length);
     }
 
@@ -129,6 +147,14 @@ public sealed class Dx12ArgumentTableBindingTests
             3,
             Binding(5, ERHIBindType.Buffer, count: 2),
             Binding(1, ERHIBindType.Sampler));
+        using Dx12ArgumentTableLayout optional = CreateLayout(
+            3,
+            Binding(
+                4,
+                ERHIBindType.Buffer,
+                count: 2,
+                requirement: ERHIArgumentBindingRequirement.Optional),
+            Binding(1, ERHIBindType.Sampler));
 
         Dx12PipelineLayoutPlan plan = new Dx12PipelineLayoutPlan(new RHIPipelineLayoutDescriptor
         {
@@ -138,6 +164,7 @@ public sealed class Dx12ArgumentTableBindingTests
         Assert.Same(plan.TablePlans[0], plan.Resolve(3, expected));
         Assert.Same(plan.TablePlans[0], plan.Resolve(3, equivalent));
         Assert.Throws<ArgumentException>(() => plan.Resolve(3, incompatible));
+        Assert.Throws<ArgumentException>(() => plan.Resolve(3, optional));
         Assert.Throws<ArgumentException>(() => plan.Resolve(9, expected));
     }
 
@@ -179,7 +206,13 @@ public sealed class Dx12ArgumentTableBindingTests
             using RHIArgumentTableLayout partialSrvLayout = context.Device.CreateArgumentTableLayout(new RHIArgumentTableLayoutDescriptor
             {
                 Index = 1,
-                Elements = new[] { Binding(0, ERHIBindType.Buffer) },
+                Elements = new[]
+                {
+                    Binding(
+                        0,
+                        ERHIBindType.Buffer,
+                        requirement: ERHIArgumentBindingRequirement.Optional),
+                },
             });
             using RHIArgumentTable partialSrvTable = context.Device.CreateArgumentTable(new RHIArgumentTableDescriptor
             {
@@ -244,22 +277,18 @@ public sealed class Dx12ArgumentTableBindingTests
                 FeatureContractContext.TryCreateDx12(out FeatureContractContext? foreignContext, out string foreignReason),
                 foreignReason);
             using (foreignContext!)
-            using (RHIArgumentTable foreignTable = foreignContext!.Device.CreateArgumentTable(new RHIArgumentTableDescriptor
-            {
-                Layout = partialSrvLayout,
-                Elements = Array.Empty<RHIArgumentTableElement>(),
-            }))
             using (RHIPipelineLayout localPipelineLayout = context.Device.CreatePipelineLayout(new RHIPipelineLayoutDescriptor
             {
                 ArgumentTableLayouts = new[] { partialSrvLayout },
             }))
             using (RHICommandBuffer localCommandBuffer = context.CommandQueue.CreateCommandBuffer())
             {
-                Assert.Throws<ArgumentException>(() => Dx12ArgumentTableBinder.BindCompute(
-                    Assert.IsType<Dx12CommandBuffer>(localCommandBuffer).NativeCommandList,
-                    Assert.IsType<Dx12PipelineLayout>(localPipelineLayout),
-                    foreignTable,
-                    1));
+                Assert.Throws<ArgumentException>(() => foreignContext!.Device.CreateArgumentTable(
+                    new RHIArgumentTableDescriptor
+                    {
+                        Layout = partialSrvLayout,
+                        Elements = Array.Empty<RHIArgumentTableElement>(),
+                    }));
             }
 
             partialSrvTable.Dispose();
@@ -284,7 +313,6 @@ public sealed class Dx12ArgumentTableBindingTests
         {
             Dx12Device device = Assert.IsType<Dx12Device>(context.Device);
             _ = device.NullDescriptors.Get(ERHIBindType.Buffer);
-            _ = device.NullDescriptors.Get(ERHIBindType.Sampler);
             int cbvSrvUavAvailable = device.DescriptorHeapCbvSrvUav.AvailableDescriptorCount;
             int samplerAvailable = device.DescriptorHeapSampler.AvailableDescriptorCount;
 
@@ -329,15 +357,15 @@ public sealed class Dx12ArgumentTableBindingTests
             return;
         }
 
-        using RHIInstance? instance = RHIInstance.Create(new RHIInstanceDescriptor
+        using RHIInstance instance = RHIInstance.Create(new RHIInstanceDescriptor
         {
             Backend = ERHIBackend.DirectX12,
             EnableDebugLayer = true,
-            EnableValidatior = false,
+            EnableValidation = false,
             GraphicsQueueRequestCount = 1,
         });
         Assert.NotNull(instance);
-        Assert.True(instance!.DeviceCount > 0);
+        Assert.True(instance.DeviceCount > 0);
 
         RHIDevice device = Enumerable.Range(0, instance.DeviceCount)
             .Select(index => instance.GetDevice(index))
@@ -350,7 +378,8 @@ public sealed class Dx12ArgumentTableBindingTests
 
         foreach (ERHIBindType bindType in Enum.GetValues<ERHIBindType>())
         {
-            if (bindType != ERHIBindType.Pending)
+            if (bindType != ERHIBindType.Pending
+                && bindType != ERHIBindType.Sampler)
             {
                 dx12Device.NullDescriptors.Get(bindType);
             }
@@ -538,7 +567,9 @@ public sealed class Dx12ArgumentTableBindingTests
         commandBuffer.End();
 
         fence.Reset();
-        queue.Submit(commandBuffer, fence, null!, null!);
+        queue.Submit(new RHIQueueSubmitDescriptor(
+            new RHICommandBuffer[] { commandBuffer },
+            completionFence: fence));
         fence.Wait();
 
         IntPtr readbackPointer = readback.Map(0, sizeof(uint));
@@ -568,14 +599,17 @@ public sealed class Dx12ArgumentTableBindingTests
         uint slot,
         ERHIBindType type,
         uint count = 1,
-        ERHIShaderStage stage = ERHIShaderStage.Compute)
+        ERHIShaderStageMask stages = ERHIShaderStageMask.Compute,
+        ERHIArgumentBindingRequirement requirement =
+            ERHIArgumentBindingRequirement.Required)
     {
         return new RHIArgumentTableLayoutElement
         {
             Slot = slot,
             Count = count,
             Type = type,
-            Stage = stage,
+            Stages = stages,
+            Requirement = requirement,
         };
     }
 

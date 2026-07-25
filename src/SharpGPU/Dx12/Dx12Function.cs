@@ -1,11 +1,12 @@
 using System;
 using SharpGPU.Collections;
+using SharpGPU.Core;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8600, CS8602, CA1416
+#pragma warning disable CA1416
     internal unsafe class Dx12Function : RHIFunction
     {
         public Vortice.Direct3D12.ShaderBytecode NativeShaderBytecode
@@ -71,9 +72,6 @@ namespace SharpGPU
                 Marshal.FreeHGlobal(m_OwnedByteCode);
                 m_OwnedByteCode = IntPtr.Zero;
             }
-
-            m_NativeShaderBytecode = default;
-            m_NativeShaderData = Array.Empty<byte>();
         }
     }
 
@@ -108,9 +106,6 @@ namespace SharpGPU
                 Marshal.FreeHGlobal(m_OwnedByteCode);
                 m_OwnedByteCode = IntPtr.Zero;
             }
-
-            m_NativeShaderBytecode = default;
-            m_NativeShaderData = Array.Empty<byte>();
         }
 
         private static IntPtr CloneShaderByteCode(in IntPtr source, in uint byteSize, string context)
@@ -180,8 +175,8 @@ namespace SharpGPU
         private uint m_EntryStride;
         private uint m_LocalDataStrideInBytes;
         private Dx12Device m_Dx12Device;
-        private Vortice.Direct3D12.ID3D12Resource m_NativeResource;
-        private Dx12RaytracingPipeline m_CachedPipeline;
+        private Vortice.Direct3D12.ID3D12Resource? m_NativeResource;
+        private Dx12RaytracingPipeline? m_CachedPipeline;
         private Dx12FunctionTableEntry m_RayGenerationProgram;
         private bool m_HasRayGenerationRecord;
         private TArray<Dx12FunctionTableEntry> m_MissPrograms;
@@ -319,7 +314,6 @@ namespace SharpGPU
 
             ReleaseNativeResource();
 
-            Vortice.Direct3D12.ID3D12Resource dx12Resource;
             Vortice.Direct3D12.ResourceDescription resourceDesc = Vortice.Direct3D12.ResourceDescription.Buffer(m_EntryCount * m_EntryStride, Vortice.Direct3D12.ResourceFlags.None);
             Vortice.Direct3D12.HeapProperties heapProperties = new Vortice.Direct3D12.HeapProperties(Vortice.Direct3D12.HeapType.Upload, 0, 0);
             SharpGen.Runtime.Result hResult = m_Dx12Device.NativeDevice.CreateCommittedResource(
@@ -328,36 +322,48 @@ namespace SharpGPU
                 resourceDesc,
                 Vortice.Direct3D12.ResourceStates.GenericRead,
                 null,
-                out dx12Resource);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            m_NativeResource = dx12Resource;
+                out Vortice.Direct3D12.ID3D12Resource? dx12Resource);
+            m_NativeResource = Dx12Utility.RequireCreatedObject(
+                dx12Resource,
+                hResult,
+                "ID3D12Device.CreateCommittedResource(shader binding table)");
 
             void* pTableData;
             hResult = m_NativeResource.Map(0, null, &pTableData);
-#if DEBUG
             Dx12Utility.CHECK_HR(hResult);
-#endif
-
-            byte* tableData = (byte*)pTableData;
-            WriteRecord(dx12RaytracingPipeline, tableData + 0 * m_EntryStride, ERHIRayShaderTableSection.RayGeneration, m_RayGenerationProgram);
-            for (int i = 0; i < m_MissPrograms.length; ++i)
+            if (pTableData == null)
             {
-                WriteRecord(dx12RaytracingPipeline, tableData + (1 + i) * m_EntryStride, ERHIRayShaderTableSection.Miss, m_MissPrograms[i]);
+                throw new RHIException(
+                    ERHIErrorCode.NativeFailure,
+                    ERHIBackend.DirectX12,
+                    hResult.Code,
+                    "ID3D12Resource.Map succeeded without returning a shader binding table pointer.",
+                    ERHIDeviceState.Operational);
             }
 
-            for (int i = 0; i < m_HitGroupPrograms.length; ++i)
+            try
             {
-                WriteRecord(dx12RaytracingPipeline, tableData + (1 + m_MissPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Hit, m_HitGroupPrograms[i]);
-            }
+                byte* tableData = (byte*)pTableData;
+                WriteRecord(dx12RaytracingPipeline, tableData + 0 * m_EntryStride, ERHIRayShaderTableSection.RayGeneration, m_RayGenerationProgram);
+                for (int i = 0; i < m_MissPrograms.length; ++i)
+                {
+                    WriteRecord(dx12RaytracingPipeline, tableData + (1 + i) * m_EntryStride, ERHIRayShaderTableSection.Miss, m_MissPrograms[i]);
+                }
 
-            for (int i = 0; i < m_CallablePrograms.length; ++i)
+                for (int i = 0; i < m_HitGroupPrograms.length; ++i)
+                {
+                    WriteRecord(dx12RaytracingPipeline, tableData + (1 + m_MissPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Hit, m_HitGroupPrograms[i]);
+                }
+
+                for (int i = 0; i < m_CallablePrograms.length; ++i)
+                {
+                    WriteRecord(dx12RaytracingPipeline, tableData + (1 + m_MissPrograms.length + m_HitGroupPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Callable, m_CallablePrograms[i]);
+                }
+            }
+            finally
             {
-                WriteRecord(dx12RaytracingPipeline, tableData + (1 + m_MissPrograms.length + m_HitGroupPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Callable, m_CallablePrograms[i]);
+                m_NativeResource.Unmap(0, null);
             }
-
-            m_NativeResource.Unmap(0, null);
         }
 
         public override void Update()
@@ -372,27 +378,40 @@ namespace SharpGPU
 
             void* pTableData;
             SharpGen.Runtime.Result hResult = m_NativeResource.Map(0, null, &pTableData);
-#if DEBUG
             Dx12Utility.CHECK_HR(hResult);
-#endif
-            byte* tableData = (byte*)pTableData;
-            WriteRecord(m_CachedPipeline, tableData + 0 * m_EntryStride, ERHIRayShaderTableSection.RayGeneration, m_RayGenerationProgram);
-            for (int i = 0; i < m_MissPrograms.length; ++i)
+            if (pTableData == null)
             {
-                WriteRecord(m_CachedPipeline, tableData + (1 + i) * m_EntryStride, ERHIRayShaderTableSection.Miss, m_MissPrograms[i]);
+                throw new RHIException(
+                    ERHIErrorCode.NativeFailure,
+                    ERHIBackend.DirectX12,
+                    hResult.Code,
+                    "ID3D12Resource.Map succeeded without returning a shader binding table pointer.",
+                    ERHIDeviceState.Operational);
             }
 
-            for (int i = 0; i < m_HitGroupPrograms.length; ++i)
+            try
             {
-                WriteRecord(m_CachedPipeline, tableData + (1 + m_MissPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Hit, m_HitGroupPrograms[i]);
-            }
+                byte* tableData = (byte*)pTableData;
+                WriteRecord(m_CachedPipeline, tableData + 0 * m_EntryStride, ERHIRayShaderTableSection.RayGeneration, m_RayGenerationProgram);
+                for (int i = 0; i < m_MissPrograms.length; ++i)
+                {
+                    WriteRecord(m_CachedPipeline, tableData + (1 + i) * m_EntryStride, ERHIRayShaderTableSection.Miss, m_MissPrograms[i]);
+                }
 
-            for (int i = 0; i < m_CallablePrograms.length; ++i)
+                for (int i = 0; i < m_HitGroupPrograms.length; ++i)
+                {
+                    WriteRecord(m_CachedPipeline, tableData + (1 + m_MissPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Hit, m_HitGroupPrograms[i]);
+                }
+
+                for (int i = 0; i < m_CallablePrograms.length; ++i)
+                {
+                    WriteRecord(m_CachedPipeline, tableData + (1 + m_MissPrograms.length + m_HitGroupPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Callable, m_CallablePrograms[i]);
+                }
+            }
+            finally
             {
-                WriteRecord(m_CachedPipeline, tableData + (1 + m_MissPrograms.length + m_HitGroupPrograms.length + i) * m_EntryStride, ERHIRayShaderTableSection.Callable, m_CallablePrograms[i]);
+                m_NativeResource.Unmap(0, null);
             }
-
-            m_NativeResource.Unmap(0, null);
         }
 
         protected override void Release()
@@ -455,14 +474,28 @@ namespace SharpGPU
         private void WriteSingleRecord(Dx12RaytracingPipeline pipeline, ERHIRayShaderTableSection section, in int index, in Dx12FunctionTableEntry entry)
         {
             void* pTableData;
-            SharpGen.Runtime.Result hResult = m_NativeResource.Map(0, null, &pTableData);
-#if DEBUG
+            SharpGen.Runtime.Result hResult = m_NativeResource!.Map(0, null, &pTableData);
             Dx12Utility.CHECK_HR(hResult);
-#endif
-            int absoluteIndex = GetAbsoluteEntryIndex(section, index);
-            byte* destination = (byte*)pTableData + absoluteIndex * m_EntryStride;
-            WriteRecord(pipeline, destination, section, entry);
-            m_NativeResource.Unmap(0, null);
+            if (pTableData == null)
+            {
+                throw new RHIException(
+                    ERHIErrorCode.NativeFailure,
+                    ERHIBackend.DirectX12,
+                    hResult.Code,
+                    "ID3D12Resource.Map succeeded without returning a shader binding table pointer.",
+                    ERHIDeviceState.Operational);
+            }
+
+            try
+            {
+                int absoluteIndex = GetAbsoluteEntryIndex(section, index);
+                byte* destination = (byte*)pTableData + absoluteIndex * m_EntryStride;
+                WriteRecord(pipeline, destination, section, entry);
+            }
+            finally
+            {
+                m_NativeResource.Unmap(0, null);
+            }
         }
 
         private int GetAbsoluteEntryIndex(ERHIRayShaderTableSection section, in int sectionIndex)
@@ -537,5 +570,5 @@ namespace SharpGPU
             }
         }
     }
-#pragma warning restore CS8600, CS8602, CA1416
+#pragma warning restore CA1416
 }

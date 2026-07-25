@@ -6,13 +6,17 @@ using System.Runtime.InteropServices;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8618
     internal unsafe class VulkanInstance : RHIInstance
     {
         public override int DeviceCount => m_Devices.Count;
         public override ERHIBackend BackendType => ERHIBackend.Vulkan;
 
         public VkInstance NativeInstance => m_VkInstance;
+        internal uint LoaderApiVersion => m_LoaderApiVersion;
+        internal uint ApiVersion => m_ApiVersion;
+        internal RHINativeSurfaceKind SurfaceKind => m_SurfaceKind;
+        internal VulkanValidationDiagnostics? ValidationDiagnostics =>
+            m_ValidationDiagnostics;
         public bool HasDebugUtils => m_HasDebugUtils;
         public bool HasValidationLayerEnabled =>
             m_HasValidationLayerEnabled;
@@ -20,10 +24,14 @@ namespace SharpGPU
         private VkInstance m_VkInstance;
         private bool m_HasDebugUtils;
         private bool m_HasValidationLayerEnabled;
+        private VulkanValidationDiagnostics? m_ValidationDiagnostics;
         private bool m_EnablePortabilityEnumeration;
-        private List<VulkanDevice> m_Devices;
-        private List<string> m_ValidationLayers;
-        private List<string> m_RequiredExtensions;
+        private List<VulkanDevice> m_Devices = new List<VulkanDevice>();
+        private uint m_LoaderApiVersion;
+        private uint m_ApiVersion;
+        private List<string> m_ValidationLayers = new List<string>();
+        private readonly RHINativeSurfaceKind m_SurfaceKind;
+        private List<string> m_RequiredExtensions = new List<string>();
 
         // Debug utils function pointers (loaded at runtime via vkGetInstanceProcAddr)
         [StructLayout(LayoutKind.Sequential)]
@@ -39,6 +47,9 @@ namespace SharpGPU
         private delegate IntPtr PFN_vkGetInstanceProcAddr(VkInstance instance, byte* pName);
 
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        private delegate VkResult PFN_vkEnumerateInstanceVersion(uint* apiVersion);
+
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         private delegate VkResult PFN_vkEnumerateInstanceExtensionProperties(byte* layerName, uint* propertyCount, VkExtensionProperties* properties);
 
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
@@ -50,15 +61,19 @@ namespace SharpGPU
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         private delegate void PFN_vkCmdEndDebugUtilsLabel(VkCommandBuffer commandBuffer);
 
-        private PFN_vkCmdBeginDebugUtilsLabel m_CmdBeginDebugUtilsLabel;
-        private PFN_vkCmdEndDebugUtilsLabel m_CmdEndDebugUtilsLabel;
+        private PFN_vkCmdBeginDebugUtilsLabel? m_CmdBeginDebugUtilsLabel;
+        private PFN_vkCmdEndDebugUtilsLabel? m_CmdEndDebugUtilsLabel;
         private static IntPtr s_VulkanGlobalLibrary;
-        private static PFN_vkEnumerateInstanceExtensionProperties s_EnumerateInstanceExtensionProperties;
-        private static PFN_vkEnumerateInstanceLayerProperties s_EnumerateInstanceLayerProperties;
+        private static PFN_vkGetInstanceProcAddr? s_GetInstanceProcAddr;
+        private static PFN_vkEnumerateInstanceVersion? s_EnumerateInstanceVersion;
+        private static PFN_vkEnumerateInstanceExtensionProperties? s_EnumerateInstanceExtensionProperties;
+        private static PFN_vkEnumerateInstanceLayerProperties? s_EnumerateInstanceLayerProperties;
         private static bool s_GlobalFunctionsLoaded;
+        private static readonly object s_GlobalFunctionsGate = new();
 
         public VulkanInstance(in RHIInstanceDescriptor descriptor)
         {
+            m_SurfaceKind = descriptor.SurfaceKind;
             CheckExtensionSupport(descriptor);
             CheckValidationLayerSupport(descriptor);
             CreateVulkanInstance(descriptor);
@@ -67,6 +82,20 @@ namespace SharpGPU
                 LoadDebugUtilsFunctions();
             }
             EnumeratePhysicalDevices(descriptor);
+        }
+
+        internal static bool RequiresSwapchainDeviceExtension(
+            RHINativeSurfaceKind surfaceKind)
+        {
+            if (!Enum.IsDefined(surfaceKind))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(surfaceKind),
+                    surfaceKind,
+                    "The native surface kind is not defined.");
+            }
+
+            return surfaceKind != RHINativeSurfaceKind.Headless;
         }
 
         private static bool ContainsExtension(HashSet<string> availableExtensions, string extension)
@@ -98,10 +127,12 @@ namespace SharpGPU
         private void CheckExtensionSupport(in RHIInstanceDescriptor descriptor)
         {
             EnsureGlobalVulkanFunctionsLoaded();
+            PFN_vkEnumerateInstanceExtensionProperties enumerateExtensions = s_EnumerateInstanceExtensionProperties
+                ?? throw new InvalidOperationException("Vulkan loader did not expose vkEnumerateInstanceExtensionProperties.");
             uint supportedExtensionCount = 0;
-            VulkanUtility.CheckErrors(s_EnumerateInstanceExtensionProperties(null, &supportedExtensionCount, null));
+            VulkanUtility.CheckErrors(enumerateExtensions(null, &supportedExtensionCount, null));
             VkExtensionProperties* supportedExtensions = stackalloc VkExtensionProperties[(int)supportedExtensionCount];
-            VulkanUtility.CheckErrors(s_EnumerateInstanceExtensionProperties(null, &supportedExtensionCount, supportedExtensions));
+            VulkanUtility.CheckErrors(enumerateExtensions(null, &supportedExtensionCount, supportedExtensions));
 
             HashSet<string> availableExtensions = new HashSet<string>(StringComparer.Ordinal);
             for (int i = 0; i < supportedExtensionCount; ++i)
@@ -149,7 +180,7 @@ namespace SharpGPU
 
             EnableExtensionIfAvailable(availableExtensions, m_RequiredExtensions, "VK_KHR_get_physical_device_properties2");
 
-            if (descriptor.EnableValidatior)
+            if (descriptor.EnableValidation)
             {
                 if (ContainsExtension(availableExtensions, "VK_EXT_debug_utils"))
                 {
@@ -158,7 +189,10 @@ namespace SharpGPU
                 }
                 else
                 {
-                    EnableExtensionIfAvailable(availableExtensions, m_RequiredExtensions, "VK_EXT_debug_report");
+                    throw new NotSupportedException(
+                        "Vulkan validation requires VK_EXT_debug_utils so " +
+                        "SharpGPU can collect diagnostics from instance and " +
+                        "logical-device creation onward.");
                 }
             }
         }
@@ -166,10 +200,12 @@ namespace SharpGPU
         private void CheckValidationLayerSupport(in RHIInstanceDescriptor descriptor)
         {
             EnsureGlobalVulkanFunctionsLoaded();
+            PFN_vkEnumerateInstanceLayerProperties enumerateLayers = s_EnumerateInstanceLayerProperties
+                ?? throw new InvalidOperationException("Vulkan loader did not expose vkEnumerateInstanceLayerProperties.");
             uint layerCount = 0;
-            VulkanUtility.CheckErrors(s_EnumerateInstanceLayerProperties(&layerCount, null));
+            VulkanUtility.CheckErrors(enumerateLayers(&layerCount, null));
             VkLayerProperties* availableLayers = stackalloc VkLayerProperties[(int)layerCount];
-            VulkanUtility.CheckErrors(s_EnumerateInstanceLayerProperties(&layerCount, availableLayers));
+            VulkanUtility.CheckErrors(enumerateLayers(&layerCount, availableLayers));
 
             string[] array = new string[layerCount];
             for (int i = 0; i < layerCount; ++i)
@@ -178,33 +214,17 @@ namespace SharpGPU
             }
 
             m_ValidationLayers = new List<string>();
-            if (descriptor.EnableValidatior)
+            if (descriptor.EnableValidation)
             {
-                switch (VulkanUtility.GetCurrentOSPlatfom())
+                if (array.Any(static layer => layer == "VK_LAYER_KHRONOS_validation"))
                 {
-                    case EOSPlatform.Windows:
-                    case EOSPlatform.Linux:
-                        if (array.Any((string l) => l == "VK_LAYER_KHRONOS_validation"))
-                        {
-                            m_ValidationLayers.Add("VK_LAYER_KHRONOS_validation");
-                        }
-                        break;
-                    case EOSPlatform.Android:
-                        if (array.Any((string l) => l == "VK_LAYER_LUNARG_core_validation"))
-                        {
-                            m_ValidationLayers.Add("VK_LAYER_LUNARG_core_validation");
-                        }
-
-                        if (array.Any((string l) => l == "VK_LAYER_LUNARG_swapchain"))
-                        {
-                            m_ValidationLayers.Add("VK_LAYER_LUNARG_swapchain");
-                        }
-
-                        if (array.Any((string l) => l == "VK_LAYER_LUNARG_parameter_validation"))
-                        {
-                            m_ValidationLayers.Add("VK_LAYER_LUNARG_parameter_validation");
-                        }
-                        break;
+                    m_ValidationLayers.Add("VK_LAYER_KHRONOS_validation");
+                }
+                else
+                {
+                    throw new NotSupportedException(
+                        "Vulkan validation was requested, but VK_LAYER_KHRONOS_validation " +
+                        "is not available. Install or externally inject the Khronos validation layer.");
                 }
             }
         }
@@ -220,8 +240,12 @@ namespace SharpGPU
 
             try
             {
-                appName = "Hello Triangle".ToPointer();
-                engineName = "No Engine".ToPointer();
+                m_LoaderApiVersion = QueryLoaderApiVersion();
+                m_ApiVersion = SelectInstanceApiVersion(
+                    m_LoaderApiVersion,
+                    VulkanUtility.GetCurrentOSPlatfom());
+                appName = "InfinityBrowser".ToPointer();
+                engineName = "SharpGPU".ToPointer();
                 VkApplicationInfo appInfo = new VkApplicationInfo()
                 {
                     sType = VkStructureType.ApplicationInfo,
@@ -229,7 +253,7 @@ namespace SharpGPU
                     applicationVersion = new VkVersion(VulkanUtility.Version(1, 0, 0)),
                     pEngineName = engineName,
                     engineVersion = new VkVersion(VulkanUtility.Version(1, 0, 0)),
-                    apiVersion = new VkVersion(VulkanUtility.Version(1, 3, 0)),
+                    apiVersion = new VkVersion(m_ApiVersion),
                 };
 
                 VkInstanceCreateInfo createInfo = default;
@@ -267,16 +291,63 @@ namespace SharpGPU
                 }
 #else
                 createInfo.enabledLayerCount = 0;
-                createInfo.pNext = null;
 #endif
 
-                fixed (VkInstance* instancePtr = &m_VkInstance)
+                VulkanValidationDiagnostics? validationDiagnostics = null;
+                VulkanDebugUtilsMessengerCreateInfo validationCreateInfo =
+                    default;
+                if (descriptor.EnableValidation)
                 {
-                    VulkanUtility.CheckErrors(VulkanNative.vkCreateInstance(&createInfo, null, instancePtr));
+                    if (!m_HasDebugUtils)
+                    {
+                        throw new NotSupportedException(
+                            "Vulkan validation diagnostics require " +
+                            "VK_EXT_debug_utils.");
+                    }
+
+                    validationDiagnostics = new VulkanValidationDiagnostics();
+                    validationCreateInfo =
+                        validationDiagnostics.CreateInstanceCreateInfo();
+                    createInfo.pNext = &validationCreateInfo;
                 }
 
-                m_HasValidationLayerEnabled =
-                    createInfo.enabledLayerCount > 0;
+                try
+                {
+                    fixed (VkInstance* instancePtr = &m_VkInstance)
+                    {
+                        VulkanUtility.CheckErrors(
+                            VulkanNative.vkCreateInstance(
+                                &createInfo,
+                                null,
+                                instancePtr));
+                    }
+
+                    m_HasValidationLayerEnabled =
+                        createInfo.enabledLayerCount > 0;
+                    if (validationDiagnostics != null)
+                    {
+                        validationDiagnostics.Attach(
+                            m_VkInstance,
+                            GetInstanceProcedure(
+                                m_VkInstance,
+                                "vkCreateDebugUtilsMessengerEXT"),
+                            GetInstanceProcedure(
+                                m_VkInstance,
+                                "vkDestroyDebugUtilsMessengerEXT"));
+                        m_ValidationDiagnostics = validationDiagnostics;
+                    }
+                }
+                catch
+                {
+                    validationDiagnostics?.Dispose();
+                    if (m_VkInstance.Handle != 0)
+                    {
+                        VulkanNative.vkDestroyInstance(m_VkInstance, null);
+                        m_VkInstance = default;
+                    }
+
+                    throw;
+                }
             }
             finally
             {
@@ -322,9 +393,27 @@ namespace SharpGPU
             VulkanUtility.CheckErrors(VulkanNative.vkEnumeratePhysicalDevices(m_VkInstance, &deviceCount, physicalDevices));
 
             m_Devices = new List<VulkanDevice>((int)deviceCount);
+            EOSPlatform platform = VulkanUtility.GetCurrentOSPlatfom();
+            uint androidMinimum = VulkanUtility.Version(1, 1, 0);
             for (int i = 0; i < deviceCount; ++i)
             {
+                VkPhysicalDeviceProperties properties;
+                VulkanNative.vkGetPhysicalDeviceProperties(
+                    physicalDevices[i],
+                    &properties);
+                if (platform == EOSPlatform.Android &&
+                    properties.apiVersion.Value < androidMinimum)
+                {
+                    continue;
+                }
+
                 m_Devices.Add(new VulkanDevice(this, physicalDevices[i], descriptor.ComputeQueueRequestCount, descriptor.TransferQueueRequestCount, descriptor.GraphicsQueueRequestCount));
+            }
+
+            if (m_Devices.Count == 0)
+            {
+                throw new NotSupportedException(
+                    "Android SharpGPU requires a Vulkan 1.1-or-newer physical device.");
             }
         }
 
@@ -388,38 +477,140 @@ namespace SharpGPU
             }
         }
 
+        private static IntPtr GetInstanceProcedure(
+            VkInstance instance,
+            string name)
+        {
+            EnsureGlobalVulkanFunctionsLoaded();
+            ArgumentException.ThrowIfNullOrWhiteSpace(name);
+            byte* nativeName =
+                (byte*)Marshal.StringToHGlobalAnsi(name);
+            try
+            {
+                IntPtr procedure = s_GetInstanceProcAddr!(
+                    instance,
+                    nativeName);
+                if (procedure == IntPtr.Zero)
+                {
+                    throw new NotSupportedException(
+                        $"Vulkan instance function '{name}' is unavailable.");
+                }
+
+                return procedure;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal((IntPtr)nativeName);
+            }
+        }
+
         private static void EnsureGlobalVulkanFunctionsLoaded()
         {
-            if (s_GlobalFunctionsLoaded)
+            lock (s_GlobalFunctionsGate)
             {
-                return;
+                if (s_GlobalFunctionsLoaded)
+                {
+                    return;
+                }
+
+                if (!NativeLibrary.TryLoad("vulkan-1", out s_VulkanGlobalLibrary) &&
+                    !NativeLibrary.TryLoad("libvulkan.so.1", out s_VulkanGlobalLibrary) &&
+                    !NativeLibrary.TryLoad("libvulkan.so", out s_VulkanGlobalLibrary) &&
+                    !NativeLibrary.TryLoad("libvulkan.1.dylib", out s_VulkanGlobalLibrary) &&
+                    !NativeLibrary.TryLoad("libvulkan.dylib", out s_VulkanGlobalLibrary) &&
+                    !NativeLibrary.TryLoad("libMoltenVK.dylib", out s_VulkanGlobalLibrary) &&
+                    !NativeLibrary.TryLoad("/usr/local/lib/libvulkan.1.dylib", out s_VulkanGlobalLibrary) &&
+                    !NativeLibrary.TryLoad("/usr/local/lib/libvulkan.dylib", out s_VulkanGlobalLibrary))
+                {
+                    throw new InvalidOperationException("Failed to load Vulkan loader library.");
+                }
+
+                if (!NativeLibrary.TryGetExport(
+                        s_VulkanGlobalLibrary,
+                        "vkGetInstanceProcAddr",
+                        out IntPtr getInstanceProcAddrPtr))
+                {
+                    throw new InvalidOperationException(
+                        "Failed to load vkGetInstanceProcAddr.");
+                }
+
+                if (!NativeLibrary.TryGetExport(s_VulkanGlobalLibrary, "vkEnumerateInstanceExtensionProperties", out IntPtr enumExtensionsPtr))
+                {
+                    throw new InvalidOperationException("Failed to load vkEnumerateInstanceExtensionProperties.");
+                }
+
+                if (!NativeLibrary.TryGetExport(s_VulkanGlobalLibrary, "vkEnumerateInstanceLayerProperties", out IntPtr enumLayersPtr))
+                {
+                    throw new InvalidOperationException("Failed to load vkEnumerateInstanceLayerProperties.");
+                }
+
+                if (NativeLibrary.TryGetExport(
+                        s_VulkanGlobalLibrary,
+                        "vkEnumerateInstanceVersion",
+                        out IntPtr enumerateVersionPtr))
+                {
+                    s_EnumerateInstanceVersion =
+                        Marshal.GetDelegateForFunctionPointer<PFN_vkEnumerateInstanceVersion>(
+                            enumerateVersionPtr);
+                }
+
+                s_GetInstanceProcAddr =
+                    Marshal.GetDelegateForFunctionPointer<
+                        PFN_vkGetInstanceProcAddr>(
+                        getInstanceProcAddrPtr);
+                s_EnumerateInstanceExtensionProperties = Marshal.GetDelegateForFunctionPointer<PFN_vkEnumerateInstanceExtensionProperties>(enumExtensionsPtr);
+                s_EnumerateInstanceLayerProperties = Marshal.GetDelegateForFunctionPointer<PFN_vkEnumerateInstanceLayerProperties>(enumLayersPtr);
+                s_GlobalFunctionsLoaded = true;
+            }
+        }
+
+        private static uint QueryLoaderApiVersion()
+        {
+            EnsureGlobalVulkanFunctionsLoaded();
+            if (s_EnumerateInstanceVersion == null)
+            {
+                return VulkanUtility.Version(1, 0, 0);
             }
 
-            if (!NativeLibrary.TryLoad("vulkan-1", out s_VulkanGlobalLibrary) &&
-                !NativeLibrary.TryLoad("libvulkan.so.1", out s_VulkanGlobalLibrary) &&
-                !NativeLibrary.TryLoad("libvulkan.so", out s_VulkanGlobalLibrary) &&
-                !NativeLibrary.TryLoad("libvulkan.1.dylib", out s_VulkanGlobalLibrary) &&
-                !NativeLibrary.TryLoad("libvulkan.dylib", out s_VulkanGlobalLibrary) &&
-                !NativeLibrary.TryLoad("libMoltenVK.dylib", out s_VulkanGlobalLibrary) &&
-                !NativeLibrary.TryLoad("/usr/local/lib/libvulkan.1.dylib", out s_VulkanGlobalLibrary) &&
-                !NativeLibrary.TryLoad("/usr/local/lib/libvulkan.dylib", out s_VulkanGlobalLibrary))
+            uint loaderVersion = 0;
+            VulkanUtility.CheckErrors(s_EnumerateInstanceVersion(&loaderVersion));
+            if (loaderVersion < VulkanUtility.Version(1, 0, 0))
             {
-                throw new InvalidOperationException("Failed to load Vulkan loader library.");
+                throw new InvalidOperationException(
+                    $"The Vulkan loader reported an invalid API version 0x{loaderVersion:X8}.");
             }
 
-            if (!NativeLibrary.TryGetExport(s_VulkanGlobalLibrary, "vkEnumerateInstanceExtensionProperties", out IntPtr enumExtensionsPtr))
+            return loaderVersion;
+        }
+
+        internal static uint SelectInstanceApiVersion(
+            uint loaderApiVersion,
+            EOSPlatform platform)
+        {
+            uint minimum = VulkanUtility.Version(1, 0, 0);
+            uint androidMinimum = VulkanUtility.Version(1, 1, 0);
+            uint loaderMajor = loaderApiVersion >> 22;
+            if (loaderMajor != 1)
             {
-                throw new InvalidOperationException("Failed to load vkEnumerateInstanceExtensionProperties.");
+                throw new NotSupportedException(
+                    $"SharpGPU recognizes Vulkan 1.x instance negotiation, " +
+                    $"but the loader reported API version 0x{loaderApiVersion:X8}.");
+            }
+            if (loaderApiVersion < minimum)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(loaderApiVersion),
+                    loaderApiVersion,
+                    "The Vulkan loader API version must be at least 1.0.");
+            }
+            if (platform == EOSPlatform.Android &&
+                loaderApiVersion < androidMinimum)
+            {
+                throw new NotSupportedException(
+                    "Android SharpGPU requires a Vulkan 1.1-or-newer loader.");
             }
 
-            if (!NativeLibrary.TryGetExport(s_VulkanGlobalLibrary, "vkEnumerateInstanceLayerProperties", out IntPtr enumLayersPtr))
-            {
-                throw new InvalidOperationException("Failed to load vkEnumerateInstanceLayerProperties.");
-            }
-
-            s_EnumerateInstanceExtensionProperties = Marshal.GetDelegateForFunctionPointer<PFN_vkEnumerateInstanceExtensionProperties>(enumExtensionsPtr);
-            s_EnumerateInstanceLayerProperties = Marshal.GetDelegateForFunctionPointer<PFN_vkEnumerateInstanceLayerProperties>(enumLayersPtr);
-            s_GlobalFunctionsLoaded = true;
+            return loaderApiVersion;
         }
 
         internal void CmdBeginDebugUtilsLabel(VkCommandBuffer commandBuffer, string name)
@@ -470,9 +661,10 @@ namespace SharpGPU
             }
 
             m_Devices.Clear();
+            m_ValidationDiagnostics?.Dispose();
+            m_ValidationDiagnostics = null;
             VulkanNative.vkDestroyInstance(m_VkInstance, null);
         }
     }
 
-#pragma warning restore CS8618
 }

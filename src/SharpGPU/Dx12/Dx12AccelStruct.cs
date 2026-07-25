@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
+#pragma warning disable CA1416
     internal static unsafe class Dx12RaytracingHelper
     {
         public static Vortice.Direct3D12.HeapProperties kUploadHeapProps = CreateHeapProperties(Vortice.Direct3D12.HeapType.Upload, Vortice.Direct3D12.CpuPageProperty.Unknown, Vortice.Direct3D12.MemoryPool.Unknown, 0, 0);
@@ -41,12 +41,12 @@ namespace SharpGPU
                 Width = size
             };
 
-            Vortice.Direct3D12.ID3D12Resource nativeResource;
+            Vortice.Direct3D12.ID3D12Resource? nativeResource;
             SharpGen.Runtime.Result hResult = pDevice.CreateCommittedResource(heapProps, Vortice.Direct3D12.HeapFlags.AllowAllBuffersAndTextures, description, initState, null, out nativeResource);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            return nativeResource;
+            return Dx12Utility.RequireCreatedObject(
+                nativeResource,
+                hResult,
+                "ID3D12Device.CreateCommittedResource(acceleration-structure buffer)");
         }
     }
 
@@ -78,7 +78,7 @@ namespace SharpGPU
             for (int i = 0; i < descriptor.Instances.Length; ++i)
             {
                 ref RHIAccelStructInstance asInstance = ref asInstances[i];
-                Dx12BottomLevelAccelStruct accelStruct = asInstance.BottomLevelAccelStruct as Dx12BottomLevelAccelStruct;
+                Dx12BottomLevelAccelStruct accelStruct = asInstance.BottomLevelAccelStruct as Dx12BottomLevelAccelStruct ?? throw new ArgumentException("TLAS instance must reference a Dx12BottomLevelAccelStruct.", nameof(descriptor));
 
                 ref Vortice.Direct3D12.RaytracingInstanceDescription nativeInstanceDescription = ref nativeInstanceDescriptions[i];
                 {
@@ -142,7 +142,7 @@ namespace SharpGPU
             for (int i = 0; i < descriptor.Instances.Length; ++i)
             {
                 ref RHIAccelStructInstance asInstance = ref asInstances[i];
-                Dx12BottomLevelAccelStruct accelStruct = asInstance.BottomLevelAccelStruct as Dx12BottomLevelAccelStruct;
+                Dx12BottomLevelAccelStruct accelStruct = asInstance.BottomLevelAccelStruct as Dx12BottomLevelAccelStruct ?? throw new ArgumentException("TLAS instance must reference a Dx12BottomLevelAccelStruct.", nameof(descriptor));
 
                 ref Vortice.Direct3D12.RaytracingInstanceDescription nativeInstanceDescription = ref nativeInstanceDescriptions[i];
                 {
@@ -200,7 +200,7 @@ namespace SharpGPU
         private Dx12Device m_Dx12Device;
         private Vortice.Direct3D12.ID3D12Resource m_NativeResultBuffer;
         private Vortice.Direct3D12.ID3D12Resource m_NativeScratchBuffer;
-        private Vortice.Direct3D12.ID3D12Resource m_NativeCurveAabbBuffer;
+        private Vortice.Direct3D12.ID3D12Resource? m_NativeCurveAabbBuffer;
         private Vortice.Direct3D12.RaytracingGeometryDescription[] m_NativeGeometryDescriptions;
         private Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription m_NativeAccelStructDescriptor;
 
@@ -227,8 +227,11 @@ namespace SharpGPU
                 switch (asGeometry.GeometryType)
                 {
                     case EAccelStructGeometryType.AABB:
-                        RHIAccelStructAABBs aabbGeometry = asGeometry as RHIAccelStructAABBs;
-                        Dx12Buffer aabbBuffer = aabbGeometry.AABBBuffer as Dx12Buffer;
+                        if (asGeometry is not RHIAccelStructAABBs aabbGeometry)
+                        {
+                            throw new ArgumentException("DX12 AABB geometry descriptor has an unexpected type.", nameof(descriptor));
+                        }
+                        Dx12Buffer aabbBuffer = aabbGeometry.AABBBuffer as Dx12Buffer ?? throw new ArgumentException("DX12 acceleration-structure geometry requires a Dx12Buffer.", nameof(descriptor));
 
                         nativeGeometryDescription.Type = Vortice.Direct3D12.RaytracingGeometryType.ProceduralPrimitiveAabbs;
                         nativeGeometryDescription.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(asGeometry.GeometryFlag);
@@ -240,9 +243,12 @@ namespace SharpGPU
                         break;
 
                     case EAccelStructGeometryType.Triangle:
-                        RHIAccelStructTriangles triangleGeometry = asGeometry as RHIAccelStructTriangles;
-                        Dx12Buffer indexBuffer = triangleGeometry.IndexBuffer as Dx12Buffer;
-                        Dx12Buffer vertexBuffer = triangleGeometry.VertexBuffer as Dx12Buffer;
+                        if (asGeometry is not RHIAccelStructTriangles triangleGeometry)
+                        {
+                            throw new ArgumentException("DX12 triangle geometry descriptor has an unexpected type.", nameof(descriptor));
+                        }
+                        Dx12Buffer indexBuffer = triangleGeometry.IndexBuffer as Dx12Buffer ?? throw new ArgumentException("DX12 acceleration-structure geometry requires a Dx12Buffer.", nameof(descriptor));
+                        Dx12Buffer vertexBuffer = triangleGeometry.VertexBuffer as Dx12Buffer ?? throw new ArgumentException("DX12 acceleration-structure geometry requires a Dx12Buffer.", nameof(descriptor));
 
                         nativeGeometryDescription.Type = Vortice.Direct3D12.RaytracingGeometryType.Triangles;
                         nativeGeometryDescription.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(asGeometry.GeometryFlag);
@@ -265,12 +271,13 @@ namespace SharpGPU
                         break;
 
                     case EAccelStructGeometryType.Curves:
-                        // DXR does not support native curve geometry. Map each curve segment to an AABB
-                        // for procedural intersection. The intersection shader performs the exact test.
-                        RHIAccelStructCurves curveGeometry = asGeometry as RHIAccelStructCurves;
-                        Dx12Buffer controlPointBuffer = curveGeometry.ControlPointBuffer as Dx12Buffer;
-                        Dx12Buffer radiusBuffer = curveGeometry.RadiusBuffer as Dx12Buffer;
-                        Dx12Buffer curveIndexBuffer = curveGeometry.IndexBuffer as Dx12Buffer;
+                        if (asGeometry is not RHIAccelStructCurves curveGeometry)
+                        {
+                            throw new ArgumentException("DX12 curve geometry descriptor has an unexpected type.", nameof(descriptor));
+                        }
+                        Dx12Buffer controlPointBuffer = curveGeometry.ControlPointBuffer as Dx12Buffer ?? throw new ArgumentException("DX12 acceleration-structure geometry requires a Dx12Buffer.", nameof(descriptor));
+                        Dx12Buffer radiusBuffer = curveGeometry.RadiusBuffer as Dx12Buffer ?? throw new ArgumentException("DX12 acceleration-structure geometry requires a Dx12Buffer.", nameof(descriptor));
+                        Dx12Buffer curveIndexBuffer = curveGeometry.IndexBuffer as Dx12Buffer ?? throw new ArgumentException("DX12 acceleration-structure geometry requires a Dx12Buffer.", nameof(descriptor));
                         if (controlPointBuffer == null || radiusBuffer == null)
                         {
                             throw new InvalidOperationException("Curve geometry requires control-point and radius buffers.");
@@ -470,5 +477,5 @@ namespace SharpGPU
             m_NativeScratchBuffer.Release();
         }
     }
-#pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416
+#pragma warning restore CA1416
 }

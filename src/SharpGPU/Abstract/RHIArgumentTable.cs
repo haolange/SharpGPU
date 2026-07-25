@@ -3,12 +3,19 @@ using SharpGPU.Core;
 
 namespace SharpGPU
 {
+    public enum ERHIArgumentBindingRequirement : byte
+    {
+        Required,
+        Optional
+    }
+
     public struct RHIArgumentTableLayoutElement
     {
         public uint Slot;
         public uint Count;
         public ERHIBindType Type;
-        public ERHIShaderStage Stage;
+        public ERHIShaderStageMask Stages;
+        public ERHIArgumentBindingRequirement Requirement;
     }
 
     public struct RHIArgumentTableLayoutDescriptor
@@ -19,7 +26,19 @@ namespace SharpGPU
 
     public abstract class RHIArgumentTableLayout : Disposal
     {
+        internal uint CanonicalIndex => m_CanonicalIndex;
+        internal ReadOnlySpan<RHIArgumentTableLayoutElement> CanonicalElements =>
+            m_CanonicalElements;
 
+        private readonly uint m_CanonicalIndex;
+        private readonly RHIArgumentTableLayoutElement[] m_CanonicalElements;
+
+        protected RHIArgumentTableLayout(
+            in RHIArgumentTableLayoutDescriptor descriptor)
+        {
+            m_CanonicalIndex = descriptor.Index;
+            m_CanonicalElements = descriptor.Elements.Span.ToArray();
+        }
     }
 
     public struct RHIArgumentTableElement

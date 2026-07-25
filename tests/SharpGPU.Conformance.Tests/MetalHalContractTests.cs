@@ -18,7 +18,7 @@ public sealed class MetalHalContractTests
         }
 
         using MetalTestContext context = MetalTestContext.Create();
-        if (context.Device.Feature?.IsTimestampQueriesSupported != true)
+        if (context.Device.Capabilities.Synchronization.TimestampQueries.Tier == ERHICapabilityTier.Unavailable)
         {
             Assert.Throws<NotSupportedException>(() => context.Device.CreateQuery(new RHIQueryDescriptor
             {
@@ -28,7 +28,7 @@ public sealed class MetalHalContractTests
             Assert.Throws<NotSupportedException>(() => context.Device.CreateQuery(new RHIQueryDescriptor
             {
                 Count = 2,
-                Type = ERHIQueryType.TimestampGenerice,
+                Type = ERHIQueryType.Timestamp,
             }));
             return;
         }
@@ -80,7 +80,7 @@ public sealed class MetalHalContractTests
         }
 
         using MetalTestContext context = MetalTestContext.Create();
-        using RHIQuery? occlusionQuery = context.Device.Feature?.IsOcclusionQueriesSupported == true
+        using RHIQuery? occlusionQuery = context.Device.Capabilities.Synchronization.OcclusionQueries.Tier != ERHICapabilityTier.Unavailable
             ? context.Device.CreateQuery(new RHIQueryDescriptor
             {
                 Count = 1,
@@ -89,7 +89,7 @@ public sealed class MetalHalContractTests
             : null;
 
         RHIQuery? statisticsQuery = null;
-        if (context.Device.Feature?.IsPipelineStatsQueriesSupported == true)
+        if (context.Device.Capabilities.Synchronization.PipelineStatisticsQueries.Tier != ERHICapabilityTier.Unavailable)
         {
             statisticsQuery = context.Device.CreateQuery(new RHIQueryDescriptor
             {
@@ -198,6 +198,14 @@ public sealed class MetalHalContractTests
 
     private static RHIRenderStateDescriptor CreateDefaultRenderState()
     {
+        RHIStencilStateDescriptor keepStencilFace = new()
+        {
+            ComparisonMode = ERHIComparisonMode.Always,
+            StencilPassOp = ERHIStencilOp.Keep,
+            StencilFailOp = ERHIStencilOp.Keep,
+            StencilDepthFailOp = ERHIStencilOp.Keep,
+        };
+
         return new RHIRenderStateDescriptor
         {
             BlendState = new RHIBlendStateDescriptor
@@ -227,6 +235,8 @@ public sealed class MetalHalContractTests
                 DepthWriteMask = false,
                 StencilEnable = false,
                 ComparisonMode = ERHIComparisonMode.Always,
+                FrontFace = keepStencilFace,
+                BackFace = keepStencilFace,
             },
         };
     }
@@ -237,8 +247,14 @@ public sealed class MetalHalContractTests
         {
             new()
             {
-                MipLevel = 0,
-                ArraySlice = 0,
+                SubresourceRange = new RHITextureSubresourceRange
+                {
+                    BaseMipLevel = 0,
+                    MipLevelCount = 1,
+                    BaseArrayLayer = 0,
+                    ArrayLayerCount = 1,
+                    AspectMask = ERHITextureAspectMask.Color,
+                },
                 ClearValue = new float4(0, 0, 0, 1),
                 LoadAction = ERHILoadAction.Clear,
                 StoreAction = ERHIStoreAction.Store,
@@ -292,7 +308,9 @@ public sealed class MetalHalContractTests
     private static void SubmitAndWait(MetalTestContext context, RHICommandBuffer commandBuffer)
     {
         context.Fence.Reset();
-        context.Queue.Submit(commandBuffer, context.Fence, null!, null!);
+        context.Queue.Submit(new RHIQueueSubmitDescriptor(
+            new RHICommandBuffer[] { commandBuffer },
+            completionFence: context.Fence));
         context.Fence.Wait();
     }
 
@@ -337,7 +355,7 @@ public sealed class MetalMLContractTests
         }
 
         using MetalTestContext context = MetalTestContext.Create();
-        if (context.Device.Feature?.IsMLSupported != true)
+        if (context.Device.Capabilities.MachineLearning.Execution.Tier == ERHICapabilityTier.Unavailable)
         {
             RHIMLTensorDescriptor tensorDescriptor = CreateTensorDescriptor(2, 3);
             RHIMLOpDescriptor addOp = RHIMLOpDescriptor.Create(
@@ -469,7 +487,9 @@ public sealed class MetalMLContractTests
         commandBuffer.End();
 
         context.Fence.Reset();
-        context.Queue.Submit(commandBuffer, context.Fence, null!, null!);
+        context.Queue.Submit(new RHIQueueSubmitDescriptor(
+            new RHICommandBuffer[] { commandBuffer },
+            completionFence: context.Fence));
         context.Fence.Wait();
 
         float[] actual = FromBytes(Unpack(outputDescriptor, ReadbackBytes(readback, outputNativeByteSize)));
@@ -557,7 +577,9 @@ public sealed class MetalMLContractTests
         commandBuffer.End();
 
         context.Fence.Reset();
-        context.Queue.Submit(commandBuffer, context.Fence, null!, null!);
+        context.Queue.Submit(new RHIQueueSubmitDescriptor(
+            new RHICommandBuffer[] { commandBuffer },
+            completionFence: context.Fence));
         context.Fence.Wait();
 
         float[] actual = FromBytes(Unpack(tensorDescriptor, ReadbackBytes(readback, nativeByteSize)));
@@ -649,7 +671,9 @@ public sealed class MetalMLContractTests
         commandBuffer.End();
 
         context.Fence.Reset();
-        context.Queue.Submit(commandBuffer, context.Fence, null!, null!);
+        context.Queue.Submit(new RHIQueueSubmitDescriptor(
+            new RHICommandBuffer[] { commandBuffer },
+            completionFence: context.Fence));
         context.Fence.Wait();
 
         float[] actual = FromBytes(Unpack(outputDescriptor, ReadbackBytes(readback, outputNativeByteSize)));
@@ -813,7 +837,7 @@ internal sealed class MetalTestContext : IDisposable
         {
             Backend = ERHIBackend.Metal,
             EnableDebugLayer = false,
-            EnableValidatior = false,
+            EnableValidation = false,
             ComputeQueueRequestCount = 0,
             TransferQueueRequestCount = 0,
             GraphicsQueueRequestCount = 1,

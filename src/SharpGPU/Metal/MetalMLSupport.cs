@@ -70,11 +70,16 @@ namespace SharpGPU
 
             if (metalPipeline.TemporaryResourceSize > 0)
             {
-                RHIHeapDescription heapDescriptor = new RHIHeapDescription
-                {
-                    Size = metalPipeline.TemporaryResourceSize,
-                    StorageMode = ERHIStorageMode.GPULocal,
-                };
+                RHIResourceMemoryRequirements heapRequirements = new RHIResourceMemoryRequirements(
+                    device,
+                    metalPipeline.TemporaryResourceSize,
+                    1,
+                    ERHIStorageMode.GPULocal,
+                    1,
+                    ERHIMemoryResourceKind.Buffer);
+                RHIHeapDescription heapDescriptor = new RHIHeapDescription(
+                    metalPipeline.TemporaryResourceSize,
+                    heapRequirements);
                 m_IntermediatesHeap = new MetalHeap(device, heapDescriptor, MTLHeapType.Automatic);
                 device.RegisterMetalMLIntermediatesHeap(m_IntermediatesHeap.NativeHeap);
             }

@@ -3,7 +3,6 @@ using Vortice.Vulkan;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8618
     internal unsafe class VulkanQuery : RHIQuery
     {
         public VkQueryPool NativeQueryPool => m_NativeQueryPool;
@@ -75,7 +74,6 @@ namespace SharpGPU
             VulkanNative.vkDestroyQueryPool(m_VulkanDevice.NativeDevice, m_NativeQueryPool, null);
         }
     }
-#pragma warning restore CS8618
 }
 
 

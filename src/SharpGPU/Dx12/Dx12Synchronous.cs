@@ -11,6 +11,7 @@ namespace SharpGPU
         {
             get
             {
+                ThrowIfSynchronizationDisposed();
                 return m_NativeFence;
             }
         }
@@ -18,30 +19,41 @@ namespace SharpGPU
         {
             get
             {
-                ulong targetValue = (ulong)Volatile.Read(ref m_LastSignaledValue);
-                if (targetValue == 0)
+                ThrowIfSynchronizationDisposed();
+                if (IsSignalKnownComplete)
+                {
+                    return EFenceStatus.Success;
+                }
+
+                if (!IsSignalPending)
                 {
                     return EFenceStatus.NotReady;
                 }
 
-                return m_NativeFence.CompletedValue >= targetValue ? EFenceStatus.Success : EFenceStatus.NotReady;
+                ulong targetValue = (ulong)Volatile.Read(ref m_LastSignaledValue);
+                bool complete = targetValue != 0 && m_NativeFence.CompletedValue >= targetValue;
+                if (complete)
+                {
+                    MarkSignaled();
+                }
+
+                return complete ? EFenceStatus.Success : EFenceStatus.NotReady;
             }
         }
 
         private Vortice.Direct3D12.ID3D12Fence m_NativeFence;
         private AutoResetEvent m_FenceEvent;
         private long m_NextFenceValue;
-        private long m_PendingSignalValue;
         private long m_LastSignaledValue;
 
-        public Dx12Fence(Dx12Device device)
+        public Dx12Fence(Dx12Device device) : base(device)
         {
-            Vortice.Direct3D12.ID3D12Fence fence;
+            Vortice.Direct3D12.ID3D12Fence? fence;
             SharpGen.Runtime.Result hResult = device.NativeDevice.CreateFence(0, Vortice.Direct3D12.FenceFlags.None, out fence);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            m_NativeFence = fence;
+            m_NativeFence = Dx12Utility.RequireCreatedObject(
+                fence,
+                hResult,
+                "ID3D12Device.CreateFence(completion fence)");
 
             m_FenceEvent = new AutoResetEvent(false);
 #if DEBUG
@@ -49,51 +61,89 @@ namespace SharpGPU
 #endif
 
             m_NextFenceValue = 1;
-            m_PendingSignalValue = 0;
             m_LastSignaledValue = 0;
         }
 
         public override void Reset()
         {
-            long value = Interlocked.Increment(ref m_NextFenceValue) - 1;
-            Volatile.Write(ref m_PendingSignalValue, value);
+            if (IsSignalPending)
+            {
+                _ = Status;
+            }
+
+            if (!BeginReset())
+            {
+                return;
+            }
+
+            CompleteReset();
         }
 
-        public override void Wait()
+        public override EFenceStatus Wait(ulong timeoutNanoseconds = ulong.MaxValue)
         {
+            EnsureWaitable();
+            if (IsSignalKnownComplete)
+            {
+                return EFenceStatus.Success;
+            }
+
             ulong targetValue = (ulong)Volatile.Read(ref m_LastSignaledValue);
             if (targetValue == 0)
             {
-                return;
+                throw new InvalidOperationException("The fence has no native signal value.");
             }
 
             if (m_NativeFence.CompletedValue >= targetValue)
             {
-                return;
+                MarkSignaled();
+                return EFenceStatus.Success;
             }
 
             IntPtr eventPtr = m_FenceEvent.SafeWaitHandle.DangerousGetHandle();
             System.IntPtr eventHandle = new System.IntPtr(eventPtr.ToPointer());
-            m_NativeFence.SetEventOnCompletion(targetValue, eventHandle);
-            m_FenceEvent.WaitOne();
-        }
-
-        internal ulong ConsumeSignalValue()
-        {
-            long pendingValue = Volatile.Read(ref m_PendingSignalValue);
-            long lastSignaledValue = Volatile.Read(ref m_LastSignaledValue);
-            if (pendingValue <= lastSignaledValue)
+            SharpGen.Runtime.Result setEventResult = m_NativeFence.SetEventOnCompletion(targetValue, eventHandle);
+            Dx12Utility.CHECK_HR(setEventResult);
+            bool completed;
+            if (timeoutNanoseconds == ulong.MaxValue)
             {
-                pendingValue = Interlocked.Increment(ref m_NextFenceValue) - 1;
-                Volatile.Write(ref m_PendingSignalValue, pendingValue);
+                m_FenceEvent.WaitOne();
+                completed = true;
+            }
+            else
+            {
+                ulong timeoutMilliseconds = timeoutNanoseconds / 1_000_000UL;
+                if ((timeoutNanoseconds % 1_000_000UL) != 0)
+                {
+                    ++timeoutMilliseconds;
+                }
+
+                completed = m_FenceEvent.WaitOne((int)Math.Min(timeoutMilliseconds, int.MaxValue));
             }
 
-            Volatile.Write(ref m_LastSignaledValue, pendingValue);
-            return (ulong)pendingValue;
+            if (!completed && m_NativeFence.CompletedValue < targetValue)
+            {
+                return EFenceStatus.NotReady;
+            }
+
+            MarkSignaled();
+            return EFenceStatus.Success;
+        }
+
+        internal ulong PrepareSignalValue()
+        {
+            if (!IsSignalPending)
+            {
+                throw new InvalidOperationException("The fence signal must be reserved before obtaining a native value.");
+            }
+
+            long signalValue = Interlocked.Increment(ref m_NextFenceValue) - 1;
+            Volatile.Write(ref m_LastSignaledValue, signalValue);
+            return (ulong)signalValue;
         }
 
         protected override void Release()
         {
+            m_FenceEvent.Dispose();
             m_NativeFence.Release();
         }
     }
@@ -112,14 +162,14 @@ namespace SharpGPU
         private long m_NextSemaphoreValue;
         private long m_LastSignaledValue;
 
-        public Dx12Semaphore(Dx12Device device)
+        public Dx12Semaphore(Dx12Device device) : base(device)
         {
-            Vortice.Direct3D12.ID3D12Fence fence;
+            Vortice.Direct3D12.ID3D12Fence? fence;
             SharpGen.Runtime.Result hResult = device.NativeDevice.CreateFence(0, Vortice.Direct3D12.FenceFlags.None, out fence);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            m_NativeFence = fence;
+            m_NativeFence = Dx12Utility.RequireCreatedObject(
+                fence,
+                hResult,
+                "ID3D12Device.CreateFence(binary semaphore)");
             m_NextSemaphoreValue = 1;
             m_LastSignaledValue = 0;
         }

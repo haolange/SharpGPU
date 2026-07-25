@@ -9,7 +9,7 @@ using System.Runtime.CompilerServices;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8600, CS8602, CA1416
+#pragma warning disable CA1416
     internal unsafe struct Dx12DescriptorInfo
     {
         public int Index;
@@ -92,10 +92,12 @@ namespace SharpGPU
             descriptorInfo.Flags = flag;
             descriptorInfo.DescriptorCount = count;
 
-            Vortice.Direct3D12.ID3D12DescriptorHeap nativeDescriptorHeap;
+            Vortice.Direct3D12.ID3D12DescriptorHeap? nativeDescriptorHeap;
             SharpGen.Runtime.Result hResult = device.CreateDescriptorHeap(descriptorInfo, out nativeDescriptorHeap);
-            Dx12Utility.CHECK_HR(hResult);
-            m_NativeDescriptorHeap = nativeDescriptorHeap;
+            m_NativeDescriptorHeap = Dx12Utility.RequireCreatedObject(
+                nativeDescriptorHeap,
+                hResult,
+                "ID3D12Device.CreateDescriptorHeap");
         }
 
         public Dx12DescriptorInfo GetDescriptorInfo(in int index)
@@ -346,18 +348,88 @@ namespace SharpGPU
 
         public static void CHECK_HR(int hr, [CallerFilePath] string __FILE__ = "", [CallerLineNumber] int __LINE__ = 0, [CallerArgumentExpression("hr")] string expr = "")
         {
-            if (hr < 0)
+            if (hr >= 0)
             {
-                throw new InvalidOperationException($"{__FILE__}({__LINE__}): FAILED({(string.IsNullOrEmpty(expr) ? hr.ToString("X8") : expr)})");
+                return;
             }
+
+            ThrowNativeFailure(hr, expr);
         }
 
         public static void CHECK_HR(SharpGen.Runtime.Result hr, [CallerFilePath] string __FILE__ = "", [CallerLineNumber] int __LINE__ = 0, [CallerArgumentExpression("hr")] string expr = "")
         {
-            if (hr.Failure)
+            if (hr.Success)
             {
-                throw new InvalidOperationException($"{__FILE__}({__LINE__}): FAILED({(string.IsNullOrEmpty(expr) ? ((int)hr).ToString("X8") : expr)})");
+                return;
             }
+
+            ThrowNativeFailure(hr.Code, expr);
+        }
+
+        internal static SharpGen.Runtime.Result CreateCommandListWithoutInitialPipelineState(
+            Vortice.Direct3D12.ID3D12Device10 device,
+            uint nodeMask,
+            Vortice.Direct3D12.CommandListType type,
+            out Vortice.Direct3D12.ID3D12GraphicsCommandList7? commandList)
+        {
+            // CreateCommandList1 creates a closed command list without an initial PSO.
+            // Begin() will Reset it against the caller's allocator.
+            return device.CreateCommandList1<Vortice.Direct3D12.ID3D12GraphicsCommandList7>(
+                nodeMask,
+                type,
+                Vortice.Direct3D12.CommandListFlags.None,
+                out commandList);
+        }
+
+        internal static T RequireCreatedObject<T>(
+            T? nativeObject,
+            SharpGen.Runtime.Result result,
+            string operation)
+            where T : class
+        {
+            CHECK_HR(result);
+            if (nativeObject != null)
+            {
+                return nativeObject;
+            }
+
+            throw new RHIException(
+                ERHIErrorCode.NativeFailure,
+                ERHIBackend.DirectX12,
+                result.Code,
+                $"{operation} succeeded without returning a native object.",
+                ERHIDeviceState.Operational);
+        }
+
+        private static void ThrowNativeFailure(int nativeCode, string expression)
+        {
+            const int EOutOfMemory = unchecked((int)0x8007000E);
+            const int DxgiErrorDeviceRemoved = unchecked((int)0x887A0005);
+            const int DxgiErrorDeviceHung = unchecked((int)0x887A0006);
+            const int DxgiErrorDeviceReset = unchecked((int)0x887A0007);
+
+            ERHIErrorCode errorCode = nativeCode switch
+            {
+                EOutOfMemory => ERHIErrorCode.OutOfMemory,
+                DxgiErrorDeviceRemoved or DxgiErrorDeviceHung or DxgiErrorDeviceReset => ERHIErrorCode.DeviceLost,
+                _ => ERHIErrorCode.NativeFailure
+            };
+            ERHIDeviceState deviceState = nativeCode switch
+            {
+                DxgiErrorDeviceRemoved => ERHIDeviceState.Removed,
+                DxgiErrorDeviceReset => ERHIDeviceState.Reset,
+                DxgiErrorDeviceHung => ERHIDeviceState.Lost,
+                _ => ERHIDeviceState.Operational
+            };
+            string nativeMessage = string.IsNullOrWhiteSpace(expression)
+                ? $"HRESULT 0x{unchecked((uint)nativeCode):X8}"
+                : $"{expression} failed with HRESULT 0x{unchecked((uint)nativeCode):X8}";
+            throw new RHIException(
+                errorCode,
+                ERHIBackend.DirectX12,
+                unchecked((uint)nativeCode),
+                nativeMessage,
+                deviceState);
         }
 
         internal static uint GetFormatBytesPerPixel(in ERHIPixelFormat format)
@@ -470,7 +542,7 @@ namespace SharpGPU
                     return Vortice.Direct3D12.QueryType.PipelineStatistics;
 
                 case ERHIQueryType.TimestampTransfer:
-                case ERHIQueryType.TimestampGenerice:
+                case ERHIQueryType.Timestamp:
                     return Vortice.Direct3D12.QueryType.Timestamp;
 
                 default:
@@ -491,7 +563,7 @@ namespace SharpGPU
                 case ERHIQueryType.TimestampTransfer:
                     return Vortice.Direct3D12.QueryHeapType.CopyQueueTimestamp;
 
-                case ERHIQueryType.TimestampGenerice:
+                case ERHIQueryType.Timestamp:
                     return Vortice.Direct3D12.QueryHeapType.Timestamp;
 
                 default:
@@ -865,6 +937,7 @@ namespace SharpGPU
             stateRules.Add(ERHITextureUsage.DepthStencil, Vortice.Direct3D12.ResourceFlags.AllowDepthStencil);
             stateRules.Add(ERHITextureUsage.RenderTarget, Vortice.Direct3D12.ResourceFlags.AllowRenderTarget);
             stateRules.Add(ERHITextureUsage.UnorderedAccess, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess);
+            stateRules.Add(ERHITextureUsage.RasterizerOrdered, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess);
 
             Vortice.Direct3D12.ResourceFlags result = Vortice.Direct3D12.ResourceFlags.None;
             foreach (KeyValuePair<ERHITextureUsage, Vortice.Direct3D12.ResourceFlags> rule in stateRules)
@@ -1957,31 +2030,24 @@ namespace SharpGPU
             }
         }
 
-        internal static Vortice.Direct3D12.ShaderVisibility ConvertToDx12ShaderType(in ERHIShaderStage shaderStage)
+        internal static Vortice.Direct3D12.ShaderVisibility ConvertToDx12ShaderVisibility(in ERHIShaderStageMask stages)
         {
-            switch (shaderStage)
+            if (stages == ERHIShaderStageMask.None || (stages & ~ERHIShaderStageMask.All) != 0)
             {
-                case ERHIShaderStage.Task:
-                    return Vortice.Direct3D12.ShaderVisibility.Amplification;
-
-                case ERHIShaderStage.Mesh:
-                    return Vortice.Direct3D12.ShaderVisibility.Mesh;
-
-                case ERHIShaderStage.Vertex:
-                    return Vortice.Direct3D12.ShaderVisibility.Vertex;
-
-                case ERHIShaderStage.Fragment:
-                    return Vortice.Direct3D12.ShaderVisibility.Pixel;
-
-                case ERHIShaderStage.Compute:
-                case ERHIShaderStage.AllGraphics:
-                case ERHIShaderStage.RayTracing:
-                case ERHIShaderStage.All:
-                    return Vortice.Direct3D12.ShaderVisibility.All;
-
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(shaderStage), shaderStage, "Unsupported DX12 argument-table shader stage.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(stages),
+                    stages,
+                    "DX12 argument-table shader-stage visibility must be a non-empty known mask.");
             }
+
+            return stages switch
+            {
+                ERHIShaderStageMask.Task => Vortice.Direct3D12.ShaderVisibility.Amplification,
+                ERHIShaderStageMask.Mesh => Vortice.Direct3D12.ShaderVisibility.Mesh,
+                ERHIShaderStageMask.Vertex => Vortice.Direct3D12.ShaderVisibility.Vertex,
+                ERHIShaderStageMask.Fragment => Vortice.Direct3D12.ShaderVisibility.Pixel,
+                _ => Vortice.Direct3D12.ShaderVisibility.All
+            };
         }
 
         internal static Vortice.Direct3D12.ClearFlags GetDx12ClearFlagByDSA(in RHIDepthStencilAttachmentDescriptor depthStencilAttachment)
@@ -2059,7 +2125,7 @@ namespace SharpGPU
 
         internal static bool IsUnorderedAccessTexture(in ERHITextureUsage textureFlag)
         {
-            return (textureFlag & ERHITextureUsage.UnorderedAccess) == ERHITextureUsage.UnorderedAccess;
+            return (textureFlag & (ERHITextureUsage.UnorderedAccess | ERHITextureUsage.RasterizerOrdered)) != 0;
         }
 
         internal static void FillTexture2DSRV(ref Vortice.Direct3D12.Texture2DShaderResourceView srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)
@@ -2173,7 +2239,7 @@ namespace SharpGPU
                 return;
             }
             rtv.ArraySize = descriptor.ArrayCount;
-            rtv.MipSlice = descriptor.MipCount;
+            rtv.MipSlice = descriptor.BaseMipLevel;
             rtv.FirstArraySlice = descriptor.BaseArraySlice;
             rtv.PlaneSlice = 0;
         }
@@ -2209,5 +2275,5 @@ namespace SharpGPU
             dsv.ArraySize = descriptor.ArrayCount;
         }
     }
-#pragma warning restore CS8600, CS8602, CA1416
+#pragma warning restore CA1416
 }

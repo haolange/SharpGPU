@@ -28,7 +28,7 @@ namespace SharpGPU
         Pending
     }
 
-    public enum ERHIMatrixMajorons : byte
+    public enum ERHIMatrixMajorOrder : byte
     {
         RowMajor,
         ColumnMajor,
@@ -80,20 +80,31 @@ namespace SharpGPU
         Pending
     }
 
-    public enum ERHIShaderStage
+    public enum ERHIShaderStage : byte
     {
-        Vertex = 0x1,
-        Fragment = 0x2,
-        Compute = 0x4,
-        Task = 0x8,
-        Mesh = 0x10,
-        AllGraphics = 0x20,
-        //AllGraphics = Vertex | Fragment,
-        RayTracing = 0x40,
-        MachineLearning = 0x80,
-        All = 0x100,
-        //All = Vertex | Fragment | Compute | Task | Mesh | RayTracing | MachineLearning,
+        Vertex,
+        Fragment,
+        Compute,
+        Task,
+        Mesh,
+        RayTracing,
+        MachineLearning,
         Pending
+    }
+
+    [System.Flags]
+    public enum ERHIShaderStageMask : ushort
+    {
+        None = 0,
+        Vertex = 1 << 0,
+        Fragment = 1 << 1,
+        Compute = 1 << 2,
+        Task = 1 << 3,
+        Mesh = 1 << 4,
+        RayTracing = 1 << 5,
+        MachineLearning = 1 << 6,
+        AllGraphics = Vertex | Fragment | Task | Mesh,
+        All = AllGraphics | Compute | RayTracing | MachineLearning
     }
 
     public enum ERHIPrimitiveType : byte
@@ -108,7 +119,7 @@ namespace SharpGPU
         Occlusion,
         Statistics,
         TimestampTransfer,
-        TimestampGenerice,
+        Timestamp,
         Pending
     }
 
@@ -480,13 +491,20 @@ namespace SharpGPU
         Pending
     }
 
+    [System.Flags]
     public enum ERHISubPassFlags : byte
     {
         None = 0,
-        ReadOnlyDepth = 1,
-        ReadOnlyStencil = 2,
-        ReadOnlyDepthStencil = 3,
-        Pending
+        ReadOnlyDepth = 1 << 0,
+        ReadOnlyStencil = 1 << 1,
+        ReadOnlyDepthStencil = ReadOnlyDepth | ReadOnlyStencil
+    }
+
+    [System.Flags]
+    public enum ERHIRasterAttachmentAccess : byte
+    {
+        None = 0,
+        RasterOrderedReadWrite = 1 << 0
     }
 
     public enum ERHILoadAction : byte

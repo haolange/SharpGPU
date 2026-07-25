@@ -2,96 +2,238 @@ using System;
 using Vortice.Vulkan;
 using SharpGPU.Mathematics;
 using System.Runtime.InteropServices;
+using System.Collections.Generic;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8600, CS8602, CS8618
     internal unsafe class VulkanPipelineLayout : RHIPipelineLayout
     {
-        public VkPipelineLayout NativePipelineLayout => m_NativePipelineLayout;
+        public VkPipelineLayout NativePipelineLayout
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return m_NativePipelineLayout;
+            }
+        }
+        internal VulkanDevice Device => m_VulkanDevice;
         public uint PushConstantSize => m_PushConstantSize;
+        internal IReadOnlyDictionary<uint, VkDescriptorSetLayout>
+            NativeTableLayouts => m_NativeTableLayouts;
 
-        private VulkanDevice m_VulkanDevice;
+        private readonly VulkanDevice m_VulkanDevice;
+        private readonly Dictionary<uint, VulkanArgumentTablePlan> m_TablePlans;
+        private readonly Dictionary<uint, VkDescriptorSetLayout>
+            m_NativeTableLayouts;
         private VkPipelineLayout m_NativePipelineLayout;
-        private uint m_PushConstantSize;
+        private readonly uint m_PushConstantSize;
 
-        public VulkanPipelineLayout(VulkanDevice device, in RHIPipelineLayoutDescriptor descriptor)
+        public VulkanPipelineLayout(
+            VulkanDevice device,
+            in RHIPipelineLayoutDescriptor descriptor)
         {
             m_VulkanDevice = device;
             m_PushConstantSize = descriptor.PushConstantSize;
 
-            int layoutCount = descriptor.ArgumentTableLayouts != null ? descriptor.ArgumentTableLayouts.Length : 0;
-            int setLayoutCount = 0;
+            RHIArgumentTableLayout[] sourceLayouts =
+                descriptor.ArgumentTableLayouts
+                ?? Array.Empty<RHIArgumentTableLayout>();
+            int layoutCount = sourceLayouts.Length;
+            m_TablePlans =
+                new Dictionary<uint, VulkanArgumentTablePlan>(layoutCount);
+            m_NativeTableLayouts =
+                new Dictionary<uint, VkDescriptorSetLayout>(layoutCount);
             int maxSetIndex = -1;
-            for (int i = 0; i < layoutCount; ++i)
+            for (int index = 0; index < layoutCount; ++index)
             {
-                VulkanArgumentTableLayout vkLayout = descriptor.ArgumentTableLayouts[i] as VulkanArgumentTableLayout;
-                maxSetIndex = Math.Max(maxSetIndex, (int)vkLayout.Descriptor.Index);
-            }
-            if (maxSetIndex >= 0)
-            {
-                setLayoutCount = maxSetIndex + 1;
+                VulkanArgumentTableLayout layout =
+                    sourceLayouts[index] as VulkanArgumentTableLayout
+                    ?? throw new ArgumentException(
+                        $"Vulkan pipeline argument table {index} must be a "
+                        + $"{nameof(VulkanArgumentTableLayout)}.",
+                        nameof(descriptor));
+                if (layout.IsDisposed)
+                {
+                    throw new ObjectDisposedException(
+                        nameof(descriptor),
+                        $"Vulkan pipeline argument table "
+                        + $"{layout.Plan.Index} is disposed.");
+                }
+                if (!ReferenceEquals(layout.Device, device))
+                {
+                    throw new ArgumentException(
+                        $"Vulkan pipeline argument table "
+                        + $"{layout.Plan.Index} belongs to a different "
+                        + "Vulkan device.",
+                        nameof(descriptor));
+                }
+                if (!m_TablePlans.TryAdd(layout.Plan.Index, layout.Plan))
+                {
+                    throw new ArgumentException(
+                        $"Vulkan pipeline contains duplicate argument table "
+                        + $"index {layout.Plan.Index}.",
+                        nameof(descriptor));
+                }
+                m_NativeTableLayouts.Add(
+                    layout.Plan.Index,
+                    layout.NativeDescriptorSetLayout);
+                maxSetIndex = Math.Max(
+                    maxSetIndex,
+                    checked((int)layout.Plan.Index));
             }
 
-            VkDescriptorSetLayout* setLayouts = stackalloc VkDescriptorSetLayout[Math.Max(setLayoutCount, 1)];
+            int setLayoutCount = maxSetIndex < 0 ? 0 : maxSetIndex + 1;
+            if ((uint)setLayoutCount > device.DescriptorLimits.MaximumBoundSets)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(descriptor),
+                    $"Vulkan pipeline declares {setLayoutCount} "
+                    + "descriptor-set slots, exceeding the device limit "
+                    + $"{device.DescriptorLimits.MaximumBoundSets}.");
+            }
+
+            InitializePipelineCacheIdentity(descriptor);
+            VkDescriptorSetLayout* setLayouts =
+                stackalloc VkDescriptorSetLayout[Math.Max(setLayoutCount, 1)];
             VkDescriptorSetLayout emptySetLayout = default;
-
-            if (setLayoutCount > 0)
+            try
             {
-                VkDescriptorSetLayoutCreateInfo emptyLayoutInfo = new VkDescriptorSetLayoutCreateInfo()
+                if (setLayoutCount > 0)
                 {
-                    sType = VkStructureType.DescriptorSetLayoutCreateInfo,
-                    bindingCount = 0,
-                    pBindings = null,
-                };
+                    VkDescriptorSetLayoutCreateInfo emptyLayoutInfo =
+                        new VkDescriptorSetLayoutCreateInfo
+                        {
+                            sType = VkStructureType
+                                .DescriptorSetLayoutCreateInfo,
+                            bindingCount = 0,
+                            pBindings = null,
+                        };
+                    VulkanUtility.CheckErrors(
+                        VulkanNative.vkCreateDescriptorSetLayout(
+                            device.NativeDevice,
+                            &emptyLayoutInfo,
+                            null,
+                            &emptySetLayout));
 
-                VulkanUtility.CheckErrors(VulkanNative.vkCreateDescriptorSetLayout(device.NativeDevice, &emptyLayoutInfo, null, &emptySetLayout));
-
-                for (int i = 0; i < setLayoutCount; ++i)
-                {
-                    setLayouts[i] = emptySetLayout;
+                    for (int index = 0;
+                        index < setLayoutCount;
+                        ++index)
+                    {
+                        setLayouts[index] = emptySetLayout;
+                    }
+                    for (int index = 0; index < layoutCount; ++index)
+                    {
+                        VulkanArgumentTableLayout layout =
+                            (VulkanArgumentTableLayout)sourceLayouts[index];
+                        setLayouts[(int)layout.Plan.Index] =
+                            layout.NativeDescriptorSetLayout;
+                    }
                 }
 
-                for (int i = 0; i < layoutCount; ++i)
+                VkPushConstantRange pushConstantRange =
+                    new VkPushConstantRange
+                    {
+                        stageFlags = VkShaderStageFlags.All,
+                        offset = 0,
+                        size = descriptor.PushConstantSize,
+                    };
+                VkPipelineLayoutCreateInfo layoutInfo =
+                    new VkPipelineLayoutCreateInfo
+                    {
+                        sType = VkStructureType.PipelineLayoutCreateInfo,
+                        setLayoutCount = checked((uint)setLayoutCount),
+                        pSetLayouts = setLayoutCount > 0
+                            ? setLayouts
+                            : null,
+                        pushConstantRangeCount =
+                            descriptor.PushConstantSize > 0 ? 1u : 0u,
+                        pPushConstantRanges =
+                            descriptor.PushConstantSize > 0
+                                ? &pushConstantRange
+                                : null,
+                    };
+                fixed (VkPipelineLayout* layoutPointer =
+                    &m_NativePipelineLayout)
                 {
-                    VulkanArgumentTableLayout vkLayout = descriptor.ArgumentTableLayouts[i] as VulkanArgumentTableLayout;
-                    setLayouts[(int)vkLayout.Descriptor.Index] = vkLayout.NativeDescriptorSetLayout;
+                    VulkanUtility.CheckErrors(
+                        VulkanNative.vkCreatePipelineLayout(
+                            device.NativeDevice,
+                            &layoutInfo,
+                            null,
+                            layoutPointer));
                 }
             }
-
-            VkPushConstantRange pushConstantRange = new VkPushConstantRange()
+            finally
             {
-                stageFlags = VkShaderStageFlags.All,
-                offset = 0,
-                size = descriptor.PushConstantSize,
-            };
+                if (emptySetLayout.Handle != 0)
+                {
+                    VulkanNative.vkDestroyDescriptorSetLayout(
+                        device.NativeDevice,
+                        emptySetLayout,
+                        null);
+                }
+            }
+        }
 
-            VkPipelineLayoutCreateInfo layoutInfo = new VkPipelineLayoutCreateInfo()
+        internal VulkanArgumentTable ResolveReadyTable(
+            RHIArgumentTable argumentTable,
+            in uint tableIndex)
+        {
+            ThrowIfDisposed();
+            VulkanArgumentTable table =
+                argumentTable as VulkanArgumentTable
+                ?? throw new ArgumentException(
+                    "Vulkan encoder requires a VulkanArgumentTable from the "
+                    + "same backend.",
+                    nameof(argumentTable));
+            if (!ReferenceEquals(m_VulkanDevice, table.Device))
             {
-                sType = VkStructureType.PipelineLayoutCreateInfo,
-                setLayoutCount = (uint)setLayoutCount,
-                pSetLayouts = setLayoutCount > 0 ? setLayouts : null,
-                pushConstantRangeCount = descriptor.PushConstantSize > 0 ? 1u : 0u,
-                pPushConstantRanges = descriptor.PushConstantSize > 0 ? &pushConstantRange : null,
-            };
-
-            fixed (VkPipelineLayout* layoutPtr = &m_NativePipelineLayout)
+                throw new ArgumentException(
+                    "Vulkan encoder cannot bind an argument table allocated "
+                    + "from a different Vulkan device.",
+                    nameof(argumentTable));
+            }
+            if (table.Layout.Plan.Index != tableIndex)
             {
-                VulkanUtility.CheckErrors(VulkanNative.vkCreatePipelineLayout(device.NativeDevice, &layoutInfo, null, layoutPtr));
+                throw new ArgumentException(
+                    $"Vulkan argument table reports index "
+                    + $"{table.Layout.Plan.Index}, but SetArgumentTable "
+                    + $"requested {tableIndex}.",
+                    nameof(tableIndex));
+            }
+            if (!m_TablePlans.TryGetValue(
+                    tableIndex,
+                    out VulkanArgumentTablePlan? expectedPlan))
+            {
+                throw new ArgumentException(
+                    $"Vulkan pipeline layout does not declare argument table "
+                    + $"index {tableIndex}.",
+                    nameof(tableIndex));
+            }
+            if (!expectedPlan.StructurallyEquals(table.Layout.Plan))
+            {
+                throw new ArgumentException(
+                    $"Vulkan argument table {tableIndex} is structurally "
+                    + "incompatible with the pipeline layout.",
+                    nameof(argumentTable));
             }
 
-            if (emptySetLayout.Handle != 0)
-            {
-                VulkanNative.vkDestroyDescriptorSetLayout(device.NativeDevice, emptySetLayout, null);
-            }
+            table.EnsureReadyForBinding();
+            return table;
         }
 
         protected override void Release()
         {
-            VulkanNative.vkDestroyPipelineLayout(m_VulkanDevice.NativeDevice, m_NativePipelineLayout, null);
+            if (m_NativePipelineLayout.Handle != 0)
+            {
+                VulkanNative.vkDestroyPipelineLayout(
+                    m_VulkanDevice.NativeDevice,
+                    m_NativePipelineLayout,
+                    null);
+                m_NativePipelineLayout = default;
+            }
         }
     }
-
     internal unsafe class VulkanComputePipeline : RHIComputePipeline
     {
         public VkPipeline NativePipeline => m_NativePipeline;
@@ -101,13 +243,28 @@ namespace SharpGPU
         private VkPipeline m_NativePipeline;
         private VulkanPipelineLayout m_VulkanPipelineLayout;
 
-        public VulkanComputePipeline(VulkanDevice device, in RHIComputePipelineDescriptor descriptor)
+        public VulkanComputePipeline(
+            VulkanDevice device,
+            in RHIComputePipelineDescriptor descriptor)
+            : this(device, descriptor, null)
+        {
+        }
+
+        internal VulkanComputePipeline(
+            VulkanDevice device,
+            in RHIComputePipelineDescriptor descriptor,
+            VulkanPipelineCache? pipelineCache)
         {
             m_VulkanDevice = device;
             m_Descriptor = descriptor;
-            m_VulkanPipelineLayout = descriptor.PipelineLayout as VulkanPipelineLayout;
+            m_VulkanPipelineLayout = descriptor.PipelineLayout as VulkanPipelineLayout
+                ?? throw new ArgumentException(
+                    "Vulkan compute pipeline requires a VulkanPipelineLayout.",
+                    nameof(descriptor));
 
-            VulkanFunction computeFunction = descriptor.ComputeFunction as VulkanFunction;
+            VulkanFunction computeFunction = descriptor.ComputeFunction as VulkanFunction
+                ?? throw new ArgumentException(
+                    "Vulkan compute pipeline requires a VulkanFunction.", nameof(descriptor));
             VkPipelineShaderStageCreateInfo stageInfo = computeFunction.GetShaderStageCreateInfo();
 
             VkComputePipelineCreateInfo pipelineInfo = new VkComputePipelineCreateInfo()
@@ -119,7 +276,29 @@ namespace SharpGPU
 
             fixed (VkPipeline* pipelinePtr = &m_NativePipeline)
             {
-                VulkanUtility.CheckErrors(VulkanNative.vkCreateComputePipelines(device.NativeDevice, default, 1, &pipelineInfo, null, pipelinePtr));
+                VkResult result = VulkanNative.vkCreateComputePipelines(
+                    device.NativeDevice,
+                    pipelineCache?.NativePipelineCache ?? default,
+                    1,
+                    &pipelineInfo,
+                    null,
+                    pipelinePtr);
+                if (result != VkResult.Success)
+                {
+                    if (m_NativePipeline.Handle != 0)
+                    {
+                        VulkanNative.vkDestroyPipeline(
+                            device.NativeDevice,
+                            m_NativePipeline,
+                            null);
+                        m_NativePipeline = default;
+                    }
+                    if (pipelineCache != null)
+                    {
+                        pipelineCache.ThrowPipelineCreationFailure(result, "Compute");
+                    }
+                }
+                VulkanUtility.CheckErrors(result);
             }
         }
 
@@ -129,47 +308,118 @@ namespace SharpGPU
         }
     }
 
-    internal unsafe class VulkanRasterPipeline : RHIRasterPipeline
+    internal unsafe class VulkanRasterPipeline : RHIRasterPipeline, IVulkanRasterNativePipeline
     {
         public VkPipeline NativePipeline => m_NativePipeline;
         public VulkanPipelineLayout VulkanPipelineLayout => m_VulkanPipelineLayout;
+        internal VkPipelineLayout EffectiveNativePipelineLayout =>
+            m_EffectiveNativePipelineLayout;
+        internal VulkanPrivateRasterBindingPlan PrivateBindingPlan =>
+            m_PrivateBindingPlan;
+        internal VulkanPrivateRasterDescriptorLayout?
+            PrivateDescriptorLayout => m_PrivateDescriptorLayout;
+        internal bool HasNativePipeline =>
+            m_NativePipeline.Handle != 0;
+        VkPipeline IVulkanRasterNativePipeline.NativePipeline =>
+            m_NativePipeline;
+        VkPipelineLayout IVulkanRasterNativePipeline
+            .EffectiveNativePipelineLayout =>
+                m_EffectiveNativePipelineLayout;
+        VulkanPrivateRasterBindingPlan IVulkanRasterNativePipeline
+            .PrivateBindingPlan => m_PrivateBindingPlan;
+        VulkanPrivateRasterDescriptorLayout?
+            IVulkanRasterNativePipeline.PrivateDescriptorLayout =>
+                m_PrivateDescriptorLayout;
+        bool IVulkanRasterNativePipeline.HasNativePipeline =>
+            HasNativePipeline;
 
         private VulkanDevice m_VulkanDevice;
         private VkPipeline m_NativePipeline;
         private VulkanPipelineLayout m_VulkanPipelineLayout;
+        private VkPipelineLayout m_EffectiveNativePipelineLayout;
+        private bool m_OwnsEffectiveNativePipelineLayout;
+        private VulkanPrivateRasterBindingPlan m_PrivateBindingPlan;
+        private VulkanPrivateRasterDescriptorLayout? m_PrivateDescriptorLayout;
+        private VulkanRasterShaderModuleSet m_ShaderModules;
+        private bool m_OwnsShaderModules;
 
-        public VulkanRasterPipeline(VulkanDevice device, in RHIRasterPipelineDescriptor descriptor)
+        public VulkanRasterPipeline(
+            VulkanDevice device,
+            in RHIRasterPipelineDescriptor descriptor)
+            : this(device, descriptor, null)
+        {
+        }
+
+        internal VulkanRasterPipeline(
+            VulkanDevice device,
+            in RHIRasterPipelineDescriptor descriptor,
+            VulkanPipelineCache? pipelineCache,
+            VkRenderPass compatibleRenderPass = default,
+            uint compatibleSubPass = 0,
+            VulkanRasterShaderModuleSet? shaderModules = null)
         {
             m_VulkanDevice = device;
-            m_Descriptor = descriptor;
-            m_VulkanPipelineLayout = descriptor.PipelineLayout as VulkanPipelineLayout;
-
-            // Shader stages
-            int stageCount = 0;
-            VkPipelineShaderStageCreateInfo* shaderStages = stackalloc VkPipelineShaderStageCreateInfo[5];
-
-            if (descriptor.PrimitiveAssembler.VertexAssembler.HasValue)
+            m_Descriptor =
+                RHIRasterPipelineContract.SnapshotAndValidate(
+                    in descriptor);
+            m_ShaderModules =
+                shaderModules ??
+                VulkanRasterShaderModuleSet.Create(
+                    device,
+                    in m_Descriptor);
+            m_OwnsShaderModules = shaderModules == null;
+            try
             {
-                VulkanFunction vertexFunction = descriptor.PrimitiveAssembler.VertexAssembler.Value.VertexFunction as VulkanFunction;
-                shaderStages[stageCount++] = vertexFunction.GetShaderStageCreateInfo();
+            m_VulkanPipelineLayout = descriptor.PipelineLayout as VulkanPipelineLayout
+                ?? throw new ArgumentException(
+                    "Vulkan raster pipelines require a Vulkan pipeline layout.",
+                    nameof(descriptor));
+            m_PrivateBindingPlan =
+                VulkanPrivatePipelineLayoutBuilder.CompilePlan(
+                    device,
+                    m_VulkanPipelineLayout,
+                    in m_Descriptor.AttachmentInterface);
+            if (m_PrivateBindingPlan.HasPrivateBindings)
+            {
+                m_PrivateDescriptorLayout =
+                    new VulkanPrivateRasterDescriptorLayout(
+                        device,
+                        in m_PrivateBindingPlan);
+                m_EffectiveNativePipelineLayout =
+                    VulkanPrivatePipelineLayoutBuilder.Create(
+                        m_VulkanPipelineLayout,
+                        m_PrivateDescriptorLayout);
+                m_OwnsEffectiveNativePipelineLayout = true;
+            }
+            else
+            {
+                m_EffectiveNativePipelineLayout =
+                    m_VulkanPipelineLayout.NativePipelineLayout;
             }
 
-            if (descriptor.PrimitiveAssembler.MeshletAssembler.HasValue)
+            VulkanDynamicRenderingAttachmentMappingPlan
+                dynamicMappingPlan =
+                    VulkanDynamicRenderingAttachmentMappingPlan
+                        .Compile(
+                            in m_Descriptor.AttachmentInterface);
+            if (compatibleRenderPass.Handle == 0 &&
+                (!device.SupportsDynamicRendering ||
+                 (dynamicMappingPlan.HasLocalReadOrRemapping &&
+                  !device.SupportsDynamicRenderingLocalRead)))
             {
-                if (descriptor.PrimitiveAssembler.MeshletAssembler.Value.TaskFunction != null)
-                {
-                    VulkanFunction taskFunction = descriptor.PrimitiveAssembler.MeshletAssembler.Value.TaskFunction as VulkanFunction;
-                    shaderStages[stageCount++] = taskFunction.GetShaderStageCreateInfo();
-                }
-                VulkanFunction meshFunction = descriptor.PrimitiveAssembler.MeshletAssembler.Value.MeshFunction as VulkanFunction;
-                shaderStages[stageCount++] = meshFunction.GetShaderStageCreateInfo();
+                // Vulkan 1.1/1.2 RenderPass2-only devices freeze the
+                // private state and shader modules here. The native
+                // compatible variant is created only after a concrete
+                // RenderPass/subpass is known.
+                return;
             }
 
-            if (descriptor.FragmentFunction != null)
-            {
-                VulkanFunction fragmentFunction = descriptor.FragmentFunction as VulkanFunction;
-                shaderStages[stageCount++] = fragmentFunction.GetShaderStageCreateInfo();
-            }
+            // Pipeline-owned shader modules keep lazy native-compatible
+            // variants independent from disposed public RHIFunctions.
+            int stageCount = m_ShaderModules.StageCount;
+            VkPipelineShaderStageCreateInfo* shaderStages =
+                stackalloc VkPipelineShaderStageCreateInfo[stageCount];
+            m_ShaderModules.Populate(shaderStages);
 
             // Vertex input state
             int vertexBindingCount = 0;
@@ -297,8 +547,16 @@ namespace SharpGPU
             };
 
             // Color blend attachments
-            int colorFormatCount = descriptor.ColorFormats != null ? descriptor.ColorFormats.Length : 0;
-            VkPipelineColorBlendAttachmentState* colorBlendAttachments = stackalloc VkPipelineColorBlendAttachmentState[Math.Max(colorFormatCount, 1)];
+            int colorFormatCount =
+                descriptor.ColorFormats?.Length ?? 0;
+            int colorBlendAttachmentCount =
+                compatibleRenderPass.Handle == 0
+                    ? colorFormatCount
+                    : descriptor.AttachmentInterface
+                        .ColorOutputLocationCount;
+            VkPipelineColorBlendAttachmentState* colorBlendAttachments =
+                stackalloc VkPipelineColorBlendAttachmentState[
+                    Math.Max(colorBlendAttachmentCount, 1)];
 
             RHIBlendDescriptor* blendDescs = stackalloc RHIBlendDescriptor[8];
             blendDescs[0] = descriptor.RenderState.BlendState.BlendDescriptor0;
@@ -310,7 +568,7 @@ namespace SharpGPU
             blendDescs[6] = descriptor.RenderState.BlendState.BlendDescriptor6;
             blendDescs[7] = descriptor.RenderState.BlendState.BlendDescriptor7;
 
-            for (int i = 0; i < colorFormatCount; ++i)
+            for (int i = 0; i < colorBlendAttachmentCount; ++i)
             {
                 int blendIndex = descriptor.RenderState.BlendState.IndependentBlend ? i : 0;
                 ref RHIBlendDescriptor blend = ref blendDescs[blendIndex];
@@ -332,8 +590,12 @@ namespace SharpGPU
             {
                 sType = VkStructureType.PipelineColorBlendStateCreateInfo,
                 logicOpEnable = false,
-                attachmentCount = (uint)colorFormatCount,
-                pAttachments = colorFormatCount > 0 ? colorBlendAttachments : null,
+                attachmentCount =
+                    checked((uint)colorBlendAttachmentCount),
+                pAttachments =
+                    colorBlendAttachmentCount > 0
+                        ? colorBlendAttachments
+                        : null,
             };
 
             // Dynamic state
@@ -352,14 +614,46 @@ namespace SharpGPU
 
             // Dynamic rendering format info (Vulkan 1.3)
             VkFormat* colorFormats = stackalloc VkFormat[Math.Max(colorFormatCount, 1)];
+            ERHIPixelFormat[] descriptorColorFormats = descriptor.ColorFormats
+                ?? throw new InvalidOperationException("Vulkan raster pipeline descriptor is missing color formats.");
             for (int i = 0; i < colorFormatCount; ++i)
             {
-                colorFormats[i] = VulkanUtility.ConvertToVkFormat(descriptor.ColorFormats[i]);
+                colorFormats[i] = VulkanUtility.ConvertToVkFormat(descriptorColorFormats[i]);
             }
 
+            uint* outputLocations =
+                stackalloc uint[Math.Max(colorFormatCount, 1)];
+            uint* inputIndices =
+                stackalloc uint[Math.Max(colorFormatCount, 1)];
+            dynamicMappingPlan.Populate(
+                outputLocations,
+                inputIndices);
+            VkRenderingInputAttachmentIndexInfo inputIndexInfo = new()
+            {
+                sType = VkStructureType
+                    .RenderingInputAttachmentIndexInfo,
+                colorAttachmentCount =
+                    checked((uint)colorFormatCount),
+                pColorAttachmentInputIndices =
+                    colorFormatCount == 0 ? null : inputIndices,
+            };
+            VkRenderingAttachmentLocationInfo locationInfo = new()
+            {
+                sType = VkStructureType
+                    .RenderingAttachmentLocationInfo,
+                pNext = &inputIndexInfo,
+                colorAttachmentCount =
+                    checked((uint)colorFormatCount),
+                pColorAttachmentLocations =
+                    colorFormatCount == 0 ? null : outputLocations,
+            };
             VkPipelineRenderingCreateInfo renderingInfo = new VkPipelineRenderingCreateInfo()
             {
                 sType = VkStructureType.PipelineRenderingCreateInfo,
+                pNext =
+                    dynamicMappingPlan.HasLocalReadOrRemapping
+                        ? &locationInfo
+                        : null,
                 colorAttachmentCount = (uint)colorFormatCount,
                 pColorAttachmentFormats = colorFormatCount > 0 ? colorFormats : null,
                 depthAttachmentFormat = descriptor.DepthFormat != ERHIPixelFormat.Unknown ? VulkanUtility.ConvertToVkFormat(descriptor.DepthFormat) : VkFormat.Undefined,
@@ -369,7 +663,10 @@ namespace SharpGPU
             VkGraphicsPipelineCreateInfo pipelineInfo = new VkGraphicsPipelineCreateInfo()
             {
                 sType = VkStructureType.GraphicsPipelineCreateInfo,
-                pNext = &renderingInfo,
+                pNext =
+                    compatibleRenderPass.Handle == 0
+                        ? &renderingInfo
+                        : null,
                 stageCount = (uint)stageCount,
                 pStages = shaderStages,
                 pVertexInputState = &vertexInputInfo,
@@ -380,23 +677,126 @@ namespace SharpGPU
                 pDepthStencilState = &depthStencil,
                 pColorBlendState = &colorBlending,
                 pDynamicState = &dynamicState,
-                layout = m_VulkanPipelineLayout.NativePipelineLayout,
-                renderPass = default,
-                subpass = 0,
+                layout = m_EffectiveNativePipelineLayout,
+                renderPass = compatibleRenderPass,
+                subpass = compatibleSubPass,
+                flags =
+                    VulkanRasterPipelineFlagUtility.Get(
+                        in m_Descriptor.AttachmentInterface),
             };
 
             fixed (VkPipeline* pipelinePtr = &m_NativePipeline)
             {
-                VulkanUtility.CheckErrors(VulkanNative.vkCreateGraphicsPipelines(device.NativeDevice, default, 1, &pipelineInfo, null, pipelinePtr));
+                VkResult result = VulkanNative.vkCreateGraphicsPipelines(
+                    device.NativeDevice,
+                    pipelineCache?.NativePipelineCache ?? default,
+                    1,
+                    &pipelineInfo,
+                    null,
+                    pipelinePtr);
+                if (result != VkResult.Success)
+                {
+                    if (m_NativePipeline.Handle != 0)
+                    {
+                        VulkanNative.vkDestroyPipeline(
+                            device.NativeDevice,
+                            m_NativePipeline,
+                            null);
+                        m_NativePipeline = default;
+                    }
+                    if (pipelineCache != null)
+                    {
+                        pipelineCache.ThrowPipelineCreationFailure(result, "Graphics");
+                    }
+                }
+                VulkanUtility.CheckErrors(result);
             }
+            }
+            catch
+            {
+                ReleaseNativeOwnership();
+                throw;
+            }
+        }
+
+        internal VulkanRasterNativeVariant CreateCompatibleVariant(
+            VkRenderPass renderPass,
+            uint subPass)
+        {
+            ThrowIfDisposed();
+            if (renderPass.Handle == 0)
+            {
+                throw new ArgumentException(
+                    "A non-null compatible RenderPass is required.",
+                    nameof(renderPass));
+            }
+            RHIRasterPipelineDescriptor descriptor = m_Descriptor;
+            using VulkanRasterPipeline temporary =
+                new(
+                    m_VulkanDevice,
+                    in descriptor,
+                    pipelineCache: null,
+                    renderPass,
+                    subPass,
+                    m_ShaderModules);
+            return temporary.DetachNativeVariant();
+        }
+
+        private VulkanRasterNativeVariant DetachNativeVariant()
+        {
+            VulkanRasterNativeVariant result =
+                new(
+                    m_VulkanDevice.NativeDevice,
+                    m_NativePipeline,
+                    m_EffectiveNativePipelineLayout,
+                    m_OwnsEffectiveNativePipelineLayout,
+                    in m_PrivateBindingPlan,
+                    m_PrivateDescriptorLayout);
+            m_NativePipeline = default;
+            m_EffectiveNativePipelineLayout = default;
+            m_OwnsEffectiveNativePipelineLayout = false;
+            m_PrivateDescriptorLayout = null;
+
+            // The detached transient owns native facts only. It must not
+            // retain the public descriptor, layout, function wrappers, or
+            // the source pipeline's shader-module owner.
+            m_Descriptor = default;
+            return result;
         }
 
         protected override void Release()
         {
-            VulkanNative.vkDestroyPipeline(m_VulkanDevice.NativeDevice, m_NativePipeline, null);
+            ReleaseNativeOwnership();
+        }
+
+        private void ReleaseNativeOwnership()
+        {
+            if (m_NativePipeline.Handle != 0)
+            {
+                VulkanNative.vkDestroyPipeline(
+                    m_VulkanDevice.NativeDevice,
+                    m_NativePipeline,
+                    null);
+                m_NativePipeline = default;
+            }
+            if (m_OwnsEffectiveNativePipelineLayout &&
+                m_EffectiveNativePipelineLayout.Handle != 0)
+            {
+                VulkanNative.vkDestroyPipelineLayout(
+                    m_VulkanDevice.NativeDevice,
+                    m_EffectiveNativePipelineLayout,
+                    null);
+                m_EffectiveNativePipelineLayout = default;
+            }
+            m_PrivateDescriptorLayout?.Dispose();
+            m_PrivateDescriptorLayout = null;
+            if (m_OwnsShaderModules &&
+                m_ShaderModules != null)
+            {
+                m_ShaderModules.Dispose();
+            }
         }
     }
-
     internal unsafe class VulkanRaytracingPipeline : RHIRaytracingPipeline
     {
         public VkPipeline NativePipeline => m_NativePipeline;
@@ -428,7 +828,10 @@ namespace SharpGPU
         {
             m_VulkanDevice = device;
             m_Descriptor = descriptor;
-            m_VulkanPipelineLayout = descriptor.PipelineLayout as VulkanPipelineLayout;
+            m_VulkanPipelineLayout = descriptor.PipelineLayout as VulkanPipelineLayout
+                ?? throw new ArgumentException(
+                    "Vulkan ray-tracing pipeline requires a VulkanPipelineLayout.",
+                    nameof(descriptor));
 
             VulkanFunctionLibrary functionLibrary = descriptor.FunctionLibrary as VulkanFunctionLibrary
                 ?? throw new InvalidOperationException("Vulkan raytracing pipeline requires a VulkanFunctionLibrary.");
@@ -622,75 +1025,6 @@ namespace SharpGPU
         }
     }
 
-    internal unsafe class VulkanPipelineLibrary : RHIPipelineLibrary
-    {
-        private VulkanDevice m_VulkanDevice;
-        private VkPipelineCache m_NativePipelineCache;
-
-        public VulkanPipelineLibrary(VulkanDevice device, in RHIPipelineLibraryDescriptor descriptor) : base(descriptor)
-        {
-            m_VulkanDevice = device;
-
-            VkPipelineCacheCreateInfo cacheInfo = new VkPipelineCacheCreateInfo()
-            {
-                sType = VkStructureType.PipelineCacheCreateInfo,
-            };
-
-            fixed (VkPipelineCache* cachePtr = &m_NativePipelineCache)
-            {
-                VulkanUtility.CheckErrors(VulkanNative.vkCreatePipelineCache(device.NativeDevice, &cacheInfo, null, cachePtr));
-            }
-        }
-
-        public override void StoreComputePipeline(string name, RHIComputePipeline computePipeline)
-        {
-            // Pipeline cache handles this implicitly in Vulkan
-        }
-
-        public override void StoreRaytracingPipeline(string name, RHIRaytracingPipeline raytracingPipeline)
-        {
-        }
-
-        public override void StoreRasterPipeline(string name, RHIRasterPipeline rasterPipeline)
-        {
-        }
-
-        public override RHIComputePipeline LoadComputePipeline(RHIComputePipelineDescriptor computePipelineDescriptor)
-        {
-            return new VulkanComputePipeline(m_VulkanDevice, computePipelineDescriptor);
-        }
-
-        public override RHIRaytracingPipeline LoadRaytracingPipeline(RHIRaytracingPipelineDescriptor raytracingPipelineDescriptor)
-        {
-            return new VulkanRaytracingPipeline(m_VulkanDevice, raytracingPipelineDescriptor);
-        }
-
-        public override RHIRasterPipeline LoadRasterPipeline(RHIRasterPipelineDescriptor rasterPipelineDescriptor)
-        {
-            return new VulkanRasterPipeline(m_VulkanDevice, rasterPipelineDescriptor);
-        }
-
-        public override RHIPipelineLibraryResult Serialize()
-        {
-            nuint dataSize = 0;
-            VulkanNative.vkGetPipelineCacheData(m_VulkanDevice.NativeDevice, m_NativePipelineCache, &dataSize, null);
-
-            IntPtr data = Marshal.AllocHGlobal((int)dataSize);
-            VulkanNative.vkGetPipelineCacheData(m_VulkanDevice.NativeDevice, m_NativePipelineCache, &dataSize, data.ToPointer());
-
-            return new RHIPipelineLibraryResult()
-            {
-                ByteSize = (uint)dataSize,
-                ByteCode = data,
-            };
-        }
-
-        protected override void Release()
-        {
-            VulkanNative.vkDestroyPipelineCache(m_VulkanDevice.NativeDevice, m_NativePipelineCache, null);
-        }
-    }
-#pragma warning restore CS8600, CS8602, CS8618
     internal sealed class VulkanWorkGraphPipeline : RHIWorkGraphPipeline
     {
         internal VulkanWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)

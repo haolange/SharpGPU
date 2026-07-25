@@ -73,7 +73,22 @@ internal static class ThirdPartyNativeLibraryResolver
 
     public static IEnumerable<string> EnumerateCandidates(string libraryName)
     {
-        if (!TryEnumerateCandidates(libraryName, out IEnumerable<string> candidates))
+        return EnumerateCandidates(
+            libraryName,
+            Environment.GetEnvironmentVariable(
+                ThirdPartyRootEnvironmentVariableName));
+    }
+
+    internal static IEnumerable<string> EnumerateCandidatesWithExplicitRootsForTesting(
+        string libraryName,
+        string? explicitRoots)
+    {
+        return EnumerateCandidates(libraryName, explicitRoots);
+    }
+
+    private static IEnumerable<string> EnumerateCandidates(string libraryName, string? explicitRoots)
+    {
+        if (!TryEnumerateCandidates(libraryName, explicitRoots, out IEnumerable<string> candidates))
         {
             return Array.Empty<string>();
         }
@@ -86,7 +101,11 @@ internal static class ThirdPartyNativeLibraryResolver
         handle = 0;
         resolvedPath = null;
 
-        if (!TryEnumerateCandidates(libraryName, out IEnumerable<string> candidates))
+        string? explicitRoots =
+            Environment.GetEnvironmentVariable(
+                ThirdPartyRootEnvironmentVariableName);
+        if (!TryEnumerateCandidates(
+                libraryName, explicitRoots, out IEnumerable<string> candidates))
         {
             return false;
         }
@@ -128,7 +147,10 @@ internal static class ThirdPartyNativeLibraryResolver
         return 0;
     }
 
-    private static bool TryEnumerateCandidates(string libraryName, out IEnumerable<string> candidates)
+    private static bool TryEnumerateCandidates(
+        string libraryName,
+        string? explicitRoots,
+        out IEnumerable<string> candidates)
     {
         candidates = Array.Empty<string>();
         string normalized = NormalizeLibraryName(libraryName);
@@ -162,7 +184,7 @@ internal static class ThirdPartyNativeLibraryResolver
 
         List<string> candidateList = new();
         HashSet<string> emitted = new(StringComparer.OrdinalIgnoreCase);
-        foreach (string root in EnumerateThirdPartyRoots())
+        foreach (string root in EnumerateThirdPartyRoots(explicitRoots))
         {
             foreach (string candidate in EnumerateCandidateLibraryPaths(root, profile, osFolder, archFolder, nativeFileName))
             {
@@ -257,24 +279,14 @@ internal static class ThirdPartyNativeLibraryResolver
                 yield return candidate;
             }
         }
-
-        // Fallback for historical copy layouts where library directory is nested one level deeper.
-        string? rootCandidate4 = TryNormalize(Path.Combine(normalizedRoot, vendor, "ThirdParty", profile.Library, osFolder, archFolder, nativeFileName));
-        if (!string.IsNullOrWhiteSpace(rootCandidate4))
-        {
-            if (emitted.Add(rootCandidate4))
-            {
-                yield return rootCandidate4;
-            }
-        }
     }
 
-    private static IEnumerable<string> EnumerateThirdPartyRoots()
+    private static IEnumerable<string> EnumerateThirdPartyRoots(string? explicitRoots)
     {
         HashSet<string> emitted = new(StringComparer.OrdinalIgnoreCase);
         List<string> repositoryRoots = new();
 
-        foreach (string explicitRoot in EnumerateExplicitThirdPartyRoots())
+        foreach (string explicitRoot in EnumerateExplicitThirdPartyRoots(explicitRoots))
         {
             if (emitted.Add(explicitRoot))
             {
@@ -300,15 +312,14 @@ internal static class ThirdPartyNativeLibraryResolver
         }
     }
 
-    private static IEnumerable<string> EnumerateExplicitThirdPartyRoots()
+    private static IEnumerable<string> EnumerateExplicitThirdPartyRoots(string? explicitRoots)
     {
-        string? explicitRoot = Environment.GetEnvironmentVariable(ThirdPartyRootEnvironmentVariableName);
-        if (string.IsNullOrWhiteSpace(explicitRoot))
+        if (string.IsNullOrWhiteSpace(explicitRoots))
         {
             yield break;
         }
 
-        foreach (string? root in explicitRoot.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        foreach (string? root in explicitRoots.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             if (string.IsNullOrWhiteSpace(root))
             {

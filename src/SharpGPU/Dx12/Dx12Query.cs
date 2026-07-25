@@ -3,7 +3,7 @@ using SharpGPU.Collections.LowLevel;
 
 namespace SharpGPU
 {
-#pragma warning disable CA1416, CS8600, CS8602
+#pragma warning disable CA1416
 
     internal unsafe class Dx12Query : RHIQuery
     {
@@ -29,9 +29,12 @@ namespace SharpGPU
             queryHeapDesc.Count = descriptor.Count;
             queryHeapDesc.NodeMask = 0;
 
-            Vortice.Direct3D12.ID3D12QueryHeap queryHeap;
-            device.NativeDevice.CreateQueryHeap(queryHeapDesc, out queryHeap);
-            m_QueryHeap = queryHeap;
+            SharpGen.Runtime.Result queryHeapResult =
+                device.NativeDevice.CreateQueryHeap(queryHeapDesc, out Vortice.Direct3D12.ID3D12QueryHeap? queryHeap);
+            m_QueryHeap = Dx12Utility.RequireCreatedObject(
+                queryHeap,
+                queryHeapResult,
+                "ID3D12Device.CreateQueryHeap");
 
             Vortice.Direct3D12.HeapProperties heapProperties;
             {
@@ -55,15 +58,17 @@ namespace SharpGPU
                 resourceDesc.Flags = Vortice.Direct3D12.ResourceFlags.None;
                 resourceDesc.Layout = Vortice.Direct3D12.TextureLayout.RowMajor;
             }
-            Vortice.Direct3D12.ID3D12Resource queryResult;
-            device.NativeDevice.CreateCommittedResource(
+            SharpGen.Runtime.Result queryResultCreation = device.NativeDevice.CreateCommittedResource(
                 heapProperties,
                 Vortice.Direct3D12.HeapFlags.None,
                 resourceDesc,
                 Vortice.Direct3D12.ResourceStates.CopyDest,
                 null,
-                out queryResult);
-            m_QueryResult = queryResult;
+                out Vortice.Direct3D12.ID3D12Resource? queryResult);
+            m_QueryResult = Dx12Utility.RequireCreatedObject(
+                queryResult,
+                queryResultCreation,
+                "ID3D12Device.CreateCommittedResource(query readback)");
         }
 
         private static uint GetResultStrideInBytes(in ERHIQueryType queryType)
@@ -75,19 +80,31 @@ namespace SharpGPU
 
         public override bool ResolveData()
         {
-            void* queryResult;
+            void* queryResult = null;
             Vortice.Direct3D12.Range range = new Vortice.Direct3D12.Range(0, 0);
             Span<ulong> resultsSpan = new Span<ulong>(m_Results);
 
-            m_QueryResult.Map(0, range, &queryResult);
-            new IntPtr(queryResult).CopyTo(resultsSpan);
-            m_QueryResult.Unmap(0, null);
-
+            SharpGen.Runtime.Result mapResult = m_QueryResult.Map(0, range, &queryResult);
+            Dx12Utility.CHECK_HR(mapResult);
             if (queryResult == null)
             {
-                return false;
+                throw new RHIException(
+                    ERHIErrorCode.NativeFailure,
+                    ERHIBackend.DirectX12,
+                    mapResult.Code,
+                    "ID3D12Resource.Map succeeded without returning a query readback pointer.",
+                    ERHIDeviceState.Operational);
             }
-            return true;
+
+            try
+            {
+                new IntPtr(queryResult).CopyTo(resultsSpan);
+                return true;
+            }
+            finally
+            {
+                m_QueryResult.Unmap(0, null);
+            }
         }
 
         protected override void Release()
@@ -96,5 +113,5 @@ namespace SharpGPU
             m_QueryResult.Release();
         }
     }
-#pragma warning restore CA1416, CS8600, CS8602
+#pragma warning restore CA1416
 }

@@ -26,23 +26,23 @@ namespace SharpGPU
         private static VkInstanceApi GetPrimaryInstanceApi() { foreach (VkInstanceApi api in s_InstanceApis.Values) return api; throw new InvalidOperationException("No Vulkan instance API registered."); }
         private static VkInstanceApi GetInstanceApi(VkPhysicalDevice physicalDevice)
         {
-            if (s_PhysicalToInstance.TryGetValue(physicalDevice.Handle, out nint instanceHandle) && s_InstanceApis.TryGetValue(instanceHandle, out VkInstanceApi api)) return api;
+            if (s_PhysicalToInstance.TryGetValue(physicalDevice.Handle, out nint instanceHandle) && s_InstanceApis.TryGetValue(instanceHandle, out VkInstanceApi? api) && api != null) return api;
             throw new InvalidOperationException("VkPhysicalDevice is not registered to any VkInstance.");
         }
         private static VkDeviceApi GetDeviceApi(VkDevice device)
         {
-            if (s_DeviceApis.TryGetValue(device.Handle, out VkDeviceApi api)) return api;
+            if (s_DeviceApis.TryGetValue(device.Handle, out VkDeviceApi? api) && api != null) return api;
             throw new InvalidOperationException("VkDevice API not registered.");
         }
         private static VkDeviceApi GetPrimaryDeviceApi() { foreach (VkDeviceApi api in s_DeviceApis.Values) return api; throw new InvalidOperationException("No Vulkan device API registered."); }
         private static VkDeviceApi GetDeviceApi(VkQueue queue)
         {
-            if (s_QueueToDevice.TryGetValue(queue.Handle, out nint deviceHandle) && s_DeviceApis.TryGetValue(deviceHandle, out VkDeviceApi api)) return api;
+            if (s_QueueToDevice.TryGetValue(queue.Handle, out nint deviceHandle) && s_DeviceApis.TryGetValue(deviceHandle, out VkDeviceApi? api) && api != null) return api;
             throw new InvalidOperationException("VkQueue is not registered to any VkDevice.");
         }
         private static VkDeviceApi GetDeviceApi(VkCommandBuffer commandBuffer)
         {
-            if (s_CommandBufferToDevice.TryGetValue(commandBuffer.Handle, out nint deviceHandle) && s_DeviceApis.TryGetValue(deviceHandle, out VkDeviceApi api)) return api;
+            if (s_CommandBufferToDevice.TryGetValue(commandBuffer.Handle, out nint deviceHandle) && s_DeviceApis.TryGetValue(deviceHandle, out VkDeviceApi? api) && api != null) return api;
             throw new InvalidOperationException("VkCommandBuffer is not registered to any VkDevice.");
         }
         private static void RegisterInstance(VkInstance instance) => GetInstanceApi(instance);
@@ -119,9 +119,46 @@ namespace SharpGPU
             GetDeviceApi(commandBuffer).vkCmdBeginQuery(commandBuffer, queryPool, query, flags);
         }
 
-        public static void vkCmdBeginRendering(VkCommandBuffer commandBuffer, VkRenderingInfo* renderingInfo)
+        public static void vkCmdBeginRendering(
+            VkCommandBuffer commandBuffer,
+            VkRenderingInfo* renderingInfo,
+            bool useKhrCommand = false)
         {
-            GetDeviceApi(commandBuffer).vkCmdBeginRendering(commandBuffer, renderingInfo);
+            if (useKhrCommand)
+            {
+                GetDeviceApi(commandBuffer).vkCmdBeginRenderingKHR(
+                    commandBuffer,
+                    renderingInfo);
+            }
+            else
+            {
+                GetDeviceApi(commandBuffer).vkCmdBeginRendering(
+                    commandBuffer,
+                    renderingInfo);
+            }
+        }
+
+        public static void vkCmdBeginRenderPass2(
+            VkCommandBuffer commandBuffer,
+            VkRenderPassBeginInfo* renderPassBegin,
+            VkSubpassBeginInfo* subpassBegin,
+            bool useKhrEntryPoints)
+        {
+            VkDeviceApi api = GetDeviceApi(commandBuffer);
+            if (useKhrEntryPoints)
+            {
+                api.vkCmdBeginRenderPass2KHR(
+                    commandBuffer,
+                    renderPassBegin,
+                    subpassBegin);
+            }
+            else
+            {
+                api.vkCmdBeginRenderPass2(
+                    commandBuffer,
+                    renderPassBegin,
+                    subpassBegin);
+            }
         }
 
         public static void vkCmdBindDescriptorSets(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint firstSet, uint descriptorSetCount, VkDescriptorSet* descriptorSets, uint dynamicOffsetCount, uint* dynamicOffsets)
@@ -214,9 +251,59 @@ namespace SharpGPU
             GetDeviceApi(commandBuffer).vkCmdEndQuery(commandBuffer, queryPool, query);
         }
 
-        public static void vkCmdEndRendering(VkCommandBuffer commandBuffer)
+        public static void vkCmdEndRendering(
+            VkCommandBuffer commandBuffer,
+            bool useKhrCommand = false)
         {
-            GetDeviceApi(commandBuffer).vkCmdEndRendering(commandBuffer);
+            if (useKhrCommand)
+            {
+                GetDeviceApi(commandBuffer).vkCmdEndRenderingKHR(
+                    commandBuffer);
+            }
+            else
+            {
+                GetDeviceApi(commandBuffer).vkCmdEndRendering(
+                    commandBuffer);
+            }
+        }
+
+        public static void vkCmdEndRenderPass2(
+            VkCommandBuffer commandBuffer,
+            VkSubpassEndInfo* subpassEnd,
+            bool useKhrEntryPoints)
+        {
+            VkDeviceApi api = GetDeviceApi(commandBuffer);
+            if (useKhrEntryPoints)
+            {
+                api.vkCmdEndRenderPass2KHR(commandBuffer, subpassEnd);
+            }
+            else
+            {
+                api.vkCmdEndRenderPass2(commandBuffer, subpassEnd);
+            }
+        }
+
+        public static void vkCmdNextSubpass2(
+            VkCommandBuffer commandBuffer,
+            VkSubpassBeginInfo* subpassBegin,
+            VkSubpassEndInfo* subpassEnd,
+            bool useKhrEntryPoints)
+        {
+            VkDeviceApi api = GetDeviceApi(commandBuffer);
+            if (useKhrEntryPoints)
+            {
+                api.vkCmdNextSubpass2KHR(
+                    commandBuffer,
+                    subpassBegin,
+                    subpassEnd);
+            }
+            else
+            {
+                api.vkCmdNextSubpass2(
+                    commandBuffer,
+                    subpassBegin,
+                    subpassEnd);
+            }
         }
 
         public static void vkCmdPipelineBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, uint memoryBarrierCount, VkMemoryBarrier* memoryBarriers, uint bufferMemoryBarrierCount, VkBufferMemoryBarrier* bufferMemoryBarriers, uint imageMemoryBarrierCount, VkImageMemoryBarrier* imageMemoryBarriers)
@@ -247,6 +334,46 @@ namespace SharpGPU
         public static void vkCmdSetBlendConstants(VkCommandBuffer commandBuffer, float* blendConstants)
         {
             GetDeviceApi(commandBuffer).vkCmdSetBlendConstants(commandBuffer, blendConstants);
+        }
+
+        public static void vkCmdSetRenderingAttachmentLocations(
+            VkCommandBuffer commandBuffer,
+            VkRenderingAttachmentLocationInfo* locationInfo,
+            bool useKhrEntryPoints)
+        {
+            VkDeviceApi api = GetDeviceApi(commandBuffer);
+            if (useKhrEntryPoints)
+            {
+                api.vkCmdSetRenderingAttachmentLocationsKHR(
+                    commandBuffer,
+                    locationInfo);
+            }
+            else
+            {
+                api.vkCmdSetRenderingAttachmentLocations(
+                    commandBuffer,
+                    locationInfo);
+            }
+        }
+
+        public static void vkCmdSetRenderingInputAttachmentIndices(
+            VkCommandBuffer commandBuffer,
+            VkRenderingInputAttachmentIndexInfo* inputIndexInfo,
+            bool useKhrEntryPoints)
+        {
+            VkDeviceApi api = GetDeviceApi(commandBuffer);
+            if (useKhrEntryPoints)
+            {
+                api.vkCmdSetRenderingInputAttachmentIndicesKHR(
+                    commandBuffer,
+                    inputIndexInfo);
+            }
+            else
+            {
+                api.vkCmdSetRenderingInputAttachmentIndices(
+                    commandBuffer,
+                    inputIndexInfo);
+            }
         }
 
         public static void vkCmdSetFragmentShadingRateKHR(VkCommandBuffer commandBuffer, VkExtent2D* fragmentSize, VkFragmentShadingRateCombinerOpKHR* combinerOps)
@@ -325,6 +452,37 @@ namespace SharpGPU
             VkResult result = GetInstanceApi(physicalDevice).vkCreateDevice(physicalDevice, createInfo, allocator, device);
             if (result == VkResult.Success && device != null) RegisterDevice(physicalDevice, *device);
             return result;
+        }
+
+        public static VkResult vkCreateFramebuffer(
+            VkDevice device,
+            VkFramebufferCreateInfo* createInfo,
+            VkAllocationCallbacks* allocator,
+            VkFramebuffer* framebuffer)
+        {
+            return GetDeviceApi(device).vkCreateFramebuffer(
+                createInfo,
+                allocator,
+                framebuffer);
+        }
+
+        public static VkResult vkCreateRenderPass2(
+            VkDevice device,
+            VkRenderPassCreateInfo2* createInfo,
+            VkAllocationCallbacks* allocator,
+            VkRenderPass* renderPass,
+            bool useKhrEntryPoints)
+        {
+            VkDeviceApi api = GetDeviceApi(device);
+            return useKhrEntryPoints
+                ? api.vkCreateRenderPass2KHR(
+                    createInfo,
+                    allocator,
+                    renderPass)
+                : api.vkCreateRenderPass2(
+                    createInfo,
+                    allocator,
+                    renderPass);
         }
 
         public static VkResult vkCreateFence(VkDevice device, VkFenceCreateInfo* createInfo, VkAllocationCallbacks* allocator, VkFence* fence)
@@ -501,6 +659,11 @@ namespace SharpGPU
             GetDeviceApi(device).vkDestroyDescriptorSetLayout(descriptorSetLayout, allocator);
         }
 
+        public static void vkDestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer, VkAllocationCallbacks* allocator)
+        {
+            GetDeviceApi(device).vkDestroyFramebuffer(framebuffer, allocator);
+        }
+
         public static void vkDestroyDevice(VkDevice device, VkAllocationCallbacks* allocator)
         {
             VkDevice destroyedDevice = device;
@@ -543,6 +706,11 @@ namespace SharpGPU
         public static void vkDestroyPipelineLayout(VkDevice device, VkPipelineLayout pipelineLayout, VkAllocationCallbacks* allocator)
         {
             GetDeviceApi(device).vkDestroyPipelineLayout(pipelineLayout, allocator);
+        }
+
+        public static void vkDestroyRenderPass(VkDevice device, VkRenderPass renderPass, VkAllocationCallbacks* allocator)
+        {
+            GetDeviceApi(device).vkDestroyRenderPass(renderPass, allocator);
         }
 
         public static void vkDestroyQueryPool(VkDevice device, VkQueryPool queryPool, VkAllocationCallbacks* allocator)
@@ -622,6 +790,12 @@ namespace SharpGPU
             return result;
         }
 
+        public static VkResult vkInvalidateMappedMemoryRanges(VkDevice device, uint memoryRangeCount, VkMappedMemoryRange* memoryRanges)
+        {
+            VkResult result = GetDeviceApi(device).vkInvalidateMappedMemoryRanges(memoryRangeCount, memoryRanges);
+            return result;
+        }
+
         public static VkResult vkFreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, uint descriptorSetCount, VkDescriptorSet* descriptorSets)
         {
             VkResult result = GetDeviceApi(device).vkFreeDescriptorSets(descriptorPool, descriptorSetCount, descriptorSets);
@@ -672,6 +846,11 @@ namespace SharpGPU
             GetDeviceApi(device).vkGetImageMemoryRequirements(image, memoryRequirements);
         }
 
+        public static void vkGetImageSparseMemoryRequirements(VkDevice device, VkImage image, uint* sparseMemoryRequirementCount, VkSparseImageMemoryRequirements* sparseMemoryRequirements)
+        {
+            GetDeviceApi(device).vkGetImageSparseMemoryRequirements(image, sparseMemoryRequirementCount, sparseMemoryRequirements);
+        }
+
         public static void vkGetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* features)
         {
             GetInstanceApi(physicalDevice).vkGetPhysicalDeviceFeatures(physicalDevice, features);
@@ -682,9 +861,31 @@ namespace SharpGPU
             GetInstanceApi(physicalDevice).vkGetPhysicalDeviceFeatures2(physicalDevice, features);
         }
 
+        public static void vkGetPhysicalDeviceFormatProperties(
+            VkPhysicalDevice physicalDevice,
+            VkFormat format,
+            VkFormatProperties* formatProperties)
+        {
+            GetInstanceApi(physicalDevice)
+                .vkGetPhysicalDeviceFormatProperties(
+                    physicalDevice,
+                    format,
+                    formatProperties);
+        }
+
         public static void vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* memoryProperties)
         {
             GetInstanceApi(physicalDevice).vkGetPhysicalDeviceMemoryProperties(physicalDevice, memoryProperties);
+        }
+
+        public static void vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2* memoryProperties)
+        {
+            GetInstanceApi(physicalDevice).vkGetPhysicalDeviceMemoryProperties2(physicalDevice, memoryProperties);
+        }
+
+        public static void vkGetPhysicalDeviceMemoryProperties2KHR(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2* memoryProperties)
+        {
+            GetInstanceApi(physicalDevice).vkGetPhysicalDeviceMemoryProperties2KHR(physicalDevice, memoryProperties);
         }
 
         public static void vkGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* properties)
@@ -711,6 +912,18 @@ namespace SharpGPU
         public static VkResult vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint* surfaceFormatCount, VkSurfaceFormatKHR* surfaceFormats)
         {
             VkResult result = GetInstanceApi(physicalDevice).vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, surfaceFormatCount, surfaceFormats);
+            return result;
+        }
+
+        public static VkResult vkGetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint* presentModeCount, VkPresentModeKHR* presentModes)
+        {
+            VkResult result = GetInstanceApi(physicalDevice).vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, presentModeCount, presentModes);
+            return result;
+        }
+
+        public static VkResult vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint queueFamilyIndex, VkSurfaceKHR surface, VkBool32* supported)
+        {
+            VkResult result = GetInstanceApi(physicalDevice).vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFamilyIndex, surface, supported);
             return result;
         }
 

@@ -1,24 +1,25 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8600, CS8602, CS8604, CS8618, CA1416
+#pragma warning disable CA1416
     internal unsafe class Dx12CommandBuffer : RHICommandBuffer
     {
         public Vortice.Direct3D12.ID3D12CommandAllocator NativeCommandAllocator
         {
             get
             {
-                return m_NativeCommandAllocator;
+                return m_NativeCommandAllocator ?? throw new ObjectDisposedException(GetType().FullName);
             }
         }
         public Vortice.Direct3D12.ID3D12GraphicsCommandList7 NativeCommandList
         {
             get
             {
-                return m_NativeCommandList;
+                return m_NativeCommandList ?? throw new ObjectDisposedException(GetType().FullName);
             }
         }
 
@@ -28,9 +29,11 @@ namespace SharpGPU
         private Dx12RaytracingEncoder m_RaytracingEncoder;
         private Dx12MLEncoder m_MLEncoder;
         private Dx12WorkGraphEncoder m_WorkGraphEncoder;
-        private Vortice.Direct3D12.ID3D12CommandAllocator m_NativeCommandAllocator;
-        private Vortice.Direct3D12.ID3D12GraphicsCommandList7 m_NativeCommandList;
+        private Vortice.Direct3D12.ID3D12CommandAllocator? m_NativeCommandAllocator;
+        private Vortice.Direct3D12.ID3D12GraphicsCommandList7? m_NativeCommandList;
         private Vortice.Direct3D12.ID3D12DescriptorHeap[] m_DescriptorHeaps;
+        private readonly List<(Dx12DescriptorInfo Descriptor, int Count)>
+            m_TransientCbvSrvUavDescriptors = new();
 
         public Dx12CommandBuffer(Dx12CommandQueue commandQueue)
         {
@@ -53,47 +56,42 @@ namespace SharpGPU
 
         private void InitializeNativeObjects()
         {
-            Debug.Assert(m_CommandQueue != null, "CommandQueue is null.");
-            Dx12CommandQueue commandQueue = m_CommandQueue as Dx12CommandQueue;
-            Vortice.Direct3D12.ID3D12CommandAllocator commandAllocator;
+            if (m_CommandQueue is not Dx12CommandQueue commandQueue)
+            {
+                throw new InvalidOperationException("Dx12CommandBuffer requires a Dx12CommandQueue.");
+            }
+
+            Vortice.Direct3D12.ID3D12CommandAllocator? commandAllocator;
             SharpGen.Runtime.Result hResult = commandQueue.Dx12Device.NativeDevice.CreateCommandAllocator(
                 Dx12Utility.ConvertToDx12QueueType(commandQueue.PipelineType),
                 out commandAllocator);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            if (commandAllocator == null)
-            {
-                throw new InvalidOperationException("Failed to create ID3D12CommandAllocator.");
-            }
-            m_NativeCommandAllocator = commandAllocator;
+            m_NativeCommandAllocator = Dx12Utility.RequireCreatedObject(
+                commandAllocator,
+                hResult,
+                "ID3D12Device.CreateCommandAllocator");
 
-            Vortice.Direct3D12.ID3D12GraphicsCommandList7 commandList;
-            hResult = commandQueue.Dx12Device.NativeDevice.CreateCommandList(
+            Vortice.Direct3D12.ID3D12GraphicsCommandList7? commandList;
+            hResult = Dx12Utility.CreateCommandListWithoutInitialPipelineState(
+                commandQueue.Dx12Device.NativeDevice,
                 0,
                 Dx12Utility.ConvertToDx12QueueType(commandQueue.PipelineType),
-                m_NativeCommandAllocator,
-                null!,
                 out commandList);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            if (commandList == null)
-            {
-                throw new InvalidOperationException("Failed to create ID3D12GraphicsCommandList7.");
-            }
-            m_NativeCommandList = commandList;
-            // D3D12 command lists are created in the recording state; close once so the first Begin() can Reset safely.
-            m_NativeCommandList.Close();
+            m_NativeCommandList = Dx12Utility.RequireCreatedObject(
+                commandList,
+                hResult,
+                "ID3D12Device4.CreateCommandList1");
+            // CreateCommandList1 returns a closed list; the first Begin() Reset()s it.
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void Begin(string name)
         {
+            ValidateCanBegin();
             try
             {
-                m_NativeCommandAllocator.Reset();
-                m_NativeCommandList.Reset(m_NativeCommandAllocator, null);
+                ReleaseTransientCbvSrvUavDescriptors();
+                NativeCommandAllocator.Reset();
+                NativeCommandList.Reset(NativeCommandAllocator);
             }
             catch (Exception ex)
             {
@@ -104,16 +102,19 @@ namespace SharpGPU
             }
 
 #if DEBUG
-            Dx12PixEventMarker.BeginEvent((nint)m_NativeCommandList, name);
+            Dx12PixEventMarker.BeginEvent((nint)NativeCommandList, name);
 #endif
 
-            m_NativeCommandList.SetDescriptorHeaps(m_DescriptorHeaps);
+            NativeCommandList.SetDescriptorHeaps(m_DescriptorHeaps);
+            MarkBeginSucceeded();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHITransferEncoder BeginTransferPass(in RHITransferPassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.Transfer);
             m_TransferEncoder.BeginPass(descriptor);
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.Transfer);
             return m_TransferEncoder;
         }
 
@@ -126,7 +127,9 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIComputeEncoder BeginComputePass(in RHIComputePassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.Compute);
             m_ComputeEncoder.BeginPass(descriptor);
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.Compute);
             return m_ComputeEncoder;
         }
 
@@ -139,7 +142,9 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIRaytracingEncoder BeginRaytracingPass(in RHIRayTracingPassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.RayTracing);
             m_RaytracingEncoder.BeginPass(descriptor);
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.RayTracing);
             return m_RaytracingEncoder;
         }
 
@@ -152,7 +157,9 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIRasterEncoder BeginRasterPass(in RHIRasterPassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.Raster);
             m_RasterEncoder.BeginPass(descriptor);
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.Raster);
             return m_RasterEncoder;
         }
 
@@ -165,7 +172,9 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIMLEncoder BeginMLPass(in RHIMLPassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.MachineLearning);
             m_MLEncoder.BeginPass(descriptor);
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.MachineLearning);
             return m_MLEncoder;
         }
 
@@ -178,12 +187,13 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void End()
         {
+            ValidateCanEnd();
 #if DEBUG
-            Dx12PixEventMarker.EndEvent((nint)m_NativeCommandList);
+            Dx12PixEventMarker.EndEvent((nint)NativeCommandList);
 #endif
             try
             {
-                m_NativeCommandList.Close();
+                NativeCommandList.Close();
             }
             catch (SharpGen.Runtime.SharpGenException)
             {
@@ -194,6 +204,8 @@ namespace SharpGPU
 
                 throw;
             }
+
+            MarkEndSucceeded();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -228,7 +240,9 @@ namespace SharpGPU
 
         public override RHIWorkGraphEncoder BeginWorkGraphPass(in RHIWorkGraphPassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.WorkGraph);
             m_WorkGraphEncoder.BeginPass(descriptor);
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.WorkGraph);
             return m_WorkGraphEncoder;
         }
 
@@ -244,27 +258,34 @@ namespace SharpGPU
             return m_WorkGraphEncoder;
         }
 
-        /*public override void Commit(RHIFence? fence)
+        internal void RegisterTransientCbvSrvUavDescriptor(
+            in Dx12DescriptorInfo descriptor,
+            int count)
         {
-            Dx12CommandAllocator dx12CommandPool = m_CommandPool as Dx12CommandAllocator;
-            Dx12CommandQueue commandQueue = m_CommandPool.CommandQueue as Dx12CommandQueue;
-
-            Vortice.Direct3D12.ID3D12CommandList* ppCommandLists = stackalloc Vortice.Direct3D12.ID3D12CommandList[1] { (Vortice.Direct3D12.ID3D12CommandList)m_NativeCommandList };
-            commandQueue.NativeCommandQueue.ExecuteCommandLists(1, ppCommandLists);
-
-            if (fence != null)
+            if (count <= 0)
             {
-                Dx12Fence dx12Fence = fence as Dx12Fence;
-                dx12Fence.Reset();
-                commandQueue.NativeCommandQueue.Signal(dx12Fence.NativeFence, 1);
+                throw new ArgumentOutOfRangeException(nameof(count));
             }
-        }*/
+            m_TransientCbvSrvUavDescriptors.Add((descriptor, count));
+        }
+
+        private void ReleaseTransientCbvSrvUavDescriptors()
+        {
+            Dx12Device device = Dx12EncoderGuards.RequireDevice(this);
+            foreach ((Dx12DescriptorInfo descriptor, int count) in
+                     m_TransientCbvSrvUavDescriptors)
+            {
+                device.FreeCbvSrvUavDescriptor(descriptor.Index, count);
+            }
+            m_TransientCbvSrvUavDescriptors.Clear();
+        }
 
         protected override void Release()
         {
+            ReleaseTransientCbvSrvUavDescriptors();
             m_WorkGraphEncoder?.ReleaseCommandListInterface();
-            m_NativeCommandList.Release();
-            m_NativeCommandAllocator.Release();
+            m_NativeCommandList?.Release(); m_NativeCommandList = null;
+            m_NativeCommandAllocator?.Release(); m_NativeCommandAllocator = null;
             m_WorkGraphEncoder?.Dispose();
             m_MLEncoder?.Dispose();
             m_RaytracingEncoder?.Dispose();
@@ -312,7 +333,7 @@ namespace SharpGPU
             Vortice.Direct3D12.ResourceDescription bufferDesc = Vortice.Direct3D12.ResourceDescription.Buffer(m_MaxCommandCount * (uint)sizeof(Vortice.Direct3D12.DispatchArguments));
             Vortice.Direct3D12.HeapProperties heapProps = new Vortice.Direct3D12.HeapProperties(Vortice.Direct3D12.HeapType.Default);
 
-            Vortice.Direct3D12.ID3D12Resource resource;
+            Vortice.Direct3D12.ID3D12Resource? resource;
             SharpGen.Runtime.Result hResult = device.NativeDevice.CreateCommittedResource(
                 heapProps,
                 Vortice.Direct3D12.HeapFlags.None,
@@ -320,14 +341,10 @@ namespace SharpGPU
                 Vortice.Direct3D12.ResourceStates.Common,
                 null,
                 out resource);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            if (resource == null)
-            {
-                throw new InvalidOperationException("Failed to create compute indirect argument buffer resource.");
-            }
-            m_NativeArgumentBuffer = resource;
+            m_NativeArgumentBuffer = Dx12Utility.RequireCreatedObject(
+                resource,
+                hResult,
+                "ID3D12Device.CreateCommittedResource(compute-indirect-args)");
         }
 
         protected override void Release()
@@ -374,7 +391,7 @@ namespace SharpGPU
             Vortice.Direct3D12.ResourceDescription bufferDesc = Vortice.Direct3D12.ResourceDescription.Buffer(m_MaxCommandCount * (uint)sizeof(Vortice.Direct3D12.DispatchRaysDescription));
             Vortice.Direct3D12.HeapProperties heapProps = new Vortice.Direct3D12.HeapProperties(Vortice.Direct3D12.HeapType.Default);
 
-            Vortice.Direct3D12.ID3D12Resource resource;
+            Vortice.Direct3D12.ID3D12Resource? resource;
             SharpGen.Runtime.Result hResult = device.NativeDevice.CreateCommittedResource(
                 heapProps,
                 Vortice.Direct3D12.HeapFlags.None,
@@ -382,14 +399,10 @@ namespace SharpGPU
                 Vortice.Direct3D12.ResourceStates.Common,
                 null,
                 out resource);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            if (resource == null)
-            {
-                throw new InvalidOperationException("Failed to create ray tracing indirect argument buffer resource.");
-            }
-            m_NativeArgumentBuffer = resource;
+            m_NativeArgumentBuffer = Dx12Utility.RequireCreatedObject(
+                resource,
+                hResult,
+                "ID3D12Device.CreateCommittedResource(raytracing-indirect-args)");
         }
 
         protected override void Release()
@@ -436,7 +449,7 @@ namespace SharpGPU
             Vortice.Direct3D12.ResourceDescription bufferDesc = Vortice.Direct3D12.ResourceDescription.Buffer(m_MaxCommandCount * (uint)sizeof(Vortice.Direct3D12.DrawIndexedArguments));
             Vortice.Direct3D12.HeapProperties heapProps = new Vortice.Direct3D12.HeapProperties(Vortice.Direct3D12.HeapType.Default);
 
-            Vortice.Direct3D12.ID3D12Resource resource;
+            Vortice.Direct3D12.ID3D12Resource? resource;
             SharpGen.Runtime.Result hResult = device.NativeDevice.CreateCommittedResource(
                 heapProps,
                 Vortice.Direct3D12.HeapFlags.None,
@@ -444,14 +457,10 @@ namespace SharpGPU
                 Vortice.Direct3D12.ResourceStates.Common,
                 null,
                 out resource);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            if (resource == null)
-            {
-                throw new InvalidOperationException("Failed to create raster indirect argument buffer resource.");
-            }
-            m_NativeArgumentBuffer = resource;
+            m_NativeArgumentBuffer = Dx12Utility.RequireCreatedObject(
+                resource,
+                hResult,
+                "ID3D12Device.CreateCommittedResource(raster-indirect-args)");
         }
 
         protected override void Release()
@@ -459,5 +468,5 @@ namespace SharpGPU
             m_NativeArgumentBuffer.Release();
         }
     }
-#pragma warning restore CS8600, CS8602, CS8604, CS8618, CA1416
+#pragma warning restore CA1416
 }

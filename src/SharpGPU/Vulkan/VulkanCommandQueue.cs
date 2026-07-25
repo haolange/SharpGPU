@@ -3,7 +3,6 @@ using Vortice.Vulkan;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8600, CS8602, CS8618
     internal unsafe class VulkanCommandQueue : RHICommandQueue
     {
         public VulkanDevice VulkanDevice
@@ -38,6 +37,8 @@ namespace SharpGPU
             }
         }
 
+        protected override object DeviceIdentity => m_VulkanDevice;
+
         private VulkanDevice m_VulkanDevice;
         private VkQueue m_NativeQueue;
         private uint m_QueueFamilyIndex;
@@ -59,275 +60,458 @@ namespace SharpGPU
             return new VulkanCommandBuffer(this);
         }
 
-        public override void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore)
+        public override void Submit(in RHIQueueSubmitDescriptor descriptor)
         {
-            VkSubmitInfo submitInfo = new VkSubmitInfo()
-            {
-                sType = VkStructureType.SubmitInfo,
-            };
+            ValidateSubmit(in descriptor);
+            ReadOnlySpan<RHIQueueSemaphoreWait> waitSemaphores = descriptor.WaitSemaphores.Span;
+            ReadOnlySpan<RHICommandBuffer> commandBuffers = descriptor.CommandBuffers.Span;
+            ReadOnlySpan<RHISemaphore> signalSemaphores = descriptor.SignalSemaphores.Span;
+            int waitCount = waitSemaphores.Length;
+            int commandBufferCount = commandBuffers.Length;
+            int signalCount = signalSemaphores.Length;
 
-            VkSemaphore waitSem = default;
-            VkPipelineStageFlags waitStage = VkPipelineStageFlags.AllCommands;
-            if (waitSemaphore != null)
+            for (int i = 0; i < waitCount; ++i)
             {
-                VulkanSemaphore vkWaitSem = waitSemaphore as VulkanSemaphore;
-                waitSem = vkWaitSem.NativeSemaphore;
-                submitInfo.waitSemaphoreCount = 1;
-                submitInfo.pWaitSemaphores = &waitSem;
-                submitInfo.pWaitDstStageMask = &waitStage;
+                if (waitSemaphores[i].Semaphore is not VulkanSemaphore)
+                {
+                    throw new ArgumentException($"Wait semaphore at index {i} is not a Vulkan semaphore.", nameof(descriptor));
+                }
             }
 
-            VkCommandBuffer nativeCmdBuffer = default;
-            if (cmdBuffer != null)
+            for (int i = 0; i < commandBufferCount; ++i)
             {
-                VulkanCommandBuffer vkCmdBuffer = cmdBuffer as VulkanCommandBuffer;
-                nativeCmdBuffer = vkCmdBuffer.NativeCommandBuffer;
-                submitInfo.commandBufferCount = 1;
-                submitInfo.pCommandBuffers = &nativeCmdBuffer;
+                if (commandBuffers[i] is not VulkanCommandBuffer)
+                {
+                    throw new ArgumentException($"Command buffer at index {i} is not a Vulkan command buffer.", nameof(descriptor));
+                }
             }
 
-            VkSemaphore signalSem = default;
-            if (signalSemaphore != null)
+            for (int i = 0; i < signalCount; ++i)
             {
-                VulkanSemaphore vkSignalSem = signalSemaphore as VulkanSemaphore;
-                signalSem = vkSignalSem.NativeSemaphore;
-                submitInfo.signalSemaphoreCount = 1;
-                submitInfo.pSignalSemaphores = &signalSem;
+                if (signalSemaphores[i] is not VulkanSemaphore)
+                {
+                    throw new ArgumentException($"Signal semaphore at index {i} is not a Vulkan semaphore.", nameof(descriptor));
+                }
             }
 
-            VkFence fence = default;
-            if (signalFence != null)
+            if (descriptor.CompletionFence != null && descriptor.CompletionFence is not VulkanFence)
             {
-                VulkanFence vkFence = signalFence as VulkanFence;
-                fence = vkFence.NativeFence;
+                throw new ArgumentException("The completion fence is not a Vulkan fence.", nameof(descriptor));
             }
 
-            VulkanUtility.CheckErrors(VulkanNative.vkQueueSubmit(m_NativeQueue, 1, &submitInfo, fence));
-        }
-
-        public override void Submits(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores)
-        {
-            VkSubmitInfo submitInfo = new VkSubmitInfo()
-            {
-                sType = VkStructureType.SubmitInfo,
-            };
-
-            int waitCount = waitSemaphores != null ? waitSemaphores.Length : 0;
             VkSemaphore* waitSems = stackalloc VkSemaphore[Math.Max(waitCount, 1)];
             VkPipelineStageFlags* waitStages = stackalloc VkPipelineStageFlags[Math.Max(waitCount, 1)];
-            if (waitCount > 0)
-            {
-                for (int i = 0; i < waitCount; ++i)
-                {
-                    VulkanSemaphore vkSem = waitSemaphores[i] as VulkanSemaphore;
-                    waitSems[i] = vkSem.NativeSemaphore;
-                    waitStages[i] = VkPipelineStageFlags.AllCommands;
-                }
-                submitInfo.waitSemaphoreCount = (uint)waitCount;
-                submitInfo.pWaitSemaphores = waitSems;
-                submitInfo.pWaitDstStageMask = waitStages;
-            }
-
-            VkCommandBuffer nativeCmdBuffer = default;
-            if (cmdBuffer != null)
-            {
-                VulkanCommandBuffer vkCmdBuffer = cmdBuffer as VulkanCommandBuffer;
-                nativeCmdBuffer = vkCmdBuffer.NativeCommandBuffer;
-                submitInfo.commandBufferCount = 1;
-                submitInfo.pCommandBuffers = &nativeCmdBuffer;
-            }
-
-            int signalCount = signalSemaphores != null ? signalSemaphores.Length : 0;
+            VkCommandBuffer* nativeCommandBuffers = stackalloc VkCommandBuffer[Math.Max(commandBufferCount, 1)];
             VkSemaphore* signalSems = stackalloc VkSemaphore[Math.Max(signalCount, 1)];
-            if (signalCount > 0)
+            for (int i = 0; i < waitCount; ++i)
             {
-                for (int i = 0; i < signalCount; ++i)
-                {
-                    VulkanSemaphore vkSem = signalSemaphores[i] as VulkanSemaphore;
-                    signalSems[i] = vkSem.NativeSemaphore;
-                }
-                submitInfo.signalSemaphoreCount = (uint)signalCount;
-                submitInfo.pSignalSemaphores = signalSems;
+                waitSems[i] = ((VulkanSemaphore)waitSemaphores[i].Semaphore).NativeSemaphore;
+                waitStages[i] = VulkanUtility.ConvertToVkPipelineStage(waitSemaphores[i].StageMask, m_PipelineType);
+            }
+
+            for (int i = 0; i < commandBufferCount; ++i)
+            {
+                nativeCommandBuffers[i] = ((VulkanCommandBuffer)commandBuffers[i]).NativeCommandBuffer;
+            }
+
+            for (int i = 0; i < signalCount; ++i)
+            {
+                signalSems[i] = ((VulkanSemaphore)signalSemaphores[i]).NativeSemaphore;
             }
 
             VkFence fence = default;
-            if (signalFence != null)
+            if (descriptor.CompletionFence is VulkanFence vkFence)
             {
-                VulkanFence vkFence = signalFence as VulkanFence;
                 fence = vkFence.NativeFence;
             }
 
-            VulkanUtility.CheckErrors(VulkanNative.vkQueueSubmit(m_NativeQueue, 1, &submitInfo, fence));
-        }
-
-        public override void Submits(RHICommandBuffer[] cmdBuffers, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores)
-        {
             VkSubmitInfo submitInfo = new VkSubmitInfo()
             {
                 sType = VkStructureType.SubmitInfo,
+                waitSemaphoreCount = (uint)waitCount,
+                pWaitSemaphores = waitCount > 0 ? waitSems : null,
+                pWaitDstStageMask = waitCount > 0 ? waitStages : null,
+                commandBufferCount = (uint)commandBufferCount,
+                pCommandBuffers = commandBufferCount > 0 ? nativeCommandBuffers : null,
+                signalSemaphoreCount = (uint)signalCount,
+                pSignalSemaphores = signalCount > 0 ? signalSems : null
             };
 
-            int waitCount = waitSemaphores != null ? waitSemaphores.Length : 0;
-            VkSemaphore* waitSems = stackalloc VkSemaphore[Math.Max(waitCount, 1)];
-            VkPipelineStageFlags* waitStages = stackalloc VkPipelineStageFlags[Math.Max(waitCount, 1)];
-            if (waitCount > 0)
+            ReserveSubmit(in descriptor);
+            try
             {
-                for (int i = 0; i < waitCount; ++i)
-                {
-                    VulkanSemaphore vkSem = waitSemaphores[i] as VulkanSemaphore;
-                    waitSems[i] = vkSem.NativeSemaphore;
-                    waitStages[i] = VkPipelineStageFlags.AllCommands;
-                }
-                submitInfo.waitSemaphoreCount = (uint)waitCount;
-                submitInfo.pWaitSemaphores = waitSems;
-                submitInfo.pWaitDstStageMask = waitStages;
+                VulkanUtility.CheckErrors(VulkanNative.vkQueueSubmit(m_NativeQueue, 1, &submitInfo, fence));
+                CommitSubmit(in descriptor);
             }
-
-            int cmdCount = cmdBuffers != null ? cmdBuffers.Length : 0;
-            VkCommandBuffer* nativeCmdBuffers = stackalloc VkCommandBuffer[Math.Max(cmdCount, 1)];
-            if (cmdCount > 0)
+            catch (Exception exception)
             {
-                for (int i = 0; i < cmdCount; ++i)
-                {
-                    VulkanCommandBuffer vkCmdBuf = cmdBuffers[i] as VulkanCommandBuffer;
-                    nativeCmdBuffers[i] = vkCmdBuf.NativeCommandBuffer;
-                }
-                submitInfo.commandBufferCount = (uint)cmdCount;
-                submitInfo.pCommandBuffers = nativeCmdBuffers;
-            }
-
-            int signalCount = signalSemaphores != null ? signalSemaphores.Length : 0;
-            VkSemaphore* signalSems = stackalloc VkSemaphore[Math.Max(signalCount, 1)];
-            if (signalCount > 0)
-            {
-                for (int i = 0; i < signalCount; ++i)
-                {
-                    VulkanSemaphore vkSem = signalSemaphores[i] as VulkanSemaphore;
-                    signalSems[i] = vkSem.NativeSemaphore;
-                }
-                submitInfo.signalSemaphoreCount = (uint)signalCount;
-                submitInfo.pSignalSemaphores = signalSems;
-            }
-
-            VkFence fence = default;
-            if (signalFence != null)
-            {
-                VulkanFence vkFence = signalFence as VulkanFence;
-                fence = vkFence.NativeFence;
-            }
-
-            VulkanUtility.CheckErrors(VulkanNative.vkQueueSubmit(m_NativeQueue, 1, &submitInfo, fence));
-        }
-
-        public override void MapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
-        {
-            BindSparseTextureRegions(tiledTextureRegions, bind: true);
-        }
-
-        public override void UnMapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
-        {
-            BindSparseTextureRegions(tiledTextureRegions, bind: false);
-        }
-
-        public override void MapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
-        {
-            BindSparsePackedMips(tiledTexturePackedMips, bind: true);
-        }
-
-        public override void UnMapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
-        {
-            BindSparsePackedMips(tiledTexturePackedMips, bind: false);
-        }
-
-        private void BindSparseTextureRegions(in RHITiledTextureRegions tiledTextureRegions, bool bind)
-        {
-            VulkanTexture vkTexture = tiledTextureRegions.Texture as VulkanTexture;
-            int regionCount = tiledTextureRegions.Regions.Length;
-            if (regionCount == 0) return;
-
-            VkSparseImageMemoryBind* imageBinds = stackalloc VkSparseImageMemoryBind[regionCount];
-
-            for (int i = 0; i < regionCount; ++i)
-            {
-                ref RHITextureCoordinateRegion region = ref tiledTextureRegions.Regions.Span[i];
-
-                imageBinds[i] = new VkSparseImageMemoryBind()
-                {
-                    subresource = new VkImageSubresource()
+                RollbackSubmit(in descriptor);
+                if (exception is RHIException
                     {
-                        aspectMask = VkImageAspectFlags.Color,
-                        mipLevel = (uint)region.MipLevel,
-                        arrayLayer = (uint)region.Layer,
-                    },
-                    offset = new VkOffset3D() { x = region.Start.X, y = region.Start.Y, z = region.Start.Z },
-                    extent = new VkExtent3D()
+                        ErrorCode: ERHIErrorCode.DeviceLost
+                    } deviceLoss)
+                {
+                    m_VulkanDevice.MarkDeviceLost(deviceLoss);
+                }
+                throw;
+            }
+        }
+
+        protected override void WaitIdleCore()
+        {
+            VkResult result =
+                VulkanNative.vkQueueWaitIdle(m_NativeQueue);
+            if (result == VkResult.Success)
+            {
+                return;
+            }
+
+            ERHIDeviceState state =
+                result == VkResult.ErrorDeviceLost
+                    ? ERHIDeviceState.Lost
+                    : ERHIDeviceState.Operational;
+            throw new RHIException(
+                result == VkResult.ErrorDeviceLost
+                    ? ERHIErrorCode.DeviceLost
+                    : ERHIErrorCode.NativeFailure,
+                ERHIBackend.Vulkan,
+                (int)result,
+                $"vkQueueWaitIdle returned {result}.",
+                state);
+        }
+
+        public override void BindSparse(in RHISparseBindDescriptor descriptor)
+        {
+            m_VulkanDevice.Capabilities.Memory.SparseBinding.Require(
+                "Vulkan queue-ordered sparse texture binding");
+            if (!m_VulkanDevice.SupportsSparseQueueFamily(m_QueueFamilyIndex))
+            {
+                throw new NotSupportedException(
+                    "This Vulkan queue family does not support sparse binding.");
+            }
+
+            ValidateSparseBind(in descriptor);
+            ValidateVulkanSparseBindings(in descriptor);
+
+            ReadOnlySpan<RHISemaphore> waits = descriptor.WaitSemaphores.Span;
+            ReadOnlySpan<RHISemaphore> signals = descriptor.SignalSemaphores.Span;
+            for (int i = 0; i < waits.Length; ++i)
+            {
+                if (waits[i] is not VulkanSemaphore)
+                {
+                    throw new ArgumentException(
+                        $"Wait semaphore at index {i} is not a Vulkan semaphore.",
+                        nameof(descriptor));
+                }
+            }
+            for (int i = 0; i < signals.Length; ++i)
+            {
+                if (signals[i] is not VulkanSemaphore)
+                {
+                    throw new ArgumentException(
+                        $"Signal semaphore at index {i} is not a Vulkan semaphore.",
+                        nameof(descriptor));
+                }
+            }
+            if (descriptor.CompletionFence != null &&
+                descriptor.CompletionFence is not VulkanFence)
+            {
+                throw new ArgumentException(
+                    "The sparse completion fence is not a Vulkan fence.",
+                    nameof(descriptor));
+            }
+
+            ReadOnlySpan<RHISparseTextureTileBinding> tileBindings =
+                descriptor.TileBindings.Span;
+            ReadOnlySpan<RHISparseTextureMipTailBinding> tailBindings =
+                descriptor.MipTailBindings.Span;
+            VkSemaphore* nativeWaits =
+                stackalloc VkSemaphore[Math.Max(waits.Length, 1)];
+            VkSemaphore* nativeSignals =
+                stackalloc VkSemaphore[Math.Max(signals.Length, 1)];
+            VkSparseImageMemoryBind* nativeTileBindings =
+                stackalloc VkSparseImageMemoryBind[Math.Max(tileBindings.Length, 1)];
+            VkSparseImageMemoryBindInfo* nativeImageBindings =
+                stackalloc VkSparseImageMemoryBindInfo[Math.Max(tileBindings.Length, 1)];
+            VkSparseMemoryBind* nativeTailBindings =
+                stackalloc VkSparseMemoryBind[Math.Max(tailBindings.Length, 1)];
+            VkSparseImageOpaqueMemoryBindInfo* nativeOpaqueBindings =
+                stackalloc VkSparseImageOpaqueMemoryBindInfo[Math.Max(tailBindings.Length, 1)];
+
+            for (int i = 0; i < waits.Length; ++i)
+            {
+                nativeWaits[i] = ((VulkanSemaphore)waits[i]).NativeSemaphore;
+            }
+            for (int i = 0; i < signals.Length; ++i)
+            {
+                nativeSignals[i] = ((VulkanSemaphore)signals[i]).NativeSemaphore;
+            }
+            for (int i = 0; i < tileBindings.Length; ++i)
+            {
+                ref readonly RHISparseTextureTileBinding binding =
+                    ref tileBindings[i];
+                VulkanTexture texture = (VulkanTexture)binding.Texture;
+                RHISparseTextureMemoryRequirements requirements =
+                    texture.SparseRequirements!;
+                RHITextureDescriptor textureDescriptor = texture.Descriptor;
+                uint mipWidth = MipExtent(
+                    textureDescriptor.Extent.x,
+                    binding.MipLevel);
+                uint mipHeight = MipExtent(
+                    textureDescriptor.Extent.y,
+                    binding.MipLevel);
+                uint mipDepth = textureDescriptor.Dimension ==
+                    ERHITextureDimension.Texture3D
+                        ? MipExtent(
+                            textureDescriptor.Extent.z,
+                            binding.MipLevel)
+                        : 1;
+                uint texelOffsetX = checked(
+                    binding.TileOffset.x * requirements.TileExtent.x);
+                uint texelOffsetY = checked(
+                    binding.TileOffset.y * requirements.TileExtent.y);
+                uint texelOffsetZ = checked(
+                    binding.TileOffset.z * requirements.TileExtent.z);
+                uint texelExtentX = Math.Min(
+                    checked(binding.TileExtent.x * requirements.TileExtent.x),
+                    checked(mipWidth - texelOffsetX));
+                uint texelExtentY = Math.Min(
+                    checked(binding.TileExtent.y * requirements.TileExtent.y),
+                    checked(mipHeight - texelOffsetY));
+                uint texelExtentZ = Math.Min(
+                    checked(binding.TileExtent.z * requirements.TileExtent.z),
+                    checked(mipDepth - texelOffsetZ));
+                nativeTileBindings[i] = new VkSparseImageMemoryBind
+                {
+                    subresource = new VkImageSubresource
                     {
-                        width = (uint)(region.End.X - region.Start.X),
-                        height = (uint)(region.End.Y - region.Start.Y),
-                        depth = (uint)Math.Max(region.End.Z - region.Start.Z, 1),
+                        aspectMask = VulkanUtility.ConvertToVkImageAspect(
+                            binding.Aspect,
+                            textureDescriptor.Format),
+                        mipLevel = binding.MipLevel,
+                        arrayLayer = binding.ArrayLayer,
                     },
-                    memory = bind ? vkTexture.NativeMemory : default,
-                    memoryOffset = 0,
-                    flags = 0,
+                    offset = new VkOffset3D(
+                        checked((int)texelOffsetX),
+                        checked((int)texelOffsetY),
+                        checked((int)texelOffsetZ)),
+                    extent = new VkExtent3D(
+                        texelExtentX,
+                        texelExtentY,
+                        texelExtentZ),
+                    memory = binding.Operation == ERHISparseBindingOperation.Bind
+                        ? ((VulkanHeap)binding.Heap!).NativeMemory
+                        : default,
+                    memoryOffset = binding.Operation == ERHISparseBindingOperation.Bind
+                        ? binding.HeapOffset
+                        : 0,
+                    flags = VkSparseMemoryBindFlags.None,
+                };
+                nativeImageBindings[i] = new VkSparseImageMemoryBindInfo
+                {
+                    image = texture.NativeImage,
+                    bindCount = 1,
+                    pBinds = &nativeTileBindings[i],
                 };
             }
-
-            VkSparseImageMemoryBindInfo imageMemoryBindInfo = new VkSparseImageMemoryBindInfo()
+            for (int i = 0; i < tailBindings.Length; ++i)
             {
-                image = vkTexture.NativeImage,
-                bindCount = (uint)regionCount,
-                pBinds = imageBinds,
-            };
-
-            VkBindSparseInfo bindInfo = new VkBindSparseInfo()
-            {
-                sType = VkStructureType.BindSparseInfo,
-                imageBindCount = 1,
-                pImageBinds = &imageMemoryBindInfo,
-            };
-
-            VulkanUtility.CheckErrors(VulkanNative.vkQueueBindSparse(m_NativeQueue, 1, &bindInfo, default));
-        }
-
-        private void BindSparsePackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips, bool bind)
-        {
-            int packedMipCount = tiledTexturePackedMips.PackedMips.Length;
-            if (packedMipCount == 0) return;
-
-            // For packed mips, use opaque sparse binds (VkSparseImageOpaqueMemoryBindInfo)
-            // since packed mip tails use opaque bindings rather than per-subresource bindings
-            VkSparseMemoryBind* opaqueBinds = stackalloc VkSparseMemoryBind[packedMipCount];
-
-            for (int i = 0; i < packedMipCount; ++i)
-            {
-                opaqueBinds[i] = new VkSparseMemoryBind()
+                ref readonly RHISparseTextureMipTailBinding binding =
+                    ref tailBindings[i];
+                VulkanTexture texture = (VulkanTexture)binding.Texture;
+                RHISparseTextureMipTail tail =
+                    texture.SparseRequirements!.GetMipTail(
+                        binding.MipTailIndex);
+                nativeTailBindings[i] = new VkSparseMemoryBind
                 {
-                    resourceOffset = 0,
-                    size = 0,
-                    memory = bind ? default : default,
-                    memoryOffset = 0,
-                    flags = VkSparseMemoryBindFlags.Metadata,
+                    resourceOffset = tail.VirtualOffsetBytes,
+                    size = tail.SizeBytes,
+                    memory = binding.Operation == ERHISparseBindingOperation.Bind
+                        ? ((VulkanHeap)binding.Heap!).NativeMemory
+                        : default,
+                    memoryOffset = binding.Operation == ERHISparseBindingOperation.Bind
+                        ? binding.HeapOffset
+                        : 0,
+                    flags = VkSparseMemoryBindFlags.None,
                 };
+                nativeOpaqueBindings[i] =
+                    new VkSparseImageOpaqueMemoryBindInfo
+                    {
+                        image = texture.NativeImage,
+                        bindCount = 1,
+                        pBinds = &nativeTailBindings[i],
+                    };
             }
 
-            // Use the first packed mip's texture for the image
-            VulkanTexture vkTexture = tiledTexturePackedMips.PackedMips.Span[0].Texture as VulkanTexture;
-
-            VkSparseImageOpaqueMemoryBindInfo opaqueBindInfo = new VkSparseImageOpaqueMemoryBindInfo()
-            {
-                image = vkTexture.NativeImage,
-                bindCount = (uint)packedMipCount,
-                pBinds = opaqueBinds,
-            };
-
-            VkBindSparseInfo bindInfo = new VkBindSparseInfo()
+            VkFence nativeFence = descriptor.CompletionFence is VulkanFence fence
+                ? fence.NativeFence
+                : default;
+            VkBindSparseInfo bindInfo = new VkBindSparseInfo
             {
                 sType = VkStructureType.BindSparseInfo,
-                imageOpaqueBindCount = 1,
-                pImageOpaqueBinds = &opaqueBindInfo,
+                waitSemaphoreCount = (uint)waits.Length,
+                pWaitSemaphores = waits.Length == 0 ? null : nativeWaits,
+                imageOpaqueBindCount = (uint)tailBindings.Length,
+                pImageOpaqueBinds = tailBindings.Length == 0
+                    ? null
+                    : nativeOpaqueBindings,
+                imageBindCount = (uint)tileBindings.Length,
+                pImageBinds = tileBindings.Length == 0
+                    ? null
+                    : nativeImageBindings,
+                signalSemaphoreCount = (uint)signals.Length,
+                pSignalSemaphores = signals.Length == 0
+                    ? null
+                    : nativeSignals,
             };
 
-            VulkanUtility.CheckErrors(VulkanNative.vkQueueBindSparse(m_NativeQueue, 1, &bindInfo, default));
+            ReserveSparseBind(in descriptor);
+            try
+            {
+                VulkanUtility.CheckErrors(
+                    VulkanNative.vkQueueBindSparse(
+                        m_NativeQueue,
+                        1,
+                        &bindInfo,
+                        nativeFence));
+                CommitSparseBind(in descriptor);
+            }
+            catch (Exception exception)
+            {
+                RollbackSparseBind(in descriptor);
+                if (exception is RHIException
+                    {
+                        ErrorCode: ERHIErrorCode.DeviceLost
+                    } deviceLoss)
+                {
+                    m_VulkanDevice.MarkDeviceLost(deviceLoss);
+                }
+                throw;
+            }
+        }
+
+        private void ValidateVulkanSparseBindings(
+            in RHISparseBindDescriptor descriptor)
+        {
+            ReadOnlySpan<RHISparseTextureTileBinding> tileBindings =
+                descriptor.TileBindings.Span;
+            for (int i = 0; i < tileBindings.Length; ++i)
+            {
+                ref readonly RHISparseTextureTileBinding binding =
+                    ref tileBindings[i];
+                VulkanTexture texture = RequireSparseTexture(
+                    binding.Texture,
+                    $"tile binding at index {i}");
+                RHISparseTextureMemoryRequirements requirements =
+                    texture.SparseRequirements!;
+                RHISparseTextureSubresourceTiling subresource =
+                    requirements.GetSubresource(
+                        binding.Aspect,
+                        binding.MipLevel,
+                        binding.ArrayLayer);
+                ValidateTileRange(
+                    binding.TileOffset,
+                    binding.TileExtent,
+                    subresource.TileCount,
+                    $"tile binding at index {i}");
+                ulong tileCount = checked(
+                    (ulong)binding.TileExtent.x *
+                    binding.TileExtent.y *
+                    binding.TileExtent.z);
+                if (binding.Operation == ERHISparseBindingOperation.Bind)
+                {
+                    VulkanHeap heap = RequireSparseHeap(
+                        binding.Heap,
+                        $"tile binding at index {i}");
+                    heap.ValidateSparseSpan(
+                        binding.HeapOffset,
+                        checked(tileCount * requirements.TileSizeBytes),
+                        requirements.HeapCompatibility);
+                }
+            }
+
+            ReadOnlySpan<RHISparseTextureMipTailBinding> tailBindings =
+                descriptor.MipTailBindings.Span;
+            for (int i = 0; i < tailBindings.Length; ++i)
+            {
+                ref readonly RHISparseTextureMipTailBinding binding =
+                    ref tailBindings[i];
+                VulkanTexture texture = RequireSparseTexture(
+                    binding.Texture,
+                    $"mip-tail binding at index {i}");
+                RHISparseTextureMemoryRequirements requirements =
+                    texture.SparseRequirements!;
+                RHISparseTextureMipTail tail =
+                    requirements.GetMipTail(binding.MipTailIndex);
+                if (binding.Operation == ERHISparseBindingOperation.Bind)
+                {
+                    VulkanHeap heap = RequireSparseHeap(
+                        binding.Heap,
+                        $"mip-tail binding at index {i}");
+                    heap.ValidateSparseSpan(
+                        binding.HeapOffset,
+                        tail.SizeBytes,
+                        requirements.HeapCompatibility);
+                }
+            }
+        }
+
+        private VulkanTexture RequireSparseTexture(
+            RHITexture texture,
+            string argumentDescription)
+        {
+            if (texture.IsDisposed)
+            {
+                throw new ObjectDisposedException(texture.GetType().FullName);
+            }
+            if (texture is not VulkanTexture vulkanTexture ||
+                !ReferenceEquals(vulkanTexture.VulkanDevice, m_VulkanDevice))
+            {
+                throw new ArgumentException(
+                    $"The {argumentDescription} texture belongs to a different backend or device.");
+            }
+            if (vulkanTexture.AllocationMode !=
+                    ERHIResourceAllocationMode.Sparse ||
+                vulkanTexture.SparseRequirements == null)
+            {
+                throw new ArgumentException(
+                    $"The {argumentDescription} texture is not a sparse texture.");
+            }
+            return vulkanTexture;
+        }
+
+        private VulkanHeap RequireSparseHeap(
+            RHIHeap? heap,
+            string argumentDescription)
+        {
+            if (heap is not VulkanHeap vulkanHeap ||
+                !ReferenceEquals(heap.OwnerDevice, m_VulkanDevice))
+            {
+                throw new ArgumentException(
+                    $"The {argumentDescription} heap belongs to a different backend or device.");
+            }
+            return vulkanHeap;
+        }
+
+        private static void ValidateTileRange(
+            in SharpGPU.Mathematics.uint3 offset,
+            in SharpGPU.Mathematics.uint3 extent,
+            in SharpGPU.Mathematics.uint3 available,
+            string argumentDescription)
+        {
+            if ((ulong)offset.x + extent.x > available.x ||
+                (ulong)offset.y + extent.y > available.y ||
+                (ulong)offset.z + extent.z > available.z)
+            {
+                throw new ArgumentOutOfRangeException(
+                    argumentDescription,
+                    "Sparse tile binding exceeds the queried subresource tiling.");
+            }
+        }
+
+        private static uint MipExtent(uint value, uint mipLevel)
+        {
+            return Math.Max(1u, value >> checked((int)mipLevel));
         }
 
         protected override void Release()
@@ -335,7 +519,6 @@ namespace SharpGPU
             // VkQueue does not need explicit destruction
         }
     }
-#pragma warning restore CS8600, CS8602, CS8618
 }
 
 

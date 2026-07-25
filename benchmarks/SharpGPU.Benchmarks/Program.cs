@@ -391,7 +391,7 @@ namespace SharpGPU.Benchmarks
                         Slot = 0,
                         Count = 1,
                         Type = ERHIBindType.StorageBuffer,
-                        Stage = ERHIShaderStage.Compute,
+                        Stages = ERHIShaderStageMask.Compute,
                     },
                 },
             });
@@ -442,14 +442,14 @@ namespace SharpGPU.Benchmarks
                         Slot = 0,
                         Count = 1,
                         Type = ERHIBindType.StorageBuffer,
-                        Stage = ERHIShaderStage.Compute,
+                        Stages = ERHIShaderStageMask.Compute,
                     },
                     new RHIArgumentTableLayoutElement
                     {
                         Slot = 0,
                         Count = 1,
                         Type = ERHIBindType.Sampler,
-                        Stage = ERHIShaderStage.Compute,
+                        Stages = ERHIShaderStageMask.Compute,
                     },
                 },
             });
@@ -550,7 +550,7 @@ namespace SharpGPU.Benchmarks
             RHIQuery query = context.Device.CreateQuery(new RHIQueryDescriptor
             {
                 Count = 2,
-                Type = ERHIQueryType.TimestampGenerice,
+                Type = ERHIQueryType.Timestamp,
             });
             RHITransferPassDescriptor descriptor = new() { Name = "bench.timestamp" };
 
@@ -584,7 +584,7 @@ namespace SharpGPU.Benchmarks
                 return PreparedBenchmark.Skipped(skipReason);
             }
 
-            if (context.Device.Feature?.IsWorkgraphSupported != true)
+            if (context.Device.Capabilities.WorkGraph.Execution.Tier == ERHICapabilityTier.Unavailable)
             {
                 string reason = $"DX12 WorkGraph is not supported by adapter '{context.Device.Name}'.";
                 context.Dispose();
@@ -643,7 +643,7 @@ namespace SharpGPU.Benchmarks
                         Slot = 0,
                         Count = BindlessCount,
                         Type = ERHIBindType.StorageBuffer,
-                        Stage = ERHIShaderStage.Compute,
+                        Stages = ERHIShaderStageMask.Compute,
                     },
                 },
             });
@@ -737,7 +737,7 @@ namespace SharpGPU.Benchmarks
                 return PreparedBenchmark.Skipped(skipReason);
             }
 
-            if (context.Device.Feature?.IsWorkgraphSupported != true)
+            if (context.Device.Capabilities.WorkGraph.Execution.Tier == ERHICapabilityTier.Unavailable)
             {
                 string reason = $"DX12 WorkGraph is not supported by adapter '{context.Device.Name}'.";
                 context.Dispose();
@@ -790,6 +790,9 @@ namespace SharpGPU.Benchmarks
             }
 
             RHICommandBuffer commandBuffer = context.CommandQueue.CreateCommandBuffer();
+            RHIQueueSubmitDescriptor submitDescriptor = new RHIQueueSubmitDescriptor(
+                new RHICommandBuffer[] { commandBuffer },
+                completionFence: context.Fence);
             return new PreparedBenchmark
             {
                 AdapterName = context.Device.Name,
@@ -798,7 +801,7 @@ namespace SharpGPU.Benchmarks
                     commandBuffer.Begin("bench.submit");
                     commandBuffer.End();
                     context.Fence.Reset();
-                    context.CommandQueue.Submit(commandBuffer, context.Fence, null!, null!);
+                    context.CommandQueue.Submit(in submitDescriptor);
                     context.Fence.Wait();
                 },
                 Cleanup = () =>
@@ -1249,11 +1252,11 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                     {
                         Backend = ERHIBackend.DirectX12,
                         EnableDebugLayer = false,
-                        EnableValidatior = false,
+                        EnableValidation = false,
                         ComputeQueueRequestCount = 0,
                         TransferQueueRequestCount = 0,
                         GraphicsQueueRequestCount = 1,
-                    }) ?? throw new InvalidOperationException("RHIInstance.Create returned null.");
+                    });
                 }
                 catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or DllNotFoundException)
                 {
@@ -1575,7 +1578,7 @@ void WorkNode(ThreadNodeInputRecord<InputRecord> input)
             public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in SharpGPU.Mathematics.int3 size) => throw new NotSupportedException();
             public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in SharpGPU.Mathematics.int3 size) => throw new NotSupportedException();
             public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in SharpGPU.Mathematics.int3 size) => throw new NotSupportedException();
-            public override void EndPass() { }
+            internal override void EndPassCore() { }
             protected override void Release() => _ = m_CopyBytes;
         }
 

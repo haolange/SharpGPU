@@ -2,18 +2,21 @@ using Vortice.Vulkan;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8618
     internal unsafe class VulkanTextureView : RHITextureView
     {
-        public VulkanTexture VulkanTexture => m_VulkanTexture;
-        public VkImageView NativeImageView => m_NativeImageView;
+        public VulkanTexture VulkanTexture { get { ThrowIfDisposed(); return m_VulkanTexture; } }
+        public VkImageView NativeImageView { get { ThrowIfDisposed(); return m_NativeImageView; } }
+        public RHITextureViewDescriptor Descriptor { get { ThrowIfDisposed(); return m_Descriptor; } }
+        internal VulkanDevice Device { get { ThrowIfDisposed(); return m_VulkanTexture.VulkanDevice; } }
 
         private VulkanTexture m_VulkanTexture;
         private VkImageView m_NativeImageView;
+        private readonly RHITextureViewDescriptor m_Descriptor;
 
         public VulkanTextureView(VulkanTexture texture, in RHITextureViewDescriptor descriptor)
         {
             m_VulkanTexture = texture;
+            m_Descriptor = descriptor;
 
             VkImageAspectFlags aspect = VkImageAspectFlags.Color;
 
@@ -48,6 +51,7 @@ namespace SharpGPU
 
         public VkDescriptorImageInfo GetDescriptorImageInfo(VkImageLayout layout)
         {
+            ThrowIfDisposed();
             return new VkDescriptorImageInfo()
             {
                 imageView = m_NativeImageView,
@@ -60,7 +64,6 @@ namespace SharpGPU
             VulkanNative.vkDestroyImageView(m_VulkanTexture.VulkanDevice.NativeDevice, m_NativeImageView, null);
         }
     }
-#pragma warning restore CS8618
 }
 
 

@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 
 namespace SharpGPU
 {
-#pragma warning disable CS0169, CS0649, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
+#pragma warning disable CS0169, CS0649, CA1416
     internal sealed class Dx12PipelineArgumentTablePlan
     {
         public uint TableIndex { get; }
@@ -26,6 +26,8 @@ namespace SharpGPU
 
     internal sealed class Dx12PipelineLayoutPlan
     {
+        internal const uint AttachmentRegisterSpace = 0xFFFFu;
+
         public Dx12PipelineArgumentTablePlan[] TablePlans { get; }
         public int DescriptorTableParameterCount { get; }
         public int TotalRootParameterCount { get; }
@@ -61,6 +63,12 @@ namespace SharpGPU
                         $"DX12 pipeline layout contains duplicate argument table space/index {layout.Index}.",
                         nameof(descriptor));
                 }
+                if (layout.Index == AttachmentRegisterSpace)
+                {
+                    throw new ArgumentException(
+                        $"DX12 argument-table space {AttachmentRegisterSpace} is reserved for the backend-private raster attachment ABI.",
+                        nameof(descriptor));
+                }
 
                 uint[] rootParameterIndices = new uint[layout.Groups.Length];
                 for (int groupIndex = 0; groupIndex < rootParameterIndices.Length; ++groupIndex)
@@ -78,11 +86,12 @@ namespace SharpGPU
 
             DescriptorTableParameterCount = rootCursor;
             uint pushConstantDwordCount = descriptor.PushConstantSize / 4u;
-            ulong rootDwordCost = (ulong)DescriptorTableParameterCount + pushConstantDwordCount;
+            ulong rootDwordCost =
+                (ulong)rootCursor + pushConstantDwordCount;
             if (rootDwordCost > 64UL)
             {
                 throw new ArgumentException(
-                    $"DX12 root signature costs {rootDwordCost} DWORDs ({DescriptorTableParameterCount} descriptor tables + {pushConstantDwordCount} push-constant DWORDs), exceeding the 64-DWORD limit.",
+                    $"DX12 root signature costs {rootDwordCost} DWORDs ({rootCursor} descriptor tables + {pushConstantDwordCount} push-constant DWORDs), exceeding the 64-DWORD limit.",
                     nameof(descriptor));
             }
 
@@ -231,11 +240,40 @@ namespace SharpGPU
         public uint PushConstantSize => Plan.PushConstantSize;
         public Dx12PipelineLayoutPlan Plan { get; }
         internal Dx12Device Device { get; }
-        public Vortice.Direct3D12.ID3D12RootSignature NativeRootSignature { get; private set; }
+        internal bool IsLocalSignature { get; }
+        internal bool UsesVertexLayout { get; }
+        public Vortice.Direct3D12.ID3D12RootSignature NativeRootSignature =>
+            m_NativeRootSignature ?? throw new ObjectDisposedException(GetType().FullName);
+
+        private Vortice.Direct3D12.ID3D12RootSignature? m_NativeRootSignature;
 
         public Dx12PipelineLayout(Dx12Device device, in RHIPipelineLayoutDescriptor descriptor)
         {
             Device = device;
+            RHIArgumentTableLayout[]? argumentTableLayouts = descriptor.ArgumentTableLayouts;
+            if (argumentTableLayouts != null)
+            {
+                for (int index = 0; index < argumentTableLayouts.Length; ++index)
+                {
+                    Dx12ArgumentTableLayout layout = argumentTableLayouts[index] as Dx12ArgumentTableLayout
+                        ?? throw new ArgumentException(
+                            $"DX12 pipeline argument table {index} must be a {nameof(Dx12ArgumentTableLayout)}.",
+                            nameof(descriptor));
+                    if (layout.IsDisposed)
+                    {
+                        throw new ObjectDisposedException(layout.GetType().FullName);
+                    }
+                    if (!ReferenceEquals(layout.Device, device))
+                    {
+                        throw new ArgumentException(
+                            $"DX12 pipeline argument table {layout.Index} belongs to a different DX12 device.",
+                            nameof(descriptor));
+                    }
+                }
+            }
+            InitializePipelineCacheIdentity(descriptor);
+            IsLocalSignature = descriptor.bLocalSignature;
+            UsesVertexLayout = descriptor.bUseVertexLayout;
             Plan = new Dx12PipelineLayoutPlan(descriptor);
             Vortice.Direct3D12.RootParameter1[] rootParameters = new Vortice.Direct3D12.RootParameter1[Plan.TotalRootParameterCount];
 
@@ -313,8 +351,9 @@ namespace SharpGPU
                     0,
                     signature.BufferPointer,
                     signature.BufferSize,
-                    out Vortice.Direct3D12.ID3D12RootSignature rootSignature));
-                NativeRootSignature = rootSignature;
+                    out Vortice.Direct3D12.ID3D12RootSignature? rootSignature));
+                m_NativeRootSignature = rootSignature
+                    ?? throw new InvalidOperationException("DX12 root-signature creation returned null.");
             }
             finally
             {
@@ -404,7 +443,7 @@ namespace SharpGPU
         public static string CollectDeviceMessages(Dx12Device device, string scope)
         {
             StringBuilder builder = new StringBuilder();
-            Vortice.Direct3D12.Debug.ID3D12InfoQueue infoQueue = device.NativeDevice.QueryInterfaceOrNull<Vortice.Direct3D12.Debug.ID3D12InfoQueue>();
+            Vortice.Direct3D12.Debug.ID3D12InfoQueue? infoQueue = device.NativeDevice.QueryInterfaceOrNull<Vortice.Direct3D12.Debug.ID3D12InfoQueue>();
             if (infoQueue == null)
             {
                 builder.AppendLine($"{scope} Failed to query Vortice.Direct3D12.Debug.ID3D12InfoQueue.");
@@ -441,35 +480,26 @@ namespace SharpGPU
 
     internal unsafe class Dx12ComputePipeline : RHIComputePipeline
     {
-        public Vortice.Direct3D12.ID3D12PipelineState NativePipelineState
-        {
-            get
-            {
-                return m_NativePipelineState;
-            }
-        }
+        public Vortice.Direct3D12.ID3D12PipelineState NativePipelineState =>
+            m_NativePipelineState ?? throw new ObjectDisposedException(GetType().FullName);
 
-        private Vortice.Direct3D12.ID3D12PipelineState m_NativePipelineState;
-
-        internal Dx12ComputePipeline(Vortice.Direct3D12.ID3D12PipelineState nativePipelineState, in RHIComputePipelineDescriptor descriptor)
-        {
-            m_Descriptor = descriptor;
-            m_NativePipelineState = nativePipelineState;
-        }
+        private Vortice.Direct3D12.ID3D12PipelineState? m_NativePipelineState;
 
         public Dx12ComputePipeline(Dx12Device device, in RHIComputePipelineDescriptor descriptor)
+            : this(device, descriptor, null)
+        {
+        }
+
+        internal Dx12ComputePipeline(
+            Dx12Device device,
+            in RHIComputePipelineDescriptor descriptor,
+            Dx12PipelineCache? pipelineCache)
         {
             m_Descriptor = descriptor;
-            Dx12Function computeFunction = descriptor.ComputeFunction as Dx12Function;
-            Dx12PipelineLayout pipelineLayout = descriptor.PipelineLayout as Dx12PipelineLayout;
-            if (computeFunction == null)
-            {
-                throw new InvalidOperationException("Dx12ComputePipeline requires a Dx12Function compute shader.");
-            }
-            if (pipelineLayout == null)
-            {
-                throw new InvalidOperationException("Dx12ComputePipeline requires a Dx12PipelineLayout.");
-            }
+            Dx12Function computeFunction = descriptor.ComputeFunction as Dx12Function
+                ?? throw new InvalidOperationException("Dx12ComputePipeline requires a Dx12Function compute shader.");
+            Dx12PipelineLayout pipelineLayout = descriptor.PipelineLayout as Dx12PipelineLayout
+                ?? throw new InvalidOperationException("Dx12ComputePipeline requires a Dx12PipelineLayout.");
 
             Vortice.Direct3D12.ComputePipelineStateDescription description = new Vortice.Direct3D12.ComputePipelineStateDescription
             {
@@ -478,8 +508,15 @@ namespace SharpGPU
                 Flags = Vortice.Direct3D12.PipelineStateFlags.None,
             };
 
-            Vortice.Direct3D12.ID3D12PipelineState nativePipelineState;
-            SharpGen.Runtime.Result hResult = device.NativeDevice.CreateComputePipelineState(description, out nativePipelineState);
+            if (pipelineCache != null)
+            {
+                m_NativePipelineState = pipelineCache.CreateComputePipelineState(
+                    descriptor,
+                    description);
+                return;
+            }
+
+            SharpGen.Runtime.Result hResult = device.NativeDevice.CreateComputePipelineState(description, out Vortice.Direct3D12.ID3D12PipelineState? nativePipelineState);
 
 #if DEBUG
             if (hResult.Failure)
@@ -492,23 +529,29 @@ namespace SharpGPU
             }
 #endif
             Dx12Utility.CHECK_HR(hResult);
-            m_NativePipelineState = nativePipelineState;
+            m_NativePipelineState = Dx12Utility.RequireCreatedObject(
+                nativePipelineState,
+                hResult,
+                "ID3D12Device.CreateComputePipelineState");
         }
 
         protected override void Release()
         {
-            m_NativePipelineState.Release();
+            m_NativePipelineState?.Release();
+            m_NativePipelineState = null;
         }
     }
 
     internal unsafe class Dx12RaytracingPipeline : RHIRaytracingPipeline
     {
-        public Vortice.Direct3D12.ID3D12StateObject NativePipeline => m_NativePipeline;
-        public Vortice.Direct3D12.ID3D12StateObjectProperties NativeStateObjectProperties => m_NativeStateObjectProperties;
+        public Vortice.Direct3D12.ID3D12StateObject NativePipeline =>
+            m_NativePipeline ?? throw new ObjectDisposedException(GetType().FullName);
+        public Vortice.Direct3D12.ID3D12StateObjectProperties NativeStateObjectProperties =>
+            m_NativeStateObjectProperties ?? throw new ObjectDisposedException(GetType().FullName);
 
-        private Vortice.Direct3D12.ID3D12RootSignature m_LocalConstantsRootSignature;
-        private Vortice.Direct3D12.ID3D12StateObject m_NativePipeline;
-        private Vortice.Direct3D12.ID3D12StateObjectProperties m_NativeStateObjectProperties;
+        private Vortice.Direct3D12.ID3D12RootSignature? m_LocalConstantsRootSignature;
+        private Vortice.Direct3D12.ID3D12StateObject? m_NativePipeline;
+        private Vortice.Direct3D12.ID3D12StateObjectProperties? m_NativeStateObjectProperties;
         private string m_RayGenerationExport;
         private string[] m_MissExports;
         private string[] m_HitGroupExports;
@@ -552,17 +595,11 @@ namespace SharpGPU
                 m_CallableExports[i] = callableGroups[i].General.EntryName;
             }
 
-            Dx12FunctionLibrary functionLibrary = descriptor.FunctionLibrary as Dx12FunctionLibrary;
-            if (functionLibrary == null)
-            {
-                throw new InvalidOperationException("Dx12RaytracingPipeline requires a Dx12FunctionLibrary.");
-            }
+            Dx12FunctionLibrary functionLibrary = descriptor.FunctionLibrary as Dx12FunctionLibrary
+                ?? throw new InvalidOperationException("Dx12RaytracingPipeline requires a Dx12FunctionLibrary.");
 
-            Dx12PipelineLayout globalPipelineLayout = descriptor.PipelineLayout as Dx12PipelineLayout;
-            if (globalPipelineLayout == null)
-            {
-                throw new InvalidOperationException("Dx12RaytracingPipeline requires a Dx12PipelineLayout.");
-            }
+            Dx12PipelineLayout globalPipelineLayout = descriptor.PipelineLayout as Dx12PipelineLayout
+                ?? throw new InvalidOperationException("Dx12RaytracingPipeline requires a Dx12PipelineLayout.");
 
             List<Vortice.Direct3D12.ExportDescription> exportDescriptors = new List<Vortice.Direct3D12.ExportDescription>(1 + missGroups.Length + callableGroups.Length + hitGroups.Length * 3);
             static void AddLibraryExport(List<Vortice.Direct3D12.ExportDescription> exports, string entryName)
@@ -615,9 +652,9 @@ namespace SharpGPU
                 Vortice.Direct3D12.HitGroupDescription hitGroupDescription = new Vortice.Direct3D12.HitGroupDescription(
                     hitGroup.Name,
                     Dx12Utility.ConverteToDx12HitGroupType(hitGroup.Type),
-                    hitGroup.AnyHit.HasValue ? hitGroup.AnyHit.Value.EntryName : null,
-                    hitGroup.ClosestHit.HasValue ? hitGroup.ClosestHit.Value.EntryName : null,
-                    hitGroup.Intersect.HasValue ? hitGroup.Intersect.Value.EntryName : null);
+                    hitGroup.AnyHit.HasValue ? hitGroup.AnyHit.Value.EntryName : string.Empty,
+                    hitGroup.ClosestHit.HasValue ? hitGroup.ClosestHit.Value.EntryName : string.Empty,
+                    hitGroup.Intersect.HasValue ? hitGroup.Intersect.Value.EntryName : string.Empty);
                 stateSubObjects.Add(new Vortice.Direct3D12.StateSubObject(hitGroupDescription));
             }
 
@@ -654,7 +691,7 @@ namespace SharpGPU
 
             Vortice.Direct3D12.StateObjectDescription stateObjectDesc = new Vortice.Direct3D12.StateObjectDescription(Vortice.Direct3D12.StateObjectType.RaytracingPipeline, stateSubObjects.ToArray());
 
-            SharpGen.Runtime.Result hResult = device.NativeDevice.CreateStateObject(stateObjectDesc, out Vortice.Direct3D12.ID3D12StateObject nativePipeline);
+            SharpGen.Runtime.Result hResult = device.NativeDevice.CreateStateObject(stateObjectDesc, out Vortice.Direct3D12.ID3D12StateObject? nativePipeline);
 #if DEBUG
             if (hResult.Failure)
             {
@@ -662,13 +699,12 @@ namespace SharpGPU
                 Dx12PipelineDebug.DumpDeviceMessages(device, "[Dx12RaytracingPipeline]");
             }
 #endif
-            Dx12Utility.CHECK_HR(hResult);
-            m_NativePipeline = nativePipeline;
-            m_NativeStateObjectProperties = m_NativePipeline.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12StateObjectProperties>();
-            if (m_NativeStateObjectProperties == null)
-            {
-                throw new InvalidOperationException("Failed to query Vortice.Direct3D12.ID3D12StateObjectProperties from raytracing pipeline state object.");
-            }
+            m_NativePipeline = Dx12Utility.RequireCreatedObject(
+                nativePipeline,
+                hResult,
+                "ID3D12Device.CreateStateObject(raytracing pipeline)");
+            m_NativeStateObjectProperties = m_NativePipeline.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12StateObjectProperties>()
+                ?? throw new InvalidOperationException("Failed to query Vortice.Direct3D12.ID3D12StateObjectProperties from raytracing pipeline state object.");
         }
 
         internal string GetExportName(in ERHIRayShaderTableSection section, in int groupIndex)
@@ -708,12 +744,15 @@ namespace SharpGPU
                     throw new InvalidOperationException("DX12 local root-signature serialization returned no signature blob.");
                 }
 
-                Dx12Utility.CHECK_HR(device.NativeDevice.CreateRootSignature(
+                SharpGen.Runtime.Result createRootSignatureResult = device.NativeDevice.CreateRootSignature(
                     0,
                     signatureBlob.BufferPointer,
                     signatureBlob.BufferSize,
-                    out Vortice.Direct3D12.ID3D12RootSignature localRootSignature));
-                return localRootSignature;
+                    out Vortice.Direct3D12.ID3D12RootSignature? localRootSignature);
+                return Dx12Utility.RequireCreatedObject(
+                    localRootSignature,
+                    createRootSignatureResult,
+                    "ID3D12Device.CreateRootSignature(local raytracing constants)");
             }
             finally
             {
@@ -752,13 +791,8 @@ namespace SharpGPU
                 return m_VertexStrides;
             }
         }
-        public Vortice.Direct3D12.ID3D12PipelineState NativePipelineState
-        {
-            get
-            {
-                return m_NativePipelineState;
-            }
-        }
+        public Vortice.Direct3D12.ID3D12PipelineState NativePipelineState =>
+            m_NativePipelineState ?? throw new ObjectDisposedException(GetType().FullName);
         public Vortice.Direct3D.PrimitiveTopology PrimitiveTopology
         {
             get
@@ -766,44 +800,72 @@ namespace SharpGPU
                 return m_PrimitiveTopology;
             }
         }
+        internal Vortice.Direct3D12.ID3D12RootSignature NativeRootSignature =>
+            m_NativeRootSignature ?? throw new ObjectDisposedException(GetType().FullName);
+        internal uint AttachmentRootParameterIndex { get; private set; } =
+            uint.MaxValue;
+        internal bool HasPrivateAttachmentRootSignature =>
+            m_OwnsNativeRootSignature;
 
-        private uint[] m_VertexStrides;
-        private Vortice.Direct3D12.ID3D12PipelineState m_NativePipelineState;
+        private uint[] m_VertexStrides = Array.Empty<uint>();
+        private Vortice.Direct3D12.ID3D12PipelineState? m_NativePipelineState;
         private Vortice.Direct3D.PrimitiveTopology m_PrimitiveTopology;
-
-        internal Dx12RasterPipeline(Vortice.Direct3D12.ID3D12PipelineState nativePipelineState, in RHIRasterPipelineDescriptor descriptor)
-        {
-            m_Descriptor = descriptor;
-            m_NativePipelineState = nativePipelineState;
-            m_PrimitiveTopology = Dx12Utility.ConvertToDx12PrimitiveTopology(descriptor.PrimitiveAssembler.PrimitiveTopology);
-            m_VertexStrides = Array.Empty<uint>();
-        }
+        private Vortice.Direct3D12.ID3D12RootSignature? m_NativeRootSignature;
+        private bool m_OwnsNativeRootSignature;
 
         public Dx12RasterPipeline(Dx12Device device, in RHIRasterPipelineDescriptor descriptor)
+            : this(device, descriptor, null)
         {
-            m_Descriptor = descriptor;
-            m_PrimitiveTopology = Dx12Utility.ConvertToDx12PrimitiveTopology(descriptor.PrimitiveAssembler.PrimitiveTopology);
+        }
 
-            Dx12Function fragmentFunction = descriptor.FragmentFunction as Dx12Function;
-            Dx12PipelineLayout pipelineLayout = descriptor.PipelineLayout as Dx12PipelineLayout;
-            if (pipelineLayout == null)
+        internal Dx12RasterPipeline(
+            Dx12Device device,
+            in RHIRasterPipelineDescriptor descriptor,
+            Dx12PipelineCache? pipelineCache)
+        {
+            m_Descriptor = RHIRasterPipelineContract.SnapshotAndValidate(in descriptor);
+            m_PrimitiveTopology = Dx12Utility.ConvertToDx12PrimitiveTopology(descriptor.PrimitiveAssembler.PrimitiveTopology);
+            m_VertexStrides = Array.Empty<uint>();
+
+            Dx12PipelineLayout pipelineLayout = descriptor.PipelineLayout as Dx12PipelineLayout
+                ?? throw new ArgumentException(
+                    "Dx12RasterPipeline requires a Dx12PipelineLayout.",
+                    nameof(descriptor));
+            bool needsPrivateAttachmentRootSignature =
+                m_Descriptor.AttachmentInterface.ColorInputMask != 0;
+            if (needsPrivateAttachmentRootSignature)
             {
-                throw new InvalidOperationException("Dx12RasterPipeline requires a Dx12PipelineLayout.");
+                m_NativeRootSignature =
+                    Dx12RasterAttachmentRootSignature.Create(
+                        device,
+                        pipelineLayout,
+                        out uint attachmentRootParameterIndex);
+                AttachmentRootParameterIndex = attachmentRootParameterIndex;
+                m_OwnsNativeRootSignature = true;
+            }
+            else
+            {
+                m_NativeRootSignature = pipelineLayout.NativeRootSignature;
             }
             Vortice.Direct3D12.PrimitiveTopologyType primitiveTopologyType = Dx12Utility.ConvertToDx12PrimitiveTopologyType(descriptor.PrimitiveAssembler.PrimitiveTopology);
 
             switch (descriptor.PrimitiveAssembler.PrimitiveType)
             {
                 case ERHIPrimitiveType.Mesh:
+                    device.Capabilities.Mesh.Shader.Require("DX12 mesh shaders");
                     throw new NotSupportedException("TODO(UNVERIFIED): DX12 mesh pipeline path must be migrated to Vortice pipeline-state-stream API.");
 
                 case ERHIPrimitiveType.Vertex:
+                    Dx12Function fragmentFunction = descriptor.FragmentFunction as Dx12Function
+                        ?? throw new ArgumentException(
+                            "Dx12RasterPipeline requires a Dx12Function fragment shader.",
+                            nameof(descriptor));
                     if (!descriptor.PrimitiveAssembler.VertexAssembler.HasValue)
                     {
                         throw new InvalidOperationException("Vertex pipeline descriptor is missing VertexAssembler.");
                     }
 
-                    Dx12Function vertexFunction = descriptor.PrimitiveAssembler.VertexAssembler.Value.VertexFunction as Dx12Function;
+                    Dx12Function? vertexFunction = descriptor.PrimitiveAssembler.VertexAssembler.Value.VertexFunction as Dx12Function;
                     Span<RHIVertexLayoutDescriptor> vertexLayouts = descriptor.PrimitiveAssembler.VertexAssembler.Value.VertexLayouts.Span;
                     if (vertexFunction != null)
                     {
@@ -817,11 +879,15 @@ namespace SharpGPU
                     int inputElementCount = Dx12Utility.GetDx12VertexLayoutCount(vertexLayouts);
                     Vortice.Direct3D12.InputElementDescription[] inputElements = new Vortice.Direct3D12.InputElementDescription[inputElementCount];
                     Dx12Utility.ConvertToDx12VertexLayout(vertexLayouts, inputElements);
+                    ERHIPixelFormat[] outputLocationFormats =
+                        Dx12RasterSubPassLowering.ResolveOutputLocationFormats(
+                            in m_Descriptor.AttachmentInterface,
+                            m_Descriptor.ColorFormats);
 
                     Vortice.Direct3D12.GraphicsPipelineStateDescription nativeGraphicsPipelineDesc = new Vortice.Direct3D12.GraphicsPipelineStateDescription
                     {
                         InputLayout = new Vortice.Direct3D12.InputLayoutDescription(inputElements),
-                        RootSignature = pipelineLayout.NativeRootSignature,
+                        RootSignature = m_NativeRootSignature,
                         PrimitiveTopologyType = primitiveTopologyType,
                         SampleDescription = Dx12Utility.ConvertToDx12SampleCount(descriptor.SampleCount),
                         SampleMask = descriptor.RenderState.SampleMask.HasValue ? descriptor.RenderState.SampleMask.Value : uint.MaxValue,
@@ -829,7 +895,7 @@ namespace SharpGPU
                         RasterizerState = Dx12Utility.CreateDx12RasterizerState(descriptor.RenderState.RasterizerState, descriptor.SampleCount != ERHISampleCount.None),
                         DepthStencilState = Dx12Utility.CreateDx12DepthStencilState(descriptor.RenderState.DepthStencilState),
                         Flags = Vortice.Direct3D12.PipelineStateFlags.None,
-                        RenderTargetFormats = new Vortice.DXGI.Format[descriptor.ColorFormats.Length],
+                        RenderTargetFormats = new Vortice.DXGI.Format[outputLocationFormats.Length],
                     };
 
                     if (descriptor.DepthFormat != ERHIPixelFormat.Unknown)
@@ -837,9 +903,14 @@ namespace SharpGPU
                         nativeGraphicsPipelineDesc.DepthStencilFormat = Dx12Utility.ConvertToDx12Format(descriptor.DepthFormat);
                     }
 
-                    for (int i = 0; i < descriptor.ColorFormats.Length; ++i)
+                    for (int outputLocation = 0;
+                         outputLocation < outputLocationFormats.Length;
+                         ++outputLocation)
                     {
-                        nativeGraphicsPipelineDesc.RenderTargetFormats[i] = Dx12Utility.ConvertToDx12ViewFormat(descriptor.ColorFormats[i]);
+                        nativeGraphicsPipelineDesc.RenderTargetFormats[
+                            outputLocation] =
+                            Dx12Utility.ConvertToDx12ViewFormat(
+                                outputLocationFormats[outputLocation]);
                     }
 
                     if (vertexFunction != null)
@@ -852,7 +923,15 @@ namespace SharpGPU
                         nativeGraphicsPipelineDesc.PixelShader = fragmentFunction.NativeShaderData;
                     }
 
-                    SharpGen.Runtime.Result hResult = device.NativeDevice.CreateGraphicsPipelineState(nativeGraphicsPipelineDesc, out Vortice.Direct3D12.ID3D12PipelineState nativePipelineState);
+                    if (pipelineCache != null)
+                    {
+                        m_NativePipelineState = pipelineCache.CreateRasterPipelineState(
+                            descriptor,
+                            nativeGraphicsPipelineDesc);
+                        break;
+                    }
+
+                    SharpGen.Runtime.Result hResult = device.NativeDevice.CreateGraphicsPipelineState(nativeGraphicsPipelineDesc, out Vortice.Direct3D12.ID3D12PipelineState? nativePipelineState);
                     if (hResult.Failure || nativePipelineState == null)
                     {
                         string message =
@@ -888,205 +967,21 @@ namespace SharpGPU
 
         protected override void Release()
         {
-            m_NativePipelineState.Release();
-        }
-    }
-
-    internal unsafe class Dx12PipelineLibrary : RHIPipelineLibrary
-    {
-        private Dx12Device m_Dx12Device;
-        private Vortice.Direct3D12.ID3D12PipelineLibrary1 m_NativePipelineLibrary;
-
-        private static string GetComputePipelineCacheKey(in RHIComputePipelineDescriptor descriptor)
-        {
-            string entry = descriptor.ComputeFunction?.Descriptor.EntryName ?? "compute";
-            return $"compute:{entry}";
-        }
-
-        private static string GetRasterPipelineCacheKey(in RHIRasterPipelineDescriptor descriptor)
-        {
-            string vertex = descriptor.PrimitiveAssembler.VertexAssembler?.VertexFunction?.Descriptor.EntryName ?? "none";
-            string task = descriptor.PrimitiveAssembler.MeshletAssembler?.TaskFunction?.Descriptor.EntryName ?? "none";
-            string mesh = descriptor.PrimitiveAssembler.MeshletAssembler?.MeshFunction?.Descriptor.EntryName ?? "none";
-            string fragment = descriptor.FragmentFunction?.Descriptor.EntryName ?? "none";
-
-            return
-                $"raster:{descriptor.PrimitiveAssembler.PrimitiveType}:" +
-                $"{descriptor.PrimitiveAssembler.PrimitiveTopology}:" +
-                $"{vertex}:{task}:{mesh}:{fragment}:" +
-                $"{descriptor.SampleCount}:{descriptor.ColorFormats.Length}:{descriptor.DepthFormat}";
-        }
-
-        public Dx12PipelineLibrary(Dx12Device device, in RHIPipelineLibraryDescriptor descriptor) : base(descriptor)
-        {
-            m_Dx12Device = device;
-
-            SharpGen.Runtime.Result hResult = ((Vortice.Direct3D12.ID3D12Device2)device.NativeDevice).CreatePipelineLibrary(Span<byte>.Empty, out Vortice.Direct3D12.ID3D12PipelineLibrary basePipelineLibrary);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            m_NativePipelineLibrary = basePipelineLibrary.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12PipelineLibrary1>();
-            if (m_NativePipelineLibrary == null)
+            m_NativePipelineState?.Release();
+            m_NativePipelineState = null;
+            if (m_OwnsNativeRootSignature)
             {
-                throw new InvalidOperationException("Failed to query Vortice.Direct3D12.ID3D12PipelineLibrary1 from created pipeline library.");
-            }
-            if (basePipelineLibrary != null)
-            {
-                basePipelineLibrary.Release();
-            }
-        }
-
-        public Dx12PipelineLibrary(Dx12Device device, in RHIPipelineLibraryResult pipelineLibraryResult) : base(pipelineLibraryResult)
-        {
-            m_Dx12Device = device;
-
-            Span<byte> blob = pipelineLibraryResult.ByteCode == IntPtr.Zero || pipelineLibraryResult.ByteSize == 0
-                ? Span<byte>.Empty
-                : new Span<byte>((void*)pipelineLibraryResult.ByteCode, checked((int)pipelineLibraryResult.ByteSize));
-
-            SharpGen.Runtime.Result hResult = ((Vortice.Direct3D12.ID3D12Device2)device.NativeDevice).CreatePipelineLibrary(blob, out Vortice.Direct3D12.ID3D12PipelineLibrary basePipelineLibrary);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            m_NativePipelineLibrary = basePipelineLibrary.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12PipelineLibrary1>();
-            if (m_NativePipelineLibrary == null)
-            {
-                throw new InvalidOperationException("Failed to query Vortice.Direct3D12.ID3D12PipelineLibrary1 from serialized pipeline library blob.");
-            }
-            if (basePipelineLibrary != null)
-            {
-                basePipelineLibrary.Release();
-            }
-        }
-
-        public override void StoreComputePipeline(string name, RHIComputePipeline computePipeline)
-        {
-            Dx12ComputePipeline dx12Pipeline = computePipeline as Dx12ComputePipeline;
-            m_NativePipelineLibrary.StorePipeline(name, dx12Pipeline.NativePipelineState);
-        }
-
-        public override void StoreRasterPipeline(string name, RHIRasterPipeline rasterPipeline)
-        {
-            Dx12RasterPipeline dx12Pipeline = rasterPipeline as Dx12RasterPipeline;
-            m_NativePipelineLibrary.StorePipeline(name, dx12Pipeline.NativePipelineState);
-        }
-
-        public override void StoreRaytracingPipeline(string name, RHIRaytracingPipeline raytracingPipeline)
-        {
-            throw new System.NotSupportedException("Vortice.Direct3D12.D3D12 PipelineLibrary does not support storing raytracing state objects.");
-        }
-
-        public override RHIComputePipeline LoadComputePipeline(RHIComputePipelineDescriptor computePipelineDescriptor)
-        {
-            if (m_NativePipelineLibrary == null)
-            {
-                throw new System.InvalidOperationException("Dx12PipelineLibrary: Cannot load pipeline — Vortice.Direct3D12.ID3D12PipelineLibrary has not been initialized.");
-            }
-
-            Dx12Function computeFunction = computePipelineDescriptor.ComputeFunction as Dx12Function;
-            Dx12PipelineLayout pipelineLayout = computePipelineDescriptor.PipelineLayout as Dx12PipelineLayout;
-            if (computeFunction == null || pipelineLayout == null)
-            {
-                throw new InvalidOperationException("Dx12PipelineLibrary.LoadComputePipeline requires DX12 function/layout descriptors.");
-            }
-
-            Vortice.Direct3D12.ComputePipelineStateDescription description = new Vortice.Direct3D12.ComputePipelineStateDescription
-            {
-                RootSignature = pipelineLayout.NativeRootSignature,
-                Flags = Vortice.Direct3D12.PipelineStateFlags.None,
-                ComputeShader = computeFunction.NativeShaderData,
-            };
-
-            string pipelineName = GetComputePipelineCacheKey(computePipelineDescriptor);
-            try
-            {
-                Vortice.Direct3D12.ID3D12PipelineState nativePipelineState = m_NativePipelineLibrary.LoadComputePipeline(pipelineName, description);
-                return new Dx12ComputePipeline(nativePipelineState, computePipelineDescriptor);
-            }
-            catch
-            {
-                // Cache miss or incompatible blob: create pipeline and populate cache.
-                Dx12ComputePipeline fallbackPipeline = new Dx12ComputePipeline(m_Dx12Device, computePipelineDescriptor);
-                StoreComputePipeline(pipelineName, fallbackPipeline);
-                return fallbackPipeline;
-            }
-        }
-
-        public override RHIRasterPipeline LoadRasterPipeline(RHIRasterPipelineDescriptor rasterPipelineDescriptor)
-        {
-            if (m_NativePipelineLibrary == null)
-            {
-                throw new System.InvalidOperationException("Dx12PipelineLibrary: Cannot load pipeline — Vortice.Direct3D12.ID3D12PipelineLibrary has not been initialized.");
-            }
-
-            Dx12PipelineLayout pipelineLayout = rasterPipelineDescriptor.PipelineLayout as Dx12PipelineLayout;
-            if (pipelineLayout == null)
-            {
-                throw new InvalidOperationException("Dx12PipelineLibrary.LoadRasterPipeline requires a Dx12PipelineLayout.");
-            }
-
-            // Build the graphics pipeline state description for library lookup
-            Vortice.Direct3D12.GraphicsPipelineStateDescription description = new Vortice.Direct3D12.GraphicsPipelineStateDescription
-            {
-                RootSignature = pipelineLayout.NativeRootSignature,
-                PrimitiveTopologyType = Dx12Utility.ConvertToDx12PrimitiveTopologyType(rasterPipelineDescriptor.PrimitiveAssembler.PrimitiveTopology),
-                SampleMask = uint.MaxValue,
-                SampleDescription = Dx12Utility.ConvertToDx12SampleCount(rasterPipelineDescriptor.SampleCount),
-                RenderTargetFormats = new Vortice.DXGI.Format[rasterPipelineDescriptor.ColorFormats.Length],
-            };
-            for (int i = 0; i < rasterPipelineDescriptor.ColorFormats.Length; ++i)
-            {
-                description.RenderTargetFormats[i] = Dx12Utility.ConvertToDx12ViewFormat(rasterPipelineDescriptor.ColorFormats[i]);
-            }
-            if (rasterPipelineDescriptor.DepthFormat != ERHIPixelFormat.Unknown)
-            {
-                description.DepthStencilFormat = Dx12Utility.ConvertToDx12Format(rasterPipelineDescriptor.DepthFormat);
-            }
-
-            string pipelineName = GetRasterPipelineCacheKey(rasterPipelineDescriptor);
-            try
-            {
-                Vortice.Direct3D12.ID3D12PipelineState nativePipelineState = m_NativePipelineLibrary.LoadGraphicsPipeline(pipelineName, description);
-                return new Dx12RasterPipeline(nativePipelineState, rasterPipelineDescriptor);
-            }
-            catch
-            {
-                // Cache miss or incompatible blob: create pipeline and populate cache.
-                Dx12RasterPipeline fallbackPipeline = new Dx12RasterPipeline(m_Dx12Device, rasterPipelineDescriptor);
-                StoreRasterPipeline(pipelineName, fallbackPipeline);
-                return fallbackPipeline;
-            }
-        }
-
-        public override RHIRaytracingPipeline LoadRaytracingPipeline(RHIRaytracingPipelineDescriptor raytracingPipelineDescriptor)
-        {
-            throw new System.NotSupportedException("Vortice.Direct3D12.D3D12 PipelineLibrary does not support loading raytracing state objects. Raytracing pipelines use Vortice.Direct3D12.ID3D12StateObject which is incompatible with Vortice.Direct3D12.ID3D12PipelineLibrary.");
-        }
-
-        public override RHIPipelineLibraryResult Serialize()
-        {
-            SharpGen.Runtime.PointerUSize nativeBlobSize = m_NativePipelineLibrary.SerializedSize;
-            nuint blobSize = nativeBlobSize;
-            RHIPipelineLibraryResult result;
-            result.ByteSize = (uint)blobSize;
-            result.ByteCode = System.Runtime.InteropServices.Marshal.AllocHGlobal((int)blobSize);
-            m_NativePipelineLibrary.Serialize(result.ByteCode, nativeBlobSize);
-            return result;
-        }
-
-        protected override void Release()
-        {
-            if (m_NativePipelineLibrary != null)
-            {
-                m_NativePipelineLibrary.Release();
-                m_NativePipelineLibrary = null;
+                m_NativeRootSignature?.Release();
+                m_NativeRootSignature = null;
             }
         }
     }
-#pragma warning restore CS0169, CS0649, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
+
+#pragma warning restore CS0169, CS0649, CA1416
     internal sealed class Dx12WorkGraphPipeline : RHIWorkGraphPipeline
     {
-        internal Vortice.Direct3D12.ID3D12StateObject NativeStateObject => m_NativeStateObject;
+        internal Vortice.Direct3D12.ID3D12StateObject NativeStateObject =>
+            m_NativeStateObject ?? throw new ObjectDisposedException(GetType().FullName);
         internal Vortice.Direct3D12.ProgramIdentifier ProgramIdentifier => m_ProgramIdentifier;
         internal Vortice.Direct3D12.WorkGraphMemoryRequirements NativeMemoryRequirements => m_MemoryRequirements;
         public override RHIWorkGraphMemoryRequirements MemoryRequirements => new RHIWorkGraphMemoryRequirements(
@@ -1095,9 +990,9 @@ namespace SharpGPU
             m_MemoryRequirements.SizeGranularityInBytes);
         internal uint WorkGraphIndex => m_WorkGraphIndex;
 
-        private Vortice.Direct3D12.ID3D12StateObject m_NativeStateObject;
-        private Vortice.Direct3D12.ID3D12StateObjectProperties1 m_StateObjectProperties;
-        private Vortice.Direct3D12.ID3D12WorkGraphProperties m_WorkGraphProperties;
+        private Vortice.Direct3D12.ID3D12StateObject? m_NativeStateObject;
+        private Vortice.Direct3D12.ID3D12StateObjectProperties1? m_StateObjectProperties;
+        private Vortice.Direct3D12.ID3D12WorkGraphProperties? m_WorkGraphProperties;
         private Vortice.Direct3D12.ProgramIdentifier m_ProgramIdentifier;
         private Vortice.Direct3D12.WorkGraphMemoryRequirements m_MemoryRequirements;
         private readonly Dictionary<string, uint> m_EntrypointIndices = new Dictionary<string, uint>(StringComparer.Ordinal);
@@ -1127,23 +1022,19 @@ namespace SharpGPU
             Vortice.Direct3D12.StateObjectDescription stateObjectDesc = new Vortice.Direct3D12.StateObjectDescription(
                 Vortice.Direct3D12.StateObjectType.Executable,
                 stateSubObjects);
-            SharpGen.Runtime.Result hResult = device.NativeDevice.CreateStateObject(stateObjectDesc, out Vortice.Direct3D12.ID3D12StateObject nativeStateObject);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            if (hResult.Failure || nativeStateObject == null)
-            {
-                throw new InvalidOperationException($"Failed to create DX12 WorkGraph state object. HRESULT=0x{hResult.Code:X8}");
-            }
+            SharpGen.Runtime.Result hResult = device.NativeDevice.CreateStateObject(stateObjectDesc, out Vortice.Direct3D12.ID3D12StateObject? nativeStateObject);
+            m_NativeStateObject = Dx12Utility.RequireCreatedObject(
+                nativeStateObject,
+                hResult,
+                "ID3D12Device.CreateStateObject(work graph pipeline)");
 
-            m_NativeStateObject = nativeStateObject;
-            m_StateObjectProperties = nativeStateObject.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12StateObjectProperties1>()
+            m_StateObjectProperties = m_NativeStateObject.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12StateObjectProperties1>()
                 ?? throw new InvalidOperationException("DX12 WorkGraph state object does not expose ID3D12StateObjectProperties1.");
-            m_WorkGraphProperties = nativeStateObject.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12WorkGraphProperties>()
+            m_WorkGraphProperties = m_NativeStateObject.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12WorkGraphProperties>()
                 ?? throw new InvalidOperationException("DX12 WorkGraph state object does not expose ID3D12WorkGraphProperties.");
-            m_WorkGraphIndex = m_WorkGraphProperties.GetWorkGraphIndex(programName);
+            m_WorkGraphIndex = m_WorkGraphProperties!.GetWorkGraphIndex(programName);
             m_MemoryRequirements = m_WorkGraphProperties.GetWorkGraphMemoryRequirements(m_WorkGraphIndex);
-            m_ProgramIdentifier = m_StateObjectProperties.GetProgramIdentifier(programName);
+            m_ProgramIdentifier = m_StateObjectProperties!.GetProgramIdentifier(programName);
         }
 
         internal uint GetEntrypointIndex(string entrypoint)
@@ -1158,7 +1049,7 @@ namespace SharpGPU
                 return cachedIndex;
             }
 
-            uint entrypointIndex = m_WorkGraphProperties.GetEntrypointIndex(m_WorkGraphIndex, new Vortice.Direct3D12.NodeId
+            uint entrypointIndex = m_WorkGraphProperties!.GetEntrypointIndex(m_WorkGraphIndex, new Vortice.Direct3D12.NodeId
             {
                 Name = entrypoint,
                 ArrayIndex = 0

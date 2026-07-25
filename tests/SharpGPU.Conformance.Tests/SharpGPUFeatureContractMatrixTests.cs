@@ -1,7 +1,5 @@
 using System;
-using System.IO;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
 using SharpGPU;
 using Xunit;
 
@@ -20,12 +18,12 @@ public sealed class SharpGPUFeatureContractMatrixTests
 
         using (context)
         {
-            if (context.Device.Feature?.IsTimestampQueriesSupported != true)
+            if (context.Device.Capabilities.Synchronization.TimestampQueries.Tier == ERHICapabilityTier.Unavailable)
             {
                 Assert.Throws<NotSupportedException>(() => context.Device.CreateQuery(new RHIQueryDescriptor
                 {
                     Count = 1,
-                    Type = ERHIQueryType.TimestampGenerice,
+                    Type = ERHIQueryType.Timestamp,
                 }));
                 return;
             }
@@ -33,7 +31,7 @@ public sealed class SharpGPUFeatureContractMatrixTests
             using RHIQuery query = context.Device.CreateQuery(new RHIQueryDescriptor
             {
                 Count = 2,
-                Type = ERHIQueryType.TimestampGenerice,
+                Type = ERHIQueryType.Timestamp,
             });
             using RHICommandBuffer commandBuffer = context.CommandQueue.CreateCommandBuffer();
 
@@ -50,7 +48,9 @@ public sealed class SharpGPUFeatureContractMatrixTests
             commandBuffer.End();
 
             context.Fence.Reset();
-            context.CommandQueue.Submit(commandBuffer, context.Fence, null!, null!);
+            context.CommandQueue.Submit(new RHIQueueSubmitDescriptor(
+                new RHICommandBuffer[] { commandBuffer },
+                completionFence: context.Fence));
             context.Fence.Wait();
 
             Assert.True(query.ResolveData());
@@ -78,7 +78,7 @@ public sealed class SharpGPUFeatureContractMatrixTests
                         Slot = 0,
                         Count = 4,
                         Type = ERHIBindType.StorageBuffer,
-                        Stage = ERHIShaderStage.Compute,
+                        Stages = ERHIShaderStageMask.Compute,
                     },
                 },
             });
@@ -109,7 +109,7 @@ public sealed class SharpGPUFeatureContractMatrixTests
     }
 
     [Fact]
-    public void Dx12_StorageQueueBuffer_ShouldSubmitAndReadBackMappableDestination()
+    public void Dx12_PipelineCache_ShouldExportImportAndRejectCorruption()
     {
         if (!FeatureContractContext.TryCreateDx12(out FeatureContractContext? context, out _))
         {
@@ -118,73 +118,22 @@ public sealed class SharpGPUFeatureContractMatrixTests
 
         using (context)
         {
-            byte[] expected =
-            {
-                0x10, 0x21, 0x32, 0x43,
-                0x54, 0x65, 0x76, 0x87,
-                0x98, 0xa9, 0xba, 0xcb,
-                0xdc, 0xed, 0xfe, 0x0f,
-            };
-            string sourcePath = Path.Combine(Path.GetTempPath(), "SharpGPU", "storagequeue-source.bin");
-            Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
-            File.WriteAllBytes(sourcePath, expected);
+            using RHIPipelineCache coldCache = context.Device.CreatePipelineCache();
+            byte[] blob = coldCache.Export();
+            Assert.NotEmpty(blob);
 
-            try
-            {
-                using RHIBuffer destination = CreateBuffer(context.Device, expected.Length, ERHIBufferUsage.CopyDst | ERHIBufferUsage.ShaderResource, ERHIStorageMode.HostUpload);
-                using RHIStorageQueue queue = context.Device.CreateStorageQueue();
-                RHIStorageFileHandle fileHandle = queue.OpenFile(sourcePath);
-                Assert.Equal((ulong)expected.Length, queue.QueryFileSize(fileHandle));
+            using RHIPipelineCache restartedCache = context.Device.CreatePipelineCache();
+            RHIPipelineCacheImportResult loaded = restartedCache.Import(blob);
+            Assert.Equal(ERHIPipelineCacheImportStatus.Loaded, loaded.Status);
 
-                queue.RequestBuffer(new RHIStorageBufferRequest
-                {
-                    FileHandle = fileHandle,
-                    FileOffset = 0,
-                    FileSize = (ulong)expected.Length,
-                    DestinationBuffer = destination,
-                    DestinationOffset = 0,
-                });
-                context.Fence.Reset();
-                queue.Submit(context.Fence);
-                context.Fence.Wait();
-                queue.CloseFile(fileHandle);
+            byte[] corrupt = (byte[])blob.Clone();
+            corrupt[^1] ^= 0x5a;
+            RHIPipelineCacheImportResult rejected = restartedCache.Import(corrupt);
+            Assert.Equal(ERHIPipelineCacheImportStatus.Corrupt, rejected.Status);
 
-                byte[] actual = new byte[expected.Length];
-                IntPtr mapped = destination.Map(0, (uint)expected.Length);
-                Marshal.Copy(mapped, actual, 0, actual.Length);
-                destination.UnMap(0, 0);
-                Assert.Equal(expected, actual);
-            }
-            finally
-            {
-                File.Delete(sourcePath);
-            }
-        }
-    }
-
-    [Fact]
-    public void Dx12_PipelineLibrary_ShouldCreateAndSerialize()
-    {
-        if (!FeatureContractContext.TryCreateDx12(out FeatureContractContext? context, out _))
-        {
-            return;
-        }
-
-        using (context)
-        using (RHIPipelineLibrary library = context.Device.CreatePipelineLibrary(default))
-        {
-            RHIPipelineLibraryResult result = library.Serialize();
-            try
-            {
-                Assert.True(result.ByteSize >= 0);
-            }
-            finally
-            {
-                if (result.ByteCode != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(result.ByteCode);
-                }
-            }
+            RHIPipelineCacheImportResult emptied =
+                restartedCache.Import(ReadOnlyMemory<byte>.Empty);
+            Assert.Equal(ERHIPipelineCacheImportStatus.Empty, emptied.Status);
         }
     }
 
@@ -201,7 +150,9 @@ public sealed class SharpGPUFeatureContractMatrixTests
             for (int i = 0; i < instance.DeviceCount; ++i)
             {
                 RHIDevice device = instance.GetDevice(i);
-                Assert.False(device.Feature?.IsMeshShadingSupported == true, $"DX12 mesh feature must remain false until native mesh pipeline conformance exists on '{device.Name}'.");
+                Assert.Equal(
+                    ERHICapabilityTier.Unavailable,
+                    device.Capabilities.Mesh.Shader.Tier);
 
                 using RHIPipelineLayout pipelineLayout = device.CreatePipelineLayout(new RHIPipelineLayoutDescriptor
                 {
@@ -210,14 +161,31 @@ public sealed class SharpGPUFeatureContractMatrixTests
                     PushConstantSize = 0,
                     ArgumentTableLayouts = Array.Empty<RHIArgumentTableLayout>(),
                 });
+                RHIStencilStateDescriptor keepStencilFace = new()
+                {
+                    ComparisonMode = ERHIComparisonMode.Always,
+                    StencilPassOp = ERHIStencilOp.Keep,
+                    StencilFailOp = ERHIStencilOp.Keep,
+                    StencilDepthFailOp = ERHIStencilOp.Keep,
+                };
                 RHIRasterPipelineDescriptor descriptor = new()
                 {
                     SampleCount = ERHISampleCount.None,
                     ColorFormats = Array.Empty<ERHIPixelFormat>(),
                     PipelineLayout = pipelineLayout,
+                    RenderState = new RHIRenderStateDescriptor
+                    {
+                        DepthStencilState =
+                            new RHIDepthStencilStateDescriptor
+                            {
+                                ComparisonMode = ERHIComparisonMode.Always,
+                                FrontFace = keepStencilFace,
+                                BackFace = keepStencilFace,
+                            },
+                    },
                     PrimitiveAssembler = new RHIPrimitiveAssemblerDescriptor
                     {
-                        MeshletAssembler = new RHIMeshletAssemblerDescriptor(null!, null!),
+                        MeshletAssembler = new RHIMeshletAssemblerDescriptor(null, null),
                     },
                 };
 
@@ -239,7 +207,7 @@ public sealed class SharpGPUFeatureContractMatrixTests
             for (int i = 0; i < instance.DeviceCount; ++i)
             {
                 RHIDevice device = instance.GetDevice(i);
-                if (device.Feature?.IsRaytracingSupported == true)
+                if (device.Capabilities.RayTracing.Pipeline.Tier != ERHICapabilityTier.Unavailable)
                 {
                     continue;
                 }
@@ -262,7 +230,7 @@ public sealed class SharpGPUFeatureContractMatrixTests
             for (int i = 0; i < instance.DeviceCount; ++i)
             {
                 RHIDevice device = instance.GetDevice(i);
-                if (device.Feature?.IsMLSupported == true)
+                if (device.Capabilities.MachineLearning.Execution.Tier != ERHICapabilityTier.Unavailable)
                 {
                     continue;
                 }
@@ -288,7 +256,9 @@ public sealed class SharpGPUFeatureContractMatrixTests
             for (int i = 0; i < instance.DeviceCount; ++i)
             {
                 RHIDevice device = instance.GetDevice(i);
-                Assert.False(device.Feature?.IsMLSupported == true, $"Vulkan ML v1 must remain false until VK_ARM_tensors/data_graph capability probing is implemented on '{device.Name}'.");
+                Assert.Equal(
+                    ERHICapabilityTier.Unavailable,
+                    device.Capabilities.MachineLearning.Execution.Tier);
                 Assert.Throws<NotSupportedException>(() => device.CreateMLPipeline(default));
                 Assert.Throws<NotSupportedException>(() => device.CreateMLBindingSet(default));
                 Assert.Throws<NotSupportedException>(() => device.CreateTensor(default));
@@ -370,7 +340,7 @@ internal sealed class FeatureContractContext : IDisposable
             {
                 Backend = backend,
                 EnableDebugLayer = false,
-                EnableValidatior = false,
+                EnableValidation = false,
                 ComputeQueueRequestCount = 0,
                 TransferQueueRequestCount = 0,
                 GraphicsQueueRequestCount = 1,

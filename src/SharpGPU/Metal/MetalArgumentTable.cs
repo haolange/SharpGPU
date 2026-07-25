@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SharpMetal.Metal;
 
 namespace SharpGPU
 {
@@ -9,17 +10,131 @@ namespace SharpGPU
         public readonly uint Index;
         public readonly uint Count;
         public readonly ERHIBindType Type;
-        public readonly ERHIShaderStage Stage;
+        public readonly ERHIShaderStageMask Stages;
+        public readonly ERHIArgumentBindingRequirement Requirement;
 
         public bool IsBindless => Count > 1;
 
-        public MetalBindInfo(in uint slot, in uint index, in uint count, in ERHIBindType type, in ERHIShaderStage stage)
+        public MetalBindInfo(
+            in uint slot,
+            in uint index,
+            in uint count,
+            in ERHIBindType type,
+            in ERHIShaderStageMask stages)
+            : this(slot, index, count, type, stages, ERHIArgumentBindingRequirement.Required)
+        {
+        }
+
+        public MetalBindInfo(
+            in uint slot,
+            in uint index,
+            in uint count,
+            in ERHIBindType type,
+            in ERHIShaderStageMask stages,
+            in ERHIArgumentBindingRequirement requirement)
         {
             Slot = slot;
             Index = index;
             Count = count;
             Type = type;
-            Stage = stage;
+            Stages = stages;
+            Requirement = requirement;
+        }
+    }
+
+    internal readonly struct MetalArgumentBindingSnapshot
+    {
+        public readonly bool IsBound;
+        public readonly ulong BufferAddress;
+        public readonly MTLResourceID ResourceId;
+        public readonly MTLAllocation ResidencyAllocation;
+
+        private MetalArgumentBindingSnapshot(
+            in ulong bufferAddress,
+            in MTLResourceID resourceId,
+            in MTLAllocation residencyAllocation)
+        {
+            IsBound = true;
+            BufferAddress = bufferAddress;
+            ResourceId = resourceId;
+            ResidencyAllocation = residencyAllocation;
+        }
+
+        public static MetalArgumentBindingSnapshot Capture(
+            in RHIArgumentTableElement element,
+            in MetalBindInfo bindInfo)
+        {
+            switch (bindInfo.Type)
+            {
+                case ERHIBindType.Buffer:
+                case ERHIBindType.StorageBuffer:
+                case ERHIBindType.UniformBuffer:
+                    if (element.BufferView is MetalBufferView bufferView)
+                    {
+                        MTLBuffer nativeBuffer = bufferView.Buffer.NativeBuffer;
+                        ulong offset = (ulong)Math.Max(0, bufferView.Descriptor.Offset);
+                        return new MetalArgumentBindingSnapshot(
+                            checked(nativeBuffer.GpuAddress + offset),
+                            default,
+                            new MTLAllocation(nativeBuffer.NativePtr));
+                    }
+
+                    return default;
+
+                case ERHIBindType.Texture2D:
+                case ERHIBindType.Texture2DMS:
+                case ERHIBindType.Texture2DArray:
+                case ERHIBindType.Texture2DArrayMS:
+                case ERHIBindType.TextureCube:
+                case ERHIBindType.TextureCubeArray:
+                case ERHIBindType.Texture3D:
+                case ERHIBindType.StorageTexture2D:
+                case ERHIBindType.StorageTexture2DMS:
+                case ERHIBindType.StorageTexture2DArray:
+                case ERHIBindType.StorageTexture2DArrayMS:
+                case ERHIBindType.StorageTextureCube:
+                case ERHIBindType.StorageTextureCubeArray:
+                case ERHIBindType.StorageTexture3D:
+                    if (element.TextureView is MetalTextureView textureView)
+                    {
+                        MTLTexture nativeTexture = textureView.ParentTexture;
+                        return new MetalArgumentBindingSnapshot(
+                            0,
+                            textureView.ResourceID,
+                            new MTLAllocation(nativeTexture.NativePtr));
+                    }
+
+                    return default;
+
+                case ERHIBindType.Sampler:
+                    if (element.Sampler is MetalSampler sampler)
+                    {
+                        MTLSamplerState nativeSampler = sampler.NativeSampler;
+                        return new MetalArgumentBindingSnapshot(
+                            0,
+                            nativeSampler.GpuResourceID,
+                            default);
+                    }
+
+                    return default;
+
+                case ERHIBindType.AccelStruct:
+                    if (element.AccelStruct is MetalTopLevelAccelStruct topLevel)
+                    {
+                        MTLAccelerationStructure nativeAccelerationStructure =
+                            topLevel.NativeAccelerationStructure;
+                        return new MetalArgumentBindingSnapshot(
+                            0,
+                            nativeAccelerationStructure.GpuResourceID,
+                            new MTLAllocation(nativeAccelerationStructure.NativePtr));
+                    }
+
+                    return default;
+
+                default:
+                    throw new InvalidOperationException(
+                        $"Metal argument table {bindInfo.Index} contains unsupported binding type {bindInfo.Type}.");
+            }
         }
     }
 
@@ -31,6 +146,7 @@ namespace SharpGPU
         public ulong ReferenceBufferElementCount => m_ReferenceBufferElementCount;
         public bool RequiresReferenceBuffer => m_RequiresReferenceBuffer;
 
+        internal MetalDevice? Device { get; }
         private readonly uint m_Index;
         private readonly MetalBindInfo[] m_BindInfos;
         private readonly int[] m_ElementOffsets;
@@ -39,6 +155,7 @@ namespace SharpGPU
         private readonly bool m_RequiresReferenceBuffer;
 
         public MetalArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor)
+            : base(descriptor)
         {
             m_Index = descriptor.Index;
             m_BindInfos = new MetalBindInfo[descriptor.Elements.Length];
@@ -66,7 +183,8 @@ namespace SharpGPU
                     descriptor.Index,
                     element.Count,
                     element.Type,
-                    element.Stage);
+                    element.Stages,
+                    element.Requirement);
                 m_ElementOffsets[index] = offset;
                 offset = checked(offset + count);
                 requiresReferenceBuffer |= element.Count > 1;
@@ -79,6 +197,14 @@ namespace SharpGPU
             m_TotalElementCount = offset;
             m_ReferenceBufferElementCount = referenceBufferElementCount;
             m_RequiresReferenceBuffer = requiresReferenceBuffer;
+        }
+
+        internal MetalArgumentTableLayout(
+            MetalDevice device,
+            in RHIArgumentTableLayoutDescriptor descriptor)
+            : this(descriptor)
+        {
+            Device = device;
         }
 
         public int GetElementOffset(int bindIndex)
@@ -151,7 +277,8 @@ namespace SharpGPU
                     || left.Index != right.Index
                     || left.Count != right.Count
                     || left.Type != right.Type
-                    || left.Stage != right.Stage)
+                    || left.Stages != right.Stages
+                    || left.Requirement != right.Requirement)
                 {
                     return false;
                 }
@@ -198,11 +325,28 @@ namespace SharpGPU
     {
         public MetalArgumentTableLayout ArgumentTableLayout => m_Layout;
 
+        internal MetalDevice? Device { get; }
         private readonly MetalArgumentTableLayout m_Layout;
-        private readonly RHIArgumentTableElement[] m_Elements;
+        private readonly MetalArgumentBindingSnapshot[] m_Bindings;
 
         public MetalArgumentTable(in RHIArgumentTableDescriptor descriptor)
+            : this(null, descriptor, validateDevice: false)
         {
+        }
+
+        internal MetalArgumentTable(
+            MetalDevice device,
+            in RHIArgumentTableDescriptor descriptor)
+            : this(device, descriptor, validateDevice: true)
+        {
+        }
+
+        private MetalArgumentTable(
+            MetalDevice? device,
+            in RHIArgumentTableDescriptor descriptor,
+            bool validateDevice)
+        {
+            Device = device;
             m_Layout = descriptor.Layout as MetalArgumentTableLayout
                 ?? throw new ArgumentException(
                     $"Metal argument tables require a {nameof(MetalArgumentTableLayout)}.",
@@ -211,6 +355,12 @@ namespace SharpGPU
             {
                 throw new ObjectDisposedException(nameof(descriptor), $"Metal argument table layout {m_Layout.Index} is disposed.");
             }
+            if (validateDevice && !ReferenceEquals(m_Layout.Device, device))
+            {
+                throw new ArgumentException(
+                    $"Metal argument table layout {m_Layout.Index} belongs to a different Metal device.",
+                    nameof(descriptor));
+            }
             if (descriptor.Elements.Length > m_Layout.BindInfos.Length)
             {
                 throw new ArgumentException(
@@ -218,7 +368,7 @@ namespace SharpGPU
                     nameof(descriptor));
             }
 
-            m_Elements = new RHIArgumentTableElement[m_Layout.TotalElementCount];
+            m_Bindings = new MetalArgumentBindingSnapshot[m_Layout.TotalElementCount];
 
             Span<RHIArgumentTableElement> sourceElements = descriptor.Elements.Span;
             for (int index = 0; index < sourceElements.Length; ++index)
@@ -228,13 +378,15 @@ namespace SharpGPU
                     sourceElements[index],
                     bindInfo,
                     arrayIndex: 0,
+                    Device,
                     nameof(descriptor));
                 int elementOffset = m_Layout.GetElementOffset(index);
-                m_Elements[elementOffset] = sourceElements[index];
+                m_Bindings[elementOffset] =
+                    MetalArgumentBindingSnapshot.Capture(sourceElements[index], bindInfo);
             }
         }
 
-        public RHIArgumentTableElement GetElement(int bindIndex, int arrayIndex)
+        public MetalArgumentBindingSnapshot GetBindingSnapshot(int bindIndex, int arrayIndex)
         {
             ThrowIfDisposed();
             int elementOffset = m_Layout.GetElementOffset(bindIndex);
@@ -247,7 +399,7 @@ namespace SharpGPU
                     $"Metal argument table {m_Layout.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type} array index must be in [0, {bindInfo.Count}).");
             }
 
-            return m_Elements[checked(elementOffset + arrayIndex)];
+            return m_Bindings[checked(elementOffset + arrayIndex)];
         }
 
         public int GetBindCount()
@@ -268,8 +420,10 @@ namespace SharpGPU
                 element,
                 bindInfo,
                 arrayIndex: 0,
+                Device,
                 nameof(element));
-            m_Elements[m_Layout.GetElementOffset(bindIndex)] = element;
+            m_Bindings[m_Layout.GetElementOffset(bindIndex)] =
+                MetalArgumentBindingSnapshot.Capture(element, bindInfo);
         }
 
         public override void SetBindElement(
@@ -299,9 +453,11 @@ namespace SharpGPU
                 element,
                 bindInfo,
                 arrayIndex,
+                Device,
                 nameof(element));
             int elementOffset = checked(m_Layout.GetElementOffset(bindIndex) + arrayIndex);
-            m_Elements[elementOffset] = element;
+            m_Bindings[elementOffset] =
+                MetalArgumentBindingSnapshot.Capture(element, bindInfo);
         }
 
         internal void ValidateRequiredBindings()
@@ -311,18 +467,14 @@ namespace SharpGPU
             for (int bindIndex = 0; bindIndex < binds.Length; ++bindIndex)
             {
                 ref readonly MetalBindInfo bind = ref binds[bindIndex];
-                if (bind.Type is not (ERHIBindType.Sampler or ERHIBindType.AccelStruct))
+                if (bind.Requirement != ERHIArgumentBindingRequirement.Required)
                 {
                     continue;
                 }
 
                 for (int arrayIndex = 0; (uint)arrayIndex < bind.Count; ++arrayIndex)
                 {
-                    RHIArgumentTableElement element = GetElement(bindIndex, arrayIndex);
-                    bool isBound = bind.Type == ERHIBindType.Sampler
-                        ? element.Sampler is MetalSampler
-                        : element.AccelStruct is MetalTopLevelAccelStruct;
-                    if (!isBound)
+                    if (!GetBindingSnapshot(bindIndex, arrayIndex).IsBound)
                     {
                         throw new InvalidOperationException(
                             $"Metal argument table {m_Layout.Index} required binding slot={bind.Slot}, "
@@ -332,12 +484,9 @@ namespace SharpGPU
             }
         }
 
-        private void ThrowIfDisposed()
+        private new void ThrowIfDisposed()
         {
-            if (IsDisposed)
-            {
-                throw new ObjectDisposedException($"MetalArgumentTable[{m_Layout.Index}]");
-            }
+            base.ThrowIfDisposed();
 
             if (m_Layout.IsDisposed)
             {
@@ -374,7 +523,14 @@ namespace SharpGPU
 
             _ = checked(element.Slot + element.Count - 1);
             ValidateBindType(element.Type, nameof(element));
-            ValidateShaderStage(element.Stage, tableIndex, elementIndex);
+            ValidateShaderStages(element.Stages, tableIndex, elementIndex);
+            if (!Enum.IsDefined(element.Requirement))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(element.Requirement),
+                    element.Requirement,
+                    "Metal argument-table binding requirement is undefined.");
+            }
         }
 
         public static void ValidateBindType(in ERHIBindType bindType, string parameterName)
@@ -443,6 +599,7 @@ namespace SharpGPU
             in RHIArgumentTableElement element,
             in MetalBindInfo bindInfo,
             in int arrayIndex,
+            MetalDevice? expectedDevice,
             string parameterName)
         {
             bool hasSampler = element.Sampler is not null;
@@ -475,6 +632,7 @@ namespace SharpGPU
                     }
 
                     ValidateNotDisposed(sampler, bindInfo, arrayIndex, parameterName);
+                    ValidateDevice(expectedDevice, sampler.Device, bindInfo, arrayIndex, parameterName);
                     return;
                 case ERHIBindType.Buffer:
                 case ERHIBindType.StorageBuffer:
@@ -485,6 +643,8 @@ namespace SharpGPU
                     }
 
                     ValidateNotDisposed(bufferView, bindInfo, arrayIndex, parameterName);
+                    ValidateNotDisposed(bufferView.Buffer, bindInfo, arrayIndex, parameterName);
+                    ValidateDevice(expectedDevice, bufferView.Buffer.MetalDevice, bindInfo, arrayIndex, parameterName);
                     ERHIBufferViewType expectedBufferViewType = bindInfo.Type switch
                     {
                         ERHIBindType.Buffer => ERHIBufferViewType.ShaderResource,
@@ -521,6 +681,7 @@ namespace SharpGPU
                     }
                     ValidateNotDisposed(textureView, bindInfo, arrayIndex, parameterName);
                     ValidateNotDisposed(textureView.Texture, bindInfo, arrayIndex, parameterName);
+                    ValidateDevice(expectedDevice, textureView.Texture.MetalDevice, bindInfo, arrayIndex, parameterName);
                     ERHITextureViewType expectedTextureViewType = IsStorageTexture(bindInfo.Type)
                         ? ERHITextureViewType.UnorderedAccess
                         : ERHITextureViewType.ShaderResource;
@@ -544,6 +705,7 @@ namespace SharpGPU
                         throw WrongResourceType(bindInfo, arrayIndex, nameof(MetalTopLevelAccelStruct), parameterName);
                     }
                     ValidateNotDisposed(accelerationStructure, bindInfo, arrayIndex, parameterName);
+                    ValidateDevice(expectedDevice, accelerationStructure.Device, bindInfo, arrayIndex, parameterName);
 
                     return;
                 default:
@@ -554,28 +716,17 @@ namespace SharpGPU
             }
         }
 
-        private static void ValidateShaderStage(
-            in ERHIShaderStage shaderStage,
+        private static void ValidateShaderStages(
+            in ERHIShaderStageMask stages,
             in uint tableIndex,
             in int elementIndex)
         {
-            switch (shaderStage)
+            if (stages == ERHIShaderStageMask.None || (stages & ~ERHIShaderStageMask.All) != 0)
             {
-                case ERHIShaderStage.Vertex:
-                case ERHIShaderStage.Fragment:
-                case ERHIShaderStage.Compute:
-                case ERHIShaderStage.Task:
-                case ERHIShaderStage.Mesh:
-                case ERHIShaderStage.AllGraphics:
-                case ERHIShaderStage.RayTracing:
-                case ERHIShaderStage.MachineLearning:
-                case ERHIShaderStage.All:
-                    return;
-                default:
-                    throw new ArgumentOutOfRangeException(
-                        nameof(shaderStage),
-                        shaderStage,
-                        $"Metal argument table {tableIndex} element {elementIndex} shader stage is undefined or unsupported.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(stages),
+                    stages,
+                    $"Metal argument table {tableIndex} element {elementIndex} shader-stage visibility must be a non-empty known mask.");
             }
         }
 
@@ -632,6 +783,25 @@ namespace SharpGPU
                     parameterName,
                     $"Metal argument table {bindInfo.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type}, arrayIndex={arrayIndex} references a disposed resource.");
             }
+        }
+
+        private static void ValidateDevice(
+            MetalDevice? expectedDevice,
+            MetalDevice actualDevice,
+            in MetalBindInfo bindInfo,
+            in int arrayIndex,
+            string parameterName)
+        {
+            if (expectedDevice is null || ReferenceEquals(expectedDevice, actualDevice))
+            {
+                return;
+            }
+
+            throw new ArgumentException(
+                $"Metal argument table {bindInfo.Index} binding slot={bindInfo.Slot}, "
+                + $"type={bindInfo.Type}, arrayIndex={arrayIndex} references a resource "
+                + "from a different Metal device.",
+                parameterName);
         }
     }
 }

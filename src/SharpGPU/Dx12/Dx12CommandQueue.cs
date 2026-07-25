@@ -2,7 +2,7 @@ using System;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8600, CS8602, CA1416
+#pragma warning disable CA1416
     internal unsafe class Dx12CommandQueue : RHICommandQueue
     {
         public Dx12Device Dx12Device
@@ -28,6 +28,8 @@ namespace SharpGPU
             }
         }
 
+        protected override object DeviceIdentity => m_Dx12Device;
+
         private Dx12Device m_Dx12Device;
         private Vortice.Direct3D12.ID3D12CommandQueue m_NativeCommandQueue;
 
@@ -40,13 +42,12 @@ namespace SharpGPU
             queueDesc.Flags = Vortice.Direct3D12.CommandQueueFlags.None;
             queueDesc.Type = Dx12Utility.ConvertToDx12QueueType(pipeline);
 
-            Vortice.Direct3D12.ID3D12CommandQueue commandQueue;
+            Vortice.Direct3D12.ID3D12CommandQueue? commandQueue;
             SharpGen.Runtime.Result hResult = m_Dx12Device.NativeDevice.CreateCommandQueue(queueDesc, out commandQueue);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-
-            m_NativeCommandQueue = commandQueue;
+            m_NativeCommandQueue = Dx12Utility.RequireCreatedObject(
+                commandQueue,
+                hResult,
+                "ID3D12Device.CreateCommandQueue");
         }
 
         public override RHICommandBuffer CreateCommandBuffer()
@@ -54,262 +55,443 @@ namespace SharpGPU
             return new Dx12CommandBuffer(this);
         }
 
-        public override void MapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
+        public override void Submit(in RHIQueueSubmitDescriptor descriptor)
         {
-            Dx12Texture dx12Texture = tiledTextureRegions.Texture as Dx12Texture;
-            int regionCount = tiledTextureRegions.Regions.Length;
-
-            Vortice.Direct3D12.TiledResourceCoordinate[] coordinates = new Vortice.Direct3D12.TiledResourceCoordinate[regionCount];
-            Vortice.Direct3D12.TileRegionSize[] regionSizes = new Vortice.Direct3D12.TileRegionSize[regionCount];
-            Vortice.Direct3D12.TileRangeFlags[] rangeFlags = new Vortice.Direct3D12.TileRangeFlags[regionCount];
-            int[] heapRangeStartOffsets = new int[regionCount];
-            int[] rangeTileCounts = new int[regionCount];
-
-            for (int i = 0; i < regionCount; ++i)
+            ValidateSubmit(in descriptor);
+            ReadOnlySpan<RHIQueueSemaphoreWait> waitSemaphores = descriptor.WaitSemaphores.Span;
+            ReadOnlySpan<RHICommandBuffer> commandBuffers = descriptor.CommandBuffers.Span;
+            ReadOnlySpan<RHISemaphore> signalSemaphores = descriptor.SignalSemaphores.Span;
+            for (int i = 0; i < waitSemaphores.Length; ++i)
             {
-                ref RHITextureCoordinateRegion region = ref tiledTextureRegions.Regions.Span[i];
-
-                coordinates[i].X = (uint)region.Start.X;
-                coordinates[i].Y = (uint)region.Start.Y;
-                coordinates[i].Z = (uint)region.Start.Z;
-                coordinates[i].Subresource = (uint)(region.Layer + region.MipLevel);
-
-                uint width = (uint)(region.End.X - region.Start.X);
-                uint height = (uint)(region.End.Y - region.Start.Y);
-                uint depth = (uint)(region.End.Z - region.Start.Z);
-                if (width < 1) width = 1;
-                if (height < 1) height = 1;
-                if (depth < 1) depth = 1;
-                uint numTiles = width * height * depth;
-
-                regionSizes[i].NumTiles = numTiles;
-                regionSizes[i].UseBox = true;
-                regionSizes[i].Width = width;
-                regionSizes[i].Height = (ushort)height;
-                regionSizes[i].Depth = (ushort)depth;
-
-                rangeFlags[i] = Vortice.Direct3D12.TileRangeFlags.None;
-                heapRangeStartOffsets[i] = 0;
-                rangeTileCounts[i] = (int)numTiles;
-            }
-
-            m_NativeCommandQueue.UpdateTileMappings(
-                (Vortice.Direct3D12.ID3D12Resource)dx12Texture.NativeResource,
-                coordinates,
-                regionSizes,
-                null,
-                rangeFlags,
-                heapRangeStartOffsets,
-                rangeTileCounts,
-                Vortice.Direct3D12.TileMappingFlags.None);
-        }
-
-        public override void UnMapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
-        {
-            Dx12Texture dx12Texture = tiledTextureRegions.Texture as Dx12Texture;
-            int regionCount = tiledTextureRegions.Regions.Length;
-
-            Vortice.Direct3D12.TiledResourceCoordinate[] coordinates = new Vortice.Direct3D12.TiledResourceCoordinate[regionCount];
-            Vortice.Direct3D12.TileRegionSize[] regionSizes = new Vortice.Direct3D12.TileRegionSize[regionCount];
-            Vortice.Direct3D12.TileRangeFlags[] rangeFlags = new Vortice.Direct3D12.TileRangeFlags[regionCount];
-            int[] rangeTileCounts = new int[regionCount];
-
-            for (int i = 0; i < regionCount; ++i)
-            {
-                ref RHITextureCoordinateRegion region = ref tiledTextureRegions.Regions.Span[i];
-
-                coordinates[i].X = (uint)region.Start.X;
-                coordinates[i].Y = (uint)region.Start.Y;
-                coordinates[i].Z = (uint)region.Start.Z;
-                coordinates[i].Subresource = (uint)(region.Layer + region.MipLevel);
-
-                uint width = (uint)(region.End.X - region.Start.X);
-                uint height = (uint)(region.End.Y - region.Start.Y);
-                uint depth = (uint)(region.End.Z - region.Start.Z);
-                if (width < 1) width = 1;
-                if (height < 1) height = 1;
-                if (depth < 1) depth = 1;
-                uint numTiles = width * height * depth;
-
-                regionSizes[i].NumTiles = numTiles;
-                regionSizes[i].UseBox = true;
-                regionSizes[i].Width = width;
-                regionSizes[i].Height = (ushort)height;
-                regionSizes[i].Depth = (ushort)depth;
-
-                rangeFlags[i] = Vortice.Direct3D12.TileRangeFlags.Null;
-                rangeTileCounts[i] = (int)numTiles;
-            }
-
-            m_NativeCommandQueue.UpdateTileMappings(
-                (Vortice.Direct3D12.ID3D12Resource)dx12Texture.NativeResource,
-                coordinates,
-                regionSizes,
-                null,
-                rangeFlags,
-                null,
-                rangeTileCounts,
-                Vortice.Direct3D12.TileMappingFlags.None);
-        }
-
-        public override void MapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
-        {
-            for (int i = 0; i < tiledTexturePackedMips.PackedMips.Length; ++i)
-            {
-                ref RHITiledTexturePackedMip packedMip = ref tiledTexturePackedMips.PackedMips.Span[i];
-                Dx12Texture dx12Texture = packedMip.Texture as Dx12Texture;
-
-                Vortice.Direct3D12.TileRangeFlags[] rangeFlag = { Vortice.Direct3D12.TileRangeFlags.None };
-                int[] startOffset = { 0 };
-                int[] tileCount = { 1 };
-
-                m_NativeCommandQueue.UpdateTileMappings(
-                    (Vortice.Direct3D12.ID3D12Resource)dx12Texture.NativeResource,
-                    Array.Empty<Vortice.Direct3D12.TiledResourceCoordinate>(),
-                    Array.Empty<Vortice.Direct3D12.TileRegionSize>(),
-                    null,
-                    rangeFlag,
-                    startOffset,
-                    tileCount,
-                    Vortice.Direct3D12.TileMappingFlags.None);
-            }
-        }
-
-        public override void UnMapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
-        {
-            for (int i = 0; i < tiledTexturePackedMips.PackedMips.Length; ++i)
-            {
-                ref RHITiledTexturePackedMip packedMip = ref tiledTexturePackedMips.PackedMips.Span[i];
-                Dx12Texture dx12Texture = packedMip.Texture as Dx12Texture;
-
-                Vortice.Direct3D12.TileRangeFlags[] rangeFlag = { Vortice.Direct3D12.TileRangeFlags.Null };
-                int[] tileCount = { 1 };
-
-                m_NativeCommandQueue.UpdateTileMappings(
-                    (Vortice.Direct3D12.ID3D12Resource)dx12Texture.NativeResource,
-                    Array.Empty<Vortice.Direct3D12.TiledResourceCoordinate>(),
-                    Array.Empty<Vortice.Direct3D12.TileRegionSize>(),
-                    null,
-                    rangeFlag,
-                    null,
-                    tileCount,
-                    Vortice.Direct3D12.TileMappingFlags.None);
-            }
-        }
-
-        public override void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore)
-        {
-            if (waitSemaphore != null)
-            {
-                Dx12Semaphore dx12Semaphore = waitSemaphore as Dx12Semaphore;
-                ulong waitValue = dx12Semaphore.LastSignaledValue;
-                if (waitValue > 0)
+                if (waitSemaphores[i].Semaphore is not Dx12Semaphore)
                 {
-                    m_NativeCommandQueue.Wait(dx12Semaphore.NativeFence, waitValue);
+                    throw new ArgumentException($"Wait semaphore at index {i} is not a DX12 semaphore.", nameof(descriptor));
                 }
             }
 
-            if (cmdBuffer != null)
+            for (int i = 0; i < commandBuffers.Length; ++i)
             {
-                Dx12CommandBuffer dx12CommandBuffer = cmdBuffer as Dx12CommandBuffer;
-                m_NativeCommandQueue.ExecuteCommandList(dx12CommandBuffer.NativeCommandList);
+                if (commandBuffers[i] is not Dx12CommandBuffer)
+                {
+                    throw new ArgumentException($"Command buffer at index {i} is not a DX12 command buffer.", nameof(descriptor));
+                }
             }
 
-            if (signalSemaphore != null)
+            for (int i = 0; i < signalSemaphores.Length; ++i)
             {
-                Dx12Semaphore dx12Semaphore = signalSemaphore as Dx12Semaphore;
-                ulong signalValue = dx12Semaphore.PrepareSignalValue();
-                m_NativeCommandQueue.Signal(dx12Semaphore.NativeFence, signalValue);
+                if (signalSemaphores[i] is not Dx12Semaphore)
+                {
+                    throw new ArgumentException($"Signal semaphore at index {i} is not a DX12 semaphore.", nameof(descriptor));
+                }
             }
 
-            if (signalFence != null)
+            if (descriptor.CompletionFence != null && descriptor.CompletionFence is not Dx12Fence)
             {
-                Dx12Fence dx12Fence = signalFence as Dx12Fence;
-                ulong signalValue = dx12Fence.ConsumeSignalValue();
-                m_NativeCommandQueue.Signal(dx12Fence.NativeFence, signalValue);
+                throw new ArgumentException("The completion fence is not a DX12 fence.", nameof(descriptor));
             }
-        }
 
-        public override void Submits(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores)
-        {
-            if (waitSemaphores != null)
+            ReserveSubmit(in descriptor);
+            try
             {
                 for (int i = 0; i < waitSemaphores.Length; ++i)
                 {
-                    Dx12Semaphore dx12Semaphore = waitSemaphores[i] as Dx12Semaphore;
+                    Dx12Semaphore dx12Semaphore = (Dx12Semaphore)waitSemaphores[i].Semaphore;
                     ulong waitValue = dx12Semaphore.LastSignaledValue;
-                    if (waitValue > 0)
+                    if (waitValue == 0)
                     {
-                        m_NativeCommandQueue.Wait(dx12Semaphore.NativeFence, waitValue);
+                        throw new InvalidOperationException($"Wait semaphore at index {i} has no native signal value.");
                     }
+
+                    SharpGen.Runtime.Result waitResult = m_NativeCommandQueue.Wait(dx12Semaphore.NativeFence, waitValue);
+                    Dx12Utility.CHECK_HR(waitResult);
                 }
-            }
 
-            if (cmdBuffer != null)
-            {
-                Dx12CommandBuffer dx12CommandBuffer = cmdBuffer as Dx12CommandBuffer;
-                m_NativeCommandQueue.ExecuteCommandList(dx12CommandBuffer.NativeCommandList);
-            }
+                if (commandBuffers.Length == 1)
+                {
+                    m_NativeCommandQueue.ExecuteCommandList(((Dx12CommandBuffer)commandBuffers[0]).NativeCommandList);
+                }
+                else if (commandBuffers.Length > 1)
+                {
+                    Vortice.Direct3D12.ID3D12CommandList[] commandLists =
+                        new Vortice.Direct3D12.ID3D12CommandList[commandBuffers.Length];
+                    for (int i = 0; i < commandBuffers.Length; ++i)
+                    {
+                        commandLists[i] = ((Dx12CommandBuffer)commandBuffers[i]).NativeCommandList;
+                    }
 
-            if (signalSemaphores != null)
-            {
+                    m_NativeCommandQueue.ExecuteCommandLists(commandLists);
+                }
+
                 for (int i = 0; i < signalSemaphores.Length; ++i)
                 {
-                    Dx12Semaphore dx12Semaphore = signalSemaphores[i] as Dx12Semaphore;
+                    Dx12Semaphore dx12Semaphore = (Dx12Semaphore)signalSemaphores[i];
                     ulong signalValue = dx12Semaphore.PrepareSignalValue();
-                    m_NativeCommandQueue.Signal(dx12Semaphore.NativeFence, signalValue);
+                    SharpGen.Runtime.Result signalResult = m_NativeCommandQueue.Signal(dx12Semaphore.NativeFence, signalValue);
+                    Dx12Utility.CHECK_HR(signalResult);
                 }
-            }
 
-            if (signalFence != null)
+                if (descriptor.CompletionFence is Dx12Fence dx12Fence)
+                {
+                    ulong signalValue = dx12Fence.PrepareSignalValue();
+                    SharpGen.Runtime.Result signalResult = m_NativeCommandQueue.Signal(dx12Fence.NativeFence, signalValue);
+                    Dx12Utility.CHECK_HR(signalResult);
+                }
+
+                CommitSubmit(in descriptor);
+            }
+            catch (Exception exception)
             {
-                Dx12Fence dx12Fence = signalFence as Dx12Fence;
-                ulong signalValue = dx12Fence.ConsumeSignalValue();
-                m_NativeCommandQueue.Signal(dx12Fence.NativeFence, signalValue);
+                RollbackSubmit(in descriptor);
+                if (exception is RHIException
+                    {
+                        ErrorCode: ERHIErrorCode.DeviceLost
+                    } deviceLoss)
+                {
+                    m_Dx12Device.MarkDeviceLost(deviceLoss);
+                }
+                throw;
             }
         }
 
-        public override void Submits(RHICommandBuffer[] cmdBuffers, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores)
+        protected override void WaitIdleCore()
         {
-            if (waitSemaphores != null)
+            using Dx12Fence completion = new(m_Dx12Device);
+            RHIQueueSubmitDescriptor descriptor =
+                new(completionFence: completion);
+            Submit(in descriptor);
+            EFenceStatus status = completion.Wait();
+            if (status != EFenceStatus.Success)
             {
-                for (int i = 0; i < waitSemaphores.Length; ++i)
+                throw new RHIException(
+                    ERHIErrorCode.SynchronizationFailed,
+                    ERHIBackend.DirectX12,
+                    nativeCode: 0,
+                    $"DX12 queue lifecycle drain completed with '{status}'.",
+                    ERHIDeviceState.Operational);
+            }
+        }
+
+        public override void BindSparse(in RHISparseBindDescriptor descriptor)
+        {
+            m_Dx12Device.Capabilities.Memory.SparseBinding.Require(
+                "DX12 queue-ordered sparse texture binding");
+            ValidateSparseBind(in descriptor);
+            ValidateDx12SparseBindings(in descriptor);
+
+            ReadOnlySpan<RHISemaphore> waits = descriptor.WaitSemaphores.Span;
+            ReadOnlySpan<RHISemaphore> signals = descriptor.SignalSemaphores.Span;
+            for (int i = 0; i < waits.Length; ++i)
+            {
+                if (waits[i] is not Dx12Semaphore)
                 {
-                    Dx12Semaphore dx12Semaphore = waitSemaphores[i] as Dx12Semaphore;
-                    ulong waitValue = dx12Semaphore.LastSignaledValue;
-                    if (waitValue > 0)
+                    throw new ArgumentException(
+                        $"Wait semaphore at index {i} is not a DX12 semaphore.",
+                        nameof(descriptor));
+                }
+            }
+            for (int i = 0; i < signals.Length; ++i)
+            {
+                if (signals[i] is not Dx12Semaphore)
+                {
+                    throw new ArgumentException(
+                        $"Signal semaphore at index {i} is not a DX12 semaphore.",
+                        nameof(descriptor));
+                }
+            }
+            if (descriptor.CompletionFence != null &&
+                descriptor.CompletionFence is not Dx12Fence)
+            {
+                throw new ArgumentException(
+                    "The sparse completion fence is not a DX12 fence.",
+                    nameof(descriptor));
+            }
+
+            ReserveSparseBind(in descriptor);
+            try
+            {
+                for (int i = 0; i < waits.Length; ++i)
+                {
+                    Dx12Semaphore semaphore = (Dx12Semaphore)waits[i];
+                    ulong value = semaphore.LastSignaledValue;
+                    if (value == 0)
                     {
-                        m_NativeCommandQueue.Wait(dx12Semaphore.NativeFence, waitValue);
+                        throw new InvalidOperationException(
+                            $"Wait semaphore at index {i} has no native signal value.");
                     }
+                    Dx12Utility.CHECK_HR(
+                        m_NativeCommandQueue.Wait(semaphore.NativeFence, value));
                 }
-            }
 
-            if (cmdBuffers != null)
-            {
-                Vortice.Direct3D12.ID3D12CommandList[] commandLists = new Vortice.Direct3D12.ID3D12CommandList[cmdBuffers.Length];
-                for (int i = 0; i < cmdBuffers.Length; ++i)
+                ReadOnlySpan<RHISparseTextureTileBinding> tileBindings =
+                    descriptor.TileBindings.Span;
+                for (int i = 0; i < tileBindings.Length; ++i)
                 {
-                    Dx12CommandBuffer dx12CommandBuffer = cmdBuffers[i] as Dx12CommandBuffer;
-                    commandLists[i] = dx12CommandBuffer.NativeCommandList;
+                    ExecuteTileBinding(in tileBindings[i]);
                 }
-                m_NativeCommandQueue.ExecuteCommandLists(commandLists);
-            }
-
-            if (signalSemaphores != null)
-            {
-                for (int i = 0; i < signalSemaphores.Length; ++i)
+                ReadOnlySpan<RHISparseTextureMipTailBinding> tailBindings =
+                    descriptor.MipTailBindings.Span;
+                for (int i = 0; i < tailBindings.Length; ++i)
                 {
-                    Dx12Semaphore dx12Semaphore = signalSemaphores[i] as Dx12Semaphore;
-                    ulong signalValue = dx12Semaphore.PrepareSignalValue();
-                    m_NativeCommandQueue.Signal(dx12Semaphore.NativeFence, signalValue);
+                    ExecuteMipTailBinding(in tailBindings[i]);
+                }
+
+                for (int i = 0; i < signals.Length; ++i)
+                {
+                    Dx12Semaphore semaphore = (Dx12Semaphore)signals[i];
+                    ulong value = semaphore.PrepareSignalValue();
+                    Dx12Utility.CHECK_HR(
+                        m_NativeCommandQueue.Signal(semaphore.NativeFence, value));
+                }
+                if (descriptor.CompletionFence is Dx12Fence fence)
+                {
+                    ulong value = fence.PrepareSignalValue();
+                    Dx12Utility.CHECK_HR(
+                        m_NativeCommandQueue.Signal(fence.NativeFence, value));
+                }
+
+                CommitSparseBind(in descriptor);
+            }
+            catch (Exception exception)
+            {
+                RollbackSparseBind(in descriptor);
+                if (exception is RHIException
+                    {
+                        ErrorCode: ERHIErrorCode.DeviceLost
+                    } deviceLoss)
+                {
+                    m_Dx12Device.MarkDeviceLost(deviceLoss);
+                }
+                throw;
+            }
+        }
+
+        private void ValidateDx12SparseBindings(
+            in RHISparseBindDescriptor descriptor)
+        {
+            ReadOnlySpan<RHISparseTextureTileBinding> tileBindings =
+                descriptor.TileBindings.Span;
+            for (int i = 0; i < tileBindings.Length; ++i)
+            {
+                ref readonly RHISparseTextureTileBinding binding =
+                    ref tileBindings[i];
+                Dx12Texture texture = RequireSparseTexture(
+                    binding.Texture,
+                    $"tile binding at index {i}");
+                RHISparseTextureMemoryRequirements requirements =
+                    texture.SparseRequirements!;
+                RHISparseTextureSubresourceTiling subresource =
+                    requirements.GetSubresource(
+                        binding.Aspect,
+                        binding.MipLevel,
+                        binding.ArrayLayer);
+                ValidateTileRange(
+                    binding.TileOffset,
+                    binding.TileExtent,
+                    subresource.TileCount,
+                    $"tile binding at index {i}");
+                ulong tileCount = checked(
+                    (ulong)binding.TileExtent.x *
+                    binding.TileExtent.y *
+                    binding.TileExtent.z);
+                _ = checked((ushort)binding.TileExtent.y);
+                _ = checked((ushort)binding.TileExtent.z);
+                if (binding.Operation == ERHISparseBindingOperation.Bind)
+                {
+                    Dx12Heap heap = RequireSparseHeap(
+                        binding.Heap,
+                        $"tile binding at index {i}");
+                    heap.ValidateSparseSpan(
+                        binding.HeapOffset,
+                        checked(tileCount * requirements.TileSizeBytes),
+                        requirements.HeapCompatibility);
+                    _ = checked((int)(
+                        binding.HeapOffset / requirements.TileSizeBytes));
                 }
             }
 
-            if (signalFence != null)
+            ReadOnlySpan<RHISparseTextureMipTailBinding> tailBindings =
+                descriptor.MipTailBindings.Span;
+            for (int i = 0; i < tailBindings.Length; ++i)
             {
-                Dx12Fence dx12Fence = signalFence as Dx12Fence;
-                ulong signalValue = dx12Fence.ConsumeSignalValue();
-                m_NativeCommandQueue.Signal(dx12Fence.NativeFence, signalValue);
+                ref readonly RHISparseTextureMipTailBinding binding =
+                    ref tailBindings[i];
+                Dx12Texture texture = RequireSparseTexture(
+                    binding.Texture,
+                    $"mip-tail binding at index {i}");
+                RHISparseTextureMemoryRequirements requirements =
+                    texture.SparseRequirements!;
+                RHISparseTextureMipTail tail =
+                    requirements.GetMipTail(binding.MipTailIndex);
+                _ = checked((int)(tail.SizeBytes / requirements.TileSizeBytes));
+                if (binding.Operation == ERHISparseBindingOperation.Bind)
+                {
+                    Dx12Heap heap = RequireSparseHeap(
+                        binding.Heap,
+                        $"mip-tail binding at index {i}");
+                    heap.ValidateSparseSpan(
+                        binding.HeapOffset,
+                        tail.SizeBytes,
+                        requirements.HeapCompatibility);
+                    _ = checked((int)(
+                        binding.HeapOffset / requirements.TileSizeBytes));
+                }
+            }
+        }
+
+        private void ExecuteTileBinding(
+            in RHISparseTextureTileBinding binding)
+        {
+            Dx12Texture texture = (Dx12Texture)binding.Texture;
+            RHISparseTextureMemoryRequirements requirements =
+                texture.SparseRequirements!;
+            ulong tileCount64 = checked(
+                (ulong)binding.TileExtent.x *
+                binding.TileExtent.y *
+                binding.TileExtent.z);
+            int tileCount = checked((int)tileCount64);
+            uint nativeSubresource = checked(
+                binding.MipLevel +
+                binding.ArrayLayer * texture.Descriptor.MipCount);
+            Vortice.Direct3D12.TiledResourceCoordinate[] coordinates =
+            {
+                new Vortice.Direct3D12.TiledResourceCoordinate(
+                    binding.TileOffset.x,
+                    binding.TileOffset.y,
+                    binding.TileOffset.z,
+                    nativeSubresource),
+            };
+            Vortice.Direct3D12.TileRegionSize[] regions =
+            {
+                new Vortice.Direct3D12.TileRegionSize(
+                    binding.TileExtent.x,
+                    checked((ushort)binding.TileExtent.y),
+                    checked((ushort)binding.TileExtent.z)),
+            };
+            Vortice.Direct3D12.TileRangeFlags[] rangeFlags =
+            {
+                binding.Operation == ERHISparseBindingOperation.Bind
+                    ? Vortice.Direct3D12.TileRangeFlags.None
+                    : Vortice.Direct3D12.TileRangeFlags.Null,
+            };
+            int[] heapOffsets =
+            {
+                binding.Operation == ERHISparseBindingOperation.Bind
+                    ? checked((int)(binding.HeapOffset / requirements.TileSizeBytes))
+                    : 0,
+            };
+            int[] tileCounts = { tileCount };
+            Vortice.Direct3D12.ID3D12Heap? nativeHeap =
+                binding.Operation == ERHISparseBindingOperation.Bind
+                    ? ((Dx12Heap)binding.Heap!).NativeHeap
+                    : null;
+            m_NativeCommandQueue.UpdateTileMappings(
+                texture.NativeResource,
+                coordinates,
+                regions,
+                nativeHeap!,
+                rangeFlags,
+                heapOffsets,
+                tileCounts);
+        }
+
+        private void ExecuteMipTailBinding(
+            in RHISparseTextureMipTailBinding binding)
+        {
+            Dx12Texture texture = (Dx12Texture)binding.Texture;
+            RHISparseTextureMemoryRequirements requirements =
+                texture.SparseRequirements!;
+            RHISparseTextureMipTail tail =
+                requirements.GetMipTail(binding.MipTailIndex);
+            int tileCount = checked((int)(
+                tail.SizeBytes / requirements.TileSizeBytes));
+            Vortice.Direct3D12.TiledResourceCoordinate[] coordinates =
+            {
+                new Vortice.Direct3D12.TiledResourceCoordinate(
+                    0,
+                    0,
+                    0,
+                    tail.FirstMipLevel),
+            };
+            Vortice.Direct3D12.TileRegionSize[] regions =
+            {
+                new Vortice.Direct3D12.TileRegionSize(checked((uint)tileCount)),
+            };
+            Vortice.Direct3D12.TileRangeFlags[] rangeFlags =
+            {
+                binding.Operation == ERHISparseBindingOperation.Bind
+                    ? Vortice.Direct3D12.TileRangeFlags.None
+                    : Vortice.Direct3D12.TileRangeFlags.Null,
+            };
+            int[] heapOffsets =
+            {
+                binding.Operation == ERHISparseBindingOperation.Bind
+                    ? checked((int)(binding.HeapOffset / requirements.TileSizeBytes))
+                    : 0,
+            };
+            int[] tileCounts = { tileCount };
+            Vortice.Direct3D12.ID3D12Heap? nativeHeap =
+                binding.Operation == ERHISparseBindingOperation.Bind
+                    ? ((Dx12Heap)binding.Heap!).NativeHeap
+                    : null;
+            m_NativeCommandQueue.UpdateTileMappings(
+                texture.NativeResource,
+                coordinates,
+                regions,
+                nativeHeap!,
+                rangeFlags,
+                heapOffsets,
+                tileCounts);
+        }
+
+        private Dx12Texture RequireSparseTexture(
+            RHITexture texture,
+            string argumentDescription)
+        {
+            if (texture.IsDisposed)
+            {
+                throw new ObjectDisposedException(texture.GetType().FullName);
+            }
+            if (texture is not Dx12Texture dx12Texture ||
+                !ReferenceEquals(dx12Texture.Dx12Device, m_Dx12Device))
+            {
+                throw new ArgumentException(
+                    $"The {argumentDescription} texture belongs to a different backend or device.");
+            }
+            if (dx12Texture.AllocationMode != ERHIResourceAllocationMode.Sparse ||
+                dx12Texture.SparseRequirements == null)
+            {
+                throw new ArgumentException(
+                    $"The {argumentDescription} texture is not a sparse texture.");
+            }
+            return dx12Texture;
+        }
+
+        private Dx12Heap RequireSparseHeap(
+            RHIHeap? heap,
+            string argumentDescription)
+        {
+            if (heap is not Dx12Heap dx12Heap ||
+                !ReferenceEquals(heap.OwnerDevice, m_Dx12Device))
+            {
+                throw new ArgumentException(
+                    $"The {argumentDescription} heap belongs to a different backend or device.");
+            }
+            return dx12Heap;
+        }
+
+        private static void ValidateTileRange(
+            in SharpGPU.Mathematics.uint3 offset,
+            in SharpGPU.Mathematics.uint3 extent,
+            in SharpGPU.Mathematics.uint3 available,
+            string argumentDescription)
+        {
+            if ((ulong)offset.x + extent.x > available.x ||
+                (ulong)offset.y + extent.y > available.y ||
+                (ulong)offset.z + extent.z > available.z)
+            {
+                throw new ArgumentOutOfRangeException(
+                    argumentDescription,
+                    "Sparse tile binding exceeds the queried subresource tiling.");
             }
         }
 
@@ -318,5 +500,5 @@ namespace SharpGPU
             m_NativeCommandQueue.Release();
         }
     }
-#pragma warning restore CS8600, CS8602, CA1416
+#pragma warning restore CA1416
 }

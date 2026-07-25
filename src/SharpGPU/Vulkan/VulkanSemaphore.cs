@@ -2,7 +2,6 @@ using Vortice.Vulkan;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8618
     internal unsafe class VulkanSemaphore : RHISemaphore
     {
         public VkSemaphore NativeSemaphore => m_NativeSemaphore;
@@ -10,7 +9,7 @@ namespace SharpGPU
         private VulkanDevice m_VulkanDevice;
         private VkSemaphore m_NativeSemaphore;
 
-        public VulkanSemaphore(VulkanDevice device)
+        public VulkanSemaphore(VulkanDevice device) : base(device)
         {
             m_VulkanDevice = device;
 
@@ -30,7 +29,6 @@ namespace SharpGPU
             VulkanNative.vkDestroySemaphore(m_VulkanDevice.NativeDevice, m_NativeSemaphore, null);
         }
     }
-#pragma warning restore CS8618
 }
 
 

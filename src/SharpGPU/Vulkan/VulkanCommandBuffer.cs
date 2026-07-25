@@ -6,7 +6,6 @@ using System.Runtime.CompilerServices;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8600, CS8602, CS8618
     internal unsafe class VulkanCommandBuffer : RHICommandBuffer
     {
         public VkCommandBuffer NativeCommandBuffer
@@ -34,6 +33,14 @@ namespace SharpGPU
         private VkCommandBuffer m_NativeCommandBuffer;
         private List<IntPtr>? m_TransientAllocations;
         private List<VkImageView>? m_TransientImageViews;
+        private List<VkFramebuffer>? m_TransientFramebuffers;
+        private List<VkRenderPass>? m_TransientRenderPasses;
+        private List<VulkanDescriptorSetLease>?
+            m_TransientDescriptorSetLeases;
+        private List<VulkanRasterNativeVariant>?
+            m_TransientRasterPipelines;
+        private readonly VulkanCommandBufferImageLayoutOverlay
+            m_ImageLayoutOverlay = new();
 
         public VulkanCommandBuffer(VulkanCommandQueue commandQueue)
         {
@@ -70,7 +77,7 @@ namespace SharpGPU
 
             m_TransferEncoder = new VulkanTransferEncoder(this);
             m_ComputeEncoder = new VulkanComputeEncoder(this);
-            m_RasterEncoder = new VulkanRasterEncoder(this);
+            m_RasterEncoder = new VulkanRasterSubpassEncoder(this);
             m_RaytracingEncoder = new VulkanRaytracingEncoder(this);
             m_MLEncoder = new VulkanMLEncoder(this);
             m_WorkGraphEncoder = new VulkanWorkGraphEncoder(this);
@@ -79,6 +86,8 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void Begin(string name)
         {
+            ValidateCanBegin();
+            m_ImageLayoutOverlay.Clear();
             VulkanUtility.CheckErrors(VulkanNative.vkResetCommandBuffer(m_NativeCommandBuffer, 0));
             ReleaseTransientResources();
 
@@ -89,6 +98,239 @@ namespace SharpGPU
             };
 
             VulkanUtility.CheckErrors(VulkanNative.vkBeginCommandBuffer(m_NativeCommandBuffer, &beginInfo));
+            MarkBeginSucceeded();
+        }
+
+        internal int CaptureImageLayoutCheckpoint() =>
+            m_ImageLayoutOverlay.CaptureCheckpoint();
+
+        internal void ValidateDeclaredImageLayout(
+            VulkanTexture texture,
+            in RHITextureSubresourceRange range,
+            VkImageLayout declaredLayout)
+        {
+            ArgumentNullException.ThrowIfNull(texture);
+            RHITextureDescriptor textureDescriptor =
+                texture.Descriptor;
+            RHITextureSubresourceRange normalizedRange =
+                VulkanTextureSubresourceRangeUtility.Normalize(
+                    in textureDescriptor,
+                    in range);
+            m_ImageLayoutOverlay.ValidateDeclaredLayout(
+                texture.NativeImage,
+                in normalizedRange,
+                declaredLayout);
+        }
+
+        internal void RequireKnownImageLayout(
+            VulkanTexture texture,
+            in RHITextureSubresourceRange range,
+            VkImageLayout requiredLayout,
+            string operation)
+        {
+            ArgumentNullException.ThrowIfNull(texture);
+            RHITextureDescriptor textureDescriptor =
+                texture.Descriptor;
+            RHITextureSubresourceRange normalizedRange =
+                VulkanTextureSubresourceRangeUtility.Normalize(
+                    in textureDescriptor,
+                    in range);
+            m_ImageLayoutOverlay.RequireKnownLayout(
+                texture.NativeImage,
+                in normalizedRange,
+                requiredLayout,
+                operation);
+        }
+
+        internal void SetKnownImageLayout(
+            VulkanTexture texture,
+            in RHITextureSubresourceRange range,
+            VkImageLayout layout)
+        {
+            ArgumentNullException.ThrowIfNull(texture);
+            RHITextureDescriptor textureDescriptor =
+                texture.Descriptor;
+            RHITextureSubresourceRange normalizedRange =
+                VulkanTextureSubresourceRangeUtility.Normalize(
+                    in textureDescriptor,
+                    in range);
+            m_ImageLayoutOverlay.SetLayout(
+                texture.NativeImage,
+                in normalizedRange,
+                layout);
+        }
+
+        internal void RollbackImageLayouts(int checkpoint)
+        {
+            m_ImageLayoutOverlay.Rollback(checkpoint);
+        }
+        private void AbortRecordingAfterRasterBeginFailure(
+            in VulkanTransientResourceCheckpoint transientCheckpoint,
+            int layoutCheckpoint)
+        {
+            _ = transientCheckpoint;
+            _ = layoutCheckpoint;
+            try
+            {
+                VulkanUtility.CheckErrors(
+                    VulkanNative.vkResetCommandBuffer(
+                        m_NativeCommandBuffer,
+                        0));
+            }
+            finally
+            {
+                try
+                {
+                    ReleaseTransientResources();
+                }
+                finally
+                {
+                    m_ImageLayoutOverlay.Clear();
+                    ((VulkanRasterSubpassEncoder)m_RasterEncoder)
+                        .AbortPassState();
+                    MarkRecordingInvalid();
+                }
+            }
+        }
+        private protected override void OnSubmitted()
+        {
+            m_ImageLayoutOverlay.Clear();
+        }
+
+        internal VulkanTransientResourceCheckpoint
+            CaptureTransientResourceCheckpoint() =>
+            new(
+                m_TransientAllocations?.Count ?? 0,
+                m_TransientImageViews?.Count ?? 0,
+                m_TransientFramebuffers?.Count ?? 0,
+                m_TransientRenderPasses?.Count ?? 0,
+                m_TransientDescriptorSetLeases?.Count ?? 0,
+                m_TransientRasterPipelines?.Count ?? 0);
+
+        internal void RollbackTransientResources(
+            in VulkanTransientResourceCheckpoint checkpoint)
+        {
+            VulkanCommandQueue vkQueue =
+                VulkanEncoderGuards.RequireCommandQueue(m_CommandQueue);
+            ValidateCheckpoint(
+                m_TransientDescriptorSetLeases?.Count ?? 0,
+                checkpoint.DescriptorSetLeaseCount,
+                nameof(checkpoint.DescriptorSetLeaseCount));
+            ValidateCheckpoint(
+                m_TransientRasterPipelines?.Count ?? 0,
+                checkpoint.RasterPipelineCount,
+                nameof(checkpoint.RasterPipelineCount));
+            ValidateCheckpoint(
+                m_TransientFramebuffers?.Count ?? 0,
+                checkpoint.FramebufferCount,
+                nameof(checkpoint.FramebufferCount));
+            ValidateCheckpoint(
+                m_TransientRenderPasses?.Count ?? 0,
+                checkpoint.RenderPassCount,
+                nameof(checkpoint.RenderPassCount));
+            ValidateCheckpoint(
+                m_TransientImageViews?.Count ?? 0,
+                checkpoint.ImageViewCount,
+                nameof(checkpoint.ImageViewCount));
+            ValidateCheckpoint(
+                m_TransientAllocations?.Count ?? 0,
+                checkpoint.AllocationCount,
+                nameof(checkpoint.AllocationCount));
+
+            if (m_TransientDescriptorSetLeases != null)
+            {
+                for (int index =
+                         m_TransientDescriptorSetLeases.Count - 1;
+                     index >= checkpoint.DescriptorSetLeaseCount;
+                     --index)
+                {
+                    vkQueue.VulkanDevice.DescriptorPoolAllocator
+                        .Free(m_TransientDescriptorSetLeases[index]);
+                }
+                RemoveTail(
+                    m_TransientDescriptorSetLeases,
+                    checkpoint.DescriptorSetLeaseCount);
+            }
+
+            if (m_TransientRasterPipelines != null)
+            {
+                for (int index =
+                         m_TransientRasterPipelines.Count - 1;
+                     index >= checkpoint.RasterPipelineCount;
+                     --index)
+                {
+                    m_TransientRasterPipelines[index].Dispose();
+                }
+                RemoveTail(
+                    m_TransientRasterPipelines,
+                    checkpoint.RasterPipelineCount);
+            }
+
+            if (m_TransientFramebuffers != null)
+            {
+                for (int index =
+                         m_TransientFramebuffers.Count - 1;
+                     index >= checkpoint.FramebufferCount;
+                     --index)
+                {
+                    VulkanNative.vkDestroyFramebuffer(
+                        vkQueue.VulkanDevice.NativeDevice,
+                        m_TransientFramebuffers[index],
+                        null);
+                }
+                RemoveTail(
+                    m_TransientFramebuffers,
+                    checkpoint.FramebufferCount);
+            }
+
+            if (m_TransientRenderPasses != null)
+            {
+                for (int index =
+                         m_TransientRenderPasses.Count - 1;
+                     index >= checkpoint.RenderPassCount;
+                     --index)
+                {
+                    VulkanNative.vkDestroyRenderPass(
+                        vkQueue.VulkanDevice.NativeDevice,
+                        m_TransientRenderPasses[index],
+                        null);
+                }
+                RemoveTail(
+                    m_TransientRenderPasses,
+                    checkpoint.RenderPassCount);
+            }
+
+            if (m_TransientImageViews != null)
+            {
+                for (int index =
+                         m_TransientImageViews.Count - 1;
+                     index >= checkpoint.ImageViewCount;
+                     --index)
+                {
+                    VulkanNative.vkDestroyImageView(
+                        vkQueue.VulkanDevice.NativeDevice,
+                        m_TransientImageViews[index],
+                        null);
+                }
+                RemoveTail(
+                    m_TransientImageViews,
+                    checkpoint.ImageViewCount);
+            }
+
+            if (m_TransientAllocations != null)
+            {
+                for (int index =
+                         m_TransientAllocations.Count - 1;
+                     index >= checkpoint.AllocationCount;
+                     --index)
+                {
+                    NativeMemory.Free(
+                        (void*)m_TransientAllocations[index]);
+                }
+                RemoveTail(
+                    m_TransientAllocations,
+                    checkpoint.AllocationCount);
+            }
         }
 
         internal void RegisterTransientAllocation(void* ptr)
@@ -97,60 +339,115 @@ namespace SharpGPU
             {
                 return;
             }
-
             m_TransientAllocations ??= new List<IntPtr>(16);
             m_TransientAllocations.Add((IntPtr)ptr);
         }
 
-        internal void RegisterTransientImageView(VkImageView imageView)
+        internal void RegisterTransientImageView(
+            VkImageView imageView)
         {
-            if (imageView.Equals(default(VkImageView)))
+            if (imageView.Handle == 0)
             {
                 return;
             }
-
-            m_TransientImageViews ??= new List<VkImageView>(16);
+            m_TransientImageViews ??=
+                new List<VkImageView>(16);
             m_TransientImageViews.Add(imageView);
+        }
+
+        internal void RegisterTransientFramebuffer(
+            VkFramebuffer framebuffer)
+        {
+            if (framebuffer.Handle == 0)
+            {
+                return;
+            }
+            m_TransientFramebuffers ??=
+                new List<VkFramebuffer>(4);
+            m_TransientFramebuffers.Add(framebuffer);
+        }
+
+        internal void RegisterTransientRenderPass(
+            VkRenderPass renderPass)
+        {
+            if (renderPass.Handle == 0)
+            {
+                return;
+            }
+            m_TransientRenderPasses ??=
+                new List<VkRenderPass>(4);
+            m_TransientRenderPasses.Add(renderPass);
+        }
+
+        internal void RegisterTransientRasterPipeline(
+            VulkanRasterNativeVariant pipeline)
+        {
+            ArgumentNullException.ThrowIfNull(pipeline);
+            try
+            {
+                m_TransientRasterPipelines ??=
+                    new List<VulkanRasterNativeVariant>(4);
+                m_TransientRasterPipelines.Add(pipeline);
+            }
+            catch
+            {
+                pipeline.Dispose();
+                throw;
+            }
+        }
+
+        internal void RegisterTransientDescriptorSetLease(
+            VulkanDescriptorSetLease lease)
+        {
+            if (lease.Pool.Handle == 0 ||
+                lease.Set.Handle == 0)
+            {
+                throw new ArgumentException(
+                    "A complete native descriptor-set lease is required.",
+                    nameof(lease));
+            }
+            m_TransientDescriptorSetLeases ??=
+                new List<VulkanDescriptorSetLease>(8);
+            m_TransientDescriptorSetLeases.Add(lease);
         }
 
         private void ReleaseTransientResources()
         {
-            VulkanCommandQueue vkQueue = m_CommandQueue as VulkanCommandQueue;
+            RollbackTransientResources(
+                VulkanTransientResourceCheckpoint.Empty);
+        }
 
-            if (m_TransientImageViews != null && m_TransientImageViews.Count > 0)
+        private static void ValidateCheckpoint(
+            int currentCount,
+            int checkpointCount,
+            string checkpointMember)
+        {
+            if ((uint)checkpointCount > (uint)currentCount)
             {
-                // Dynamic rendering image views are baked into recorded commands;
-                // destroy them only after command buffer reset confirms prior execution is complete.
-                for (int i = 0; i < m_TransientImageViews.Count; ++i)
-                {
-                    if (!m_TransientImageViews[i].Equals(default(VkImageView)))
-                    {
-                        VulkanNative.vkDestroyImageView(vkQueue.VulkanDevice.NativeDevice, m_TransientImageViews[i], null);
-                    }
-                }
-                m_TransientImageViews.Clear();
+                throw new InvalidOperationException(
+                    $"Transient checkpoint member {checkpointMember} " +
+                    $"{checkpointCount} exceeds current count " +
+                    $"{currentCount}.");
             }
+        }
 
-            if (m_TransientAllocations == null || m_TransientAllocations.Count == 0)
+        private static void RemoveTail<T>(
+            List<T> values,
+            int retainedCount)
+        {
+            int removeCount = values.Count - retainedCount;
+            if (removeCount != 0)
             {
-                return;
+                values.RemoveRange(retainedCount, removeCount);
             }
-
-            for (int i = 0; i < m_TransientAllocations.Count; ++i)
-            {
-                if (m_TransientAllocations[i] != IntPtr.Zero)
-                {
-                    NativeMemory.Free((void*)m_TransientAllocations[i]);
-                }
-            }
-
-            m_TransientAllocations.Clear();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHITransferEncoder BeginTransferPass(in RHITransferPassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.Transfer);
             m_TransferEncoder.BeginPass(descriptor);
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.Transfer);
             return m_TransferEncoder;
         }
 
@@ -163,7 +460,9 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIComputeEncoder BeginComputePass(in RHIComputePassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.Compute);
             m_ComputeEncoder.BeginPass(descriptor);
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.Compute);
             return m_ComputeEncoder;
         }
 
@@ -176,7 +475,9 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIRaytracingEncoder BeginRaytracingPass(in RHIRayTracingPassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.RayTracing);
             m_RaytracingEncoder.BeginPass(descriptor);
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.RayTracing);
             return m_RaytracingEncoder;
         }
 
@@ -189,8 +490,36 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIRasterEncoder BeginRasterPass(in RHIRasterPassDescriptor descriptor)
         {
-            m_RasterEncoder.BeginPass(descriptor);
-            return m_RasterEncoder;
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.Raster);
+            VulkanTransientResourceCheckpoint transientCheckpoint =
+                CaptureTransientResourceCheckpoint();
+            int layoutCheckpoint =
+                CaptureImageLayoutCheckpoint();
+            try
+            {
+                m_RasterEncoder.BeginPass(descriptor);
+                MarkEncoderBeginSucceeded(
+                    ERHICommandEncoderKind.Raster);
+                return m_RasterEncoder;
+            }
+            catch (Exception beginFailure)
+            {
+                try
+                {
+                    AbortRecordingAfterRasterBeginFailure(
+                        in transientCheckpoint,
+                        layoutCheckpoint);
+                }
+                catch (Exception abortFailure)
+                {
+                    throw new AggregateException(
+                        "Vulkan raster-pass begin failed and " +
+                        "native command-buffer rollback also failed.",
+                        beginFailure,
+                        abortFailure);
+                }
+                throw;
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -214,7 +543,9 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void End()
         {
+            ValidateCanEnd();
             VulkanUtility.CheckErrors(VulkanNative.vkEndCommandBuffer(m_NativeCommandBuffer));
+            MarkEndSucceeded();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -249,7 +580,9 @@ namespace SharpGPU
 
         public override RHIWorkGraphEncoder BeginWorkGraphPass(in RHIWorkGraphPassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.WorkGraph);
             m_WorkGraphEncoder.BeginPass(descriptor);
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.WorkGraph);
             return m_WorkGraphEncoder;
         }
 
@@ -268,9 +601,8 @@ namespace SharpGPU
         protected override void Release()
         {
             ReleaseTransientResources();
-            VulkanCommandQueue vkQueue = m_CommandQueue as VulkanCommandQueue;
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(m_CommandQueue);
             VulkanNative.vkDestroyCommandPool(vkQueue.VulkanDevice.NativeDevice, m_NativeCommandPool, null);
         }
     }
-#pragma warning restore CS8600, CS8602, CS8618
 }

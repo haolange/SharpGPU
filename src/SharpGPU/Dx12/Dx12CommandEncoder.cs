@@ -9,7 +9,7 @@ using Viewport = SharpGPU.Mathematics.Viewport;
 
 namespace SharpGPU
 {
-#pragma warning disable CS0414, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
+#pragma warning disable CS0414, CA1416
     internal unsafe struct Dx12AttachmentInfo
     {
         public bool bDepthStencil;
@@ -51,7 +51,7 @@ namespace SharpGPU
     internal static class Dx12ResourceBarrierUtil
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vortice.Direct3D12.ResourceBarrier InitUAV(Vortice.Direct3D12.ID3D12Resource resource)
+        public static Vortice.Direct3D12.ResourceBarrier InitUAV(Vortice.Direct3D12.ID3D12Resource? resource)
             => Vortice.Direct3D12.ResourceBarrier.BarrierUnorderedAccessView(resource);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -61,6 +61,204 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vortice.Direct3D12.ResourceBarrier InitTransition(Vortice.Direct3D12.ID3D12Resource resource, Vortice.Direct3D12.ResourceStates stateBefore, Vortice.Direct3D12.ResourceStates stateAfter)
             => Vortice.Direct3D12.ResourceBarrier.BarrierTransition(resource, stateBefore, stateAfter, Vortice.Direct3D12.D3D12.ResourceBarrierAllSubResources, Vortice.Direct3D12.ResourceBarrierFlags.None);
+    }
+
+    internal static class Dx12EncoderGuards
+    {
+        internal static Dx12CommandBuffer RequireCommandBuffer(RHICommandBuffer? commandBuffer)
+        {
+            return commandBuffer as Dx12CommandBuffer
+                ?? throw new InvalidOperationException("DX12 encoder operations require a Dx12CommandBuffer.");
+        }
+
+        internal static Dx12Query RequireQuery(RHIQuery query)
+        {
+            return query as Dx12Query
+                ?? throw new ArgumentException("DX12 query operations require a Dx12Query.", nameof(query));
+        }
+
+        internal static Dx12Buffer RequireBuffer(RHIBuffer buffer)
+        {
+            return buffer as Dx12Buffer
+                ?? throw new ArgumentException("DX12 buffer operations require a Dx12Buffer.", nameof(buffer));
+        }
+
+        internal static Dx12Texture RequireTexture(RHITexture texture)
+        {
+            return texture as Dx12Texture
+                ?? throw new ArgumentException("DX12 texture operations require a Dx12Texture.", nameof(texture));
+        }
+
+        internal static Dx12ComputePipeline RequireComputePipeline(RHIComputePipeline pipeline)
+        {
+            return pipeline as Dx12ComputePipeline
+                ?? throw new ArgumentException("DX12 compute operations require a Dx12ComputePipeline.", nameof(pipeline));
+        }
+
+        internal static Dx12RaytracingPipeline RequireRaytracingPipeline(RHIRaytracingPipeline pipeline)
+        {
+            return pipeline as Dx12RaytracingPipeline
+                ?? throw new ArgumentException("DX12 ray-tracing operations require a Dx12RaytracingPipeline.", nameof(pipeline));
+        }
+
+        internal static Dx12RasterPipeline RequireRasterPipeline(RHIRasterPipeline? pipeline)
+        {
+            return pipeline as Dx12RasterPipeline
+                ?? throw new ArgumentException("DX12 raster operations require a Dx12RasterPipeline.", nameof(pipeline));
+        }
+
+        internal static Dx12PipelineLayout RequirePipelineLayout(RHIPipelineLayout? pipelineLayout)
+        {
+            return pipelineLayout as Dx12PipelineLayout
+                ?? throw new ArgumentException("DX12 pipeline operations require a Dx12PipelineLayout.", nameof(pipelineLayout));
+        }
+
+        internal static Dx12FunctionTable RequireFunctionTable(RHIFunctionTable functionTable)
+        {
+            return functionTable as Dx12FunctionTable
+                ?? throw new ArgumentException("DX12 ray-tracing dispatch requires a Dx12FunctionTable.", nameof(functionTable));
+        }
+
+        internal static Dx12TopLevelAccelStruct RequireTopLevelAccelStruct(RHITopLevelAccelStruct accelStruct)
+        {
+            return accelStruct as Dx12TopLevelAccelStruct
+                ?? throw new ArgumentException("DX12 acceleration-structure build requires a Dx12TopLevelAccelStruct.", nameof(accelStruct));
+        }
+
+        internal static Dx12BottomLevelAccelStruct RequireBottomLevelAccelStruct(RHIBottomLevelAccelStruct accelStruct)
+        {
+            return accelStruct as Dx12BottomLevelAccelStruct
+                ?? throw new ArgumentException("DX12 acceleration-structure build requires a Dx12BottomLevelAccelStruct.", nameof(accelStruct));
+        }
+
+        internal static Dx12PipelineLayout RequireCachedComputePipelineLayout(RHIComputePipeline? cachedPipeline)
+        {
+            if (cachedPipeline is not Dx12ComputePipeline dx12Pipeline)
+            {
+                throw new InvalidOperationException("DX12 compute encoder requires a bound Dx12ComputePipeline.");
+            }
+
+            return RequirePipelineLayout(dx12Pipeline.Descriptor.PipelineLayout);
+        }
+
+        internal static Dx12PipelineLayout RequireCachedRaytracingPipelineLayout(RHIRaytracingPipeline? cachedPipeline)
+        {
+            if (cachedPipeline is not Dx12RaytracingPipeline dx12Pipeline)
+            {
+                throw new InvalidOperationException("DX12 ray-tracing encoder requires a bound Dx12RaytracingPipeline.");
+            }
+
+            return RequirePipelineLayout(dx12Pipeline.Descriptor.PipelineLayout);
+        }
+
+        internal static Dx12PipelineLayout RequireCachedRasterPipelineLayout(RHIRasterPipeline? cachedPipeline)
+        {
+            if (cachedPipeline is not Dx12RasterPipeline dx12Pipeline)
+            {
+                throw new InvalidOperationException("DX12 raster encoder requires a bound Dx12RasterPipeline.");
+            }
+
+            return RequirePipelineLayout(dx12Pipeline.DescriptorInternal.PipelineLayout);
+        }
+
+        internal static Dx12CommandQueue RequireCommandQueue(RHICommandQueue? commandQueue)
+        {
+            return commandQueue as Dx12CommandQueue
+                ?? throw new InvalidOperationException("DX12 operations require a Dx12CommandQueue.");
+        }
+
+        internal static Dx12Device RequireDevice(RHICommandBuffer? commandBuffer)
+        {
+            return RequireCommandQueue(RequireCommandBuffer(commandBuffer).CommandQueue).Dx12Device;
+        }
+    }
+
+    internal static class Dx12QueryEncoderValidation
+    {
+        internal static (Dx12Query Query, Dx12CommandBuffer CommandBuffer) RequireTimestampQuery(
+            RHICommandBuffer? commandBuffer,
+            uint index)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(commandBuffer);
+            return RequireQueryHeap(
+                dx12CommandBuffer,
+                dx12CommandBuffer.TimestampQueryHeap,
+                "timestamp",
+                index,
+                ERHIQueryType.Timestamp,
+                ERHIQueryType.TimestampTransfer);
+        }
+
+        internal static (Dx12Query Query, Dx12CommandBuffer CommandBuffer) RequireOcclusionQuery(
+            RHICommandBuffer? commandBuffer,
+            uint index)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(commandBuffer);
+            return RequireQueryHeap(
+                dx12CommandBuffer,
+                dx12CommandBuffer.OcclusionQueryHeap,
+                "occlusion",
+                index,
+                ERHIQueryType.Occlusion);
+        }
+
+        internal static (Dx12Query Query, Dx12CommandBuffer CommandBuffer) RequireStatisticsQuery(
+            RHICommandBuffer? commandBuffer,
+            uint index)
+        {
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(commandBuffer);
+            return RequireQueryHeap(
+                dx12CommandBuffer,
+                dx12CommandBuffer.StatisticsQueryHeap,
+                "statistics",
+                index,
+                ERHIQueryType.Statistics);
+        }
+
+        private static (Dx12Query Query, Dx12CommandBuffer CommandBuffer) RequireQueryHeap(
+            Dx12CommandBuffer commandBuffer,
+            RHIQuery? queryHeap,
+            string heapName,
+            uint index,
+            params ERHIQueryType[] expectedTypes)
+        {
+            if (queryHeap is not Dx12Query dx12Query)
+            {
+                throw new InvalidOperationException($"Current pass {heapName} query heap is not a Dx12Query.");
+            }
+
+            if (dx12Query.IsDisposed)
+            {
+                throw new ObjectDisposedException(dx12Query.GetType().FullName);
+            }
+
+            ERHIQueryType actualType = dx12Query.QueryDescriptor.Type;
+            bool typeMatches = false;
+            for (int i = 0; i < expectedTypes.Length; ++i)
+            {
+                if (actualType == expectedTypes[i])
+                {
+                    typeMatches = true;
+                    break;
+                }
+            }
+
+            if (!typeMatches)
+            {
+                throw new InvalidOperationException(
+                    $"Current pass {heapName} query heap type is {actualType}.");
+            }
+
+            if (index >= dx12Query.QueryDescriptor.Count)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(index),
+                    index,
+                    $"Query index {index} is out of range for {heapName} heap count {dx12Query.QueryDescriptor.Count}.");
+            }
+
+            return (dx12Query, commandBuffer);
+        }
     }
 
     internal static unsafe class Dx12CommandListInteropExtensions
@@ -92,15 +290,6 @@ namespace SharpGPU
 
     internal static unsafe class Dx12BarrierEmitter
     {
-        private static readonly Vortice.Direct3D12.BarrierSubresourceRange s_AllSubresourcesRange = new Vortice.Direct3D12.BarrierSubresourceRange
-        {
-            IndexOrFirstMipLevel = Vortice.Direct3D12.D3D12.ResourceBarrierAllSubResources,
-            NumMipLevels = 0,
-            FirstArraySlice = 0,
-            NumArraySlices = 0,
-            FirstPlane = 0,
-            NumPlanes = 0
-        };
 
         public static void EmitBarrier(Dx12CommandBuffer commandBuffer, in RHIBarrier barrier)
         {
@@ -115,18 +304,116 @@ namespace SharpGPU
                 return;
             }
 
-            Dx12Device device = ((Dx12CommandQueue)commandBuffer.CommandQueue).Dx12Device;
-            if (device.IsEnhancedBarriersSupported)
+            Dx12Device device = Dx12EncoderGuards.RequireDevice(commandBuffer);
+            ERHIPipelineType recordingQueue = commandBuffer.CommandQueue.PipelineType;
+            for (int i = 0; i < barriers.Length; ++i)
+            {
+                RHIBarrierUtility.ValidateQueueOwnership(in barriers[i], recordingQueue);
+            }
+
+            if (device.EnhancedBarriers.Tier != ERHICapabilityTier.Unavailable)
             {
                 EmitEnhancedBarriers(commandBuffer, barriers);
             }
+            else if (barriers.Length == 1)
+            {
+                EmitSingleResourceBarrier(commandBuffer, in barriers[0]);
+            }
             else
             {
-                EmitLegacyBarriers(commandBuffer, barriers);
+                EmitResourceBarriers(commandBuffer, barriers);
             }
         }
 
-        private static void EmitLegacyBarriers(Dx12CommandBuffer commandBuffer, ReadOnlySpan<RHIBarrier> barriers)
+        internal static void EmitUnorderedAccessOrderingBarrier(
+            Dx12CommandBuffer commandBuffer,
+            Dx12Texture texture)
+        {
+            Dx12Device device =
+                Dx12EncoderGuards.RequireDevice(commandBuffer);
+            if (device.EnhancedBarriers.Tier !=
+                ERHICapabilityTier.Unavailable)
+            {
+                RHIBarrier barrier = RHIBarrier.Texture(
+                    texture,
+                    RHIBarrierUtility.CreateWholeSubresourceRange(texture),
+                    ERHITextureLayout.General,
+                    ERHITextureLayout.General,
+                    ERHISyncStageMask.Fragment,
+                    ERHISyncStageMask.Fragment,
+                    ERHIAccessMask.ShaderWrite,
+                    ERHIAccessMask.ShaderRead |
+                        ERHIAccessMask.ShaderWrite);
+                EmitBarrier(commandBuffer, barrier);
+                return;
+            }
+
+            Vortice.Direct3D12.ResourceBarrier nativeBarrier =
+                Dx12ResourceBarrierUtil.InitUAV(texture.NativeResource);
+            ((Vortice.Direct3D12.ID3D12GraphicsCommandList)
+                commandBuffer.NativeCommandList).ResourceBarrier(
+                    nativeBarrier);
+        }
+
+        private static void EmitSingleResourceBarrier(
+            Dx12CommandBuffer commandBuffer,
+            in RHIBarrier barrier)
+        {
+            Vortice.Direct3D12.ResourceBarrier nativeBarrier;
+            switch (barrier.Kind)
+            {
+                case ERHIBarrierKind.Global:
+                    nativeBarrier =
+                        Dx12ResourceBarrierUtil.InitUAV(null);
+                    break;
+
+                case ERHIBarrierKind.Buffer:
+                {
+                    RHIBufferBarrier bufferBarrier =
+                        barrier.BufferBarrier;
+                    nativeBarrier = Dx12ResourceBarrierUtil.InitTransition(
+                        GetBufferResource(
+                            commandBuffer,
+                            bufferBarrier.Resource,
+                            0),
+                        ConvertToResourceBufferStates(
+                            bufferBarrier.AccessBefore),
+                        ConvertToResourceBufferStates(
+                            bufferBarrier.AccessAfter));
+                    break;
+                }
+
+                case ERHIBarrierKind.Texture:
+                {
+                    RHITextureBarrier textureBarrier =
+                        barrier.TextureBarrier;
+                    nativeBarrier = Dx12ResourceBarrierUtil.InitTransition(
+                        GetTexture(
+                            commandBuffer,
+                            textureBarrier.Resource,
+                            0).NativeResource,
+                        ConvertToResourceTextureStates(
+                            textureBarrier.LayoutBefore,
+                            textureBarrier.AccessBefore),
+                        ConvertToResourceTextureStates(
+                            textureBarrier.LayoutAfter,
+                            textureBarrier.AccessAfter));
+                    break;
+                }
+
+                default:
+                    throw new InvalidOperationException(
+                        $"Unsupported barrier kind {barrier.Kind}.");
+            }
+
+            ((Vortice.Direct3D12.ID3D12GraphicsCommandList)
+                commandBuffer.NativeCommandList).ResourceBarrier(
+                    nativeBarrier);
+        }
+
+        private static void EmitResourceBarriers(
+            Dx12CommandBuffer commandBuffer,
+            ReadOnlySpan<RHIBarrier> barriers)
         {
             Vortice.Direct3D12.ResourceBarrier[] nativeBarriers = new Vortice.Direct3D12.ResourceBarrier[barriers.Length];
             int barrierCount = 0;
@@ -137,18 +424,19 @@ namespace SharpGPU
                 switch (barrier.Kind)
                 {
                     case ERHIBarrierKind.Global:
-                        // TODO: Legacy D3D12 cannot express global memory barriers with sync/access granularity.
-                        // Use a conservative global UAV barrier.
+                        // The Resource Barrier API exposes global shader-memory
+                        // ordering through the documented null-resource UAV
+                        // barrier rather than stage/access-scoped global barriers.
                         nativeBarriers[barrierCount++] = Dx12ResourceBarrierUtil.InitUAV(null);
                         break;
 
                     case ERHIBarrierKind.Buffer:
                     {
                         RHIBufferBarrier bufferBarrier = barrier.BufferBarrier;
-                        Vortice.Direct3D12.ResourceStates stateBefore = ConvertToLegacyBufferStates(bufferBarrier.AccessBefore);
-                        Vortice.Direct3D12.ResourceStates stateAfter = ConvertToLegacyBufferStates(bufferBarrier.AccessAfter);
+                        Vortice.Direct3D12.ResourceStates stateBefore = ConvertToResourceBufferStates(bufferBarrier.AccessBefore);
+                        Vortice.Direct3D12.ResourceStates stateAfter = ConvertToResourceBufferStates(bufferBarrier.AccessAfter);
                         nativeBarriers[barrierCount++] = Dx12ResourceBarrierUtil.InitTransition(
-                            GetBufferResource(bufferBarrier.Resource, i),
+                            GetBufferResource(commandBuffer, bufferBarrier.Resource, i),
                             stateBefore,
                             stateAfter);
                         break;
@@ -157,10 +445,10 @@ namespace SharpGPU
                     case ERHIBarrierKind.Texture:
                     {
                         RHITextureBarrier textureBarrier = barrier.TextureBarrier;
-                        Vortice.Direct3D12.ResourceStates stateBefore = ConvertToLegacyTextureStates(textureBarrier.LayoutBefore, textureBarrier.AccessBefore);
-                        Vortice.Direct3D12.ResourceStates stateAfter = ConvertToLegacyTextureStates(textureBarrier.LayoutAfter, textureBarrier.AccessAfter);
+                        Vortice.Direct3D12.ResourceStates stateBefore = ConvertToResourceTextureStates(textureBarrier.LayoutBefore, textureBarrier.AccessBefore);
+                        Vortice.Direct3D12.ResourceStates stateAfter = ConvertToResourceTextureStates(textureBarrier.LayoutAfter, textureBarrier.AccessAfter);
                         nativeBarriers[barrierCount++] = Dx12ResourceBarrierUtil.InitTransition(
-                            GetTextureResource(textureBarrier.Resource, i),
+                            GetTexture(commandBuffer, textureBarrier.Resource, i).NativeResource,
                             stateBefore,
                             stateAfter);
                         break;
@@ -231,7 +519,7 @@ namespace SharpGPU
                             SyncAfter = syncAfter,
                             AccessBefore = accessBefore,
                             AccessAfter = accessAfter,
-                            Resource = GetBufferResource(bufferBarrier.Resource, i),
+                            Resource = GetBufferResource(commandBuffer, bufferBarrier.Resource, i),
                             Offset = bufferBarrier.Range.Offset,
                             Size = bufferBarrier.Range.Size == 0 ? RHIBufferRange.WholeSize : bufferBarrier.Range.Size
                         });
@@ -252,6 +540,10 @@ namespace SharpGPU
                             accessAfter,
                             queuePipeline);
 
+                        Dx12Texture texture = GetTexture(
+                            commandBuffer,
+                            textureBarrier.Resource,
+                            i);
                         (textureBarriers ??= new List<Vortice.Direct3D12.TextureBarrier>(barriers.Length)).Add(new Vortice.Direct3D12.TextureBarrier
                         {
                             SyncBefore = syncBefore,
@@ -260,8 +552,10 @@ namespace SharpGPU
                             AccessAfter = accessAfter,
                             LayoutBefore = ConvertToBarrierLayout(textureBarrier.LayoutBefore, queuePipeline),
                             LayoutAfter = ConvertToBarrierLayout(textureBarrier.LayoutAfter, queuePipeline),
-                            Resource = GetTextureResource(textureBarrier.Resource, i),
-                            Subresources = ConvertToSubresourceRange(textureBarrier.SubresourceRange),
+                            Resource = texture.NativeResource,
+                            Subresources = ConvertToSubresourceRange(
+                                textureBarrier.SubresourceRange,
+                                texture.Descriptor),
                             Flags = Vortice.Direct3D12.TextureBarrierFlags.None
                         });
                         break;
@@ -321,7 +615,7 @@ namespace SharpGPU
                             queuePipeline),
                         AccessBefore = accessBefore,
                         AccessAfter = accessAfter,
-                        Resource = GetBufferResource(bufferBarrier.Resource, 0),
+                        Resource = GetBufferResource(commandBuffer, bufferBarrier.Resource, 0),
                         Offset = bufferBarrier.Range.Offset,
                         Size = bufferBarrier.Range.Size == 0 ? RHIBufferRange.WholeSize : bufferBarrier.Range.Size
                     };
@@ -334,6 +628,10 @@ namespace SharpGPU
                     RHITextureBarrier textureBarrier = barrier.TextureBarrier;
                     Vortice.Direct3D12.BarrierAccess accessBefore = ConvertToBarrierAccess(textureBarrier.AccessBefore);
                     Vortice.Direct3D12.BarrierAccess accessAfter = ConvertToBarrierAccess(textureBarrier.AccessAfter);
+                    Dx12Texture texture = GetTexture(
+                        commandBuffer,
+                        textureBarrier.Resource,
+                        0);
                     Vortice.Direct3D12.TextureBarrier nativeBarrier = new()
                     {
                         SyncBefore = HarmonizeSyncWithAccess(
@@ -348,8 +646,10 @@ namespace SharpGPU
                         AccessAfter = accessAfter,
                         LayoutBefore = ConvertToBarrierLayout(textureBarrier.LayoutBefore, queuePipeline),
                         LayoutAfter = ConvertToBarrierLayout(textureBarrier.LayoutAfter, queuePipeline),
-                        Resource = GetTextureResource(textureBarrier.Resource, 0),
-                        Subresources = ConvertToSubresourceRange(textureBarrier.SubresourceRange),
+                        Resource = texture.NativeResource,
+                        Subresources = ConvertToSubresourceRange(
+                            textureBarrier.SubresourceRange,
+                            texture.Descriptor),
                         Flags = Vortice.Direct3D12.TextureBarrierFlags.None
                     };
                     commandBuffer.NativeCommandList.Barrier(in nativeBarrier);
@@ -361,56 +661,163 @@ namespace SharpGPU
             }
         }
 
-        private static Vortice.Direct3D12.ID3D12Resource GetBufferResource(RHIBuffer resource, in int index)
+        private static Vortice.Direct3D12.ID3D12Resource GetBufferResource(
+            Dx12CommandBuffer commandBuffer,
+            RHIBuffer resource,
+            in int index)
         {
-            Dx12Buffer buffer = resource as Dx12Buffer;
-#if DEBUG
-            Debug.Assert(buffer != null, index >= 0 ? String.Format("Barrier Buffer is null at index {0}.", index) : "Barrier Buffer is null");
-#endif
-            if (buffer == null)
+            if (resource == null)
             {
-                throw new InvalidOperationException(index >= 0 ? String.Format("Barrier Buffer is null at index {0}.", index) : "Barrier Buffer is null");
+                throw new ArgumentException(
+                    index >= 0 ? $"Barrier buffer is null at index {index}." : "Barrier buffer is null.");
+            }
+            if (resource.IsDisposed)
+            {
+                throw new ObjectDisposedException(resource.GetType().FullName);
+            }
+
+            Dx12Device device = Dx12EncoderGuards.RequireDevice(commandBuffer);
+            if (resource is not Dx12Buffer buffer || !ReferenceEquals(buffer.Dx12Device, device))
+            {
+                throw new ArgumentException(
+                    index >= 0
+                        ? $"Barrier buffer at index {index} was created by a different backend or device."
+                        : "Barrier buffer was created by a different backend or device.");
             }
 
             return buffer.NativeResource;
         }
 
-        private static Vortice.Direct3D12.ID3D12Resource GetTextureResource(RHITexture resource, in int index)
+        private static Dx12Texture GetTexture(
+            Dx12CommandBuffer commandBuffer,
+            RHITexture resource,
+            in int index)
         {
-            Dx12Texture texture = resource as Dx12Texture;
-#if DEBUG
-            Debug.Assert(texture != null, index >= 0 ? String.Format("Barrier Texture is null at index {0}.", index) : "Barrier Texture is null");
-#endif
-            if (texture == null)
+            if (resource == null)
             {
-                throw new InvalidOperationException(index >= 0 ? String.Format("Barrier Texture is null at index {0}.", index) : "Barrier Texture is null");
+                throw new ArgumentException(
+                    index >= 0 ? $"Barrier texture is null at index {index}." : "Barrier texture is null.");
+            }
+            if (resource.IsDisposed)
+            {
+                throw new ObjectDisposedException(resource.GetType().FullName);
             }
 
-            return texture.NativeResource;
+            Dx12Device device = Dx12EncoderGuards.RequireDevice(commandBuffer);
+            if (resource is not Dx12Texture texture || !ReferenceEquals(texture.Dx12Device, device))
+            {
+                throw new ArgumentException(
+                    index >= 0
+                        ? $"Barrier texture at index {index} was created by a different backend or device."
+                        : "Barrier texture was created by a different backend or device.");
+            }
+
+            return texture;
         }
 
-        private static Vortice.Direct3D12.BarrierSubresourceRange ConvertToSubresourceRange(in RHITextureSubresourceRange range)
+        private static Vortice.Direct3D12.BarrierSubresourceRange ConvertToSubresourceRange(
+            in RHITextureSubresourceRange range,
+            in RHITextureDescriptor texture)
         {
-            bool isWholeRange = range.BaseMipLevel == 0
-                                && range.MipLevelCount == RHITextureSubresourceRange.All
-                                && range.BaseArrayLayer == 0
-                                && range.ArrayLayerCount == RHITextureSubresourceRange.All;
-            if (isWholeRange)
+            uint arrayLayerCount =
+                texture.Dimension == ERHITextureDimension.Texture3D
+                    ? 1u
+                    : texture.Extent.z;
+            return ConvertToSubresourceRange(
+                range,
+                texture.MipCount,
+                arrayLayerCount,
+                RHIBarrierUtility.InferAspectMask(texture.Format));
+        }
+
+        internal static Vortice.Direct3D12.BarrierSubresourceRange ConvertToSubresourceRange(
+            in RHITextureSubresourceRange range,
+            uint textureMipLevelCount,
+            uint textureArrayLayerCount,
+            ERHITextureAspectMask availableAspects)
+        {
+
+            bool stencilOnly =
+                range.AspectMask == ERHITextureAspectMask.Stencil;
+            bool depthStencil =
+                range.AspectMask ==
+                (ERHITextureAspectMask.Depth |
+                 ERHITextureAspectMask.Stencil);
+            if (range.AspectMask is not ERHITextureAspectMask.Color and
+                not ERHITextureAspectMask.Depth and
+                not ERHITextureAspectMask.Stencil &&
+                !depthStencil)
             {
-                return s_AllSubresourcesRange;
+                throw new ArgumentOutOfRangeException(
+                    nameof(range),
+                    range.AspectMask,
+                    "DX12 enhanced texture barriers require an exact color, " +
+                    "depth, stencil, or depth-stencil aspect range.");
             }
 
-            // TODO: plane range is not exposed in the RHI barrier model.
-            // D3D12 enhanced texture barrier plane dimension is conservatively widened.
+            const ERHITextureAspectMask knownAspects =
+                ERHITextureAspectMask.Color |
+                ERHITextureAspectMask.Depth |
+                ERHITextureAspectMask.Stencil;
+            if (availableAspects == ERHITextureAspectMask.None ||
+                (availableAspects & ~knownAspects) != 0 ||
+                (range.AspectMask & ~availableAspects) != 0)
+            {
+                throw new ArgumentException(
+                    $"DX12 barrier aspect {range.AspectMask} is not available " +
+                    $"for a texture with aspects {availableAspects}.",
+                    nameof(range));
+            }
+
+            uint mipLevelCount = ResolveRangeCount(
+                range.BaseMipLevel,
+                range.MipLevelCount,
+                textureMipLevelCount,
+                "mip level");
+            uint arrayLayerCount = ResolveRangeCount(
+                range.BaseArrayLayer,
+                range.ArrayLayerCount,
+                textureArrayLayerCount,
+                "array layer");
             return new Vortice.Direct3D12.BarrierSubresourceRange
             {
                 IndexOrFirstMipLevel = range.BaseMipLevel,
-                NumMipLevels = range.MipLevelCount == RHITextureSubresourceRange.All ? 0u : range.MipLevelCount,
+                NumMipLevels = mipLevelCount,
                 FirstArraySlice = range.BaseArrayLayer,
-                NumArraySlices = range.ArrayLayerCount == RHITextureSubresourceRange.All ? 0u : range.ArrayLayerCount,
-                FirstPlane = 0,
-                NumPlanes = 0
+                NumArraySlices = arrayLayerCount,
+                FirstPlane = stencilOnly ? 1u : 0u,
+                NumPlanes = depthStencil ? 2u : 1u
             };
+        }
+
+        private static uint ResolveRangeCount(
+            uint first,
+            uint requestedCount,
+            uint availableCount,
+            string componentName)
+        {
+            if (availableCount == 0 || first >= availableCount)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(first),
+                    first,
+                    $"DX12 barrier {componentName} base must be inside " +
+                    $"the available count {availableCount}.");
+            }
+
+            uint count = requestedCount == RHITextureSubresourceRange.All
+                ? availableCount - first
+                : requestedCount;
+            if (count == 0 || count > availableCount - first)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(requestedCount),
+                    requestedCount,
+                    $"DX12 barrier {componentName} count exceeds the " +
+                    $"available range [{first}, {availableCount}).");
+            }
+
+            return count;
         }
 
         private static Vortice.Direct3D12.BarrierSync ResolveBarrierSync(in ERHISyncStageMask syncMask, in ERHIPipelineType queuePipeline)
@@ -496,6 +903,8 @@ namespace SharpGPU
         {
             switch (layout)
             {
+                case ERHITextureLayout.Common:
+                    return Vortice.Direct3D12.BarrierLayout.Common;
                 case ERHITextureLayout.Undefined:
                     return Vortice.Direct3D12.BarrierLayout.Undefined;
                 case ERHITextureLayout.Present:
@@ -533,7 +942,7 @@ namespace SharpGPU
             }
         }
 
-        private static Vortice.Direct3D12.ResourceStates ConvertToLegacyBufferStates(in ERHIAccessMask accessMask)
+        private static Vortice.Direct3D12.ResourceStates ConvertToResourceBufferStates(in ERHIAccessMask accessMask)
         {
             if (accessMask == ERHIAccessMask.None)
             {
@@ -556,10 +965,10 @@ namespace SharpGPU
             return result == 0 ? Vortice.Direct3D12.ResourceStates.Common : result;
         }
 
-        private static Vortice.Direct3D12.ResourceStates ConvertToLegacyTextureStates(in ERHITextureLayout layout, in ERHIAccessMask accessMask)
+        private static Vortice.Direct3D12.ResourceStates ConvertToResourceTextureStates(in ERHITextureLayout layout, in ERHIAccessMask accessMask)
         {
-            Vortice.Direct3D12.ResourceStates layoutState = ConvertTextureLayoutToLegacyState(layout);
-            Vortice.Direct3D12.ResourceStates accessState = ConvertTextureAccessToLegacyState(accessMask);
+            Vortice.Direct3D12.ResourceStates layoutState = ConvertTextureLayoutToResourceState(layout);
+            Vortice.Direct3D12.ResourceStates accessState = ConvertTextureAccessToResourceState(accessMask);
 
             if (layoutState == Vortice.Direct3D12.ResourceStates.Common)
             {
@@ -574,10 +983,12 @@ namespace SharpGPU
             return layoutState | accessState;
         }
 
-        private static Vortice.Direct3D12.ResourceStates ConvertTextureLayoutToLegacyState(in ERHITextureLayout layout)
+        private static Vortice.Direct3D12.ResourceStates ConvertTextureLayoutToResourceState(in ERHITextureLayout layout)
         {
             switch (layout)
             {
+                case ERHITextureLayout.Common:
+                    return Vortice.Direct3D12.ResourceStates.Common;
                 case ERHITextureLayout.Present:
                     return Vortice.Direct3D12.ResourceStates.Present;
                 case ERHITextureLayout.CopySource:
@@ -606,7 +1017,7 @@ namespace SharpGPU
             }
         }
 
-        private static Vortice.Direct3D12.ResourceStates ConvertTextureAccessToLegacyState(in ERHIAccessMask accessMask)
+        private static Vortice.Direct3D12.ResourceStates ConvertTextureAccessToResourceState(in ERHIAccessMask accessMask)
         {
             Vortice.Direct3D12.ResourceStates result = 0;
             bool hasShaderWrite = (accessMask & ERHIAccessMask.ShaderWrite) != 0;
@@ -1062,42 +1473,39 @@ namespace SharpGPU
 
         public override void Barrier(in RHIBarrier barrier)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12BarrierEmitter.EmitBarrier(dx12CommandBuffer, barrier);
         }
 
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12BarrierEmitter.EmitBarriers(dx12CommandBuffer, barriers);
         }
 
         public override void PushDebugGroup(string name)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12PixEventMarker.BeginEvent((nint)dx12CommandBuffer.NativeCommandList, name);
         }
 
         public override void PopDebugGroup()
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12PixEventMarker.EndEvent((nint)dx12CommandBuffer.NativeCommandList);
         }
 
         public override void WriteTimestamp(in uint index)
         {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, index);
         }
 
         public override void ResolveQuery(RHIQuery query, in uint startIndex, in uint queriesCount)
         {
-            Dx12Query dx12Query = query as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12Query dx12Query = Dx12EncoderGuards.RequireQuery(query);
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
 
             switch (query.QueryDescriptor.Type)
             {
@@ -1117,18 +1525,18 @@ namespace SharpGPU
 
         public override void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size)
         {
-            Dx12Buffer dx12SrcBuffer = srcBuffer as Dx12Buffer;
-            Dx12Buffer dx12DstBuffer = dstBuffer as Dx12Buffer;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12Buffer dx12SrcBuffer = Dx12EncoderGuards.RequireBuffer(srcBuffer);
+            Dx12Buffer dx12DstBuffer = Dx12EncoderGuards.RequireBuffer(dstBuffer);
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
 
             dx12CommandBuffer.NativeCommandList.CopyBufferRegion(dx12DstBuffer.NativeResource, (ulong)dstOffset, dx12SrcBuffer.NativeResource, (ulong)srcOffset, (ulong)size);
         }
 
         public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
         {
-            Dx12Buffer srcBuffer = src.Buffer as Dx12Buffer;
-            Dx12Texture dstTexture = dst.Texture as Dx12Texture;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12Buffer srcBuffer = Dx12EncoderGuards.RequireBuffer(src.Buffer);
+            Dx12Texture dstTexture = Dx12EncoderGuards.RequireTexture(dst.Texture);
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
 
             Dx12TextureCopyLocation srcLocation = new Dx12TextureCopyLocation
             {
@@ -1170,9 +1578,9 @@ namespace SharpGPU
 
         public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size)
         {
-            Dx12Texture srcTexture = src.Texture as Dx12Texture;
-            Dx12Buffer dstBuffer = dst.Buffer as Dx12Buffer;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12Texture srcTexture = Dx12EncoderGuards.RequireTexture(src.Texture);
+            Dx12Buffer dstBuffer = Dx12EncoderGuards.RequireBuffer(dst.Buffer);
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
 
             Dx12TextureCopyLocation srcLocation = new Dx12TextureCopyLocation
             {
@@ -1204,9 +1612,9 @@ namespace SharpGPU
 
         public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
         {
-            Dx12Texture srcTexture = src.Texture as Dx12Texture;
-            Dx12Texture dstTexture = dst.Texture as Dx12Texture;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12Texture srcTexture = Dx12EncoderGuards.RequireTexture(src.Texture);
+            Dx12Texture dstTexture = Dx12EncoderGuards.RequireTexture(dst.Texture);
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
 
             Dx12TextureCopyLocation srcLocation = new Dx12TextureCopyLocation
             {
@@ -1235,7 +1643,7 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, &srcBox);
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
 #if DEBUG
             PopDebugGroup();
@@ -1264,55 +1672,46 @@ namespace SharpGPU
 
         public override void Barrier(in RHIBarrier barrier)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12BarrierEmitter.EmitBarrier(dx12CommandBuffer, barrier);
         }
 
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12BarrierEmitter.EmitBarriers(dx12CommandBuffer, barriers);
         }
 
         public override void PushDebugGroup(string name)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12PixEventMarker.BeginEvent((nint)dx12CommandBuffer.NativeCommandList, name);
         }
 
         public override void PopDebugGroup()
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12PixEventMarker.EndEvent((nint)dx12CommandBuffer.NativeCommandList);
         }
 
         public override void WriteTimestamp(in uint index)
         {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, index);
         }
 
         public override void BeginStatistics(in uint index)
         {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current RasterPass StatisticsQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, index);
             dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
         public override void EndStatistics(in uint index)
         {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current RasterPass StatisticsQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
@@ -1320,29 +1719,25 @@ namespace SharpGPU
         {
             m_CachedPipeline = pipeline;
 
-            Dx12ComputePipeline dx12Pipeline = pipeline as Dx12ComputePipeline;
-            Dx12PipelineLayout dx12PipelineLayout = pipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
+            Dx12ComputePipeline dx12Pipeline = Dx12EncoderGuards.RequireComputePipeline(pipeline);
+            Dx12PipelineLayout dx12PipelineLayout = Dx12EncoderGuards.RequirePipelineLayout(pipeline.Descriptor.PipelineLayout);
 
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.SetPipelineState(dx12Pipeline.NativePipelineState);
             dx12CommandBuffer.NativeCommandList.SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            Dx12PipelineLayout pipelineLayout = m_CachedPipeline?.Descriptor.PipelineLayout as Dx12PipelineLayout
-                ?? throw new InvalidOperationException("DX12 compute encoder requires a bound pipeline with a Dx12PipelineLayout.");
-            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
-                ?? throw new InvalidOperationException("DX12 compute encoder requires a Dx12CommandBuffer.");
+            Dx12PipelineLayout pipelineLayout = Dx12EncoderGuards.RequireCachedComputePipelineLayout(m_CachedPipeline);
+            Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12ArgumentTableBinder.BindCompute(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
-            Dx12PipelineLayout pipelineLayout = m_CachedPipeline?.Descriptor.PipelineLayout as Dx12PipelineLayout
-                ?? throw new InvalidOperationException("DX12 compute encoder requires a bound pipeline with a Dx12PipelineLayout.");
-            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
-                ?? throw new InvalidOperationException("DX12 compute encoder requires a Dx12CommandBuffer.");
+            Dx12PipelineLayout pipelineLayout = Dx12EncoderGuards.RequireCachedComputePipelineLayout(m_CachedPipeline);
+            Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             if (!Dx12ArgumentTableBinder.ValidatePushConstantWrite(pipelineLayout, data, size, offset))
             {
                 return;
@@ -1352,26 +1747,26 @@ namespace SharpGPU
 
         public override void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.Dispatch(groupCountX, groupCountY, groupCountZ);
         }
 
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
-            Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
-            Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12Buffer dx12Buffer = Dx12EncoderGuards.RequireBuffer(argsBuffer);
+            Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DispatchComputeIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
         }
 
         public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
         {
-            Dx12ComputeIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12ComputeIndirectCommandBuffer;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12ComputeIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12ComputeIndirectCommandBuffer ?? throw new InvalidOperationException("DX12 compute indirect dispatch requires a Dx12ComputeIndirectCommandBuffer.");
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
 #if DEBUG
             PopDebugGroup();
@@ -1401,55 +1796,46 @@ namespace SharpGPU
 
         public override void Barrier(in RHIBarrier barrier)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12BarrierEmitter.EmitBarrier(dx12CommandBuffer, barrier);
         }
 
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12BarrierEmitter.EmitBarriers(dx12CommandBuffer, barriers);
         }
 
         public override void PushDebugGroup(string name)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12PixEventMarker.BeginEvent((nint)dx12CommandBuffer.NativeCommandList, name);
         }
 
         public override void PopDebugGroup()
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12PixEventMarker.EndEvent((nint)dx12CommandBuffer.NativeCommandList);
         }
 
         public override void WriteTimestamp(in uint index)
         {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, index);
         }
 
         public override void BeginStatistics(in uint index)
         {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current RasterPass StatisticsQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, index);
             dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
         public override void EndStatistics(in uint index)
         {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current RasterPass StatisticsQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
@@ -1457,27 +1843,25 @@ namespace SharpGPU
         {
             m_CachedPipeline = pipeline;
 
-            Dx12RaytracingPipeline dx12Pipeline = pipeline as Dx12RaytracingPipeline;
-            Dx12PipelineLayout dx12PipelineLayout = pipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
+            Dx12RaytracingPipeline dx12Pipeline = Dx12EncoderGuards.RequireRaytracingPipeline(pipeline);
+            Dx12PipelineLayout dx12PipelineLayout = Dx12EncoderGuards.RequirePipelineLayout(pipeline.Descriptor.PipelineLayout);
 
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.SetPipelineState1(dx12Pipeline.NativePipeline);
             dx12CommandBuffer.NativeCommandList.SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            Dx12PipelineLayout pipelineLayout = m_CachedPipeline?.Descriptor.PipelineLayout as Dx12PipelineLayout
-                ?? throw new InvalidOperationException("DX12 ray-tracing encoder requires a bound pipeline with a Dx12PipelineLayout.");
-            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
-                ?? throw new InvalidOperationException("DX12 ray-tracing encoder requires a Dx12CommandBuffer.");
+            Dx12PipelineLayout pipelineLayout = Dx12EncoderGuards.RequireCachedRaytracingPipelineLayout(m_CachedPipeline);
+            Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12ArgumentTableBinder.BindCompute(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
         }
 
         public override void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12TopLevelAccelStruct dx12TopLevelAccelStruct = topLevelAccelStruct as Dx12TopLevelAccelStruct;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            Dx12TopLevelAccelStruct dx12TopLevelAccelStruct = Dx12EncoderGuards.RequireTopLevelAccelStruct(topLevelAccelStruct);
             Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription accelStructDescription = dx12TopLevelAccelStruct.NativeAccelStructDescriptor;
             dx12CommandBuffer.NativeCommandList.BuildRaytracingAccelerationStructure(accelStructDescription);
 
@@ -1487,8 +1871,8 @@ namespace SharpGPU
 
         public override void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12BottomLevelAccelStruct dx12BottomLevelAccelStruct = bottomLevelAccelStruct as Dx12BottomLevelAccelStruct;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            Dx12BottomLevelAccelStruct dx12BottomLevelAccelStruct = Dx12EncoderGuards.RequireBottomLevelAccelStruct(bottomLevelAccelStruct);
             Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription accelStructDescription = dx12BottomLevelAccelStruct.NativeAccelStructDescriptor;
             dx12CommandBuffer.NativeCommandList.BuildRaytracingAccelerationStructure(accelStructDescription);
 
@@ -1498,16 +1882,18 @@ namespace SharpGPU
 
         public override void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable)
         {
-            Dx12FunctionTable dx12FunctionTable = functionTable as Dx12FunctionTable;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
+            Dx12FunctionTable dx12FunctionTable = Dx12EncoderGuards.RequireFunctionTable(functionTable)
+                ?? throw new InvalidOperationException("Raytracing dispatch requires a Dx12FunctionTable.");
+            if (!dx12FunctionTable.IsGenerated)
+            {
+                throw new InvalidOperationException("FunctionTable must call Generate() before Dispatch().");
+            }
 
-#if DEBUG
-            Debug.Assert(dx12FunctionTable != null, "Raytracing dispatch requires a Dx12FunctionTable.");
-            Debug.Assert(dx12FunctionTable.IsGenerated, "FunctionTable must call Generate() before Dispatch().");
-#endif
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer)
+                ?? throw new InvalidOperationException("DX12 ray-tracing dispatch requires a Dx12CommandBuffer.");
+            Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
 
-            if (dx12Device.Feature.IsRaytracingSupported)
+            if (dx12Device.Capabilities.RayTracing.Pipeline.Tier != ERHICapabilityTier.Unavailable)
             {
                 Vortice.Direct3D12.DispatchRaysDescription dispatchRayDescriptor;
                 {
@@ -1533,23 +1919,23 @@ namespace SharpGPU
 
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable)
         {
-            Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
-            Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
-            if (dx12Device.Feature.IsRaytracingSupported)
+            Dx12Buffer dx12Buffer = Dx12EncoderGuards.RequireBuffer(argsBuffer);
+            Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
+            if (dx12Device.Capabilities.RayTracing.Pipeline.Tier != ERHICapabilityTier.Unavailable)
             {
-                Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+                Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
                 dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DispatchRayIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
             }
         }
 
         public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
         {
-            Dx12RayTracingIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RayTracingIndirectCommandBuffer;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12RayTracingIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RayTracingIndirectCommandBuffer ?? throw new InvalidOperationException("DX12 ray-tracing indirect dispatch requires a Dx12RayTracingIndirectCommandBuffer.");
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
 #if DEBUG
             PopDebugGroup();
@@ -1565,84 +1951,162 @@ namespace SharpGPU
 
     internal unsafe class Dx12RasterEncoder : RHIRasterEncoder
     {
-        protected byte m_SubPassIndex;
         protected List<Dx12AttachmentInfo> m_AttachmentInfos;
         private bool m_UseNativeRenderPass;
         private bool m_IsNativeRenderPassActive;
         private RHIRasterPassDescriptor m_PassDescriptor;
+        private Dx12RasterPassLowering? m_Lowering;
+        private Dx12RasterPassLowering Lowering =>
+            m_Lowering ?? throw new InvalidOperationException("DX12 raster pass has not begun.");
+        private Vortice.Direct3D12.CpuDescriptorHandle[] m_RtvHandles;
+        private Vortice.Direct3D12.CpuDescriptorHandle[][]
+            m_OmSubPassRenderTargetHandles;
+        private Vortice.Direct3D12.CpuDescriptorHandle? m_DsvHandle;
+        private Vortice.Direct3D12.CpuDescriptorHandle? m_ReadOnlyDsvHandle;
+        private Dx12DescriptorInfo m_PrivateAttachmentDescriptors;
+        private int m_PrivateAttachmentDescriptorCount;
+        private bool m_HasPrivateAttachmentDescriptors;
+        private readonly ERHITextureLayout[] m_ColorLayouts;
+        private ERHITextureLayout m_DepthStencilLayout;
         private Vortice.Direct3D12.RenderPassRenderTargetDescription[] m_NativeRenderPassColorDescriptions;
         private Vortice.Direct3D12.RenderPassDepthStencilDescription? m_NativeRenderPassDepthStencilDescription;
 
         public Dx12RasterEncoder(Dx12CommandBuffer cmdBuffer)
         {
-            m_SubPassIndex = 0;
             m_CommandBuffer = cmdBuffer;
             m_AttachmentInfos = new List<Dx12AttachmentInfo>(5);
+            m_RtvHandles = Array.Empty<Vortice.Direct3D12.CpuDescriptorHandle>();
+            m_OmSubPassRenderTargetHandles =
+                Array.Empty<Vortice.Direct3D12.CpuDescriptorHandle[]>();
+            m_ColorLayouts = new ERHITextureLayout[RHIAttachmentIndexArray.MaxAttachments];
             m_UseNativeRenderPass = false;
             m_IsNativeRenderPassActive = false;
             m_NativeRenderPassColorDescriptions = Array.Empty<Vortice.Direct3D12.RenderPassRenderTargetDescription>();
             m_NativeRenderPassDepthStencilDescription = null;
         }
 
-        internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
+        internal override void BeginPassCore(RasterPassPlan plan)
         {
+            RHIRasterPassDescriptor descriptor = plan.DescriptorSnapshot;
             m_PassDescriptor = descriptor;
 #if DEBUG
             PushDebugGroup(descriptor.Name);
 #endif
             if (descriptor.Timestamp.HasValue)
             {
-                m_CommandBuffer.TimestampQueryHeap = descriptor.Timestamp.Value.Query;
-                m_CommandBuffer.TimestampQueryIndex = descriptor.Timestamp.Value.BeginIndex;
+                Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                commandBuffer.TimestampQueryHeap = descriptor.Timestamp.Value.Query;
+                commandBuffer.TimestampQueryIndex = descriptor.Timestamp.Value.BeginIndex;
                 WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
             }
-            m_SubPassIndex = 0;
             m_AttachmentInfos.Clear();
             m_UseNativeRenderPass = false;
             m_IsNativeRenderPassActive = false;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
-            Vortice.Direct3D12.CpuDescriptorHandle[] rtvHandles = CreateColorAttachmentViews(descriptor);
-            Vortice.Direct3D12.CpuDescriptorHandle? dsvHandle = CreateDepthStencilAttachmentView(descriptor);
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
+            Array.Clear(m_ColorLayouts);
+            m_DepthStencilLayout = ERHITextureLayout.Undefined;
+            m_HasPrivateAttachmentDescriptors = false;
+            m_PrivateAttachmentDescriptorCount = 0;
+            m_OmSubPassRenderTargetHandles =
+                Array.Empty<Vortice.Direct3D12.CpuDescriptorHandle[]>();
+            m_Lowering = Dx12RasterPassLowering.Compile(
+                plan,
+                dx12Device.NativeRenderPass.Tier != ERHICapabilityTier.Unavailable,
+                dx12Device.Capabilities.Raster.RasterOrderedAccess.Tier !=
+                    ERHICapabilityTier.Unavailable,
+                dx12Device.EnhancedBarriers.Tier != ERHICapabilityTier.Unavailable);
+            try
+            {
+                m_RtvHandles = CreateColorAttachmentViews(
+                    descriptor,
+                    dx12Device);
+                CreateDepthStencilAttachmentViews(
+                    descriptor,
+                    Lowering.SubPasses.Span,
+                    dx12Device,
+                    out m_DsvHandle,
+                    out m_ReadOnlyDsvHandle);
 
-            if (dx12Device.IsNativeRenderPassSupported)
-            {
-                CacheNativeRenderPass(dx12CommandBuffer, descriptor, rtvHandles, dsvHandle);
-                m_UseNativeRenderPass = true;
-            }
-            else
-            {
-                BeginLegacyRasterPass(dx12CommandBuffer, descriptor, rtvHandles, dsvHandle);
-            }
+                if (Lowering.Strategy ==
+                    EDx12RasterPassStrategy.NativeRenderPass)
+                {
+                    CacheNativeRenderPass(
+                        dx12CommandBuffer,
+                        descriptor,
+                        m_RtvHandles,
+                        m_DsvHandle);
+                    m_UseNativeRenderPass = true;
+                }
+                else
+                {
+                    m_OmSubPassRenderTargetHandles =
+                        CreateOmSubPassRenderTargetViews(
+                            plan,
+                            m_Lowering,
+                            dx12Device);
+                }
 
-            if (descriptor.ShadingRateTexture != null)
+                if (Lowering.Strategy ==
+                    EDx12RasterPassStrategy.OmMultipass)
+                {
+                    ClearOmAttachments(dx12CommandBuffer, descriptor);
+                    BindOmSubPass(dx12CommandBuffer, plan, 0);
+                }
+
+                if (descriptor.ShadingRateTexture != null)
+                {
+                    Dx12Texture dx12Texture = Dx12EncoderGuards.RequireTexture(descriptor.ShadingRateTexture);
+                    dx12CommandBuffer.NativeCommandList.RSSetShadingRateImage(dx12Texture.NativeResource);
+                }
+
+                // The private shader-visible allocation is committed last.
+                // Any earlier BeginRasterPass failure can therefore release
+                // every RTV/DSV/null descriptor immediately, while this
+                // allocation remains transactional until command-buffer
+                // registration succeeds.
+                CreatePrivateAttachmentDescriptors(
+                    plan,
+                    m_Lowering,
+                    dx12Device,
+                    dx12CommandBuffer);
+            }
+            catch
             {
-                Dx12Texture dx12Texture = descriptor.ShadingRateTexture as Dx12Texture;
-                dx12CommandBuffer.NativeCommandList.RSSetShadingRateImage(dx12Texture.NativeResource);
+                ReleaseAttachmentDescriptors(dx12Device);
+                ResetRasterDescriptorState();
+                throw;
             }
         }
 
-        private Vortice.Direct3D12.CpuDescriptorHandle[] CreateColorAttachmentViews(in RHIRasterPassDescriptor descriptor)
+        private Vortice.Direct3D12.CpuDescriptorHandle[]
+            CreateColorAttachmentViews(
+                in RHIRasterPassDescriptor descriptor,
+                Dx12Device device)
         {
             Vortice.Direct3D12.CpuDescriptorHandle[] rtvHandles = new Vortice.Direct3D12.CpuDescriptorHandle[descriptor.ColorAttachments.Length];
 
             for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
             {
-                Dx12Texture texture = descriptor.ColorAttachments.Span[i].RenderTarget as Dx12Texture;
-#if DEBUG
-                Debug.Assert(texture != null, "ColorRenderTarget Texture is null");
-#endif
+                ref RHIColorAttachmentDescriptor attachment = ref descriptor.ColorAttachments.Span[i];
+                Dx12Texture texture = Dx12EncoderGuards.RequireTexture(attachment.RenderTarget) ?? throw new InvalidOperationException("Render target must be a Dx12Texture.");
                 if (texture == null)
                 {
                     throw new InvalidOperationException($"Color render target at index {i} is null.");
                 }
+                if (!ReferenceEquals(texture.Dx12Device, device))
+                {
+                    throw new ArgumentException(
+                        $"Color render target at index {i} belongs to a " +
+                        "different DX12 device.");
+                }
 
                 RHITextureViewDescriptor viewDescriptor;
                 {
-                    viewDescriptor.MipCount = texture.Descriptor.MipCount;
-                    viewDescriptor.BaseMipLevel = 0;
-                    viewDescriptor.ArrayCount = texture.Descriptor.Extent.z;
-                    viewDescriptor.BaseArraySlice = 0;
+                    viewDescriptor.MipCount = attachment.SubresourceRange.MipLevelCount;
+                    viewDescriptor.BaseMipLevel = attachment.SubresourceRange.BaseMipLevel;
+                    viewDescriptor.ArrayCount = attachment.SubresourceRange.ArrayLayerCount;
+                    viewDescriptor.BaseArraySlice = attachment.SubresourceRange.BaseArrayLayer;
                     viewDescriptor.ViewType = ERHITextureViewType.Pending;
                 }
 
@@ -1656,44 +2120,85 @@ namespace SharpGPU
                 Dx12AttachmentInfo dx12AttachmentInfo = new Dx12AttachmentInfo();
                 {
                     dx12AttachmentInfo.bDepthStencil = false;
-                    dx12AttachmentInfo.AttachmentInfo = texture.Dx12Device.AllocateRtvDescriptor(1);
+                    dx12AttachmentInfo.AttachmentInfo =
+                        device.AllocateRtvDescriptor(1);
                 }
                 m_AttachmentInfos.Add(dx12AttachmentInfo);
 
                 rtvHandles[i] = dx12AttachmentInfo.AttachmentInfo.CpuHandle;
-                texture.Dx12Device.NativeDevice.CreateRenderTargetView(texture.NativeResource, desc, rtvHandles[i]);
+                device.NativeDevice.CreateRenderTargetView(
+                    texture.NativeResource,
+                    desc,
+                    rtvHandles[i]);
             }
 
             return rtvHandles;
         }
 
-        private Vortice.Direct3D12.CpuDescriptorHandle? CreateDepthStencilAttachmentView(in RHIRasterPassDescriptor descriptor)
+        private void CreateDepthStencilAttachmentViews(
+            in RHIRasterPassDescriptor descriptor,
+            ReadOnlySpan<Dx12RasterSubPassLowering> subPasses,
+            Dx12Device device,
+            out Vortice.Direct3D12.CpuDescriptorHandle? writableHandle,
+            out Vortice.Direct3D12.CpuDescriptorHandle? readOnlyHandle)
         {
+            writableHandle = null;
+            readOnlyHandle = null;
             if (!descriptor.DepthStencilAttachment.HasValue)
             {
-                return null;
+                return;
             }
 
-            Dx12Texture texture = descriptor.DepthStencilAttachment.Value.RenderTarget as Dx12Texture;
-#if DEBUG
-            Debug.Assert(texture != null, "DepthStencilTarget texture is null");
-#endif
+            writableHandle = CreateDepthStencilAttachmentView(
+                descriptor.DepthStencilAttachment.Value,
+                ERHISubPassFlags.None,
+                device);
+
+            ERHISubPassFlags readOnlyFlags = ERHISubPassFlags.None;
+            for (int index = 0; index < subPasses.Length; ++index)
+            {
+                readOnlyFlags |= subPasses[index].DepthStencilFlags;
+            }
+            if (readOnlyFlags != ERHISubPassFlags.None)
+            {
+                readOnlyHandle = CreateDepthStencilAttachmentView(
+                    descriptor.DepthStencilAttachment.Value,
+                    readOnlyFlags,
+                    device);
+            }
+        }
+
+        private Vortice.Direct3D12.CpuDescriptorHandle
+            CreateDepthStencilAttachmentView(
+                in RHIDepthStencilAttachmentDescriptor attachment,
+                ERHISubPassFlags readOnlyFlags,
+                Dx12Device device)
+        {
+            Dx12Texture texture = Dx12EncoderGuards.RequireTexture(attachment.RenderTarget) ?? throw new InvalidOperationException("Render target must be a Dx12Texture.");
             if (texture == null)
             {
                 throw new InvalidOperationException("Depth stencil render target is null.");
             }
+            if (!ReferenceEquals(texture.Dx12Device, device))
+            {
+                throw new ArgumentException(
+                    "Depth stencil render target belongs to a different " +
+                    "DX12 device.");
+            }
 
             RHITextureViewDescriptor viewDescriptor;
             {
-                viewDescriptor.MipCount = texture.Descriptor.MipCount;
-                viewDescriptor.BaseMipLevel = 0;
-                viewDescriptor.ArrayCount = texture.Descriptor.Extent.z;
-                viewDescriptor.BaseArraySlice = 0;
+                viewDescriptor.MipCount = attachment.SubresourceRange.MipLevelCount;
+                viewDescriptor.BaseMipLevel = attachment.SubresourceRange.BaseMipLevel;
+                viewDescriptor.ArrayCount = attachment.SubresourceRange.ArrayLayerCount;
+                viewDescriptor.BaseArraySlice = attachment.SubresourceRange.BaseArrayLayer;
                 viewDescriptor.ViewType = ERHITextureViewType.Pending;
             }
 
             Vortice.Direct3D12.DepthStencilViewDescription desc = new Vortice.Direct3D12.DepthStencilViewDescription();
-            desc.Flags = Dx12Utility.GetDx12DSVFlag(false, false);
+            desc.Flags = Dx12Utility.GetDx12DSVFlag(
+                (readOnlyFlags & ERHISubPassFlags.ReadOnlyDepth) != 0,
+                (readOnlyFlags & ERHISubPassFlags.ReadOnlyStencil) != 0);
             desc.Format = Dx12Utility.ConvertToDx12Format(texture.Descriptor.Format);
             desc.ViewDimension = Dx12Utility.ConvertToDx12TextureDSVDimension(texture.Descriptor.Dimension);
             Dx12Utility.FillTexture2DDSV(ref desc.Texture2D, viewDescriptor, texture.Descriptor.Dimension);
@@ -1702,25 +2207,429 @@ namespace SharpGPU
             Dx12AttachmentInfo dx12AttachmentInfo = new Dx12AttachmentInfo();
             {
                 dx12AttachmentInfo.bDepthStencil = true;
-                dx12AttachmentInfo.AttachmentInfo = texture.Dx12Device.AllocateDsvDescriptor(1);
+                dx12AttachmentInfo.AttachmentInfo =
+                    device.AllocateDsvDescriptor(1);
             }
             m_AttachmentInfos.Add(dx12AttachmentInfo);
 
             Vortice.Direct3D12.CpuDescriptorHandle dsvHandle = dx12AttachmentInfo.AttachmentInfo.CpuHandle;
-            texture.Dx12Device.NativeDevice.CreateDepthStencilView(texture.NativeResource, desc, dsvHandle);
+            device.NativeDevice.CreateDepthStencilView(
+                texture.NativeResource,
+                desc,
+                dsvHandle);
             return dsvHandle;
         }
 
-        private static void BeginLegacyRasterPass(Dx12CommandBuffer dx12CommandBuffer,
-                                                  in RHIRasterPassDescriptor descriptor,
-                                                  Vortice.Direct3D12.CpuDescriptorHandle[] rtvHandles,
-                                                  Vortice.Direct3D12.CpuDescriptorHandle? dsvHandle)
+        private Vortice.Direct3D12.CpuDescriptorHandle[][]
+            CreateOmSubPassRenderTargetViews(
+                RasterPassPlan plan,
+                Dx12RasterPassLowering lowering,
+                Dx12Device device)
         {
-            fixed (Vortice.Direct3D12.CpuDescriptorHandle* rtvHandlesPtr = rtvHandles)
+            ReadOnlySpan<Dx12RasterSubPassLowering> subPasses =
+                lowering.SubPasses.Span;
+            Vortice.Direct3D12.CpuDescriptorHandle[][] phaseHandles =
+                new Vortice.Direct3D12.CpuDescriptorHandle[
+                    subPasses.Length][];
+            for (int subPassIndex = 0;
+                 subPassIndex < subPasses.Length;
+                 ++subPassIndex)
             {
-                dx12CommandBuffer.NativeCommandList.OMSetRenderTargets((uint)rtvHandles.Length, rtvHandlesPtr, false, dsvHandle);
+                ref readonly Dx12RasterSubPassLowering subPass =
+                    ref subPasses[subPassIndex];
+                int outputLocationCount =
+                    subPass.OutputLogicalAttachments.Length;
+                Vortice.Direct3D12.CpuDescriptorHandle[] outputHandles =
+                    new Vortice.Direct3D12.CpuDescriptorHandle[
+                        outputLocationCount];
+                for (int outputLocation = 0;
+                     outputLocation < outputLocationCount;
+                     ++outputLocation)
+                {
+                    int renderTargetLogicalAttachment =
+                        subPass.GetRenderTargetLogicalAttachment(
+                            outputLocation);
+                    outputHandles[outputLocation] =
+                        renderTargetLogicalAttachment >= 0
+                            ? m_RtvHandles[
+                                renderTargetLogicalAttachment]
+                            : CreateTypedNullRenderTargetView(
+                                plan,
+                                in subPass,
+                                outputLocation,
+                                device);
+                }
+                phaseHandles[subPassIndex] = outputHandles;
+            }
+            return phaseHandles;
+        }
+
+        private Vortice.Direct3D12.CpuDescriptorHandle
+            CreateTypedNullRenderTargetView(
+                RasterPassPlan plan,
+                in Dx12RasterSubPassLowering subPass,
+                int outputLocation,
+                Dx12Device device)
+        {
+            int representativeLogicalAttachment =
+                subPass.GetOutputLogicalAttachment(outputLocation);
+            if (representativeLogicalAttachment < 0)
+            {
+                representativeLogicalAttachment =
+                    FindFirstBoundOutput(in subPass);
+            }
+            if (representativeLogicalAttachment < 0)
+            {
+                throw new InvalidOperationException(
+                    "DX12 typed null RTV creation requires a bound " +
+                    "output-location format anchor.");
             }
 
+            ref readonly RHIColorAttachmentDescriptor attachment =
+                ref plan.GetColorAttachment(
+                    representativeLogicalAttachment);
+            Dx12Texture texture = Dx12EncoderGuards.RequireTexture(attachment.RenderTarget)
+                ?? throw new ArgumentException(
+                    $"DX12 attachment {representativeLogicalAttachment} " +
+                    "belongs to a different backend.");
+            RHITextureViewDescriptor viewDescriptor = new()
+            {
+                MipCount = attachment.SubresourceRange.MipLevelCount,
+                BaseMipLevel =
+                    attachment.SubresourceRange.BaseMipLevel,
+                ArrayCount =
+                    attachment.SubresourceRange.ArrayLayerCount,
+                BaseArraySlice =
+                    attachment.SubresourceRange.BaseArrayLayer,
+                ViewType = ERHITextureViewType.Pending,
+            };
+            Vortice.Direct3D12.RenderTargetViewDescription description =
+                new()
+                {
+                    Format = Dx12Utility.ConvertToDx12ViewFormat(
+                        subPass.OutputLocationFormats.Span[
+                            outputLocation]),
+                    ViewDimension =
+                        Dx12Utility.ConvertToDx12TextureRTVDimension(
+                            texture.Descriptor.Dimension),
+                };
+            Dx12Utility.FillTexture2DRTV(
+                ref description.Texture2D,
+                viewDescriptor,
+                texture.Descriptor.Dimension);
+            Dx12Utility.FillTexture3DRTV(
+                ref description.Texture3D,
+                viewDescriptor,
+                texture.Descriptor.Dimension);
+            Dx12Utility.FillTexture2DArrayRTV(
+                ref description.Texture2DArray,
+                viewDescriptor,
+                texture.Descriptor.Dimension);
+
+            Dx12AttachmentInfo descriptor = new()
+            {
+                bDepthStencil = false,
+                AttachmentInfo = device.AllocateRtvDescriptor(1),
+            };
+            m_AttachmentInfos.Add(descriptor);
+            device.NativeDevice.CreateRenderTargetView(
+                null,
+                description,
+                descriptor.AttachmentInfo.CpuHandle);
+            return descriptor.AttachmentInfo.CpuHandle;
+        }
+
+        private static int FindFirstBoundOutput(
+            in Dx12RasterSubPassLowering subPass)
+        {
+            for (int outputLocation = 0;
+                 outputLocation < subPass.OutputLogicalAttachments.Length;
+                 ++outputLocation)
+            {
+                int logicalAttachment =
+                    subPass.GetOutputLogicalAttachment(outputLocation);
+                if (logicalAttachment >= 0)
+                {
+                    return logicalAttachment;
+                }
+            }
+            return RHIAttachmentInterfaceSignature
+                .UnboundLogicalAttachment;
+        }
+
+        private void CreatePrivateAttachmentDescriptors(
+            RasterPassPlan plan,
+            Dx12RasterPassLowering lowering,
+            Dx12Device device,
+            Dx12CommandBuffer commandBuffer)
+        {
+            m_HasPrivateAttachmentDescriptors = false;
+            m_PrivateAttachmentDescriptorCount = 0;
+            if (!lowering.RequiresPrivateAttachmentTable)
+            {
+                return;
+            }
+
+            ReadOnlySpan<Dx12RasterSubPassLowering> subPasses =
+                lowering.SubPasses.Span;
+            int descriptorCount = checked(
+                subPasses.Length *
+                Dx12RasterPassLowering
+                    .PrivateDescriptorCountPerSubPass);
+            Dx12DescriptorInfo allocation =
+                device.AllocateCbvSrvUavDescriptor(descriptorCount);
+            try
+            {
+                uint descriptorSize =
+                    device.DescriptorHeapCbvSrvUav.DescriptorSize;
+                for (int subPassIndex = 0;
+                     subPassIndex < subPasses.Length;
+                     ++subPassIndex)
+                {
+                    ref readonly Dx12RasterSubPassLowering subPass =
+                        ref subPasses[subPassIndex];
+                    InitializeTypedNullPrivateAttachmentTable(
+                        device,
+                        allocation,
+                        descriptorSize,
+                        subPassIndex);
+
+                    for (int inputIndex = 0;
+                         inputIndex <
+                            subPass.PrivateInputLogicalAttachments.Length;
+                         ++inputIndex)
+                    {
+                        int logicalAttachment =
+                            subPass.GetPrivateInputLogicalAttachment(
+                                inputIndex);
+                        if (logicalAttachment < 0)
+                        {
+                            continue;
+                        }
+
+                        GetPrivateAttachmentView(
+                            plan,
+                            logicalAttachment,
+                            device,
+                            out Dx12Texture texture,
+                            out RHITextureViewDescriptor view);
+                        Vortice.Direct3D12
+                            .ShaderResourceViewDescription description =
+                                CreatePrivateShaderResourceDescription(
+                                    texture,
+                                    in view);
+                        device.NativeDevice.CreateShaderResourceView(
+                            texture.NativeResource,
+                            description,
+                            new Vortice.Direct3D12
+                                .CpuDescriptorHandle(
+                                    in allocation.CpuHandle,
+                                    Dx12RasterPassLowering
+                                        .GetPrivateInputDescriptorOffset(
+                                            subPassIndex,
+                                            inputIndex),
+                                    descriptorSize));
+                    }
+
+                    for (int logicalAttachment = 0;
+                         logicalAttachment < plan.ColorAttachmentCount;
+                         ++logicalAttachment)
+                    {
+                        byte bit = checked((byte)(
+                            1 << logicalAttachment));
+                        if ((subPass.RasterOrderedMask & bit) == 0)
+                        {
+                            continue;
+                        }
+
+                        GetPrivateAttachmentView(
+                            plan,
+                            logicalAttachment,
+                            device,
+                            out Dx12Texture texture,
+                            out RHITextureViewDescriptor view);
+                        Vortice.Direct3D12
+                            .UnorderedAccessViewDescription description =
+                                CreatePrivateRasterOrderedDescription(
+                                    texture,
+                                    in view);
+                        device.NativeDevice.CreateUnorderedAccessView(
+                            texture.NativeResource,
+                            null,
+                            description,
+                            new Vortice.Direct3D12
+                                .CpuDescriptorHandle(
+                                    in allocation.CpuHandle,
+                                    Dx12RasterPassLowering
+                                        .GetRasterOrderedDescriptorOffset(
+                                            subPassIndex,
+                                            logicalAttachment),
+                                    descriptorSize));
+                    }
+                }
+
+                commandBuffer.RegisterTransientCbvSrvUavDescriptor(
+                    allocation,
+                    descriptorCount);
+                m_PrivateAttachmentDescriptors = allocation;
+                m_PrivateAttachmentDescriptorCount = descriptorCount;
+                m_HasPrivateAttachmentDescriptors = true;
+            }
+            catch
+            {
+                device.FreeCbvSrvUavDescriptor(
+                    allocation.Index,
+                    descriptorCount);
+                throw;
+            }
+        }
+
+        private static void InitializeTypedNullPrivateAttachmentTable(
+            Dx12Device device,
+            in Dx12DescriptorInfo allocation,
+            uint descriptorSize,
+            int subPassIndex)
+        {
+            Vortice.Direct3D12.ShaderResourceViewDescription nullSrv =
+                new()
+                {
+                    Format = Vortice.DXGI.Format.R32_UInt,
+                    ViewDimension = Vortice.Direct3D12
+                        .ShaderResourceViewDimension.Texture2D,
+                    Shader4ComponentMapping = 5768,
+                };
+            Vortice.Direct3D12.UnorderedAccessViewDescription nullUav =
+                new()
+                {
+                    Format = Vortice.DXGI.Format.R32_UInt,
+                    ViewDimension = Vortice.Direct3D12
+                        .UnorderedAccessViewDimension.Texture2D,
+                };
+            for (int ordinal = 0;
+                 ordinal < RHIAttachmentIndexArray.MaxAttachments;
+                 ++ordinal)
+            {
+                device.NativeDevice.CreateShaderResourceView(
+                    null,
+                    nullSrv,
+                    new Vortice.Direct3D12.CpuDescriptorHandle(
+                        in allocation.CpuHandle,
+                        Dx12RasterPassLowering
+                            .GetPrivateInputDescriptorOffset(
+                                subPassIndex,
+                                ordinal),
+                        descriptorSize));
+                device.NativeDevice.CreateUnorderedAccessView(
+                    null,
+                    null,
+                    nullUav,
+                    new Vortice.Direct3D12.CpuDescriptorHandle(
+                        in allocation.CpuHandle,
+                        Dx12RasterPassLowering
+                            .GetRasterOrderedDescriptorOffset(
+                                subPassIndex,
+                                ordinal),
+                        descriptorSize));
+            }
+        }
+
+        private static void GetPrivateAttachmentView(
+            RasterPassPlan plan,
+            int logicalAttachment,
+            Dx12Device device,
+            out Dx12Texture texture,
+            out RHITextureViewDescriptor view)
+        {
+            ref readonly RHIColorAttachmentDescriptor attachment =
+                ref plan.GetColorAttachment(logicalAttachment);
+            texture = Dx12EncoderGuards.RequireTexture(attachment.RenderTarget)
+                ?? throw new ArgumentException(
+                    $"DX12 attachment {logicalAttachment} belongs to a " +
+                    "different backend.");
+            if (!ReferenceEquals(texture.Dx12Device, device))
+            {
+                throw new ArgumentException(
+                    $"DX12 attachment {logicalAttachment} belongs to a " +
+                    "different device.");
+            }
+            view = new RHITextureViewDescriptor
+            {
+                BaseMipLevel =
+                    attachment.SubresourceRange.BaseMipLevel,
+                MipCount =
+                    attachment.SubresourceRange.MipLevelCount,
+                BaseArraySlice =
+                    attachment.SubresourceRange.BaseArrayLayer,
+                ArrayCount =
+                    attachment.SubresourceRange.ArrayLayerCount,
+            };
+        }
+
+        private static Vortice.Direct3D12
+            .ShaderResourceViewDescription
+            CreatePrivateShaderResourceDescription(
+                Dx12Texture texture,
+                in RHITextureViewDescriptor view)
+        {
+            Vortice.Direct3D12.ShaderResourceViewDescription description =
+                new()
+                {
+                    Format = Dx12Utility.ConvertToDx12ViewFormat(
+                        texture.Descriptor.Format),
+                    ViewDimension =
+                        Dx12Utility.ConvertToDx12TextureSRVDimension(
+                            texture.Descriptor.Dimension),
+                    Shader4ComponentMapping = 5768,
+                };
+            Dx12Utility.FillTexture2DSRV(
+                ref description.Texture2D,
+                view,
+                texture.Descriptor.Dimension);
+            Dx12Utility.FillTexture2DArraySRV(
+                ref description.Texture2DArray,
+                view,
+                texture.Descriptor.Dimension);
+            Dx12Utility.FillTexture3DSRV(
+                ref description.Texture3D,
+                view,
+                texture.Descriptor.Dimension);
+            return description;
+        }
+
+        private static Vortice.Direct3D12
+            .UnorderedAccessViewDescription
+            CreatePrivateRasterOrderedDescription(
+                Dx12Texture texture,
+                in RHITextureViewDescriptor view)
+        {
+            Vortice.Direct3D12.UnorderedAccessViewDescription description =
+                new()
+                {
+                    Format = Dx12Utility.ConvertToDx12ViewFormat(
+                        texture.Descriptor.Format),
+                    ViewDimension =
+                        Dx12Utility.ConvertToDx12TextureUAVDimension(
+                            texture.Descriptor.Dimension),
+                };
+            Dx12Utility.FillTexture2DUAV(
+                ref description.Texture2D,
+                view,
+                texture.Descriptor.Dimension);
+            Dx12Utility.FillTexture2DArrayUAV(
+                ref description.Texture2DArray,
+                view,
+                texture.Descriptor.Dimension);
+            Dx12Utility.FillTexture3DUAV(
+                ref description.Texture3D,
+                view,
+                texture.Descriptor.Dimension);
+            return description;
+        }
+
+        private void ClearOmAttachments(
+            Dx12CommandBuffer dx12CommandBuffer,
+            in RHIRasterPassDescriptor descriptor)
+        {
             for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
             {
                 ref RHIColorAttachmentDescriptor colorAttachmentDescriptor = ref descriptor.ColorAttachments.Span[i];
@@ -1731,22 +2640,161 @@ namespace SharpGPU
 
                 float4 clearValue = colorAttachmentDescriptor.ClearValue;
                 Vortice.Mathematics.Color4 nativeClearValue = new Vortice.Mathematics.Color4(clearValue.x, clearValue.y, clearValue.z, clearValue.w);
-                dx12CommandBuffer.NativeCommandList.ClearRenderTargetView(rtvHandles[i], nativeClearValue);
+                dx12CommandBuffer.NativeCommandList.ClearRenderTargetView(m_RtvHandles[i], nativeClearValue);
             }
 
-            if (dsvHandle.HasValue && descriptor.DepthStencilAttachment.HasValue)
+            if (m_DsvHandle.HasValue && descriptor.DepthStencilAttachment.HasValue)
             {
                 RHIDepthStencilAttachmentDescriptor depthStencilAttachmentDescriptor = descriptor.DepthStencilAttachment.Value;
                 if (depthStencilAttachmentDescriptor.DepthLoadOp == ERHILoadAction.Clear || depthStencilAttachmentDescriptor.StencilLoadOp == ERHILoadAction.Clear)
                 {
                     dx12CommandBuffer.NativeCommandList.ClearDepthStencilView(
-                        dsvHandle.Value,
+                        m_DsvHandle.Value,
                         Dx12Utility.GetDx12ClearFlagByDSA(depthStencilAttachmentDescriptor),
                         depthStencilAttachmentDescriptor.DepthClearValue,
                         Convert.ToByte(depthStencilAttachmentDescriptor.StencilClearValue));
                 }
             }
         }
+
+        private void BindOmSubPass(
+            Dx12CommandBuffer commandBuffer,
+            RasterPassPlan plan,
+            int subPassIndex)
+        {
+            ref readonly Dx12RasterSubPassLowering subPass =
+                ref Lowering.SubPasses.Span[subPassIndex];
+            ApplyOmSubPassTransitions(commandBuffer, plan, in subPass);
+
+            Vortice.Direct3D12.CpuDescriptorHandle[] renderTargets =
+                m_OmSubPassRenderTargetHandles[subPassIndex];
+            int renderTargetCount = renderTargets.Length;
+
+            Vortice.Direct3D12.CpuDescriptorHandle? depthStencilHandle =
+                null;
+            if (plan.HasDepthStencilAttachment)
+            {
+                depthStencilHandle =
+                    subPass.DepthStencilFlags == ERHISubPassFlags.None
+                        ? m_DsvHandle
+                        : m_ReadOnlyDsvHandle;
+            }
+
+            fixed (Vortice.Direct3D12.CpuDescriptorHandle*
+                   renderTargetsPtr = renderTargets)
+            {
+                commandBuffer.NativeCommandList.OMSetRenderTargets(
+                    checked((uint)renderTargetCount),
+                    renderTargetsPtr,
+                    false,
+                    depthStencilHandle);
+            }
+        }
+
+        private void ApplyOmSubPassTransitions(
+            Dx12CommandBuffer commandBuffer,
+            RasterPassPlan plan,
+            in Dx12RasterSubPassLowering subPass)
+        {
+            for (int attachmentIndex = 0;
+                 attachmentIndex < plan.ColorAttachmentCount;
+                 ++attachmentIndex)
+            {
+                byte bit = checked((byte)(1 << attachmentIndex));
+                ERHITextureLayout desiredLayout;
+                ERHIAccessMask desiredAccess;
+                if ((subPass.RasterOrderedMask & bit) != 0)
+                {
+                    desiredLayout = ERHITextureLayout.General;
+                    desiredAccess =
+                        ERHIAccessMask.ShaderRead |
+                        ERHIAccessMask.ShaderWrite;
+                }
+                else if ((subPass.ShaderResourceMask & bit) != 0)
+                {
+                    desiredLayout = ERHITextureLayout.ShaderReadOnly;
+                    desiredAccess = ERHIAccessMask.ShaderRead;
+                }
+                else if ((subPass.RenderTargetMask & bit) != 0)
+                {
+                    desiredLayout = ERHITextureLayout.RenderTarget;
+                    desiredAccess =
+                        ERHIAccessMask.RenderTargetRead |
+                        ERHIAccessMask.RenderTargetWrite;
+                }
+                else
+                {
+                    continue;
+                }
+
+                ERHITextureLayout currentLayout =
+                    m_ColorLayouts[attachmentIndex] == ERHITextureLayout.Undefined
+                        ? ERHITextureLayout.RenderTarget
+                        : m_ColorLayouts[attachmentIndex];
+                if (currentLayout == desiredLayout)
+                {
+                    continue;
+                }
+
+                ref readonly RHIColorAttachmentDescriptor attachment =
+                    ref plan.GetColorAttachment(attachmentIndex);
+                RHIBarrier barrier = RHIBarrier.Texture(
+                    attachment.RenderTarget,
+                    attachment.SubresourceRange,
+                    currentLayout,
+                    desiredLayout,
+                    ERHISyncStageMask.Fragment,
+                    ERHISyncStageMask.Fragment,
+                    AccessForColorLayout(currentLayout),
+                    desiredAccess);
+                Dx12BarrierEmitter.EmitBarrier(commandBuffer, barrier);
+                m_ColorLayouts[attachmentIndex] = desiredLayout;
+            }
+
+            if (plan.HasDepthStencilAttachment)
+            {
+                ERHITextureLayout desiredLayout =
+                    subPass.DepthStencilFlags ==
+                        ERHISubPassFlags.ReadOnlyDepthStencil
+                        ? ERHITextureLayout.DepthStencilReadOnly
+                        : ERHITextureLayout.DepthStencilWrite;
+                ERHITextureLayout currentLayout =
+                    m_DepthStencilLayout == ERHITextureLayout.Undefined
+                        ? ERHITextureLayout.DepthStencilWrite
+                        : m_DepthStencilLayout;
+                if (currentLayout != desiredLayout)
+                {
+                    RHIDepthStencilAttachmentDescriptor attachment =
+                        plan.GetDepthStencilAttachment();
+                    RHIBarrier barrier = RHIBarrier.Texture(
+                        attachment.RenderTarget,
+                        attachment.SubresourceRange,
+                        currentLayout,
+                        desiredLayout,
+                        ERHISyncStageMask.Fragment,
+                        ERHISyncStageMask.Fragment,
+                        currentLayout == ERHITextureLayout.DepthStencilReadOnly
+                            ? ERHIAccessMask.DepthStencilRead
+                            : ERHIAccessMask.DepthStencilWrite,
+                        desiredLayout == ERHITextureLayout.DepthStencilReadOnly
+                            ? ERHIAccessMask.DepthStencilRead
+                            : ERHIAccessMask.DepthStencilWrite);
+                    Dx12BarrierEmitter.EmitBarrier(commandBuffer, barrier);
+                    m_DepthStencilLayout = desiredLayout;
+                }
+            }
+        }
+
+        private static ERHIAccessMask AccessForColorLayout(
+            ERHITextureLayout layout) => layout switch
+        {
+            ERHITextureLayout.General =>
+                ERHIAccessMask.ShaderRead | ERHIAccessMask.ShaderWrite,
+            ERHITextureLayout.ShaderReadOnly => ERHIAccessMask.ShaderRead,
+            _ =>
+                ERHIAccessMask.RenderTargetRead |
+                ERHIAccessMask.RenderTargetWrite,
+        };
 
         private void CacheNativeRenderPass(Dx12CommandBuffer dx12CommandBuffer,
                                            in RHIRasterPassDescriptor descriptor,
@@ -1757,10 +2805,7 @@ namespace SharpGPU
             for (int i = 0; i < descriptor.ColorAttachments.Length; ++i)
             {
                 ref RHIColorAttachmentDescriptor colorAttachmentDescriptor = ref descriptor.ColorAttachments.Span[i];
-                Dx12Texture colorTexture = colorAttachmentDescriptor.RenderTarget as Dx12Texture;
-#if DEBUG
-                Debug.Assert(colorTexture != null, "ColorRenderTarget Texture is null");
-#endif
+                Dx12Texture colorTexture = Dx12EncoderGuards.RequireTexture(colorAttachmentDescriptor.RenderTarget);
                 if (colorTexture == null)
                 {
                     throw new InvalidOperationException($"Color render target at index {i} is null.");
@@ -1778,10 +2823,7 @@ namespace SharpGPU
             if (dsvHandle.HasValue && descriptor.DepthStencilAttachment.HasValue)
             {
                 RHIDepthStencilAttachmentDescriptor depthStencilAttachment = descriptor.DepthStencilAttachment.Value;
-                Dx12Texture depthStencilTexture = depthStencilAttachment.RenderTarget as Dx12Texture;
-#if DEBUG
-                Debug.Assert(depthStencilTexture != null, "DepthStencilTarget texture is null");
-#endif
+                Dx12Texture depthStencilTexture = Dx12EncoderGuards.RequireTexture(depthStencilAttachment.RenderTarget);
                 if (depthStencilTexture == null)
                 {
                     throw new InvalidOperationException("Depth stencil render target is null.");
@@ -1807,7 +2849,7 @@ namespace SharpGPU
                 return;
             }
 
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.BeginRenderPass(m_NativeRenderPassColorDescriptions, m_NativeRenderPassDepthStencilDescription, Vortice.Direct3D12.RenderPassFlags.None);
             m_IsNativeRenderPassActive = true;
         }
@@ -1847,8 +2889,8 @@ namespace SharpGPU
                         throw new InvalidOperationException("Color resolve requires ResolveTarget to be set.");
                     }
 
-                    Dx12Texture srcTexture = colorAttachmentDescriptor.RenderTarget as Dx12Texture;
-                    Dx12Texture dstTexture = colorAttachmentDescriptor.ResolveTarget as Dx12Texture;
+                    Dx12Texture srcTexture = Dx12EncoderGuards.RequireTexture(colorAttachmentDescriptor.RenderTarget);
+                    Dx12Texture dstTexture = Dx12EncoderGuards.RequireTexture(colorAttachmentDescriptor.ResolveTarget);
                     if (srcTexture == null || dstTexture == null)
                     {
                         throw new InvalidOperationException("Color resolve requires Dx12 textures for source and destination.");
@@ -1860,8 +2902,8 @@ namespace SharpGPU
                         DstResource = dstTexture.NativeResource,
                         SubresourceCount = 1,
                         SubresourceParameters = new Vortice.Direct3D12.RenderPassEndingAccessResolveSubresourceParameters(
-                            ComputeResolveSubresourceIndex(srcTexture, colorAttachmentDescriptor.MipLevel, colorAttachmentDescriptor.ArraySlice),
-                            ComputeResolveSubresourceIndex(dstTexture, colorAttachmentDescriptor.ResolveMipLevel, colorAttachmentDescriptor.ResolveArraySlice),
+                            ComputeResolveSubresourceIndex(srcTexture, colorAttachmentDescriptor.SubresourceRange.BaseMipLevel, colorAttachmentDescriptor.SubresourceRange.BaseArrayLayer),
+                            ComputeResolveSubresourceIndex(dstTexture, colorAttachmentDescriptor.ResolveSubresourceRange.BaseMipLevel, colorAttachmentDescriptor.ResolveSubresourceRange.BaseArrayLayer),
                             0,
                             0,
                             default),
@@ -1896,22 +2938,25 @@ namespace SharpGPU
                         throw new InvalidOperationException("Depth/stencil resolve requires ResolveTarget to be set.");
                     }
 
-                    Dx12Texture srcTexture = depthStencilAttachmentDescriptor.RenderTarget as Dx12Texture;
-                    Dx12Texture dstTexture = depthStencilAttachmentDescriptor.ResolveTarget as Dx12Texture;
+                    Dx12Texture srcTexture = Dx12EncoderGuards.RequireTexture(depthStencilAttachmentDescriptor.RenderTarget);
+                    Dx12Texture dstTexture = Dx12EncoderGuards.RequireTexture(depthStencilAttachmentDescriptor.ResolveTarget);
                     if (srcTexture == null || dstTexture == null)
                     {
                         throw new InvalidOperationException("Depth/stencil resolve requires Dx12 textures for source and destination.");
                     }
 
-                    Vortice.Direct3D12.ResolveMode resolveMode = ConvertDepthResolveMode(depthStencilAttachmentDescriptor.ResolveMode);
+                    EResolveMode requestedResolveMode = isDepth
+                        ? depthStencilAttachmentDescriptor.DepthResolveMode
+                        : depthStencilAttachmentDescriptor.StencilResolveMode;
+                    Vortice.Direct3D12.ResolveMode resolveMode = ConvertDepthResolveMode(requestedResolveMode);
                     Vortice.Direct3D12.RenderPassEndingAccessResolveParameters resolveParameters = new Vortice.Direct3D12.RenderPassEndingAccessResolveParameters
                     {
                         SrcResource = srcTexture.NativeResource,
                         DstResource = dstTexture.NativeResource,
                         SubresourceCount = 1,
                         SubresourceParameters = new Vortice.Direct3D12.RenderPassEndingAccessResolveSubresourceParameters(
-                            ComputeResolveSubresourceIndex(srcTexture, depthStencilAttachmentDescriptor.MipLevel, depthStencilAttachmentDescriptor.ArraySlice),
-                            ComputeResolveSubresourceIndex(dstTexture, depthStencilAttachmentDescriptor.ResolveMipLevel, depthStencilAttachmentDescriptor.ResolveArraySlice),
+                            ComputeResolveSubresourceIndex(srcTexture, depthStencilAttachmentDescriptor.SubresourceRange.BaseMipLevel, depthStencilAttachmentDescriptor.SubresourceRange.BaseArrayLayer),
+                            ComputeResolveSubresourceIndex(dstTexture, depthStencilAttachmentDescriptor.ResolveSubresourceRange.BaseMipLevel, depthStencilAttachmentDescriptor.ResolveSubresourceRange.BaseArrayLayer),
                             0,
                             0,
                             default),
@@ -1952,71 +2997,292 @@ namespace SharpGPU
             return arraySlice * texture.Descriptor.MipCount + mipLevel;
         }
 
+        private void EndOmRasterPass(Dx12CommandBuffer commandBuffer)
+        {
+            RestoreOmAttachmentLayouts(commandBuffer);
+            ResolveOmAttachments(commandBuffer);
+        }
+
+        private void RestoreOmAttachmentLayouts(
+            Dx12CommandBuffer commandBuffer)
+        {
+            for (int attachmentIndex = 0;
+                 attachmentIndex < m_PassDescriptor.ColorAttachments.Length;
+                 ++attachmentIndex)
+            {
+                ERHITextureLayout currentLayout =
+                    m_ColorLayouts[attachmentIndex];
+                if (currentLayout == ERHITextureLayout.Undefined ||
+                    currentLayout == ERHITextureLayout.RenderTarget)
+                {
+                    continue;
+                }
+                ref RHIColorAttachmentDescriptor attachment =
+                    ref m_PassDescriptor.ColorAttachments.Span[
+                        attachmentIndex];
+                RHIBarrier barrier = RHIBarrier.Texture(
+                    attachment.RenderTarget,
+                    attachment.SubresourceRange,
+                    currentLayout,
+                    ERHITextureLayout.RenderTarget,
+                    ERHISyncStageMask.Fragment,
+                    ERHISyncStageMask.Fragment,
+                    AccessForColorLayout(currentLayout),
+                    ERHIAccessMask.RenderTargetRead |
+                        ERHIAccessMask.RenderTargetWrite);
+                Dx12BarrierEmitter.EmitBarrier(commandBuffer, barrier);
+                m_ColorLayouts[attachmentIndex] =
+                    ERHITextureLayout.RenderTarget;
+            }
+
+            if (m_PassDescriptor.DepthStencilAttachment.HasValue &&
+                m_DepthStencilLayout ==
+                    ERHITextureLayout.DepthStencilReadOnly)
+            {
+                RHIDepthStencilAttachmentDescriptor attachment =
+                    m_PassDescriptor.DepthStencilAttachment.Value;
+                RHIBarrier barrier = RHIBarrier.Texture(
+                    attachment.RenderTarget,
+                    attachment.SubresourceRange,
+                    ERHITextureLayout.DepthStencilReadOnly,
+                    ERHITextureLayout.DepthStencilWrite,
+                    ERHISyncStageMask.Fragment,
+                    ERHISyncStageMask.Fragment,
+                    ERHIAccessMask.DepthStencilRead,
+                    ERHIAccessMask.DepthStencilWrite);
+                Dx12BarrierEmitter.EmitBarrier(commandBuffer, barrier);
+                m_DepthStencilLayout =
+                    ERHITextureLayout.DepthStencilWrite;
+            }
+        }
+
+        private void ResolveOmAttachments(Dx12CommandBuffer commandBuffer)
+        {
+            for (int attachmentIndex = 0;
+                 attachmentIndex < m_PassDescriptor.ColorAttachments.Length;
+                 ++attachmentIndex)
+            {
+                ref RHIColorAttachmentDescriptor attachment =
+                    ref m_PassDescriptor.ColorAttachments.Span[
+                        attachmentIndex];
+                if (attachment.StoreAction != ERHIStoreAction.Resolve &&
+                    attachment.StoreAction !=
+                        ERHIStoreAction.StoreAndResolve)
+                {
+                    continue;
+                }
+
+                Dx12Texture source =
+                    Dx12EncoderGuards.RequireTexture(attachment.RenderTarget)
+                    ?? throw new InvalidOperationException(
+                        "DX12 color resolve source belongs to a different backend.");
+                Dx12Texture destination =
+                    attachment.ResolveTarget is RHITexture resolveTarget ? Dx12EncoderGuards.RequireTexture(resolveTarget) : throw new InvalidOperationException("Resolve target must be a Dx12Texture.")
+                    ?? throw new InvalidOperationException(
+                        "DX12 color resolve destination belongs to a different backend.");
+                RHIBarrier toResolve = RHIBarrier.Texture(
+                    source,
+                    attachment.SubresourceRange,
+                    ERHITextureLayout.RenderTarget,
+                    ERHITextureLayout.ResolveSource,
+                    ERHISyncStageMask.Fragment,
+                    ERHISyncStageMask.Transfer,
+                    ERHIAccessMask.RenderTargetWrite,
+                    ERHIAccessMask.ResolveRead);
+                Dx12BarrierEmitter.EmitBarrier(commandBuffer, toResolve);
+                for (uint layer = 0;
+                     layer < attachment.SubresourceRange.ArrayLayerCount;
+                     ++layer)
+                {
+                    commandBuffer.NativeCommandList.ResolveSubresourceRegion(
+                        destination.NativeResource,
+                        ComputeResolveSubresourceIndex(
+                            destination,
+                            attachment.ResolveSubresourceRange.BaseMipLevel,
+                            attachment.ResolveSubresourceRange.BaseArrayLayer +
+                                layer),
+                        0,
+                        0,
+                        source.NativeResource,
+                        ComputeResolveSubresourceIndex(
+                            source,
+                            attachment.SubresourceRange.BaseMipLevel,
+                            attachment.SubresourceRange.BaseArrayLayer +
+                                layer),
+                        Dx12Utility.ConvertToDx12ViewFormat(
+                            source.Descriptor.Format),
+                        Vortice.Direct3D12.ResolveMode.Average);
+                }
+                RHIBarrier fromResolve = RHIBarrier.Texture(
+                    source,
+                    attachment.SubresourceRange,
+                    ERHITextureLayout.ResolveSource,
+                    ERHITextureLayout.RenderTarget,
+                    ERHISyncStageMask.Transfer,
+                    ERHISyncStageMask.Fragment,
+                    ERHIAccessMask.ResolveRead,
+                    ERHIAccessMask.RenderTargetRead |
+                        ERHIAccessMask.RenderTargetWrite);
+                Dx12BarrierEmitter.EmitBarrier(commandBuffer, fromResolve);
+            }
+
+            if (!m_PassDescriptor.DepthStencilAttachment.HasValue)
+            {
+                return;
+            }
+            RHIDepthStencilAttachmentDescriptor depthStencil =
+                m_PassDescriptor.DepthStencilAttachment.Value;
+            if (depthStencil.DepthStoreOp != ERHIStoreAction.Resolve &&
+                depthStencil.DepthStoreOp !=
+                    ERHIStoreAction.StoreAndResolve &&
+                depthStencil.StencilStoreOp != ERHIStoreAction.Resolve &&
+                depthStencil.StencilStoreOp !=
+                    ERHIStoreAction.StoreAndResolve)
+            {
+                return;
+            }
+
+            Dx12Texture depthSource =
+                depthStencil.RenderTarget is RHITexture renderTarget ? Dx12EncoderGuards.RequireTexture(renderTarget) : throw new InvalidOperationException("Render target must be a Dx12Texture.")
+                ?? throw new InvalidOperationException(
+                    "DX12 depth/stencil resolve source belongs to a different backend.");
+            Dx12Texture depthDestination =
+                depthStencil.ResolveTarget as Dx12Texture
+                ?? throw new InvalidOperationException(
+                    "DX12 depth/stencil resolve destination belongs to a different backend.");
+            RHIBarrier depthToResolve = RHIBarrier.Texture(
+                depthSource,
+                depthStencil.SubresourceRange,
+                ERHITextureLayout.DepthStencilWrite,
+                ERHITextureLayout.ResolveSource,
+                ERHISyncStageMask.Fragment,
+                ERHISyncStageMask.Transfer,
+                ERHIAccessMask.DepthStencilWrite,
+                ERHIAccessMask.ResolveRead);
+            Dx12BarrierEmitter.EmitBarrier(commandBuffer, depthToResolve);
+            ResolveDepthStencilAspect(
+                commandBuffer,
+                depthSource,
+                depthDestination,
+                depthStencil,
+                isDepth: true);
+            ResolveDepthStencilAspect(
+                commandBuffer,
+                depthSource,
+                depthDestination,
+                depthStencil,
+                isDepth: false);
+        }
+
+        private static void ResolveDepthStencilAspect(
+            Dx12CommandBuffer commandBuffer,
+            Dx12Texture source,
+            Dx12Texture destination,
+            in RHIDepthStencilAttachmentDescriptor attachment,
+            bool isDepth)
+        {
+            ERHIStoreAction storeAction =
+                isDepth ? attachment.DepthStoreOp : attachment.StencilStoreOp;
+            if (storeAction != ERHIStoreAction.Resolve &&
+                storeAction != ERHIStoreAction.StoreAndResolve)
+            {
+                return;
+            }
+            uint plane = isDepth ? 0u : 1u;
+            EResolveMode resolveMode =
+                isDepth
+                    ? attachment.DepthResolveMode
+                    : attachment.StencilResolveMode;
+            for (uint layer = 0;
+                 layer < attachment.SubresourceRange.ArrayLayerCount;
+                 ++layer)
+            {
+                commandBuffer.NativeCommandList.ResolveSubresourceRegion(
+                    destination.NativeResource,
+                    ComputeResolveSubresourceIndex(
+                        destination,
+                        attachment.ResolveSubresourceRange.BaseMipLevel,
+                        attachment.ResolveSubresourceRange.BaseArrayLayer +
+                            layer,
+                        plane),
+                    0,
+                    0,
+                    source.NativeResource,
+                    ComputeResolveSubresourceIndex(
+                        source,
+                        attachment.SubresourceRange.BaseMipLevel,
+                        attachment.SubresourceRange.BaseArrayLayer + layer,
+                        plane),
+                    Dx12Utility.ConvertToDx12ViewFormat(
+                        source.Descriptor.Format),
+                    ConvertDepthResolveMode(resolveMode));
+            }
+        }
+
+        private static uint ComputeResolveSubresourceIndex(
+            Dx12Texture texture,
+            in uint mipLevel,
+            in uint arraySlice,
+            in uint planeSlice)
+        {
+            return checked(
+                planeSlice *
+                    texture.Descriptor.MipCount *
+                    Math.Max(1u, texture.Descriptor.Extent.z) +
+                arraySlice * texture.Descriptor.MipCount +
+                mipLevel);
+        }
+
         public override void PushDebugGroup(string name)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12PixEventMarker.BeginEvent((nint)dx12CommandBuffer.NativeCommandList, name);
         }
 
         public override void PopDebugGroup()
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12PixEventMarker.EndEvent((nint)dx12CommandBuffer.NativeCommandList);
         }
 
         public override void WriteTimestamp(in uint index)
         {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current RasterPass TimestampQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, index);
         }
 
         public override void BeginOcclusion(in uint index)
         {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.OcclusionQueryHeap != null, "Current RasterPass OcclusionQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.OcclusionQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireOcclusionQuery(m_CommandBuffer, index);
             dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Occlusion, index);
         }
 
         public override void EndOcclusion(in uint index)
         {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.OcclusionQueryHeap != null, "Current RasterPass OcclusionQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.OcclusionQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireOcclusionQuery(m_CommandBuffer, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Occlusion, index);
         }
 
         public override void BeginStatistics(in uint index)
         {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current RasterPass StatisticsQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, index);
             dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
         public override void EndStatistics(in uint index)
         {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.StatisticsQueryHeap != null, "Current RasterPass StatisticsQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.StatisticsQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
         public override void Barrier(in RHIBarrier barrier)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             if (m_UseNativeRenderPass && m_IsNativeRenderPassActive)
             {
                 dx12CommandBuffer.NativeCommandList.EndRenderPass();
@@ -2027,7 +3293,7 @@ namespace SharpGPU
 
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             if (m_UseNativeRenderPass && m_IsNativeRenderPassActive)
             {
                 dx12CommandBuffer.NativeCommandList.EndRenderPass();
@@ -2036,15 +3302,74 @@ namespace SharpGPU
             Dx12BarrierEmitter.EmitBarriers(dx12CommandBuffer, barriers);
         }
 
-        public override void NextSubPass()
+        internal override void NextSubPassCore(
+            RasterPassPlan plan,
+            int sourceSubPassIndex,
+            int destinationSubPassIndex)
         {
-            ++m_SubPassIndex;
+            if (Lowering.Strategy !=
+                EDx12RasterPassStrategy.OmMultipass ||
+                destinationSubPassIndex != sourceSubPassIndex + 1)
+            {
+                throw new InvalidOperationException(
+                    "DX12 subpass advancement does not match the compiled OM multipass plan.");
+            }
+
+            Dx12CommandBuffer commandBuffer =
+                Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            ref readonly Dx12RasterSubPassLowering source =
+                ref Lowering.SubPasses.Span[sourceSubPassIndex];
+            ref readonly Dx12RasterSubPassLowering destination =
+                ref Lowering.SubPasses.Span[destinationSubPassIndex];
+            EmitRasterOrderPhaseBarriers(
+                commandBuffer,
+                plan,
+                in source,
+                in destination);
+            BindOmSubPass(commandBuffer, plan, destinationSubPassIndex);
+        }
+
+        private static void EmitRasterOrderPhaseBarriers(
+            Dx12CommandBuffer commandBuffer,
+            RasterPassPlan plan,
+            in Dx12RasterSubPassLowering source,
+            in Dx12RasterSubPassLowering destination)
+        {
+            byte sharedRasterOrderedMask = checked((byte)(
+                source.RasterOrderedMask &
+                destination.RasterOrderedMask));
+            if (sharedRasterOrderedMask == 0)
+            {
+                return;
+            }
+
+            for (int logicalAttachment = 0;
+                 logicalAttachment < plan.ColorAttachmentCount;
+                 ++logicalAttachment)
+            {
+                byte bit = checked((byte)(1 << logicalAttachment));
+                if ((sharedRasterOrderedMask & bit) == 0)
+                {
+                    continue;
+                }
+
+                Dx12Texture texture = plan
+                    .GetColorAttachment(logicalAttachment)
+                    .RenderTarget is RHITexture renderTarget ? Dx12EncoderGuards.RequireTexture(renderTarget) : throw new InvalidOperationException("Render target must be a Dx12Texture.")
+                    ?? throw new InvalidOperationException(
+                        $"DX12 ROV attachment {logicalAttachment} belongs " +
+                        "to a different backend.");
+                Dx12BarrierEmitter
+                    .EmitUnorderedAccessOrderingBarrier(
+                        commandBuffer,
+                        texture);
+            }
         }
 
         public override void SetScissor(in Rect rect)
         {
             Vortice.RawRect tempScissor = new Vortice.RawRect((int)rect.left, (int)rect.top, (int)rect.right, (int)rect.bottom);
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.RSSetScissorRects(new[] { tempScissor });
         }
 
@@ -2056,14 +3381,14 @@ namespace SharpGPU
             {
                 tempScissors[i] = new Vortice.RawRect((int)rectSpan[i].left, (int)rectSpan[i].top, (int)rectSpan[i].right, (int)rectSpan[i].bottom);
             }
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.RSSetScissorRects((uint)rectSpan.Length, tempScissors);
         }
 
         public override void SetViewport(in Viewport viewport)
         {
             Vortice.Mathematics.Viewport tempViewport = new Vortice.Mathematics.Viewport(viewport.TopLeftX, viewport.TopLeftY, viewport.Width, viewport.Height, viewport.MinDepth, viewport.MaxDepth);
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.RSSetViewports(new[] { tempViewport });
         }
 
@@ -2075,13 +3400,13 @@ namespace SharpGPU
             {
                 tempViewports[i] = new Vortice.Mathematics.Viewport(viewportSpan[i].TopLeftX, viewportSpan[i].TopLeftY, viewportSpan[i].Width, viewportSpan[i].Height, viewportSpan[i].MinDepth, viewportSpan[i].MaxDepth);
             }
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.RSSetViewports((uint)viewportSpan.Length, tempViewports);
         }
 
         public override void SetStencilRef(in uint value)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.OMSetStencilRef(value);
         }
 
@@ -2089,38 +3414,71 @@ namespace SharpGPU
         {
             float4 tempValue = value;
             Vortice.Mathematics.Color4 nativeBlendFactor = new Vortice.Mathematics.Color4(tempValue.x, tempValue.y, tempValue.z, tempValue.w);
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.OMSetBlendFactor(nativeBlendFactor);
         }
 
-        public override void SetPipeline(RHIRasterPipeline pipeline)
+        internal override void SetPipelineCore(RHIRasterPipeline pipeline)
         {
             m_CachedPipeline = pipeline;
 
-            Dx12RasterPipeline dx12Pipeline = pipeline as Dx12RasterPipeline;
-            Dx12PipelineLayout dx12PipelineLayout = pipeline.Descriptor.PipelineLayout as Dx12PipelineLayout;
+            Dx12RasterPipeline dx12Pipeline = Dx12EncoderGuards.RequireRasterPipeline(pipeline);
+            Dx12PipelineLayout dx12PipelineLayout = Dx12EncoderGuards.RequirePipelineLayout(pipeline.DescriptorInternal.PipelineLayout);
 
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.SetPipelineState(dx12Pipeline.NativePipelineState);
             dx12CommandBuffer.NativeCommandList.IASetPrimitiveTopology(dx12Pipeline.PrimitiveTopology);
-            dx12CommandBuffer.NativeCommandList.SetGraphicsRootSignature(dx12PipelineLayout.NativeRootSignature);
+            dx12CommandBuffer.NativeCommandList.SetGraphicsRootSignature(
+                dx12Pipeline.NativeRootSignature);
+
+            ref readonly Dx12RasterSubPassLowering subPass =
+                ref Lowering.SubPasses.Span[CurrentSubPassIndex];
+            if (subPass.RequiresPrivateAttachmentTable)
+            {
+                if (!m_HasPrivateAttachmentDescriptors ||
+                    !dx12Pipeline.HasPrivateAttachmentRootSignature)
+                {
+                    throw new InvalidOperationException(
+                        "DX12 raster attachment reads require the backend-private raster root signature and descriptor table.");
+                }
+
+                Dx12Device device =
+                    Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
+                int descriptorOffset = Dx12RasterPassLowering
+                    .GetPrivateDescriptorTableOffset(
+                        CurrentSubPassIndex);
+                if (descriptorOffset < 0 ||
+                    descriptorOffset +
+                        Dx12RasterPassLowering
+                            .PrivateDescriptorCountPerSubPass >
+                        m_PrivateAttachmentDescriptorCount)
+                {
+                    throw new InvalidOperationException(
+                        "DX12 private raster descriptor phase is outside " +
+                        "the immutable pass allocation.");
+                }
+                dx12CommandBuffer.NativeCommandList
+                    .SetGraphicsRootDescriptorTable(
+                        dx12Pipeline.AttachmentRootParameterIndex,
+                        new Vortice.Direct3D12.GpuDescriptorHandle(
+                            in m_PrivateAttachmentDescriptors.GpuHandle,
+                            descriptorOffset,
+                            device.DescriptorHeapCbvSrvUav
+                                .DescriptorSize));
+            }
         }
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            Dx12PipelineLayout pipelineLayout = m_CachedPipeline?.Descriptor.PipelineLayout as Dx12PipelineLayout
-                ?? throw new InvalidOperationException("DX12 raster encoder requires a bound pipeline with a Dx12PipelineLayout.");
-            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
-                ?? throw new InvalidOperationException("DX12 raster encoder requires a Dx12CommandBuffer.");
+            Dx12PipelineLayout pipelineLayout = Dx12EncoderGuards.RequireCachedRasterPipelineLayout(m_CachedPipeline);
+            Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12ArgumentTableBinder.BindGraphics(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
-            Dx12PipelineLayout pipelineLayout = m_CachedPipeline?.Descriptor.PipelineLayout as Dx12PipelineLayout
-                ?? throw new InvalidOperationException("DX12 raster encoder requires a bound pipeline with a Dx12PipelineLayout.");
-            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
-                ?? throw new InvalidOperationException("DX12 raster encoder requires a Dx12CommandBuffer.");
+            Dx12PipelineLayout pipelineLayout = Dx12EncoderGuards.RequireCachedRasterPipelineLayout(m_CachedPipeline);
+            Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             if (!Dx12ArgumentTableBinder.ValidatePushConstantWrite(pipelineLayout, data, size, offset))
             {
                 return;
@@ -2130,21 +3488,21 @@ namespace SharpGPU
 
         public override void SetIndexBuffer(RHIBuffer buffer, in uint offset)
         {
-            Dx12Buffer dx12Buffer = buffer as Dx12Buffer;
+            Dx12Buffer dx12Buffer = Dx12EncoderGuards.RequireBuffer(buffer);
             Vortice.Direct3D12.IndexBufferView indexBufferView = new Vortice.Direct3D12.IndexBufferView
             {
                 Format = Dx12Utility.ConvertToDx12IndexFormat(buffer.Descriptor.Format),
                 SizeInBytes = (uint)buffer.Descriptor.ByteSize - offset,
                 BufferLocation = dx12Buffer.NativeResource.GPUVirtualAddress + offset
             };
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.IASetIndexBuffer(&indexBufferView);
         }
 
         public override void SetVertexBuffer(RHIBuffer buffer, in uint slot = 0, in uint offset = 0)
         {
-            Dx12Buffer dx12Buffer = buffer as Dx12Buffer;
-            Dx12RasterPipeline dx12Pipeline = m_CachedPipeline as Dx12RasterPipeline;
+            Dx12Buffer dx12Buffer = Dx12EncoderGuards.RequireBuffer(buffer);
+            Dx12RasterPipeline dx12Pipeline = Dx12EncoderGuards.RequireRasterPipeline(m_CachedPipeline);
 
             Vortice.Direct3D12.VertexBufferView vertexBufferView = new Vortice.Direct3D12.VertexBufferView
             {
@@ -2152,7 +3510,7 @@ namespace SharpGPU
                 StrideInBytes = dx12Pipeline.VertexStrides[slot],
                 BufferLocation = dx12Buffer.NativeResource.GPUVirtualAddress + offset
             };
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.IASetVertexBuffers(slot, 1, &vertexBufferView);
         }
 
@@ -2160,110 +3518,149 @@ namespace SharpGPU
         {
             Vortice.Direct3D12.ShadingRateCombiner nativeShadingRateCombiner = Dx12Utility.ConvertToDx12ShadingRateCombiner(shadingRateCombiner);
             Vortice.Direct3D12.ShadingRateCombiner[] shadingRateCombiners = new[] { nativeShadingRateCombiner, nativeShadingRateCombiner };
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(shadingRate), shadingRateCombiners);
         }
 
-        public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
+        internal override void DrawCore(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
         {
             EnsureNativeRenderPassActive();
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
         }
 
-        public override void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
+        internal override void DrawIndexedCore(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
         {
             EnsureNativeRenderPassActive();
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.DrawIndexedInstanced(indexCount, instanceCount, firstIndex, (int)baseVertex, firstInstance);
         }
 
-        public override void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        internal override void DrawIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
             EnsureNativeRenderPassActive();
-            Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
-            Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12Buffer dx12Buffer = Dx12EncoderGuards.RequireBuffer(argsBuffer);
+            Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DrawIndirectSignature, drawCount, dx12Buffer.NativeResource, offset, null, 0);
         }
 
-        public override void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        internal override void DrawIndexedIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
             EnsureNativeRenderPassActive();
-            Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
-            Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12Buffer dx12Buffer = Dx12EncoderGuards.RequireBuffer(argsBuffer);
+            Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DrawIndexedIndirectSignature, drawCount, dx12Buffer.NativeResource, offset, null, 0);
         }
 
-        public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
+        internal override void DispatchMeshCore(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
             EnsureNativeRenderPassActive();
-            Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
-            if(dx12Device.Feature.IsMeshShadingSupported)
+            Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
+            if (dx12Device.Capabilities.Mesh.Shader.Tier != ERHICapabilityTier.Unavailable)
             {
-                Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+                Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
                 dx12CommandBuffer.NativeCommandList.DispatchMesh(groupCountX, groupCountY, groupCountZ);
             }
         }
 
-        public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
+        internal override void DispatchMeshIndirectCore(RHIBuffer argsBuffer, in uint argsOffset)
         {
             EnsureNativeRenderPassActive();
-            Dx12Buffer dx12Buffer = argsBuffer as Dx12Buffer;
-            Dx12Device dx12Device = ((Dx12CommandQueue)m_CommandBuffer.CommandQueue).Dx12Device;
-            if (dx12Device.Feature.IsMeshShadingSupported)
+            Dx12Buffer dx12Buffer = Dx12EncoderGuards.RequireBuffer(argsBuffer);
+            Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
+            if (dx12Device.Capabilities.Mesh.Shader.Tier != ERHICapabilityTier.Unavailable)
             {
-                Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+                Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
                 dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DispatchMeshIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
             }
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
+        internal override void ExecuteIndirectCommandBufferCore(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
         {
             EnsureNativeRenderPassActive();
-            Dx12RasterIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RasterIndirectCommandBuffer;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12RasterIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RasterIndirectCommandBuffer ?? throw new InvalidOperationException("DX12 raster indirect draw requires a Dx12RasterIndirectCommandBuffer.");
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
                 WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
-                m_CommandBuffer.TimestampQueryHeap = null;
+                Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                commandBuffer.TimestampQueryHeap = null;
             }
 #if DEBUG
             PopDebugGroup();
 #endif
             m_CachedPipeline = null;
 
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            if (m_UseNativeRenderPass)
+            {
+                EnsureNativeRenderPassActive();
+            }
             if (m_IsNativeRenderPassActive)
             {
                 dx12CommandBuffer.NativeCommandList.EndRenderPass();
                 m_IsNativeRenderPassActive = false;
             }
+            else if (Lowering.Strategy ==
+                     EDx12RasterPassStrategy.OmMultipass)
+            {
+                EndOmRasterPass(dx12CommandBuffer);
+            }
             m_UseNativeRenderPass = false;
             m_NativeRenderPassColorDescriptions = Array.Empty<Vortice.Direct3D12.RenderPassRenderTargetDescription>();
             m_NativeRenderPassDepthStencilDescription = null;
 
-            Dx12Device device = (m_CommandBuffer.CommandQueue as Dx12CommandQueue).Dx12Device;
+            Dx12Device device =
+                Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
+            ReleaseAttachmentDescriptors(device);
+            ResetRasterDescriptorState();
+        }
 
+        private void ReleaseAttachmentDescriptors(Dx12Device device)
+        {
             for (int i = 0; i < m_AttachmentInfos.Count; ++i)
             {
-                int index = m_AttachmentInfos[i].AttachmentInfo.Index;
-
-                if (!m_AttachmentInfos[i].bDepthStencil)
-                {
-                    device.FreeRtvDescriptor(index);
-                }
-                else
+                int index =
+                    m_AttachmentInfos[i].AttachmentInfo.Index;
+                if (m_AttachmentInfos[i].bDepthStencil)
                 {
                     device.FreeDsvDescriptor(index);
                 }
+                else
+                {
+                    device.FreeRtvDescriptor(index);
+                }
             }
+            m_AttachmentInfos.Clear();
+        }
+
+        private void ResetRasterDescriptorState()
+        {
+            m_RtvHandles =
+                Array.Empty<Vortice.Direct3D12.CpuDescriptorHandle>();
+            m_OmSubPassRenderTargetHandles =
+                Array.Empty<Vortice.Direct3D12.CpuDescriptorHandle[]>();
+            m_DsvHandle = null;
+            m_ReadOnlyDsvHandle = null;
+            m_PrivateAttachmentDescriptors = default;
+            m_PrivateAttachmentDescriptorCount = 0;
+            m_HasPrivateAttachmentDescriptors = false;
+            m_PassDescriptor = default;
+            Array.Clear(m_ColorLayouts);
+            m_DepthStencilLayout = ERHITextureLayout.Undefined;
+            m_UseNativeRenderPass = false;
+            m_IsNativeRenderPassActive = false;
+            m_NativeRenderPassColorDescriptions =
+                Array.Empty<Vortice.Direct3D12
+                    .RenderPassRenderTargetDescription>();
+            m_NativeRenderPassDepthStencilDescription = null;
         }
 
         protected override void Release()
@@ -2294,35 +3691,32 @@ namespace SharpGPU
 
         public override void Barrier(in RHIBarrier barrier)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12BarrierEmitter.EmitBarrier(dx12CommandBuffer, barrier);
         }
 
         public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12BarrierEmitter.EmitBarriers(dx12CommandBuffer, barriers);
         }
 
         public override void PushDebugGroup(string name)
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12PixEventMarker.BeginEvent((nint)dx12CommandBuffer.NativeCommandList, name);
         }
 
         public override void PopDebugGroup()
         {
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12PixEventMarker.EndEvent((nint)dx12CommandBuffer.NativeCommandList);
         }
 
         public override void WriteTimestamp(in uint index)
         {
-#if DEBUG
-            Debug.Assert(m_CommandBuffer.TimestampQueryHeap != null, "Current MLPass TimestampQuery is null");
-#endif
-            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query;
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, index);
         }
 
@@ -2347,9 +3741,6 @@ namespace SharpGPU
 
         public override void Dispatch()
         {
-#if DEBUG
-            Debug.Assert(m_PipelineSet, "Dx12MLEncoder: SetPipeline must be called before Dispatch.");
-#endif
             if (m_CachedPipeline is not Dx12MLPipeline dx12Pipeline)
             {
                 throw new InvalidOperationException("Dx12MLEncoder: SetPipeline must be called before Dispatch.");
@@ -2360,8 +3751,8 @@ namespace SharpGPU
                 throw new InvalidOperationException("Dx12MLEncoder: SetBindingSet must be called before Dispatch.");
             }
 
-            Dx12CommandBuffer dx12CommandBuffer = m_CommandBuffer as Dx12CommandBuffer;
-            Dx12Device dx12Device = ((Dx12CommandQueue)dx12CommandBuffer.CommandQueue).Dx12Device;
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(dx12CommandBuffer);
 
             if (!dx12BindingSet.InternalResourcesPrepared)
             {
@@ -2396,7 +3787,7 @@ namespace SharpGPU
             }
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
 #if DEBUG
             PopDebugGroup();
@@ -2518,17 +3909,17 @@ namespace SharpGPU
             ((Vortice.Direct3D12.ID3D12GraphicsCommandList)commandBuffer.NativeCommandList).ResourceBarrier(barriers);
         }
     }
-#pragma warning restore CS0414, CS8600, CS8601, CS8602, CS8604, CS8618, CA1416
+#pragma warning restore CS0414, CA1416
     internal unsafe sealed class Dx12WorkGraphEncoder : RHIWorkGraphEncoder
     {
         private RHIWorkGraphPassDescriptor m_PassDescriptor;
-        private Vortice.Direct3D12.ID3D12GraphicsCommandList10 m_CommandList10;
-        private Dx12Buffer m_BackingMemory;
+        private Vortice.Direct3D12.ID3D12GraphicsCommandList10? m_CommandList10;
+        private Dx12Buffer? m_BackingMemory;
         private ulong m_BackingMemoryGpuAddress;
         private ulong m_BackingMemorySize;
         private bool m_BackingMemoryInitialized;
         private bool m_WorkGraphProgramSet;
-        private Dx12Buffer m_NodeInputDescriptorUpload;
+        private Dx12Buffer? m_NodeInputDescriptorUpload;
         private IntPtr m_NodeInputDescriptorUploadPtr;
         private ulong m_NodeInputDescriptorUploadGpuAddress;
 
@@ -2584,19 +3975,17 @@ namespace SharpGPU
 
         public override void WriteTimestamp(in uint index)
         {
-            Debug.Assert(m_CommandBuffer!.TimestampQueryHeap != null, "Current WorkGraphPass TimestampQuery is null");
-            Dx12CommandBuffer dx12CommandBuffer = (Dx12CommandBuffer)m_CommandBuffer!;
-            Dx12Query dx12Query = m_CommandBuffer.TimestampQueryHeap as Dx12Query
-                ?? throw new InvalidOperationException("DX12 WorkGraph timestamp pass requires a Dx12Query.");
+            (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
+                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer!, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, index);
         }
 
         public override void SetPipeline(RHIWorkGraphPipeline pipeline)
         {
-            m_CachedPipeline = pipeline as Dx12WorkGraphPipeline
+            m_CachedPipeline = pipeline as Dx12WorkGraphPipeline ?? throw new InvalidOperationException("DX12 WorkGraph encoder requires a Dx12WorkGraphPipeline.")
                 ?? throw new InvalidOperationException("DX12 WorkGraph encoder requires a Dx12WorkGraphPipeline.");
 
-            Dx12PipelineLayout dx12PipelineLayout = pipeline.Descriptor.PipelineLayout as Dx12PipelineLayout
+            Dx12PipelineLayout dx12PipelineLayout = Dx12EncoderGuards.RequirePipelineLayout(pipeline.Descriptor.PipelineLayout)
                 ?? throw new InvalidOperationException("DX12 WorkGraph pipeline requires a Dx12PipelineLayout.");
             ((Dx12CommandBuffer)m_CommandBuffer!).NativeCommandList.SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
             m_WorkGraphProgramSet = false;
@@ -2604,18 +3993,18 @@ namespace SharpGPU
 
         public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
         {
-            Dx12PipelineLayout pipelineLayout = RequirePipeline().Descriptor.PipelineLayout as Dx12PipelineLayout
+            Dx12PipelineLayout pipelineLayout = Dx12EncoderGuards.RequirePipelineLayout(RequirePipeline().Descriptor.PipelineLayout)
                 ?? throw new InvalidOperationException("DX12 WorkGraph pipeline requires a Dx12PipelineLayout.");
-            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
+            Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer)
                 ?? throw new InvalidOperationException("DX12 WorkGraph encoder requires a Dx12CommandBuffer.");
             Dx12ArgumentTableBinder.BindCompute(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
-            Dx12PipelineLayout pipelineLayout = RequirePipeline().Descriptor.PipelineLayout as Dx12PipelineLayout
+            Dx12PipelineLayout pipelineLayout = Dx12EncoderGuards.RequirePipelineLayout(RequirePipeline().Descriptor.PipelineLayout)
                 ?? throw new InvalidOperationException("DX12 WorkGraph pipeline requires a Dx12PipelineLayout.");
-            Dx12CommandBuffer commandBuffer = m_CommandBuffer as Dx12CommandBuffer
+            Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer)
                 ?? throw new InvalidOperationException("DX12 WorkGraph encoder requires a Dx12CommandBuffer.");
             if (!Dx12ArgumentTableBinder.ValidatePushConstantWrite(pipelineLayout, data, size, offset))
             {
@@ -2631,7 +4020,7 @@ namespace SharpGPU
         public override void SetBackingMemory(RHIBuffer backingMemory, ulong byteOffset, ulong byteSize)
         {
             Dx12WorkGraphPipeline pipeline = RequirePipeline();
-            Dx12Buffer dx12Buffer = backingMemory as Dx12Buffer
+            Dx12Buffer dx12Buffer = Dx12EncoderGuards.RequireBuffer(backingMemory)
                 ?? throw new InvalidOperationException("DX12 WorkGraph backing memory requires a Dx12Buffer.");
             if (byteOffset > (ulong)dx12Buffer.Descriptor.ByteSize || byteSize > (ulong)dx12Buffer.Descriptor.ByteSize - byteOffset)
             {
@@ -2668,6 +4057,8 @@ namespace SharpGPU
             }
 
             Dx12WorkGraphPipeline pipeline = RequirePipeline();
+            Vortice.Direct3D12.ID3D12GraphicsCommandList10 commandList10 = m_CommandList10
+                ?? throw new InvalidOperationException("DX12 WorkGraph command list is unavailable.");
             if (m_BackingMemory == null)
             {
                 throw new InvalidOperationException("WorkGraph backing memory must be set before DispatchGraph.");
@@ -2681,7 +4072,7 @@ namespace SharpGPU
                 throw new ArgumentOutOfRangeException(nameof(inputRecordByteStride), "WorkGraph input record stride must be non-zero.");
             }
 
-            Dx12Buffer dx12InputBuffer = inputRecordBuffer as Dx12Buffer
+            Dx12Buffer dx12InputBuffer = Dx12EncoderGuards.RequireBuffer(inputRecordBuffer)
                 ?? throw new InvalidOperationException("DX12 WorkGraph input records require a Dx12Buffer.");
             ulong requiredInputBytes = checked((ulong)numRecords * inputRecordByteStride);
             if (requiredInputBytes > (ulong)dx12InputBuffer.Descriptor.ByteSize)
@@ -2714,7 +4105,7 @@ namespace SharpGPU
                         SizeInBytes = m_BackingMemorySize
                     }
                 };
-                m_CommandList10.SetWorkGraphProgram(in workGraphDescription);
+                commandList10.SetWorkGraphProgram(in workGraphDescription);
                 m_BackingMemoryInitialized = true;
                 m_WorkGraphProgramSet = true;
             }
@@ -2724,10 +4115,10 @@ namespace SharpGPU
                 Mode = Vortice.Direct3D12.DispatchMode.NodeGpuInput
             };
             dispatchDescription.NodeGPUInput = m_NodeInputDescriptorUploadGpuAddress;
-            m_CommandList10.DispatchGraph(ref dispatchDescription);
+            commandList10.DispatchGraph(ref dispatchDescription);
         }
 
-        public override void EndPass()
+        internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
@@ -2769,7 +4160,7 @@ namespace SharpGPU
 
         private Dx12WorkGraphPipeline RequirePipeline()
         {
-            return m_CachedPipeline as Dx12WorkGraphPipeline
+            return m_CachedPipeline as Dx12WorkGraphPipeline ?? throw new InvalidOperationException("DX12 WorkGraph encoder requires a bound Dx12WorkGraphPipeline.")
                 ?? throw new InvalidOperationException("DX12 WorkGraph pipeline must be set before this operation.");
         }
 
@@ -2780,7 +4171,7 @@ namespace SharpGPU
                 return;
             }
 
-            Dx12Device device = ((Dx12CommandQueue)m_CommandBuffer!.CommandQueue).Dx12Device;
+            Dx12Device device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
             int byteSize = Unsafe.SizeOf<Vortice.Direct3D12.NodeGpuInput>();
             m_NodeInputDescriptorUpload = new Dx12Buffer(device, new RHIBufferDescriptor
             {

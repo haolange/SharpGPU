@@ -23,7 +23,7 @@ public sealed class SharpGPUFeatureMatrixDocumentationTests
             "MeshShading",
             "Bindless",
             "StorageQueue",
-            "PipelineLibrary",
+            "PipelineCache",
             "WorkGraph",
         };
 

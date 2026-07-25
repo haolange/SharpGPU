@@ -130,7 +130,9 @@ public sealed class SharpGPUDirectMLContractTests
             commandBuffer.End();
 
             context.Fence.Reset();
-            context.CommandQueue.Submit(commandBuffer, context.Fence, null!, null!);
+            context.CommandQueue.Submit(new RHIQueueSubmitDescriptor(
+                new RHICommandBuffer[] { commandBuffer },
+                completionFence: context.Fence));
             context.Fence.Wait();
 
             float[] actual = ReadBackFloats(readback, expected.Length);
@@ -191,7 +193,9 @@ public sealed class SharpGPUDirectMLContractTests
         RecordEndToEndCommandBuffer(commandBuffer, fixture);
 
         context.Fence.Reset();
-        context.CommandQueue.Submit(commandBuffer, context.Fence, null!, null!);
+        context.CommandQueue.Submit(new RHIQueueSubmitDescriptor(
+            new RHICommandBuffer[] { commandBuffer },
+            completionFence: context.Fence));
         context.Fence.Wait();
 
         float[] actual = ReadBackFloats(fixture.ReadbackOutput, expected.Length);
@@ -495,7 +499,7 @@ public sealed class SharpGPUDirectMLContractTests
             {
                 Backend = ERHIBackend.DirectX12,
                 EnableDebugLayer = false,
-                EnableValidatior = false,
+                EnableValidation = false,
                 ComputeQueueRequestCount = 0,
                 TransferQueueRequestCount = 0,
                 GraphicsQueueRequestCount = 1,
@@ -505,7 +509,7 @@ public sealed class SharpGPUDirectMLContractTests
             for (int i = 0; i < instance.DeviceCount; ++i)
             {
                 RHIDevice candidate = instance.GetDevice(i);
-                if (candidate.Feature?.IsMLSupported == true)
+                if (candidate.Capabilities.MachineLearning.Execution.Tier != ERHICapabilityTier.Unavailable)
                 {
                     selectedDevice = candidate;
                     break;

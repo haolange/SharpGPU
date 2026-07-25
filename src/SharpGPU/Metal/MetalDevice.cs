@@ -5,6 +5,7 @@ using SharpGPU.Collections;
 using SharpMetal.Foundation;
 using SharpMetal.ObjectiveCCore;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace SharpGPU
 {
@@ -16,7 +17,9 @@ namespace SharpGPU
         internal bool SupportsMetal4Barriers => m_SupportsMetal4Barriers;
         internal bool SupportsMetal4 => m_SupportsMetal4;
         internal bool SupportsArgumentTable => m_SupportsArgumentTable;
-        internal bool SupportsMetalML => m_Feature?.IsMLSupported == true;
+        internal bool SupportsPlacementSparse => m_SupportsPlacementSparse;
+        internal bool SupportsMetalML => Capabilities.MachineLearning.Execution.Tier != ERHICapabilityTier.Unavailable;
+        internal MetalRasterCapabilities RasterCapabilities => m_RasterCapabilities;
         internal string? TimestampQueriesUnavailableReason => m_TimestampQueriesUnavailableReason;
         internal string? MetalMLUnavailableReason => m_MetalMLUnavailableReason;
         internal MTLTextureViewPool TextureViewPool => m_TextureViewPool;
@@ -27,6 +30,8 @@ namespace SharpGPU
         private readonly bool m_SupportsMetal3;
         private readonly bool m_SupportsMetal4;
         private readonly bool m_SupportsArgumentTable;
+        private readonly bool m_SupportsPlacementSparse;
+        private readonly MetalRasterCapabilities m_RasterCapabilities;
         private string? m_TimestampQueriesUnavailableReason;
         private string? m_MetalMLUnavailableReason;
         private MTLTextureViewPool m_TextureViewPool;
@@ -39,12 +44,14 @@ namespace SharpGPU
         private readonly List<MTL4MachineLearningPipelineState> m_MetalMLPipelineStates = new List<MTL4MachineLearningPipelineState>();
         private readonly List<MTL4ArgumentTable> m_MetalMLArgumentTables = new List<MTL4ArgumentTable>();
         private readonly List<MTLHeap> m_MetalMLIntermediatesHeaps = new List<MTLHeap>();
+        private RHIException? m_PendingCommandQueueFailure;
 
         private static readonly Selector s_RespondsToSelector = "respondsToSelector:";
         private static readonly Selector s_NewArgumentTableWithDescriptorError = "newArgumentTableWithDescriptor:error:";
         private static readonly Selector s_NewCompilerWithDescriptorError = "newCompilerWithDescriptor:error:";
         private static readonly Selector s_NewCounterHeapWithDescriptorError = "newCounterHeapWithDescriptor:error:";
         private static readonly Selector s_NewTensorWithDescriptorError = "newTensorWithDescriptor:error:";
+        private static readonly Selector s_SupportsPlacementSparse = "supportsPlacementSparse";
 
         public MetalDevice(MetalInstance instance, in MTLDevice device, in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
         {
@@ -65,6 +72,9 @@ namespace SharpGPU
             m_SupportsMetal4 = SafeSupportsFamily(MTLGPUFamily.Metal4);
             m_SupportsArgumentTable = m_SupportsMetal4 && SafeSupportsSelector(s_NewArgumentTableWithDescriptorError);
             m_SupportsMetal4Barriers = m_SupportsMetal4;
+            m_SupportsPlacementSparse =
+                m_SupportsMetal4 &&
+                SafeSupportsPlacementSparse();
 
             if (!m_SupportsMetal4)
             {
@@ -76,19 +86,94 @@ namespace SharpGPU
                 throw new NotSupportedException("Metal backend requires MTL4 argument table support.");
             }
 
+            m_RasterCapabilities = ProbeRasterCapabilities();
             BuildLimitAndFeature();
             CreateCommandQueues(computeQueueCount, transferQueueCount, graphicsQueueCount);
             CreateTextureViewPool();
         }
 
+        internal void ReportCommandQueueFeedback(in NSError error)
+        {
+            if (error.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            long nativeCode = error.Code;
+            MTL4CommandQueueError queueError =
+                (MTL4CommandQueueError)nativeCode;
+            (ERHIErrorCode errorCode, ERHIDeviceState deviceState) =
+                queueError switch
+                {
+                    MTL4CommandQueueError.OutOfMemory =>
+                        (ERHIErrorCode.OutOfMemory, ERHIDeviceState.Operational),
+                    MTL4CommandQueueError.DeviceRemoved =>
+                        (ERHIErrorCode.DeviceLost, ERHIDeviceState.Removed),
+                    MTL4CommandQueueError.AccessRevoked =>
+                        (ERHIErrorCode.DeviceLost, ERHIDeviceState.Lost),
+                    MTL4CommandQueueError.Timeout or
+                    MTL4CommandQueueError.NotPermitted or
+                    MTL4CommandQueueError.Internal =>
+                        (ERHIErrorCode.SubmissionFailed, ERHIDeviceState.Operational),
+                    _ =>
+                        (ERHIErrorCode.NativeFailure, ERHIDeviceState.Operational),
+                };
+
+            string nativeMessage;
+            try
+            {
+                nativeMessage = error.LocalizedDescription.ToString();
+            }
+            catch
+            {
+                nativeMessage =
+                    $"MTL4 command queue feedback reported '{queueError}'.";
+            }
+            if (string.IsNullOrWhiteSpace(nativeMessage))
+            {
+                nativeMessage =
+                    $"MTL4 command queue feedback reported '{queueError}'.";
+            }
+
+            RHIException diagnostic = new(
+                errorCode,
+                ERHIBackend.Metal,
+                nativeCode,
+                nativeMessage,
+                deviceState);
+            if (errorCode == ERHIErrorCode.DeviceLost)
+            {
+                MarkDeviceLost(diagnostic);
+                return;
+            }
+
+            _ = Interlocked.CompareExchange(
+                ref m_PendingCommandQueueFailure,
+                diagnostic,
+                null);
+        }
+
+        internal void ThrowIfCommandQueueFailed()
+        {
+            ThrowIfDeviceUnavailable();
+            RHIException? diagnostic = Interlocked.Exchange(
+                ref m_PendingCommandQueueFailure,
+                null);
+            if (diagnostic != null)
+            {
+                throw diagnostic;
+            }
+        }
+
         public override RHICommandQueue? GetCommandQueue(in ERHIPipelineType pipeline, in int index)
         {
+            ThrowIfCommandQueueFailed();
             if (m_CommandQueueMap == null)
             {
                 return null;
             }
 
-            if (m_CommandQueueMap.TryGetValue(pipeline, out TArray<RHICommandQueue> queues))
+            if (m_CommandQueueMap.TryGetValue(pipeline, out TArray<RHICommandQueue>? queues) && queues != null)
             {
                 if ((uint)index < (uint)queues.length)
                 {
@@ -101,33 +186,39 @@ namespace SharpGPU
 
         public override RHISwapChain CreateSwapChain(in RHISwapChainDescriptor descriptor)
         {
+            ThrowIfCommandQueueFailed();
+            Capabilities.Presentation.SwapChain.Require(
+                "Metal swapchain creation");
             return new MetalSwapChain(this, descriptor);
         }
 
         public override RHIFence CreateFence()
         {
-            return new MetalFence();
+            ThrowIfCommandQueueFailed();
+            return new MetalFence(this);
         }
 
         public override RHISemaphore CreateSemaphore()
         {
+            ThrowIfCommandQueueFailed();
             return new MetalSemaphore(this);
         }
 
         public override RHIStorageQueue CreateStorageQueue()
         {
-            return new MetalStorageQueue();
+            throw new NotSupportedException(
+                "Metal StorageQueue is unavailable because SharpGPU has no official native storage API for this backend.");
         }
 
         public override RHIQuery CreateQuery(in RHIQueryDescriptor descriptor)
         {
-            if ((descriptor.Type == ERHIQueryType.TimestampTransfer || descriptor.Type == ERHIQueryType.TimestampGenerice)
-                && m_Feature?.IsTimestampQueriesSupported != true)
+            if ((descriptor.Type == ERHIQueryType.TimestampTransfer || descriptor.Type == ERHIQueryType.Timestamp)
+                && Capabilities.Synchronization.TimestampQueries.Tier == ERHICapabilityTier.Unavailable)
             {
                 throw new NotSupportedException(m_TimestampQueriesUnavailableReason ?? "Metal timestamp queries require native MTL4CounterHeap support.");
             }
 
-            if (descriptor.Type == ERHIQueryType.Statistics && m_Feature?.IsPipelineStatsQueriesSupported != true)
+            if (descriptor.Type == ERHIQueryType.Statistics && Capabilities.Synchronization.PipelineStatisticsQueries.Tier == ERHICapabilityTier.Unavailable)
             {
                 throw new NotSupportedException("Metal pipeline statistics queries require a device statistics counter set.");
             }
@@ -137,17 +228,243 @@ namespace SharpGPU
 
         public override RHIHeap CreateHeap(in RHIHeapDescription descriptor)
         {
+            ThrowIfDisposed();
+            if (MetalSparseMemoryUtility.RequiresPlacementSparseCompatibility(
+                    descriptor.Compatibility))
+            {
+                Capabilities.Memory.SparseBinding.Require(
+                    "Metal placement-sparse heap creation");
+            }
+            else
+            {
+                Capabilities.Memory.PlacedResources.Require("Metal heap creation");
+            }
             return new MetalHeap(this, descriptor);
+        }
+
+        public override RHIResourceMemoryRequirements GetBufferMemoryRequirements(
+            in RHIBufferDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.Memory.PlacedResources.Require(
+                "Metal buffer memory requirements");
+            MTLResourceOptions options = MetalMemoryUtility.GetBufferOptions(descriptor);
+            MTLSizeAndAlign nativeRequirements =
+                m_NativeDevice.HeapBufferSizeAndAlign((ulong)descriptor.ByteSize, options);
+            return CreateMemoryRequirements(
+                nativeRequirements,
+                descriptor.StorageMode,
+                ERHIMemoryResourceKind.Buffer);
+        }
+
+        public override RHIResourceMemoryRequirements GetTextureMemoryRequirements(
+            in RHITextureDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.Memory.PlacedResources.Require(
+                "Metal texture memory requirements");
+            MTLTextureDescriptor nativeDescriptor =
+                MetalMemoryUtility.BuildTextureDescriptor(descriptor);
+            try
+            {
+                MTLSizeAndAlign nativeRequirements =
+                    m_NativeDevice.HeapTextureSizeAndAlign(nativeDescriptor);
+                return CreateMemoryRequirements(
+                    nativeRequirements,
+                    descriptor.StorageMode,
+                    ERHIMemoryResourceKind.Texture);
+            }
+            finally
+            {
+                ObjectiveCRuntime.Release(nativeDescriptor.NativePtr);
+            }
+        }
+
+        public override RHISparseTextureMemoryRequirements
+            GetSparseTextureMemoryRequirements(
+                in RHITextureDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.Memory.SparseBinding.Require(
+                "Metal sparse texture memory requirements");
+            MTLTexture nativeTexture =
+                MetalSparseMemoryUtility.CreateSparseTexture(
+                    this,
+                    descriptor);
+            try
+            {
+                return MetalSparseMemoryUtility.QueryRequirements(
+                    this,
+                    descriptor,
+                    nativeTexture);
+            }
+            finally
+            {
+                ObjectiveCRuntime.Release(nativeTexture.NativePtr);
+            }
+        }
+
+        public override RHITexture CreateSparseTexture(
+            in RHITextureDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.Memory.SparseBinding.Require(
+                "Metal sparse texture creation");
+            return new MetalTexture(this, descriptor, createSparse: true);
         }
 
         public override RHIBuffer CreateBuffer(in RHIBufferDescriptor descriptor)
         {
+            ThrowIfDisposed();
             return new MetalBuffer(this, descriptor);
+        }
+
+        public override RHIBuffer CreatePlacedBuffer(
+            RHIHeap heap,
+            ulong heapOffset,
+            in RHIBufferDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.Memory.PlacedResources.Require(
+                "Metal placed buffer creation");
+            ArgumentNullException.ThrowIfNull(heap);
+            if (heap is not MetalHeap metalHeap ||
+                !ReferenceEquals(heap.OwnerDevice, this))
+            {
+                throw new ArgumentException(
+                    "Placed buffer heap was created by a different backend or device.",
+                    nameof(heap));
+            }
+
+            RHIResourceMemoryRequirements requirements =
+                GetBufferMemoryRequirements(descriptor);
+            RHIHeapPlacement placement =
+                heap.ReservePlacement(heapOffset, requirements);
+            try
+            {
+                return new MetalBuffer(
+                    this,
+                    descriptor,
+                    metalHeap,
+                    heapOffset,
+                    placement);
+            }
+            catch
+            {
+                placement.Dispose();
+                throw;
+            }
         }
 
         public override RHITexture CreateTexture(in RHITextureDescriptor descriptor)
         {
+            ThrowIfDisposed();
             return new MetalTexture(this, descriptor);
+        }
+
+        public override RHITexture CreatePlacedTexture(
+            RHIHeap heap,
+            ulong heapOffset,
+            in RHITextureDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.Memory.PlacedResources.Require(
+                "Metal placed texture creation");
+            ArgumentNullException.ThrowIfNull(heap);
+            if (heap is not MetalHeap metalHeap ||
+                !ReferenceEquals(heap.OwnerDevice, this))
+            {
+                throw new ArgumentException(
+                    "Placed texture heap was created by a different backend or device.",
+                    nameof(heap));
+            }
+
+            RHIResourceMemoryRequirements requirements =
+                GetTextureMemoryRequirements(descriptor);
+            RHIHeapPlacement placement =
+                heap.ReservePlacement(heapOffset, requirements);
+            try
+            {
+                return new MetalTexture(
+                    this,
+                    descriptor,
+                    metalHeap,
+                    heapOffset,
+                    placement);
+            }
+            catch
+            {
+                placement.Dispose();
+                throw;
+            }
+        }
+
+        private RHIResourceMemoryRequirements CreateMemoryRequirements(
+            in MTLSizeAndAlign nativeRequirements,
+            ERHIStorageMode storageMode,
+            ERHIMemoryResourceKind resourceKind)
+        {
+            if (nativeRequirements.size == 0 ||
+                nativeRequirements.align == 0)
+            {
+                throw new ArgumentException(
+                    "Metal rejected the resource descriptor while querying heap requirements.");
+            }
+
+            return new RHIResourceMemoryRequirements(
+                this,
+                nativeRequirements.size,
+                nativeRequirements.align,
+                storageMode,
+                1UL,
+                resourceKind);
+        }
+
+        public override RHIMemoryBudget QueryMemoryBudget(
+            ERHIStorageMode storageMode)
+        {
+            ThrowIfDisposed();
+            Capabilities.Memory.BudgetQuery.Require(
+                "Metal memory budget query");
+            if (!Enum.IsDefined(storageMode) ||
+                storageMode == ERHIStorageMode.Pending)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(storageMode),
+                    storageMode,
+                    "Unknown storage mode.");
+            }
+
+            bool deviceLocalDomain =
+                storageMode is ERHIStorageMode.GPULocal or
+                    ERHIStorageMode.Memoryless;
+            if (!deviceLocalDomain && !m_NativeDevice.HasUnifiedMemory)
+            {
+                throw new NotSupportedException(
+                    "Metal exposes only a device-wide recommended working-set budget; " +
+                    "a discrete-memory device cannot report an exact host-visible segment budget.");
+            }
+
+            ulong budgetBytes = m_NativeDevice.RecommendedMaxWorkingSetSize;
+            if (budgetBytes == 0)
+            {
+                throw new NotSupportedException(
+                    "MTLDevice did not report a recommended maximum working-set size.");
+            }
+
+            return new RHIMemoryBudget(
+                storageMode,
+                budgetBytes,
+                m_NativeDevice.CurrentAllocatedSize);
+        }
+
+        public override void RequestResidency(
+            in RHIResidencyRequestDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            throw new NotSupportedException(
+                "Metal residency sets do not provide the explicit fence-completion " +
+                "contract required by RHIResidencyRequestDescriptor.");
         }
 
         public override RHISampler CreateSampler(in RHISamplerDescriptor descriptor)
@@ -167,17 +484,17 @@ namespace SharpGPU
 
         public override RHIArgumentTableLayout CreateArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor)
         {
-            return new MetalArgumentTableLayout(descriptor);
+            return new MetalArgumentTableLayout(this, descriptor);
         }
 
         public override RHIArgumentTable CreateArgumentTable(in RHIArgumentTableDescriptor descriptor)
         {
-            return new MetalArgumentTable(descriptor);
+            return new MetalArgumentTable(this, descriptor);
         }
 
         public override RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor)
         {
-            return new MetalPipelineLayout(descriptor);
+            return new MetalPipelineLayout(this, descriptor);
         }
 
         public override RHIFunction CreateFunction(in RHIFunctionDescriptor descriptor)
@@ -282,9 +599,10 @@ namespace SharpGPU
             throw new NotSupportedException("WorkGraph is not supported on the Metal backend.");
         }
 
-        public override RHIPipelineLibrary CreatePipelineLibrary(in RHIPipelineLibraryDescriptor descriptor)
+        public override RHIPipelineCache CreatePipelineCache()
         {
-            return new MetalPipelineLibrary(this, descriptor);
+            Capabilities.PipelineCache.NativeCache.Require("Metal pipeline cache");
+            throw new InvalidOperationException("Metal pipeline-cache capability is available without a factory implementation.");
         }
 
         public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
@@ -396,36 +714,279 @@ namespace SharpGPU
             bool isMLSupported = TryProbeMetalMLSupport(out string? metalMLUnavailableReason);
             m_MetalMLUnavailableReason = metalMLUnavailableReason;
 
-            m_Feature = new RHIDeviceFeature(
-                isFlipProjection: true,
-                isHDRPresentSupported: true,
-                isUnifiedMemorySupported: m_NativeDevice.HasUnifiedMemory,
-                isRootConstantSupport: true,
-                isIndirectRootConstantSupport: false,
-                isPixelShaderUAVSupported: true,
-                isRasterizerOrderedSupported: m_NativeDevice.RasterOrderGroupsSupported,
-                isAnisotropyTextureSupported: true,
-                isDepthbufferFetchSupported: false,
-                isFramebufferFetchSupported: false,
-                isTimestampQueriesSupported: isTimestampSupported,
-                isOcclusionQueriesSupported: true,
-                isPipelineStatsQueriesSupported: isPipelineStatsSupported,
-                isAtomicUInt64Supported: isMetal3,
-                isWorkgraphSupported: false,
-                isMeshShadingSupported: false,
-                isDrawIndirectSupported: true,
-                isDrawMultiIndirectSupported: true,
-                isRaytracingSupported: isRayTracingSupported,
-                isRaytracingInlineSupported: isRayTracingSupported,
-                isVariableRateShadingSupported: false,
-                isHiddenSurfaceRemovalSupported: false,
-                isBarycentricCoordSupported: m_NativeDevice.SupportsShaderBarycentricCoordinates,
-                isProgrammableSamplePositionSupported: m_NativeDevice.ProgrammableSamplePositionsSupported,
-                isMLSupported: isMLSupported,
-                matrixMajorons: ERHIMatrixMajorons.RowMajor,
-                depthValueRange: ERHIDepthValueRange.ZeroToOne,
-                multiviewStrategy: ERHIMultiviewStrategy.Unsupported,
-                waveOperationStrategy: ERHIWaveOperationStrategy.Basic);
+            static RHICapability Probe(
+                bool available,
+                string source,
+                string unavailableReason,
+                ERHICapabilityTier tier = ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy strategy = ERHICapabilityStrategy.NativeSpecialized,
+                ERHICapabilityProbeKind probeKind = ERHICapabilityProbeKind.NativeFeatureQuery,
+                RHICapabilityLimits limits = default)
+            {
+                return RHICapability.FromProbe(
+                    available,
+                    tier,
+                    strategy,
+                    probeKind,
+                    source,
+                    unavailableReason,
+                    limits);
+            }
+
+            RHICapabilityLimits rasterLimits = new RHICapabilityLimits(
+                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumSampleCount, 8),
+                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumVertexInputBindings, 31),
+                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumColorAttachments, 8),
+                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumTexture2DSize, (ulong)maxTextureSize),
+                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumTextureCubeSize, (ulong)maxCubeTextureSize));
+            RHICapabilityLimits bindingLimits = new RHICapabilityLimits(
+                new RHICapabilityLimit(ERHICapabilityLimitKind.UniformBufferAlignment, 256),
+                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumBoundTextures, 128));
+            RHICapabilityLimits computeLimits = new RHICapabilityLimits(
+                new RHICapabilityLimit(ERHICapabilityLimitKind.MinimumWavefrontSize, 32),
+                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumWavefrontSize, 64),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MaximumComputeThreads,
+                    m_NativeDevice.MaxThreadsPerThreadgroup.width
+                        * m_NativeDevice.MaxThreadsPerThreadgroup.height
+                        * m_NativeDevice.MaxThreadsPerThreadgroup.depth),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MaximumGroupSharedMemoryBytes,
+                    m_NativeDevice.MaxThreadgroupMemoryLength));
+
+            m_Capabilities = new RHIDeviceCapabilities(
+                raster: new RHIRasterCapabilities(
+                    ERHIProjectionStrategy.FlipY,
+                    ERHIMatrixMajorOrder.RowMajor,
+                    ERHIDepthValueRange.ZeroToOne,
+                    ERHIMultiviewStrategy.Unsupported,
+                    pixelShaderStorageWrites: RHICapability.Available(
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.CoreApi,
+                        ERHICapabilityProbeKind.ApiVersion,
+                        "Metal 4 fragment-stage writable resources",
+                        rasterLimits),
+                    rasterOrderedAccess: Probe(
+                        m_RasterCapabilities.RasterOrderGroups,
+                        "MTLDevice.rasterOrderGroupsSupported",
+                        "Raster order groups are unavailable."),
+                    anisotropicSampling: RHICapability.Available(
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.CoreApi,
+                        ERHICapabilityProbeKind.ApiVersion,
+                        "Metal sampler contract"),
+                    depthAttachmentRead: Probe(
+                        false,
+                        "SharpGPU Metal attachment-read lowering",
+                        "Depth attachment reads are not exposed by the current Metal lowering."),
+                    framebufferLocalRead: Probe(
+                        m_RasterCapabilities.FramebufferLocalRead,
+                        "MTL4RenderPassDescriptor.supportColorAttachmentMapping + " +
+                        "MTLLogicalToPhysicalColorAttachmentMap.setPhysicalIndex",
+                        "The complete Metal framebuffer-local-read selector set is unavailable.",
+                        limits: rasterLimits),
+                    sampledFeedback: Probe(
+                        false,
+                        "SharpGPU Metal sampled-feedback lowering",
+                        "Metal sampled feedback is unavailable until the backend provides exact texture-usage, hazard, and pipeline lowering.",
+                        probeKind: ERHICapabilityProbeKind.BackendContract),
+                    drawIndirect: RHICapability.Available(
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.CoreApi,
+                        ERHICapabilityProbeKind.ApiVersion,
+                        "Metal indirect draw commands"),
+                    multiDrawIndirect: RHICapability.Available(
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.CoreApi,
+                        ERHICapabilityProbeKind.ApiVersion,
+                        "Metal indirect command buffers"),
+                    variableRateShading: Probe(
+                        false,
+                        "SharpGPU Metal variable-rate rasterization lowering",
+                        "Variable-rate shading is not exposed by the Metal backend."),
+                    hiddenSurfaceRemoval: Probe(
+                        false,
+                        "SharpGPU Metal raster lowering",
+                        "Hidden-surface removal is renderer policy and is not a Metal HAL capability."),
+                    barycentricCoordinates: Probe(
+                        m_NativeDevice.SupportsShaderBarycentricCoordinates,
+                        "MTLDevice.supportsShaderBarycentricCoordinates",
+                        "Shader barycentric coordinates are unavailable."),
+                    programmableSamplePositions: Probe(
+                        m_NativeDevice.ProgrammableSamplePositionsSupported,
+                        "MTLDevice.programmableSamplePositionsSupported",
+                        "Programmable sample positions are unavailable."),
+                    nativeRenderPass: RHICapability.Available(
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.CoreApi,
+                        ERHICapabilityProbeKind.ApiVersion,
+                        "MTLRenderPassDescriptor",
+                        rasterLimits)),
+                binding: new RHIBindingCapabilities(
+                    rootConstants: RHICapability.Available(
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.CoreApi,
+                        ERHICapabilityProbeKind.ApiVersion,
+                        "Metal inline byte binding",
+                        bindingLimits),
+                    indirectRootConstants: Probe(
+                        false,
+                        "SharpGPU Metal indirect-command lowering",
+                        "Indirect inline constants are not exposed."),
+                    atomicUInt64: Probe(
+                        isMetal3,
+                        "Metal 3 64-bit atomic contract",
+                        "64-bit shader atomics require Metal 3."),
+                    descriptorIndexing: Probe(
+                        m_SupportsArgumentTable,
+                        "MTL4ArgumentTable runtime object probe",
+                        "Metal argument tables are unavailable.",
+                        strategy: ERHICapabilityStrategy.NativeSpecialized,
+                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe,
+                        limits: bindingLimits),
+                    partiallyBoundDescriptors: Probe(
+                        m_SupportsArgumentTable,
+                        "MTL4ArgumentTable nil-entry contract",
+                        "Metal argument-table nil entries are unavailable.",
+                        strategy: ERHICapabilityStrategy.NativeSpecialized,
+                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe),
+                    updateAfterBindDescriptors: Probe(
+                        false,
+                        "SharpGPU external argument-table synchronization contract",
+                        "Argument-table mutation while GPU work is pending is intentionally not exposed."),
+                    nullDescriptors: Probe(
+                        m_SupportsArgumentTable,
+                        "MTL4ArgumentTable nil resource/sampler entries",
+                        "Metal argument-table nil entries are unavailable.",
+                        strategy: ERHICapabilityStrategy.NativeSpecialized,
+                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe)),
+                synchronization: new RHISynchronizationCapabilities(
+                    timestampQueries: Probe(
+                        isTimestampSupported,
+                        "MTL4CounterHeap creation",
+                        timestampUnavailableReason ?? "Metal timestamp counter heaps are unavailable.",
+                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe),
+                    occlusionQueries: RHICapability.Available(
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.CoreApi,
+                        ERHICapabilityProbeKind.ApiVersion,
+                        "Metal visibility result queries"),
+                    pipelineStatisticsQueries: Probe(
+                        isPipelineStatsSupported,
+                        "MTLDevice counterSets statistics probe",
+                        "Metal pipeline statistics counter sets are unavailable.",
+                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe),
+                    enhancedBarriers: Probe(
+                        m_SupportsMetal4Barriers,
+                        "Metal 4 barrier contract",
+                        "Metal 4 barriers are unavailable.",
+                        probeKind: ERHICapabilityProbeKind.ApiVersion)),
+                memory: new RHIMemoryCapabilities(
+                    unifiedMemory: Probe(
+                        m_NativeDevice.HasUnifiedMemory,
+                        "MTLDevice.hasUnifiedMemory",
+                        "The Metal device does not use unified memory."),
+                    placedResources: Probe(
+                        m_SupportsMetal4,
+                        "MTLDevice heapSizeAndAlign + MTLHeap placement resources",
+                        "Metal placement heaps are unavailable.",
+                        strategy: ERHICapabilityStrategy.CoreApi,
+                        probeKind: ERHICapabilityProbeKind.ApiVersion),
+                    sparseBinding: Probe(
+                        m_SupportsPlacementSparse,
+                        "MTLDevice.supportsPlacementSparse + MTL4CommandQueue.updateTextureMappings",
+                        "The Metal runtime does not expose placement sparse resources.",
+                        strategy: ERHICapabilityStrategy.NativeSpecialized,
+                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe),
+                    residency: RHICapability.Unavailable(
+                        "MTLResidencySet does not provide the explicit completion-fence contract required by SharpGPU.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "Metal explicit residency completion contract"),
+                    budgetQuery: Probe(
+                        m_NativeDevice.RecommendedMaxWorkingSetSize != 0,
+                        "MTLDevice.recommendedMaxWorkingSetSize + currentAllocatedSize",
+                        "Metal did not report a device working-set budget.",
+                        strategy: ERHICapabilityStrategy.CoreApi,
+                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe)),
+                storage: new RHIStorageCapabilities(
+                    nativeGpuFileIo: RHICapability.Unavailable(
+                        "Metal has no SharpGPU-supported official native GPU file-I/O queue.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "Metal storage contract")),
+                pipelineCache: new RHIPipelineCacheCapabilities(
+                    nativeCache: RHICapability.Unavailable(
+                        "MTLBinaryArchive is URL-based and cannot satisfy the caller-owned in-memory blob contract.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "MTLBinaryArchive import/export contract")),
+                presentation: new RHIPresentationCapabilities(
+                    swapChain: Probe(
+                        m_SupportsMetal4,
+                        "CAMetalLayer runtime on a Metal 4 device",
+                        "Metal swapchain creation requires CAMetalLayer and Metal 4.",
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.CoreApi,
+                        probeKind: ERHICapabilityProbeKind.ApiVersion),
+                    acquireSignal: RHICapability.Unavailable(
+                        "CAMetalLayer nextDrawable does not signal caller-owned RHI synchronization.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "CAMetalLayer acquisition contract"),
+                    presentWait: RHICapability.Unavailable(
+                        "CAMetalDrawable presentation does not consume caller-owned RHI semaphores.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "CAMetalDrawable presentation contract"),
+                    presentCompletion: Probe(
+                        m_SupportsMetal4,
+                        "CAMetalDrawable addPresentedHandler runtime contract",
+                        "Metal presentation completion callbacks require the Metal 4 runtime.",
+                        strategy: ERHICapabilityStrategy.NativeSpecialized,
+                        probeKind: ERHICapabilityProbeKind.ApiVersion),
+                    maintenance: Probe(
+                        m_SupportsMetal4,
+                        "caller-drained CAMetalLayer replacement",
+                        "Metal swapchain maintenance requires the Metal 4 runtime.",
+                        strategy: ERHICapabilityStrategy.CoreApi,
+                        probeKind: ERHICapabilityProbeKind.ApiVersion),
+                    maintenanceStrategy:
+                        ERHIPresentationMaintenanceStrategy.PresentFence,
+                    hdr: RHICapability.Unavailable(
+                        "SharpGPU does not yet expose the CAMetalLayer colorspace and extended-dynamic-range contract required for HDR presentation.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "CAMetalLayer HDR presentation contract")),
+                rayTracing: new RHIRayTracingCapabilities(
+                    pipeline: Probe(
+                        isRayTracingSupported,
+                        "MTLDevice ray-tracing properties plus Apple hardware-family qualification",
+                        "Hardware Metal ray tracing is unavailable."),
+                    inline: Probe(
+                        isRayTracingSupported,
+                        "MTLDevice ray-tracing properties plus Apple hardware-family qualification",
+                        "Inline Metal ray tracing is unavailable.")),
+                mesh: new RHIMeshCapabilities(
+                    shader: RHICapability.Unavailable(
+                        "Metal mesh shaders are not exposed by the current SharpGPU factory surface.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Metal factory surface")),
+                machineLearning: new RHIMachineLearningCapabilities(
+                    execution: RHICapability.FromProbe(
+                        isMLSupported,
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.NativeSpecialized,
+                        ERHICapabilityProbeKind.RuntimeObjectProbe,
+                        "Metal 4 ML compiler, tensor, and argument-table selectors",
+                        metalMLUnavailableReason ?? "Metal 4 ML runtime objects are unavailable.")),
+                workGraph: new RHIWorkGraphCapabilities(
+                    execution: RHICapability.Unavailable(
+                        "Metal Work Graph execution is not exposed by SharpGPU.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Metal factory surface")),
+                compute: new RHIComputeCapabilities(
+                    ERHIWaveOperationStrategy.Basic,
+                    waveOperations: RHICapability.Available(
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.CoreApi,
+                        ERHICapabilityProbeKind.ApiVersion,
+                        "Metal SIMD-group operations",
+                        computeLimits)));
         }
 
         private bool TryProbeTimestampCounterHeap(out string? unavailableReason)
@@ -753,6 +1314,97 @@ namespace SharpGPU
             }
         }
 
+        private MetalRasterCapabilities ProbeRasterCapabilities()
+        {
+            bool passMappingSelector = false;
+            bool mapEntrySelector = false;
+            bool encoderMappingSelector = false;
+            MTL4RenderPassDescriptor passDescriptor = default;
+            MTLLogicalToPhysicalColorAttachmentMap map = default;
+            MTL4CommandBuffer commandBuffer = default;
+            MTL4CommandAllocator commandAllocator = default;
+            MTL4RenderCommandEncoder renderEncoder = default;
+            try
+            {
+                passDescriptor = MTL4RenderPassDescriptor.New();
+                passMappingSelector =
+                    passDescriptor.NativePtr != IntPtr.Zero &&
+                    passDescriptor.SupportsColorAttachmentMapping;
+
+                map = MTLLogicalToPhysicalColorAttachmentMap.New();
+                mapEntrySelector =
+                    map.NativePtr != IntPtr.Zero &&
+                    map.SupportsPhysicalIndexMapping;
+
+                if (passMappingSelector && mapEntrySelector)
+                {
+                    commandBuffer =
+                        m_NativeDevice.NewMTL4CommandBuffer();
+                    commandAllocator =
+                        m_NativeDevice.NewMTL4CommandAllocator();
+                    if (commandBuffer.NativePtr != IntPtr.Zero &&
+                        commandAllocator.NativePtr != IntPtr.Zero)
+                    {
+                        commandBuffer.BeginCommandBuffer(
+                            commandAllocator);
+                        passDescriptor.SupportColorAttachmentMapping =
+                            true;
+                        passDescriptor.RenderTargetWidth = 1;
+                        passDescriptor.RenderTargetHeight = 1;
+                        passDescriptor.RenderTargetArrayLength = 1;
+                        passDescriptor.DefaultRasterSampleCount = 1;
+                        renderEncoder =
+                            commandBuffer.RenderCommandEncoder(
+                                passDescriptor);
+                        encoderMappingSelector =
+                            renderEncoder.NativePtr != IntPtr.Zero &&
+                            renderEncoder
+                                .SupportsColorAttachmentMapping;
+                        if (renderEncoder.NativePtr != IntPtr.Zero)
+                        {
+                            new MTL4CommandEncoder(
+                                renderEncoder.NativePtr)
+                                .EndEncoding();
+                        }
+                        commandBuffer.EndCommandBuffer();
+                    }
+                }
+            }
+            catch
+            {
+                passMappingSelector = false;
+                mapEntrySelector = false;
+                encoderMappingSelector = false;
+            }
+            finally
+            {
+                if (commandBuffer.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(
+                        commandBuffer.NativePtr);
+                }
+                if (commandAllocator.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(
+                        commandAllocator.NativePtr);
+                }
+                if (map.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(map.NativePtr);
+                }
+                if (passDescriptor.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(passDescriptor.NativePtr);
+                }
+            }
+
+            return MetalRasterCapabilities.FromSelectorProbes(
+                passMappingSelector,
+                mapEntrySelector,
+                encoderMappingSelector,
+                m_NativeDevice.RasterOrderGroupsSupported);
+        }
+
         private bool SafeSupportsFamily(in MTLGPUFamily family)
         {
             try
@@ -774,6 +1426,23 @@ namespace SharpGPU
             catch
             {
                 return unchecked((MTLArgumentBuffersTier)ulong.MaxValue);
+            }
+        }
+
+        private bool SafeSupportsPlacementSparse()
+        {
+            if (!SafeSupportsSelector(s_SupportsPlacementSparse))
+            {
+                return false;
+            }
+
+            try
+            {
+                return m_NativeDevice.SupportsPlacementSparse;
+            }
+            catch
+            {
+                return false;
             }
         }
 

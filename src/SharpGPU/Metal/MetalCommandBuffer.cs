@@ -5,24 +5,16 @@ using SharpMetal.ObjectiveCCore;
 
 namespace SharpGPU
 {
-    internal enum MetalActiveEncoderType : byte
-    {
-        None,
-        Transfer,
-        Compute,
-        Raster,
-        Raytracing,
-        ML,
-        WorkGraph
-    }
-
     internal sealed class MetalCommandBuffer : RHICommandBuffer
     {
         internal MTL4CommandBuffer NativeCommandBuffer4 => m_NativeCommandBuffer4;
         internal CAMetalDrawable PresentDrawable => m_PresentDrawable;
         internal bool UsesMachineLearning => m_UsesMachineLearning;
         internal bool UsesArgumentTables => m_UsesArgumentTables;
+        internal MetalNativeTransientBatch NativeTransientBatch =>
+            m_NativeTransientBatch;
 
+        private readonly MetalNativeTransientBatch m_NativeTransientBatch;
         private readonly MetalTransferEncoder m_TransferEncoder;
         private readonly MetalComputeEncoder m_ComputeEncoder;
         private readonly MetalRasterEncoder m_RasterEncoder;
@@ -33,7 +25,6 @@ namespace SharpGPU
         private MTL4CommandBuffer m_NativeCommandBuffer4;
         private MTL4CommandAllocator m_NativeCommandAllocator4;
         private CAMetalDrawable m_PresentDrawable;
-        private MetalActiveEncoderType m_ActiveEncoder;
         private bool m_Mtl4CommandBufferEnded;
         private bool m_UsesMachineLearning;
         private bool m_UsesArgumentTables;
@@ -47,6 +38,7 @@ namespace SharpGPU
         public MetalCommandBuffer(MetalCommandQueue commandQueue)
         {
             m_CommandQueue = commandQueue;
+            m_NativeTransientBatch = new MetalNativeTransientBatch();
             m_TransferEncoder = new MetalTransferEncoder(this);
             m_ComputeEncoder = new MetalComputeEncoder(this);
             m_RasterEncoder = new MetalRasterEncoder(this);
@@ -59,159 +51,114 @@ namespace SharpGPU
 
         public override void Begin(string name)
         {
+            ValidateCanBegin();
+            ResetEncodersForRecording();
+            m_NativeTransientBatch.ReleaseForCommandBufferReuse();
+            ReleaseNativeCommandObjects();
             m_CommandBufferName = string.IsNullOrWhiteSpace(name) ? "MetalCommandBuffer" : name;
             ResetState();
+            MarkBeginSucceeded();
         }
 
         public override RHITransferEncoder BeginTransferPass(in RHITransferPassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.Transfer);
             m_TransferEncoder.BeginPass(descriptor);
             BeginEncoderBarrierState();
-            m_ActiveEncoder = MetalActiveEncoderType.Transfer;
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.Transfer);
             return m_TransferEncoder;
         }
 
         public override void EndTransferPass()
         {
-            if (m_ActiveEncoder != MetalActiveEncoderType.Transfer)
-            {
-                return;
-            }
-
             m_TransferEncoder.EndPass();
             EndEncoderBarrierState();
-            m_ActiveEncoder = MetalActiveEncoderType.None;
         }
 
         public override RHIComputeEncoder BeginComputePass(in RHIComputePassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.Compute);
             m_ComputeEncoder.BeginPass(descriptor);
             BeginEncoderBarrierState();
-            m_ActiveEncoder = MetalActiveEncoderType.Compute;
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.Compute);
             return m_ComputeEncoder;
         }
 
         public override void EndComputePass()
         {
-            if (m_ActiveEncoder != MetalActiveEncoderType.Compute)
-            {
-                return;
-            }
-
             m_ComputeEncoder.EndPass();
             EndEncoderBarrierState();
-            m_ActiveEncoder = MetalActiveEncoderType.None;
         }
 
         public override RHIRaytracingEncoder BeginRaytracingPass(in RHIRayTracingPassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.RayTracing);
             m_RaytracingEncoder.BeginPass(descriptor);
             BeginEncoderBarrierState();
-            m_ActiveEncoder = MetalActiveEncoderType.Raytracing;
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.RayTracing);
             return m_RaytracingEncoder;
         }
 
         public override void EndRaytracingPass()
         {
-            if (m_ActiveEncoder != MetalActiveEncoderType.Raytracing)
-            {
-                return;
-            }
-
             m_RaytracingEncoder.EndPass();
             EndEncoderBarrierState();
-            m_ActiveEncoder = MetalActiveEncoderType.None;
         }
 
         public override RHIRasterEncoder BeginRasterPass(in RHIRasterPassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.Raster);
             m_RasterEncoder.BeginPass(descriptor);
             BeginEncoderBarrierState();
-            m_ActiveEncoder = MetalActiveEncoderType.Raster;
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.Raster);
             return m_RasterEncoder;
         }
 
         public override void EndRasterPass()
         {
-            if (m_ActiveEncoder != MetalActiveEncoderType.Raster)
-            {
-                return;
-            }
-
             m_RasterEncoder.EndPass();
             EndEncoderBarrierState();
-            m_ActiveEncoder = MetalActiveEncoderType.None;
         }
 
         public override RHIMLEncoder BeginMLPass(in RHIMLPassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.MachineLearning);
             m_MLEncoder.BeginPass(descriptor);
             BeginEncoderBarrierState();
-            m_ActiveEncoder = MetalActiveEncoderType.ML;
             m_UsesMachineLearning = true;
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.MachineLearning);
             return m_MLEncoder;
         }
 
         public override void EndMLPass()
         {
-            if (m_ActiveEncoder != MetalActiveEncoderType.ML)
-            {
-                return;
-            }
-
             m_MLEncoder.EndPass();
             EndEncoderBarrierState();
-            m_ActiveEncoder = MetalActiveEncoderType.None;
         }
 
         public override RHIWorkGraphEncoder BeginWorkGraphPass(in RHIWorkGraphPassDescriptor descriptor)
         {
+            ValidateCanBeginEncoder(ERHICommandEncoderKind.WorkGraph);
             m_WorkGraphEncoder.BeginPass(descriptor);
-            m_ActiveEncoder = MetalActiveEncoderType.WorkGraph;
+            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.WorkGraph);
             return m_WorkGraphEncoder;
         }
 
         public override void EndWorkGraphPass()
         {
-            if (m_ActiveEncoder != MetalActiveEncoderType.WorkGraph)
-            {
-                return;
-            }
-
             m_WorkGraphEncoder.EndPass();
-            m_ActiveEncoder = MetalActiveEncoderType.None;
         }
 
         public override void End()
         {
-            switch (m_ActiveEncoder)
-            {
-                case MetalActiveEncoderType.Transfer:
-                    EndTransferPass();
-                    break;
-                case MetalActiveEncoderType.Compute:
-                    EndComputePass();
-                    break;
-                case MetalActiveEncoderType.Raster:
-                    EndRasterPass();
-                    break;
-                case MetalActiveEncoderType.Raytracing:
-                    EndRaytracingPass();
-                    break;
-                case MetalActiveEncoderType.ML:
-                    EndMLPass();
-                    break;
-                case MetalActiveEncoderType.WorkGraph:
-                    EndWorkGraphPass();
-                    break;
-            }
-
+            ValidateCanEnd();
             if (m_NativeCommandBuffer4.NativePtr != IntPtr.Zero &&
                 !m_Mtl4CommandBufferEnded)
             {
                 m_NativeCommandBuffer4.EndCommandBuffer();
                 m_Mtl4CommandBufferEnded = true;
             }
+            MarkEndSucceeded();
         }
 
         public override RHITransferEncoder GetTransferEncoder()
@@ -287,7 +234,13 @@ namespace SharpGPU
 
         internal void FinalizeForSubmit()
         {
-            End();
+            ValidateCanSubmit();
+            if (m_NativeCommandBuffer4.NativePtr != IntPtr.Zero &&
+                !m_Mtl4CommandBufferEnded)
+            {
+                throw new InvalidOperationException(
+                    "The native Metal command buffer was not ended before submission.");
+            }
         }
 
         // ── Barrier tracking API for encoders ──
@@ -330,21 +283,21 @@ namespace SharpGPU
             m_NativeCommandBuffer4 = default;
             m_NativeCommandAllocator4 = default;
             m_PresentDrawable = default;
-            m_ActiveEncoder = MetalActiveEncoderType.None;
             m_Mtl4CommandBufferEnded = false;
             m_CurrentEncoderSeenStages = 0;
             m_UsesMachineLearning = false;
             m_UsesArgumentTables = false;
         }
 
-        protected override void Release()
+        private void ResetEncodersForRecording()
         {
-            m_TransferEncoder.Dispose();
-            m_ComputeEncoder.Dispose();
-            m_RasterEncoder.Dispose();
-            m_RaytracingEncoder.Dispose();
-            m_MLEncoder.Dispose();
-            m_WorkGraphEncoder.Dispose();
+            m_ComputeEncoder.ResetForRecording();
+            m_RasterEncoder.ResetForRecording();
+            m_RaytracingEncoder.ResetForRecording();
+        }
+
+        private void ReleaseNativeCommandObjects()
+        {
             if (m_NativeCommandBuffer4.NativePtr != IntPtr.Zero)
             {
                 ObjectiveCRuntime.Release(m_NativeCommandBuffer4);
@@ -356,6 +309,18 @@ namespace SharpGPU
                 ObjectiveCRuntime.Release(m_NativeCommandAllocator4);
                 m_NativeCommandAllocator4 = default;
             }
+        }
+
+        protected override void Release()
+        {
+            m_TransferEncoder.Dispose();
+            m_ComputeEncoder.Dispose();
+            m_RasterEncoder.Dispose();
+            m_RaytracingEncoder.Dispose();
+            m_MLEncoder.Dispose();
+            m_WorkGraphEncoder.Dispose();
+            m_NativeTransientBatch.Dispose();
+            ReleaseNativeCommandObjects();
         }
     }
 

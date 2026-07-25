@@ -6,12 +6,14 @@ namespace SharpGPU
 {
     internal sealed class MetalSampler : RHISampler
     {
-        public MTLSamplerState NativeSampler => m_NativeSampler;
+        public MTLSamplerState NativeSampler { get { ThrowIfDisposed(); return m_NativeSampler; } }
+        internal MetalDevice Device { get; }
 
         private MTLSamplerState m_NativeSampler;
 
         public MetalSampler(MetalDevice device, in RHISamplerDescriptor descriptor)
         {
+            Device = device;
             MTLSamplerDescriptor nativeDescriptor = MTLSamplerDescriptor.New();
             nativeDescriptor.MinFilter = MetalUtility.ConvertToMetalFilter(descriptor.MinFilter);
             nativeDescriptor.MagFilter = MetalUtility.ConvertToMetalFilter(descriptor.MagFilter);

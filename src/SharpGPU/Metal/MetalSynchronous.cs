@@ -1,10 +1,8 @@
 using System;
-using System.IO;
 using SharpMetal.Metal;
 using System.Threading;
 using SharpMetal.Foundation;
 using SharpMetal.ObjectiveCCore;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 
@@ -12,70 +10,156 @@ namespace SharpGPU
 {
     internal sealed class MetalFence : RHIFence
     {
-        private readonly ManualResetEventSlim m_Event;
+        internal MTLSharedEvent NativeEvent => m_NativeEvent;
 
-        internal MetalFence()
+        private readonly MetalDevice m_MetalDevice;
+        private MTLSharedEvent m_NativeEvent;
+        private long m_NextSignalValue;
+        private long m_TargetValue;
+
+        internal MetalFence(MetalDevice device) : base(device)
         {
-            m_Event = new ManualResetEventSlim(false);
+            m_MetalDevice = device;
+            m_NativeEvent = device.NativeDevice.NewSharedEvent();
+            if (m_NativeEvent.NativePtr == IntPtr.Zero)
+            {
+                throw new NotSupportedException("Metal completion fences require MTLSharedEvent support.");
+            }
+
+            m_NextSignalValue = 0;
+            m_TargetValue = 0;
         }
 
-        public override EFenceStatus Status => m_Event.IsSet ? EFenceStatus.Success : EFenceStatus.NotReady;
+        public override EFenceStatus Status
+        {
+            get
+            {
+                m_MetalDevice.ThrowIfCommandQueueFailed();
+                ThrowIfSynchronizationDisposed();
+                if (IsSignalKnownComplete)
+                {
+                    return EFenceStatus.Success;
+                }
+
+                if (!IsSignalPending)
+                {
+                    return EFenceStatus.NotReady;
+                }
+
+                ulong targetValue = (ulong)Volatile.Read(ref m_TargetValue);
+                bool complete = targetValue != 0 && m_NativeEvent.SignaledValue >= targetValue;
+                if (complete)
+                {
+                    MarkSignaled();
+                }
+
+                return complete ? EFenceStatus.Success : EFenceStatus.NotReady;
+            }
+        }
 
         public override void Reset()
         {
-            m_Event.Reset();
+            if (IsSignalPending)
+            {
+                _ = Status;
+            }
+
+            if (!BeginReset())
+            {
+                return;
+            }
+
+            CompleteReset();
         }
 
-        public override void Wait()
+        public override EFenceStatus Wait(ulong timeoutNanoseconds = ulong.MaxValue)
         {
-            m_Event.Wait();
+            m_MetalDevice.ThrowIfCommandQueueFailed();
+            EnsureWaitable();
+            if (IsSignalKnownComplete)
+            {
+                return EFenceStatus.Success;
+            }
+
+            ulong targetValue = (ulong)Volatile.Read(ref m_TargetValue);
+            if (targetValue == 0)
+            {
+                throw new InvalidOperationException("The fence has no native signal value.");
+            }
+
+            ulong timeoutMilliseconds;
+            if (timeoutNanoseconds == ulong.MaxValue)
+            {
+                timeoutMilliseconds = ulong.MaxValue;
+            }
+            else
+            {
+                timeoutMilliseconds = timeoutNanoseconds / 1_000_000UL;
+                if ((timeoutNanoseconds % 1_000_000UL) != 0)
+                {
+                    ++timeoutMilliseconds;
+                }
+            }
+
+            m_NativeEvent.WaitUntilSignaledValue(targetValue, timeoutMilliseconds);
+            m_MetalDevice.ThrowIfCommandQueueFailed();
+            if (m_NativeEvent.SignaledValue < targetValue)
+            {
+                return EFenceStatus.NotReady;
+            }
+
+            MarkSignaled();
+            return EFenceStatus.Success;
         }
 
-        internal void Signal()
+        internal ulong PrepareSignalValue()
         {
-            m_Event.Set();
+            if (!IsSignalPending)
+            {
+                throw new InvalidOperationException("The fence signal must be reserved before obtaining a native value.");
+            }
+
+            long signalValue = Interlocked.Increment(ref m_NextSignalValue);
+            Volatile.Write(ref m_TargetValue, signalValue);
+            return (ulong)signalValue;
         }
 
         protected override void Release()
         {
-            m_Event.Dispose();
+            if (m_NativeEvent.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_NativeEvent);
+                m_NativeEvent = default;
+            }
         }
     }
 
     internal sealed class MetalSemaphore : RHISemaphore
     {
         public MTLSharedEvent NativeEvent => m_NativeEvent;
+        internal ulong LastSignaledValue => (ulong)Volatile.Read(ref m_LastSignaledValue);
 
-        private readonly object m_Lock;
         private MTLSharedEvent m_NativeEvent;
-        private ulong m_Value;
+        private long m_NextSignalValue;
+        private long m_LastSignaledValue;
 
-        internal MetalSemaphore(MetalDevice device)
+        internal MetalSemaphore(MetalDevice device) : base(device)
         {
-            m_Lock = new object();
             m_NativeEvent = device.NativeDevice.NewSharedEvent();
-            m_Value = 1;
+            if (m_NativeEvent.NativePtr == IntPtr.Zero)
+            {
+                throw new NotSupportedException("Metal binary semaphores require MTLSharedEvent support.");
+            }
+
+            m_NextSignalValue = 0;
+            m_LastSignaledValue = 0;
         }
 
-        internal ulong CurrentValue
+        internal ulong PrepareSignalValue()
         {
-            get
-            {
-                lock (m_Lock)
-                {
-                    return m_Value;
-                }
-            }
-        }
-
-        internal ulong AcquireSignalValue()
-        {
-            lock (m_Lock)
-            {
-                ulong signalValue = m_Value;
-                ++m_Value;
-                return signalValue;
-            }
+            long signalValue = Interlocked.Increment(ref m_NextSignalValue);
+            Volatile.Write(ref m_LastSignaledValue, signalValue);
+            return (ulong)signalValue;
         }
 
         protected override void Release()
@@ -104,7 +188,7 @@ namespace SharpGPU
             m_QueryDescriptor = descriptor;
             m_Results = new ulong[descriptor.Count];
             Results = new ReadOnlyMemory<ulong>(m_Results);
-            m_IsTimestampQuery = descriptor.Type == ERHIQueryType.TimestampTransfer || descriptor.Type == ERHIQueryType.TimestampGenerice;
+            m_IsTimestampQuery = descriptor.Type == ERHIQueryType.TimestampTransfer || descriptor.Type == ERHIQueryType.Timestamp;
             m_IsOcclusionQuery = descriptor.Type == ERHIQueryType.Occlusion;
             m_IsStatisticsQuery = descriptor.Type == ERHIQueryType.Statistics;
 
@@ -458,193 +542,9 @@ namespace SharpGPU
         }
     }
 
-    internal sealed class MetalStorageQueue : RHIStorageQueue
-    {
-        // Metal does not have a direct equivalent of DirectStorage (Win32 API).
-        // We use managed System.IO file streams to open / read / close files and
-        // batch the read requests into a pending list that is drained on Submit().
-        //
-        // File handles are represented as GCHandle-pinned FileStream references
-        // stored inside the RHIStorageFileHandle.NativeHandle field. This avoids
-        // any platform-specific P/Invoke while keeping the same abstract interface.
-
-        private readonly List<Action> m_PendingRequests;
-        private readonly Dictionary<IntPtr, FileStream> m_OpenFiles;
-
-        public MetalStorageQueue()
-        {
-            m_PendingRequests = new List<Action>();
-            m_OpenFiles = new Dictionary<IntPtr, FileStream>();
-        }
-
-        public override RHIStorageFileHandle OpenFile(string absPath)
-        {
-            if (string.IsNullOrEmpty(absPath))
-            {
-                throw new ArgumentException("File path must not be null or empty.", nameof(absPath));
-            }
-
-            FileStream stream = new FileStream(absPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            GCHandle gcHandle = GCHandle.Alloc(stream);
-            IntPtr handlePtr = GCHandle.ToIntPtr(gcHandle);
-            m_OpenFiles[handlePtr] = stream;
-
-            RHIStorageFileHandle result;
-            result.NativeHandle = handlePtr;
-            return result;
-        }
-
-        public override void CloseFile(in RHIStorageFileHandle fileHandle)
-        {
-            if (m_OpenFiles.TryGetValue(fileHandle.NativeHandle, out FileStream stream))
-            {
-                stream.Close();
-                stream.Dispose();
-                m_OpenFiles.Remove(fileHandle.NativeHandle);
-
-                GCHandle gcHandle = GCHandle.FromIntPtr(fileHandle.NativeHandle);
-                gcHandle.Free();
-            }
-        }
-
-        public override ulong QueryFileSize(in RHIStorageFileHandle fileHandle)
-        {
-            if (m_OpenFiles.TryGetValue(fileHandle.NativeHandle, out FileStream stream))
-            {
-                return (ulong)stream.Length;
-            }
-
-            return 0;
-        }
-
-        public override void RequestBuffer(in RHIStorageBufferRequest request)
-        {
-            // Capture the request value so the lambda does not capture the
-            // by-ref parameter (which would be invalid after this method returns).
-            RHIStorageBufferRequest capturedRequest = request;
-            m_PendingRequests.Add(() =>
-            {
-                if (!m_OpenFiles.TryGetValue(capturedRequest.FileHandle.NativeHandle, out FileStream stream))
-                {
-                    return;
-                }
-
-                byte[] tempBuffer = new byte[capturedRequest.FileSize];
-                stream.Seek((long)capturedRequest.FileOffset, SeekOrigin.Begin);
-                int totalRead = 0;
-                while (totalRead < tempBuffer.Length)
-                {
-                    int bytesRead = stream.Read(tempBuffer, totalRead, tempBuffer.Length - totalRead);
-                    if (bytesRead == 0) break;
-                    totalRead += bytesRead;
-                }
-
-                // Copy into the destination RHI buffer via Map/UnMap
-                MetalBuffer metalBuffer = capturedRequest.DestinationBuffer as MetalBuffer;
-                if (metalBuffer != null)
-                {
-                    unsafe
-                    {
-                        IntPtr dstPtr = metalBuffer.Map((uint)capturedRequest.DestinationOffset, (uint)(capturedRequest.DestinationOffset + capturedRequest.FileSize));
-                        if (dstPtr != IntPtr.Zero)
-                        {
-                            Marshal.Copy(tempBuffer, 0, dstPtr, totalRead);
-                            metalBuffer.UnMap((uint)capturedRequest.DestinationOffset, (uint)(capturedRequest.DestinationOffset + (ulong)totalRead));
-                        }
-                    }
-                }
-            });
-        }
-
-        public override void RequestTexture(in RHIStorageTextureRequest request)
-        {
-            RHIStorageTextureRequest capturedRequest = request;
-            m_PendingRequests.Add(() =>
-            {
-                if (!m_OpenFiles.TryGetValue(capturedRequest.FileHandle.NativeHandle, out FileStream stream))
-                {
-                    return;
-                }
-
-                byte[] tempBuffer = new byte[capturedRequest.FileSize];
-                stream.Seek((long)capturedRequest.FileOffset, SeekOrigin.Begin);
-                int totalRead = 0;
-                while (totalRead < tempBuffer.Length)
-                {
-                    int bytesRead = stream.Read(tempBuffer, totalRead, tempBuffer.Length - totalRead);
-                    if (bytesRead == 0) break;
-                    totalRead += bytesRead;
-                }
-
-                // For textures, we use the Metal replaceRegion approach via the
-                // native MTLTexture API. Since MetalTexture wraps an MTLTexture,
-                // we write into it using the CPU-accessible path.
-                MetalTexture metalTexture = capturedRequest.DestinationTexture as MetalTexture;
-                if (metalTexture != null)
-                {
-                    unsafe
-                    {
-                        fixed (byte* pData = tempBuffer)
-                        {
-                            uint width = (uint)metalTexture.NativeTexture.Width;
-                            uint height = (uint)metalTexture.NativeTexture.Height;
-                            // RGBA8 = 4 bytes per pixel
-                            ulong bytesPerRow = width * 4u;
-
-                            MTLRegion region = new MTLRegion();
-                            region.origin = new MTLOrigin { x = 0, y = 0, z = 0 };
-                            region.size = new MTLSize { width = width, height = height, depth = 1 };
-
-                            metalTexture.NativeTexture.ReplaceRegion(
-                                region,
-                                capturedRequest.MipLevel,
-                                capturedRequest.ArraySlice,
-                                (IntPtr)pData,
-                                bytesPerRow,
-                                0);
-                        }
-                    }
-                }
-            });
-        }
-
-        public override void Submit(RHIFence signalFence)
-        {
-            // Execute all pending file-read requests
-            foreach (Action request in m_PendingRequests)
-            {
-                request();
-            }
-            m_PendingRequests.Clear();
-
-            // Signal the fence to indicate all requests have completed
-            if (signalFence != null)
-            {
-                MetalFence metalFence = signalFence as MetalFence;
-                metalFence?.Signal();
-            }
-        }
-
-        protected override void Release()
-        {
-            m_PendingRequests.Clear();
-
-            // Close any remaining open file handles
-            foreach (KeyValuePair<IntPtr, FileStream> pair in m_OpenFiles)
-            {
-                pair.Value.Close();
-                pair.Value.Dispose();
-
-                GCHandle gcHandle = GCHandle.FromIntPtr(pair.Key);
-                gcHandle.Free();
-            }
-            m_OpenFiles.Clear();
-        }
-    }
-
     internal sealed class MetalHeap : RHIHeap
     {
-        internal SharpMetal.Metal.MTLHeap NativeHeap => m_NativeHeap;
+        internal SharpMetal.Metal.MTLHeap NativeHeap { get { ThrowIfDisposed(); return m_NativeHeap; } }
 
         private readonly MetalDevice m_MetalDevice;
         private SharpMetal.Metal.MTLHeap m_NativeHeap;
@@ -655,6 +555,7 @@ namespace SharpGPU
         }
 
         internal MetalHeap(MetalDevice device, in RHIHeapDescription descriptor, MTLHeapType heapType)
+            : base(device, descriptor, 1UL)
         {
             m_MetalDevice = device;
 
@@ -664,13 +565,37 @@ namespace SharpGPU
             nativeDescriptor.ResourceOptions = MetalUtility.ConvertToMetalResourceOptions(descriptor.StorageMode);
             nativeDescriptor.StorageMode = (MTLStorageMode)(((ulong)nativeDescriptor.ResourceOptions >> 4) & 0xF);
             nativeDescriptor.CpuCacheMode = (MTLCPUCacheMode)((ulong)nativeDescriptor.ResourceOptions & 0xF);
+            if (MetalSparseMemoryUtility.RequiresPlacementSparseCompatibility(
+                    descriptor.Compatibility))
+            {
+                nativeDescriptor.MaxCompatiblePlacementSparsePageSize =
+                    MetalSparseMemoryUtility.SparsePageSize;
+            }
+            else if (descriptor.Compatibility.NativeAllocationFlags != 0)
+            {
+                ObjectiveCRuntime.Release(nativeDescriptor.NativePtr);
+                throw new ArgumentException(
+                    "The Metal heap compatibility contains unknown native allocation flags.",
+                    nameof(descriptor));
+            }
 
-            m_NativeHeap = device.NativeDevice.NewHeap(nativeDescriptor);
-            ObjectiveCRuntime.Release(nativeDescriptor.NativePtr);
+            try
+            {
+                m_NativeHeap = device.NativeDevice.NewHeap(nativeDescriptor);
+            }
+            finally
+            {
+                ObjectiveCRuntime.Release(nativeDescriptor.NativePtr);
+            }
 
             if (m_NativeHeap.NativePtr == IntPtr.Zero)
             {
-                throw new InvalidOperationException("Failed to create MTLHeap.");
+                throw new RHIException(
+                    ERHIErrorCode.OutOfMemory,
+                    ERHIBackend.Metal,
+                    0,
+                    "MTLDevice failed to create a placement heap.",
+                    ERHIDeviceState.Operational);
             }
         }
 

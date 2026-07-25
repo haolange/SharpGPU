@@ -2,10 +2,10 @@ using Vortice.Vulkan;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8618
     internal unsafe class VulkanSampler : RHISampler
     {
-        public VkSampler NativeSampler => m_NativeSampler;
+        public VkSampler NativeSampler { get { ThrowIfDisposed(); return m_NativeSampler; } }
+        internal VulkanDevice Device { get { ThrowIfDisposed(); return m_VulkanDevice; } }
 
         private VulkanDevice m_VulkanDevice;
         private VkSampler m_NativeSampler;
@@ -42,6 +42,7 @@ namespace SharpGPU
 
         public VkDescriptorImageInfo GetDescriptorImageInfo()
         {
+            ThrowIfDisposed();
             return new VkDescriptorImageInfo()
             {
                 sampler = m_NativeSampler,
@@ -53,7 +54,6 @@ namespace SharpGPU
             VulkanNative.vkDestroySampler(m_VulkanDevice.NativeDevice, m_NativeSampler, null);
         }
     }
-#pragma warning restore CS8618
 }
 
 

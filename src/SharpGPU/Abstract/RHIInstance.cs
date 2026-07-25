@@ -8,7 +8,7 @@ namespace SharpGPU
         public ERHIBackend Backend;
         public RHINativeSurfaceKind SurfaceKind;
         public bool EnableDebugLayer;
-        public bool EnableValidatior;
+        public bool EnableValidation;
         public int ComputeQueueRequestCount;
         public int TransferQueueRequestCount;
         public int GraphicsQueueRequestCount;
@@ -90,8 +90,14 @@ namespace SharpGPU
             return backendType;
         }
 
-        public static RHIInstance? Create(in RHIInstanceDescriptor descriptor)
+        public static RHIInstance Create(in RHIInstanceDescriptor descriptor)
         {
+            if (!Enum.IsDefined(descriptor.Backend) || descriptor.Backend == ERHIBackend.Pending)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(descriptor), descriptor.Backend, "Unknown RHI backend.");
+            }
+
             if (!IsBackendSupported(descriptor.Backend, out string reason))
             {
                 throw new NotSupportedException(reason);
@@ -113,7 +119,10 @@ namespace SharpGPU
 #endif
 
                 default:
-                    return null;
+                    throw new ArgumentOutOfRangeException(
+                        nameof(descriptor),
+                        descriptor.Backend,
+                        "Unknown RHI backend.");
             }
         }
     }

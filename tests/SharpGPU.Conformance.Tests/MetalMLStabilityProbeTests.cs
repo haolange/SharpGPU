@@ -21,7 +21,7 @@ public sealed class MetalMLStabilityProbeTests
         }
 
         using MetalTestContext context = MetalTestContext.Create();
-        if (context.Device.Feature?.IsMLSupported != true)
+        if (context.Device.Capabilities.MachineLearning.Execution.Tier == ERHICapabilityTier.Unavailable)
         {
             // ML not supported, skip probe
             return;
@@ -63,7 +63,7 @@ public sealed class MetalMLStabilityProbeTests
         }
 
         using MetalTestContext context = MetalTestContext.Create();
-        if (context.Device.Feature?.IsMLSupported != true)
+        if (context.Device.Capabilities.MachineLearning.Execution.Tier == ERHICapabilityTier.Unavailable)
         {
             return;
         }
@@ -112,7 +112,7 @@ public sealed class MetalMLStabilityProbeTests
         }
 
         using MetalTestContext context = MetalTestContext.Create();
-        if (context.Device.Feature?.IsMLSupported != true)
+        if (context.Device.Capabilities.MachineLearning.Execution.Tier == ERHICapabilityTier.Unavailable)
         {
             return;
         }
@@ -159,7 +159,7 @@ public sealed class MetalMLStabilityProbeTests
         }
 
         using MetalTestContext context = MetalTestContext.Create();
-        if (context.Device.Feature?.IsMLSupported != true)
+        if (context.Device.Capabilities.MachineLearning.Execution.Tier == ERHICapabilityTier.Unavailable)
         {
             return;
         }
@@ -397,7 +397,9 @@ public sealed class MetalMLStabilityProbeTests
         commandBuffer.End();
 
         context.Fence.Reset();
-        context.Queue.Submit(commandBuffer, context.Fence, null!, null!);
+        context.Queue.Submit(new RHIQueueSubmitDescriptor(
+            new RHICommandBuffer[] { commandBuffer },
+            completionFence: context.Fence));
         context.Fence.Wait();
 
         return FromBytes(Unpack(tensorDesc, ReadbackBytes(readback, nativeByteSize)));
@@ -479,7 +481,9 @@ public sealed class MetalMLStabilityProbeTests
         commandBuffer.End();
 
         context.Fence.Reset();
-        context.Queue.Submit(commandBuffer, context.Fence, null!, null!);
+        context.Queue.Submit(new RHIQueueSubmitDescriptor(
+            new RHICommandBuffer[] { commandBuffer },
+            completionFence: context.Fence));
         context.Fence.Wait();
 
         return FromBytes(Unpack(outDesc, ReadbackBytes(readback, outNativeByteSize)));

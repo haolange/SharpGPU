@@ -23,14 +23,13 @@
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 		<Nullable>enable</Nullable>
-		<!-- Native-backend interop layers intentionally use pointer-heavy patterns and nullable sentinels. -->
-		<NoWarn>$(NoWarn);CS0162;CS8500;CS8600;CS8601;CS8603;CS8604;CS8618;CS8625;CS8629;CS9191</NoWarn>
+		<!-- Nullable diagnostics are never suppressed; native optional values are modeled explicitly. -->
+		<NoWarn>$(NoWarn);CS0162;CS8500;CS9191</NoWarn>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
 		<PlatformTarget>x64</PlatformTarget>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-		<WarningLevel>3</WarningLevel>
 		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
 		<WarningsAsErrors />
 		<DefineConstants>$(DefineConstants)TRACE;</DefineConstants>
@@ -39,7 +38,6 @@
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
 		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
 		<WarningsAsErrors></WarningsAsErrors>
-		<WarningLevel>3</WarningLevel>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<Optimize>true</Optimize>
 		<PlatformTarget>x64</PlatformTarget>
@@ -49,7 +47,6 @@
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
 		<PlatformTarget>ARM64</PlatformTarget>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-		<WarningLevel>3</WarningLevel>
 		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
 		<WarningsAsErrors />
 		<DefineConstants>$(DefineConstants)TRACE;</DefineConstants>
@@ -58,7 +55,6 @@
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
 		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
 		<WarningsAsErrors></WarningsAsErrors>
-		<WarningLevel>3</WarningLevel>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<Optimize>true</Optimize>
 		<PlatformTarget>ARM64</PlatformTarget>
@@ -72,6 +68,16 @@
 		<PackageReference Include="Vortice.DirectStorage" Version="3.8.3" />
 		<PackageReference Include="Vortice.Pix.Native" Version="1.0.1" />
 		<PackageReference Include="Vortice.Vulkan" Version="3.2.1" />
+	</ItemGroup>
+
+	<!--
+		Vortice.DirectML.props copies the selected native binaries to build output.
+		They remain owned by the Vortice.DirectML package dependency and must not
+		be repacked into SharpGPU as generic content/contentFiles assets.
+	-->
+	<ItemGroup Condition="'$(DirectMLLibrary)' != ''">
+		<Content Update="$(DirectMLLibrary)" Pack="false" />
+		<Content Update="$(DirectMLDebugLibrary)" Pack="false" />
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(InfinityBuildOS)' != 'Win'">

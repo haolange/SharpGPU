@@ -17,11 +17,20 @@ namespace SharpGPU
         {
             get
             {
-                return m_Descriptor;
+                ThrowIfDisposed(); return m_Descriptor;
+            }
+        }
+        public ERHIResourceAllocationMode AllocationMode
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return m_AllocationMode;
             }
         }
 
         protected RHIBufferDescriptor m_Descriptor;
+        protected ERHIResourceAllocationMode m_AllocationMode = ERHIResourceAllocationMode.Committed;
 
         public abstract IntPtr Map(in uint readBegin, in uint readEnd);
         public abstract void UnMap(in uint writeBegin, in uint writeEnd);

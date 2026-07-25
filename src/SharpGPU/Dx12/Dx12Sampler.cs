@@ -1,6 +1,6 @@
 namespace SharpGPU
 {
-#pragma warning disable CA1416 
+#pragma warning disable CA1416
     internal unsafe class Dx12Sampler : RHISampler, IDx12DescriptorView
     {
         public Dx12Device Device => m_Dx12Device;

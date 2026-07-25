@@ -239,6 +239,7 @@ namespace SharpGPU
         internal MTLAccelerationStructure NativeAccelerationStructure => m_NativeAccelerationStructure;
         internal MTLInstanceAccelerationStructureDescriptor NativeDescriptor => m_NativeDescriptor;
         internal MTLBuffer NativeScratchBuffer => m_NativeScratchBuffer;
+        internal MetalDevice Device => m_MetalDevice;
 
         private readonly MetalDevice m_MetalDevice;
         private MTLInstanceAccelerationStructureDescriptor m_NativeDescriptor;

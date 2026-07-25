@@ -12,38 +12,27 @@ namespace SharpGPU
         public MetalDevice MetalDevice => m_MetalDevice;
         public override ulong Frequency => 1_000_000_000UL;
 
-        internal bool SupportsMtl4Submission => m_NativeQueue4.NativePtr != IntPtr.Zero &&
-                                                m_NativeMtl4CommandAllocator.NativePtr != IntPtr.Zero &&
-                                                m_Mtl4CompletionEvent.NativePtr != IntPtr.Zero;
+        internal bool SupportsMtl4Submission => m_NativeQueue4.NativePtr != IntPtr.Zero;
 
         internal MTL4CommandQueue NativeQueue4 => m_NativeQueue4;
-        internal MTL4CommandAllocator NativeMtl4CommandAllocator => m_NativeMtl4CommandAllocator;
         internal MTLResidencySet NativeResidencySet => m_ResidencySet;
         internal bool HasResidencySet => m_ResidencySet.NativePtr != IntPtr.Zero;
+        protected override object DeviceIdentity => m_MetalDevice;
 
         private readonly MetalDevice m_MetalDevice;
         private MTL4CommandQueue m_NativeQueue4;
-        private MTL4CommandAllocator m_NativeMtl4CommandAllocator;
-        private MTLSharedEvent m_Mtl4CompletionEvent;
         private MTLResidencySet m_ResidencySet;
-        private ulong m_LastSubmittedMtl4Value;
-        private ulong m_NextMtl4CompletionValue;
-        private bool m_LastSubmittedUsedMachineLearning;
-        private bool m_LastSubmittedUsedArgumentTables;
         private bool m_HasLoggedMtl4SubmitOrder;
+        private readonly object m_FeedbackLock = new();
+        private readonly Dictionary<long, MTL4CommitFeedbackHandler> m_FeedbackHandlers = new();
+        private long m_NextFeedbackToken;
 
         public MetalCommandQueue(MetalDevice device, in ERHIPipelineType pipeline)
         {
             m_MetalDevice = device;
             m_PipelineType = pipeline;
             m_NativeQueue4 = default;
-            m_NativeMtl4CommandAllocator = default;
-            m_Mtl4CompletionEvent = default;
             m_ResidencySet = default;
-            m_LastSubmittedMtl4Value = 0;
-            m_NextMtl4CompletionValue = 1;
-            m_LastSubmittedUsedMachineLearning = false;
-            m_LastSubmittedUsedArgumentTables = false;
             m_HasLoggedMtl4SubmitOrder = false;
 
             m_NativeQueue4 = device.NativeDevice.NewMTL4CommandQueue();
@@ -52,270 +41,418 @@ namespace SharpGPU
                 throw new NotSupportedException("Metal backend requires Metal 4 command queue support. Failed to create MTL4CommandQueue.");
             }
 
-            m_NativeMtl4CommandAllocator = device.NativeDevice.NewMTL4CommandAllocator();
-            if (m_NativeMtl4CommandAllocator.NativePtr == IntPtr.Zero)
-            {
-                throw new NotSupportedException("Metal backend requires Metal 4 command allocator support. Failed to create MTL4CommandAllocator.");
-            }
-
-            m_Mtl4CompletionEvent = device.NativeDevice.NewSharedEvent();
-            if (m_Mtl4CompletionEvent.NativePtr == IntPtr.Zero)
-            {
-                throw new NotSupportedException("Metal backend requires MTLSharedEvent support for MTL4 completion tracking.");
-            }
-
             InitializeResidencySet();
         }
 
         public override RHICommandBuffer CreateCommandBuffer()
         {
+            m_MetalDevice.ThrowIfCommandQueueFailed();
             return new MetalCommandBuffer(this);
         }
 
-        public override void MapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
+        public override unsafe void Submit(in RHIQueueSubmitDescriptor descriptor)
         {
-            UpdateSparseTextureMappings(tiledTextureRegions, map: true);
-        }
-
-        public override void UnMapTiledTexture(in RHITiledTextureRegions tiledTextureRegions)
-        {
-            UpdateSparseTextureMappings(tiledTextureRegions, map: false);
-        }
-
-        public override void MapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
-        {
-            UpdatePackedMipMappings(tiledTexturePackedMips, map: true);
-        }
-
-        public override void UnMapPackedMips(in RHITiledTexturePackedMips tiledTexturePackedMips)
-        {
-            UpdatePackedMipMappings(tiledTexturePackedMips, map: false);
-        }
-
-        private void UpdateSparseTextureMappings(in RHITiledTextureRegions tiledTextureRegions, bool map)
-        {
-            MetalTexture metalTexture = tiledTextureRegions.Texture as MetalTexture ?? throw new ArgumentException("Invalid texture type for Metal sparse mapping.");
-            Span<RHITextureCoordinateRegion> regions = tiledTextureRegions.Regions.Span;
-            if (regions.Length == 0)
-            {
-                return;
-            }
-
-            if (m_NativeQueue4.NativePtr == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("TODO(UNVERIFIED): MTL4 sparse texture mapping requires a valid MTL4 command queue.");
-            }
-
-            MTLHeap heap = metalTexture.NativeTexture.Heap;
-            if (heap.NativePtr == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("TODO(UNVERIFIED): MTL4 sparse texture mapping requires texture heap residency. Texture heap is null.");
-            }
-
-            MTL4UpdateSparseTextureMappingOperation[] operations = new MTL4UpdateSparseTextureMappingOperation[regions.Length];
-            ulong mode = map ? 0UL : 1UL;
-            for (int i = 0; i < regions.Length; ++i)
-            {
-                ref RHITextureCoordinateRegion region = ref regions[i];
-                MTLRegion mtlRegion;
-                mtlRegion.origin.x = (ulong)Math.Max(0, region.Start.X);
-                mtlRegion.origin.y = (ulong)Math.Max(0, region.Start.Y);
-                mtlRegion.origin.z = (ulong)Math.Max(0, region.Start.Z);
-                mtlRegion.size.width = (ulong)Math.Max(0, region.End.X - region.Start.X);
-                mtlRegion.size.height = (ulong)Math.Max(0, region.End.Y - region.Start.Y);
-                mtlRegion.size.depth = (ulong)Math.Max(0, region.End.Z - region.Start.Z);
-                operations[i] = new MTL4UpdateSparseTextureMappingOperation
-                {
-                    mode = mode,
-                    textureRegion = mtlRegion,
-                    textureLevel = (ulong)Math.Max(0, region.MipLevel),
-                    textureSlice = (ulong)Math.Max(0, region.Layer),
-                    heapOffset = 0UL
-                };
-            }
-
-            unsafe
-            {
-                fixed (MTL4UpdateSparseTextureMappingOperation* operationsPtr = operations)
-                {
-                    m_NativeQueue4.UpdateTextureMappings(metalTexture.NativeTexture, heap, (IntPtr)operationsPtr, (ulong)operations.Length);
-                }
-            }
-        }
-
-        private void UpdatePackedMipMappings(in RHITiledTexturePackedMips tiledTexturePackedMips, bool map)
-        {
-            Span<RHITiledTexturePackedMip> packedMips = tiledTexturePackedMips.PackedMips.Span;
-            if (packedMips.Length == 0)
-            {
-                return;
-            }
-
-            if (m_NativeQueue4.NativePtr == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("TODO(UNVERIFIED): MTL4 packed-mip mapping requires a valid MTL4 command queue.");
-            }
-
-            List<MTL4UpdateSparseTextureMappingOperation> operations = new List<MTL4UpdateSparseTextureMappingOperation>(64);
-            MTLTexture activeTexture = default;
-            MTLHeap activeHeap = default;
-            ulong mode = map ? 0UL : 1UL;
-
-            for (int i = 0; i < packedMips.Length; ++i)
-            {
-                ref RHITiledTexturePackedMip packedMip = ref packedMips[i];
-                MetalTexture metalTexture = packedMip.Texture as MetalTexture ?? throw new ArgumentException($"Invalid texture type for Metal packed mip mapping at index {i}.");
-                MTLHeap textureHeap = metalTexture.NativeTexture.Heap;
-                if (textureHeap.NativePtr == IntPtr.Zero)
-                {
-                    throw new InvalidOperationException($"TODO(UNVERIFIED): MTL4 packed-mip mapping requires texture heap residency. Texture heap is null at index {i}.");
-                }
-
-                if (activeTexture.NativePtr == IntPtr.Zero)
-                {
-                    activeTexture = metalTexture.NativeTexture;
-                    activeHeap = textureHeap;
-                }
-                else if (activeTexture.NativePtr != metalTexture.NativeTexture.NativePtr)
-                {
-                    FlushPackedMipOperations(activeTexture, activeHeap, operations);
-                    operations.Clear();
-                    activeTexture = metalTexture.NativeTexture;
-                    activeHeap = textureHeap;
-                }
-
-                ulong firstPackedMipLevel = metalTexture.NativeTexture.FirstMipmapInTail;
-                ulong totalMipLevels = metalTexture.NativeTexture.MipmapLevelCount;
-
-                for (ulong mip = firstPackedMipLevel; mip < totalMipLevels; ++mip)
-                {
-                    MTLRegion mtlRegion;
-                    mtlRegion.origin.x = 0;
-                    mtlRegion.origin.y = 0;
-                    mtlRegion.origin.z = 0;
-                    ulong mipWidth = Math.Max(1UL, metalTexture.NativeTexture.Width >> (int)mip);
-                    ulong mipHeight = Math.Max(1UL, metalTexture.NativeTexture.Height >> (int)mip);
-                    ulong mipDepth = Math.Max(1UL, metalTexture.NativeTexture.Depth >> (int)mip);
-                    mtlRegion.size.width = mipWidth;
-                    mtlRegion.size.height = mipHeight;
-                    mtlRegion.size.depth = mipDepth;
-                    operations.Add(new MTL4UpdateSparseTextureMappingOperation
-                    {
-                        mode = mode,
-                        textureRegion = mtlRegion,
-                        textureLevel = mip,
-                        textureSlice = (ulong)Math.Max(0, packedMip.Layer),
-                        heapOffset = 0UL
-                    });
-                }
-            }
-
-            FlushPackedMipOperations(activeTexture, activeHeap, operations);
-        }
-
-        private void FlushPackedMipOperations(in MTLTexture texture, in MTLHeap heap, List<MTL4UpdateSparseTextureMappingOperation> operations)
-        {
-            if (texture.NativePtr == IntPtr.Zero || operations.Count == 0)
-            {
-                return;
-            }
-
-            unsafe
-            {
-                MTL4UpdateSparseTextureMappingOperation[] operationArray = operations.ToArray();
-                fixed (MTL4UpdateSparseTextureMappingOperation* operationsPtr = operationArray)
-                {
-                    m_NativeQueue4.UpdateTextureMappings(texture, heap, (IntPtr)operationsPtr, (ulong)operationArray.Length);
-                }
-            }
-        }
-
-        public override void Submit(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore waitSemaphore, RHISemaphore signalSemaphore)
-        {
-            if (cmdBuffer == null)
-            {
-                WaitLastSubmission();
-                SignalFence(signalFence as MetalFence);
-                return;
-            }
-
-            MetalCommandBuffer metalCommandBuffer = cmdBuffer as MetalCommandBuffer ?? throw new ArgumentException("Invalid command buffer type for Metal queue.", nameof(cmdBuffer));
-            metalCommandBuffer.FinalizeForSubmit();
-
-            SubmitMtl4(metalCommandBuffer, signalFence as MetalFence, waitSemaphore as MetalSemaphore, signalSemaphore as MetalSemaphore);
-        }
-
-        public override void Submits(RHICommandBuffer cmdBuffer, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores)
-        {
-            MetalSemaphore? wait = (waitSemaphores != null && waitSemaphores.Length > 0) ? waitSemaphores[0] as MetalSemaphore : null;
-            MetalSemaphore? signal = (signalSemaphores != null && signalSemaphores.Length > 0) ? signalSemaphores[0] as MetalSemaphore : null;
-            Submit(cmdBuffer, signalFence, wait, signal);
-        }
-
-        public override void Submits(RHICommandBuffer[] cmdBuffers, RHIFence signalFence, RHISemaphore[] waitSemaphores, RHISemaphore[] signalSemaphores)
-        {
-            if (cmdBuffers == null || cmdBuffers.Length == 0)
-            {
-                Submit(null, signalFence, null, null);
-                return;
-            }
-
-            for (int i = 0; i < cmdBuffers.Length; ++i)
-            {
-                RHISemaphore wait = (i == 0 && waitSemaphores != null && waitSemaphores.Length > 0) ? waitSemaphores[0] : null;
-                RHISemaphore signal = (i == cmdBuffers.Length - 1 && signalSemaphores != null && signalSemaphores.Length > 0) ? signalSemaphores[0] : null;
-                RHIFence fence = i == cmdBuffers.Length - 1 ? signalFence : null;
-                Submit(cmdBuffers[i], fence, wait, signal);
-            }
-        }
-
-        private void SubmitMtl4(MetalCommandBuffer metalCommandBuffer, MetalFence? signalFence, MetalSemaphore? waitSemaphore, MetalSemaphore? signalSemaphore)
-        {
+            m_MetalDevice.ThrowIfCommandQueueFailed();
+            ValidateSubmit(in descriptor);
             if (!SupportsMtl4Submission)
             {
                 throw new InvalidOperationException("MTL4 command submission is unavailable on this queue/device.");
             }
 
-            MTL4CommandBuffer nativeCommandBuffer = metalCommandBuffer.NativeCommandBuffer4;
-            if (nativeCommandBuffer.NativePtr == IntPtr.Zero)
+            ReadOnlySpan<RHIQueueSemaphoreWait> waitSemaphores = descriptor.WaitSemaphores.Span;
+            ReadOnlySpan<RHICommandBuffer> commandBuffers = descriptor.CommandBuffers.Span;
+            ReadOnlySpan<RHISemaphore> signalSemaphores = descriptor.SignalSemaphores.Span;
+            int commandBufferCount = commandBuffers.Length;
+
+            for (int i = 0; i < waitSemaphores.Length; ++i)
             {
-                throw new InvalidOperationException("MTL4 command buffer has not begun encoding.");
+                if (waitSemaphores[i].Semaphore is not MetalSemaphore)
+                {
+                    throw new ArgumentException($"Wait semaphore at index {i} is not a Metal semaphore.", nameof(descriptor));
+                }
             }
 
-            WaitForDrawable(m_NativeQueue4, metalCommandBuffer.PresentDrawable);
-            EncodeWait(m_NativeQueue4, waitSemaphore);
+            for (int i = 0; i < signalSemaphores.Length; ++i)
+            {
+                if (signalSemaphores[i] is not MetalSemaphore)
+                {
+                    throw new ArgumentException($"Signal semaphore at index {i} is not a Metal semaphore.", nameof(descriptor));
+                }
+            }
 
-            CommitMtl4(nativeCommandBuffer);
+            if (descriptor.CompletionFence != null && descriptor.CompletionFence is not MetalFence)
+            {
+                throw new ArgumentException("The completion fence is not a Metal fence.", nameof(descriptor));
+            }
+
+            IntPtr* nativeCommandBuffers = stackalloc IntPtr[Math.Max(commandBufferCount, 1)];
+            for (int i = 0; i < commandBufferCount; ++i)
+            {
+                if (commandBuffers[i] is not MetalCommandBuffer metalCommandBuffer)
+                {
+                    throw new ArgumentException($"Command buffer at index {i} is not a Metal command buffer.", nameof(descriptor));
+                }
+
+                metalCommandBuffer.FinalizeForSubmit();
+                MTL4CommandBuffer nativeCommandBuffer = metalCommandBuffer.NativeCommandBuffer4;
+                if (nativeCommandBuffer.NativePtr == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException($"MTL4 command buffer at index {i} has not begun encoding.");
+                }
+
+                nativeCommandBuffers[i] = nativeCommandBuffer.NativePtr;
+            }
+
+            ReserveSubmit(in descriptor);
+            try
+            {
+                for (int i = 0; i < waitSemaphores.Length; ++i)
+                {
+                    MetalSemaphore semaphore = (MetalSemaphore)waitSemaphores[i].Semaphore;
+                    ulong waitValue = semaphore.LastSignaledValue;
+                    if (waitValue == 0)
+                    {
+                        throw new InvalidOperationException($"Wait semaphore at index {i} has no native signal value.");
+                    }
+
+                    m_NativeQueue4.WaitForEvent(semaphore.NativeEvent, waitValue);
+                }
+
+                for (int i = 0; i < commandBufferCount; ++i)
+                {
+                    WaitForDrawable(m_NativeQueue4, ((MetalCommandBuffer)commandBuffers[i]).PresentDrawable);
+                }
+
+                if (commandBufferCount > 0)
+                {
+                    CommitWithFeedback((IntPtr)nativeCommandBuffers, (ulong)commandBufferCount);
+                }
+
+                for (int i = 0; i < signalSemaphores.Length; ++i)
+                {
+                    MetalSemaphore semaphore = (MetalSemaphore)signalSemaphores[i];
+                    ulong signalValue = semaphore.PrepareSignalValue();
+                    m_NativeQueue4.SignalEvent(semaphore.NativeEvent, signalValue);
+                }
+
+                if (descriptor.CompletionFence is MetalFence fence)
+                {
+                    ulong signalValue = fence.PrepareSignalValue();
+                    m_NativeQueue4.SignalEvent(fence.NativeEvent, signalValue);
+                }
+
+                CommitSubmit(in descriptor);
+            }
+            catch
+            {
+                RollbackSubmit(in descriptor);
+                throw;
+            }
+
+            for (int i = 0; i < commandBufferCount; ++i)
+            {
+                MetalCommandBuffer commandBuffer = (MetalCommandBuffer)commandBuffers[i];
+                SignalDrawable(m_NativeQueue4, commandBuffer.PresentDrawable);
+            }
 
             if (!m_HasLoggedMtl4SubmitOrder)
             {
-                Console.WriteLine("[MetalQueue] MTL4 submit order: waitForDrawable -> waitForEvent -> commit -> signalEvent -> signalDrawable -> present.");
+                Console.WriteLine("[MetalQueue] MTL4 submit order: waitForDrawable/waitForEvent -> commit(feedback) -> signalEvent/signalDrawable; RHISwapChain.Present owns presentation.");
                 m_HasLoggedMtl4SubmitOrder = true;
             }
+        }
 
-            EncodeSignal(m_NativeQueue4, signalSemaphore);
+        public override unsafe void BindSparse(
+            in RHISparseBindDescriptor descriptor)
+        {
+            m_MetalDevice.ThrowIfCommandQueueFailed();
+            m_MetalDevice.Capabilities.Memory.SparseBinding.Require(
+                "Metal queue-ordered placement sparse texture binding");
+            ValidateSparseBind(in descriptor);
+            ValidateMetalSparseBindings(in descriptor);
 
-            ulong completionValue = m_NextMtl4CompletionValue++;
-            m_NativeQueue4.SignalEvent(m_Mtl4CompletionEvent, completionValue);
-            SignalDrawable(m_NativeQueue4, metalCommandBuffer.PresentDrawable);
-            PresentDrawable(metalCommandBuffer.PresentDrawable);
-            m_LastSubmittedMtl4Value = completionValue;
-            m_LastSubmittedUsedMachineLearning = metalCommandBuffer.UsesMachineLearning;
-            m_LastSubmittedUsedArgumentTables = metalCommandBuffer.UsesArgumentTables;
-
-            if (signalFence != null)
+            ReadOnlySpan<RHISemaphore> waits =
+                descriptor.WaitSemaphores.Span;
+            ReadOnlySpan<RHISemaphore> signals =
+                descriptor.SignalSemaphores.Span;
+            for (int i = 0; i < waits.Length; ++i)
             {
-                WaitForMtl4Completion(completionValue);
-                ResetMtl4CommandAllocator();
-                if (m_LastSubmittedUsedMachineLearning || m_LastSubmittedUsedArgumentTables)
+                if (waits[i] is not MetalSemaphore)
                 {
-                    RecreateMtl4SubmissionObjects();
+                    throw new ArgumentException(
+                        $"Wait semaphore at index {i} is not a Metal semaphore.",
+                        nameof(descriptor));
+                }
+            }
+            for (int i = 0; i < signals.Length; ++i)
+            {
+                if (signals[i] is not MetalSemaphore)
+                {
+                    throw new ArgumentException(
+                        $"Signal semaphore at index {i} is not a Metal semaphore.",
+                        nameof(descriptor));
+                }
+            }
+            if (descriptor.CompletionFence != null &&
+                descriptor.CompletionFence is not MetalFence)
+            {
+                throw new ArgumentException(
+                    "The sparse completion fence is not a Metal fence.",
+                    nameof(descriptor));
+            }
+
+            ReserveSparseBind(in descriptor);
+            try
+            {
+                for (int i = 0; i < waits.Length; ++i)
+                {
+                    MetalSemaphore semaphore =
+                        (MetalSemaphore)waits[i];
+                    ulong value = semaphore.LastSignaledValue;
+                    if (value == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Wait semaphore at index {i} has no native signal value.");
+                    }
+                    m_NativeQueue4.WaitForEvent(
+                        semaphore.NativeEvent,
+                        value);
                 }
 
-                m_LastSubmittedMtl4Value = 0;
-                m_LastSubmittedUsedMachineLearning = false;
-                m_LastSubmittedUsedArgumentTables = false;
-                SignalFence(signalFence);
+                ReadOnlySpan<RHISparseTextureTileBinding> tileBindings =
+                    descriptor.TileBindings.Span;
+                for (int i = 0; i < tileBindings.Length; ++i)
+                {
+                    ExecuteTileBinding(in tileBindings[i]);
+                }
+                ReadOnlySpan<RHISparseTextureMipTailBinding> tailBindings =
+                    descriptor.MipTailBindings.Span;
+                for (int i = 0; i < tailBindings.Length; ++i)
+                {
+                    ExecuteMipTailBinding(in tailBindings[i]);
+                }
+
+                for (int i = 0; i < signals.Length; ++i)
+                {
+                    MetalSemaphore semaphore =
+                        (MetalSemaphore)signals[i];
+                    ulong value = semaphore.PrepareSignalValue();
+                    m_NativeQueue4.SignalEvent(
+                        semaphore.NativeEvent,
+                        value);
+                }
+                if (descriptor.CompletionFence is MetalFence fence)
+                {
+                    ulong value = fence.PrepareSignalValue();
+                    m_NativeQueue4.SignalEvent(fence.NativeEvent, value);
+                }
+
+                CommitSparseBind(in descriptor);
+            }
+            catch
+            {
+                RollbackSparseBind(in descriptor);
+                throw;
+            }
+        }
+
+        private void ValidateMetalSparseBindings(
+            in RHISparseBindDescriptor descriptor)
+        {
+            ReadOnlySpan<RHISparseTextureTileBinding> tileBindings =
+                descriptor.TileBindings.Span;
+            for (int i = 0; i < tileBindings.Length; ++i)
+            {
+                ref readonly RHISparseTextureTileBinding binding =
+                    ref tileBindings[i];
+                MetalTexture texture = RequireSparseTexture(
+                    binding.Texture,
+                    $"tile binding at index {i}");
+                RHISparseTextureMemoryRequirements requirements =
+                    texture.SparseRequirements!;
+                RHISparseTextureSubresourceTiling subresource =
+                    requirements.GetSubresource(
+                        binding.Aspect,
+                        binding.MipLevel,
+                        binding.ArrayLayer);
+                ValidateTileRange(
+                    binding.TileOffset,
+                    binding.TileExtent,
+                    subresource.TileCount,
+                    $"tile binding at index {i}");
+                ulong tileCount = checked(
+                    (ulong)binding.TileExtent.x *
+                    binding.TileExtent.y *
+                    binding.TileExtent.z);
+                if (binding.Operation == ERHISparseBindingOperation.Bind)
+                {
+                    MetalHeap heap = RequireSparseHeap(
+                        binding.Heap,
+                        $"tile binding at index {i}");
+                    heap.ValidateSparseSpan(
+                        binding.HeapOffset,
+                        checked(tileCount * requirements.TileSizeBytes),
+                        requirements.HeapCompatibility);
+                }
+            }
+
+            ReadOnlySpan<RHISparseTextureMipTailBinding> tailBindings =
+                descriptor.MipTailBindings.Span;
+            for (int i = 0; i < tailBindings.Length; ++i)
+            {
+                ref readonly RHISparseTextureMipTailBinding binding =
+                    ref tailBindings[i];
+                MetalTexture texture = RequireSparseTexture(
+                    binding.Texture,
+                    $"mip-tail binding at index {i}");
+                RHISparseTextureMemoryRequirements requirements =
+                    texture.SparseRequirements!;
+                RHISparseTextureMipTail tail =
+                    requirements.GetMipTail(binding.MipTailIndex);
+                if (binding.Operation == ERHISparseBindingOperation.Bind)
+                {
+                    MetalHeap heap = RequireSparseHeap(
+                        binding.Heap,
+                        $"mip-tail binding at index {i}");
+                    heap.ValidateSparseSpan(
+                        binding.HeapOffset,
+                        tail.SizeBytes,
+                        requirements.HeapCompatibility);
+                }
+            }
+        }
+
+        private unsafe void ExecuteTileBinding(
+            in RHISparseTextureTileBinding binding)
+        {
+            MetalTexture texture = (MetalTexture)binding.Texture;
+            RHISparseTextureMemoryRequirements requirements =
+                texture.SparseRequirements!;
+            MTL4UpdateSparseTextureMappingOperation operation =
+                new MTL4UpdateSparseTextureMappingOperation
+                {
+                    mode = (ulong)(
+                        binding.Operation == ERHISparseBindingOperation.Bind
+                            ? MTLSparseTextureMappingMode.Map
+                            : MTLSparseTextureMappingMode.Unmap),
+                    textureRegion = new MTLRegion(
+                        new MTLOrigin(
+                            binding.TileOffset.x,
+                            binding.TileOffset.y,
+                            binding.TileOffset.z),
+                        new MTLSize(
+                            binding.TileExtent.x,
+                            binding.TileExtent.y,
+                            binding.TileExtent.z)),
+                    textureLevel = binding.MipLevel,
+                    textureSlice = binding.ArrayLayer,
+                    heapOffset =
+                        binding.Operation == ERHISparseBindingOperation.Bind
+                            ? binding.HeapOffset /
+                                requirements.TileSizeBytes
+                            : 0,
+                };
+            MTLHeap nativeHeap =
+                binding.Operation == ERHISparseBindingOperation.Bind
+                    ? ((MetalHeap)binding.Heap!).NativeHeap
+                    : default;
+            m_NativeQueue4.UpdateTextureMappings(
+                texture.NativeTexture,
+                nativeHeap,
+                (IntPtr)(&operation),
+                1);
+        }
+
+        private unsafe void ExecuteMipTailBinding(
+            in RHISparseTextureMipTailBinding binding)
+        {
+            MetalTexture texture = (MetalTexture)binding.Texture;
+            RHISparseTextureMemoryRequirements requirements =
+                texture.SparseRequirements!;
+            RHISparseTextureMipTail tail =
+                requirements.GetMipTail(binding.MipTailIndex);
+            MTL4UpdateSparseTextureMappingOperation operation =
+                new MTL4UpdateSparseTextureMappingOperation
+                {
+                    mode = (ulong)(
+                        binding.Operation == ERHISparseBindingOperation.Bind
+                            ? MTLSparseTextureMappingMode.Map
+                            : MTLSparseTextureMappingMode.Unmap),
+                    textureRegion = new MTLRegion(
+                        new MTLOrigin(0, 0, 0),
+                        new MTLSize(1, 1, 1)),
+                    textureLevel = tail.FirstMipLevel,
+                    textureSlice = tail.FirstArrayLayer,
+                    heapOffset =
+                        binding.Operation == ERHISparseBindingOperation.Bind
+                            ? binding.HeapOffset /
+                                requirements.TileSizeBytes
+                            : 0,
+                };
+            MTLHeap nativeHeap =
+                binding.Operation == ERHISparseBindingOperation.Bind
+                    ? ((MetalHeap)binding.Heap!).NativeHeap
+                    : default;
+            m_NativeQueue4.UpdateTextureMappings(
+                texture.NativeTexture,
+                nativeHeap,
+                (IntPtr)(&operation),
+                1);
+        }
+
+        private MetalTexture RequireSparseTexture(
+            RHITexture texture,
+            string argumentDescription)
+        {
+            if (texture.IsDisposed)
+            {
+                throw new ObjectDisposedException(
+                    texture.GetType().FullName);
+            }
+            if (texture is not MetalTexture metalTexture ||
+                !ReferenceEquals(
+                    metalTexture.MetalDevice,
+                    m_MetalDevice))
+            {
+                throw new ArgumentException(
+                    $"The {argumentDescription} texture belongs to a different backend or device.");
+            }
+            if (metalTexture.AllocationMode !=
+                    ERHIResourceAllocationMode.Sparse ||
+                metalTexture.SparseRequirements == null)
+            {
+                throw new ArgumentException(
+                    $"The {argumentDescription} texture is not a sparse texture.");
+            }
+            return metalTexture;
+        }
+
+        private MetalHeap RequireSparseHeap(
+            RHIHeap? heap,
+            string argumentDescription)
+        {
+            if (heap is not MetalHeap metalHeap ||
+                !ReferenceEquals(heap.OwnerDevice, m_MetalDevice))
+            {
+                throw new ArgumentException(
+                    $"The {argumentDescription} heap belongs to a different backend or device.");
+            }
+            return metalHeap;
+        }
+
+        private static void ValidateTileRange(
+            in SharpGPU.Mathematics.uint3 offset,
+            in SharpGPU.Mathematics.uint3 extent,
+            in SharpGPU.Mathematics.uint3 available,
+            string argumentDescription)
+        {
+            if ((ulong)offset.x + extent.x > available.x ||
+                (ulong)offset.y + extent.y > available.y ||
+                (ulong)offset.z + extent.z > available.z)
+            {
+                throw new ArgumentOutOfRangeException(
+                    argumentDescription,
+                    "Sparse tile binding exceeds the queried subresource tiling.");
             }
         }
 
@@ -378,34 +515,75 @@ namespace SharpGPU
             m_NativeQueue4.AddResidencySet(m_ResidencySet);
         }
 
-        private void RecreateMtl4SubmissionObjects()
+        private void CommitWithFeedback(
+            IntPtr commandBuffers,
+            ulong commandBufferCount)
         {
-            ReleaseMtl4SubmissionObjects();
-
-            m_NativeQueue4 = m_MetalDevice.NativeDevice.NewMTL4CommandQueue();
-            if (m_NativeQueue4.NativePtr == IntPtr.Zero)
+            MTL4CommitOptions options = MTL4CommitOptions.New();
+            if (options.NativePtr == IntPtr.Zero)
             {
-                throw new InvalidOperationException("Failed to recreate MTL4CommandQueue after ML submission.");
+                throw new RHIException(
+                    ERHIErrorCode.InitializationFailed,
+                    ERHIBackend.Metal,
+                    0,
+                    "Failed to create MTL4CommitOptions.",
+                    ERHIDeviceState.Operational);
             }
 
-            m_NativeMtl4CommandAllocator = m_MetalDevice.NativeDevice.NewMTL4CommandAllocator();
-            if (m_NativeMtl4CommandAllocator.NativePtr == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("Failed to recreate MTL4CommandAllocator after ML submission.");
-            }
+            long token = ++m_NextFeedbackToken;
+            MTL4CommitFeedbackHandler handler =
+                (block, feedback) =>
+                {
+                    try
+                    {
+                        NSError error = feedback.Error;
+                        if (error.NativePtr != IntPtr.Zero)
+                        {
+                            m_MetalDevice.ReportCommandQueueFeedback(
+                                in error);
+                        }
+                    }
+                    finally
+                    {
+                        lock (m_FeedbackLock)
+                        {
+                            m_FeedbackHandlers.Remove(token);
+                        }
+                    }
+                };
 
-            m_Mtl4CompletionEvent = m_MetalDevice.NativeDevice.NewSharedEvent();
-            if (m_Mtl4CompletionEvent.NativePtr == IntPtr.Zero)
+            lock (m_FeedbackLock)
             {
-                throw new InvalidOperationException("Failed to recreate MTLSharedEvent after ML submission.");
+                m_FeedbackHandlers.Add(token, handler);
             }
-
-            m_NextMtl4CompletionValue = 1;
-            InitializeResidencySet();
+            try
+            {
+                options.AddFeedbackHandler(handler);
+                m_NativeQueue4.Commit(
+                    commandBuffers,
+                    commandBufferCount,
+                    options);
+            }
+            catch
+            {
+                lock (m_FeedbackLock)
+                {
+                    m_FeedbackHandlers.Remove(token);
+                }
+                throw;
+            }
+            finally
+            {
+                ObjectiveCRuntime.Release(options.NativePtr);
+            }
         }
 
-        private void ReleaseMtl4SubmissionObjects()
+        private void ReleaseNativeObjects()
         {
+            lock (m_FeedbackLock)
+            {
+                m_FeedbackHandlers.Clear();
+            }
             if (m_ResidencySet.NativePtr != IntPtr.Zero)
             {
                 m_ResidencySet.EndResidency();
@@ -413,74 +591,11 @@ namespace SharpGPU
                 m_ResidencySet = default;
             }
 
-            if (m_Mtl4CompletionEvent.NativePtr != IntPtr.Zero)
-            {
-                ObjectiveCRuntime.Release(m_Mtl4CompletionEvent.NativePtr);
-                m_Mtl4CompletionEvent = default;
-            }
-
-            if (m_NativeMtl4CommandAllocator.NativePtr != IntPtr.Zero)
-            {
-                ObjectiveCRuntime.Release(m_NativeMtl4CommandAllocator.NativePtr);
-                m_NativeMtl4CommandAllocator = default;
-            }
-
             if (m_NativeQueue4.NativePtr != IntPtr.Zero)
             {
                 ObjectiveCRuntime.Release(m_NativeQueue4.NativePtr);
                 m_NativeQueue4 = default;
             }
-        }
-
-        private void WaitLastSubmission()
-        {
-            if (m_LastSubmittedMtl4Value > 0 && m_Mtl4CompletionEvent.NativePtr != IntPtr.Zero)
-            {
-                WaitForMtl4Completion(m_LastSubmittedMtl4Value);
-                ResetMtl4CommandAllocator();
-                if (m_LastSubmittedUsedMachineLearning || m_LastSubmittedUsedArgumentTables)
-                {
-                    RecreateMtl4SubmissionObjects();
-                }
-
-                m_LastSubmittedMtl4Value = 0;
-                m_LastSubmittedUsedMachineLearning = false;
-                m_LastSubmittedUsedArgumentTables = false;
-            }
-        }
-
-        private void ClearResidencyAllocations()
-        {
-            if (m_ResidencySet.NativePtr != IntPtr.Zero && m_ResidencySet.AllocatedCount > 0)
-            {
-                m_ResidencySet.RemoveAllAllocations();
-                m_ResidencySet.Commit();
-            }
-        }
-
-        private void ResetMtl4CommandAllocator()
-        {
-            if (m_NativeMtl4CommandAllocator.NativePtr != IntPtr.Zero)
-            {
-                m_NativeMtl4CommandAllocator.Reset();
-            }
-        }
-
-        private void WaitForMtl4Completion(in ulong completionValue)
-        {
-            if (m_Mtl4CompletionEvent.NativePtr == IntPtr.Zero || completionValue == 0)
-            {
-                return;
-            }
-
-            m_Mtl4CompletionEvent.WaitUntilSignaledValue(completionValue, ulong.MaxValue);
-        }
-
-        private unsafe void CommitMtl4(in MTL4CommandBuffer commandBuffer)
-        {
-            IntPtr* commandBufferArray = stackalloc IntPtr[1];
-            commandBufferArray[0] = commandBuffer.NativePtr;
-            m_NativeQueue4.Commit((IntPtr)commandBufferArray, 1);
         }
 
         private static void SignalDrawable(in MTL4CommandQueue nativeQueue, in CAMetalDrawable drawable)
@@ -493,16 +608,6 @@ namespace SharpGPU
             nativeQueue.SignalDrawable(drawable);
         }
 
-        private static void PresentDrawable(in CAMetalDrawable drawable)
-        {
-            if (drawable.NativePtr == IntPtr.Zero)
-            {
-                return;
-            }
-
-            drawable.Present();
-        }
-
         private static void WaitForDrawable(in MTL4CommandQueue nativeQueue, in CAMetalDrawable drawable)
         {
             if (drawable.NativePtr == IntPtr.Zero)
@@ -513,39 +618,9 @@ namespace SharpGPU
             nativeQueue.WaitForDrawable(drawable);
         }
 
-        private static void EncodeWait(in MTL4CommandQueue nativeQueue, MetalSemaphore? waitSemaphore)
-        {
-            if (waitSemaphore == null)
-            {
-                return;
-            }
-
-            ulong waitValue = waitSemaphore.CurrentValue;
-            if (waitValue > 1)
-            {
-                nativeQueue.WaitForEvent(waitSemaphore.NativeEvent, waitValue - 1);
-            }
-        }
-
-        private static void EncodeSignal(in MTL4CommandQueue nativeQueue, MetalSemaphore? signalSemaphore)
-        {
-            if (signalSemaphore == null)
-            {
-                return;
-            }
-
-            ulong signalValue = signalSemaphore.AcquireSignalValue();
-            nativeQueue.SignalEvent(signalSemaphore.NativeEvent, signalValue);
-        }
-
-        private static void SignalFence(MetalFence? fence)
-        {
-            fence?.Signal();
-        }
-
         protected override void Release()
         {
-            ReleaseMtl4SubmissionObjects();
+            ReleaseNativeObjects();
         }
     }
 }

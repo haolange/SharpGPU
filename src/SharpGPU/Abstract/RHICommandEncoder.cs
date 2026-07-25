@@ -86,21 +86,19 @@ namespace SharpGPU
 
     public struct RHIColorAttachmentDescriptor
     {
-        public uint MipLevel;
-        public uint ArraySlice;
+        public RHITextureSubresourceRange SubresourceRange;
         public float4 ClearValue;
         public ERHILoadAction LoadAction;
         public ERHIStoreAction StoreAction;
+        public ERHIRasterAttachmentAccess Access;
         public RHITexture RenderTarget;
-        public uint ResolveMipLevel;
-        public uint ResolveArraySlice;
-        public RHITexture ResolveTarget;
+        public RHITextureSubresourceRange ResolveSubresourceRange;
+        public RHITexture? ResolveTarget;
     }
 
     public struct RHIDepthStencilAttachmentDescriptor
     {
-        public uint MipLevel;
-        public uint ArraySlice;
+        public RHITextureSubresourceRange SubresourceRange;
         public float DepthClearValue;
         public ERHILoadAction DepthLoadOp;
         public ERHIStoreAction DepthStoreOp;
@@ -108,15 +106,15 @@ namespace SharpGPU
         public ERHILoadAction StencilLoadOp;
         public ERHIStoreAction StencilStoreOp;
         public RHITexture RenderTarget;
-        public uint ResolveMipLevel;
-        public uint ResolveArraySlice;
-        public EResolveMode ResolveMode;
-        public RHITexture ResolveTarget;
+        public RHITextureSubresourceRange ResolveSubresourceRange;
+        public EResolveMode DepthResolveMode;
+        public EResolveMode StencilResolveMode;
+        public RHITexture? ResolveTarget;
     }
 
     public struct RHIAttachmentIndexArray
     {
-        public static RHIAttachmentIndexArray Emtpy = new RHIAttachmentIndexArray(0);
+        public static readonly RHIAttachmentIndexArray Empty = new RHIAttachmentIndexArray(0);
 
         public const int MaxAttachments = 8;
 
@@ -205,6 +203,7 @@ namespace SharpGPU
         public ERHISubPassFlags Flags;
         public RHIAttachmentIndexArray ColorInputs;
         public RHIAttachmentIndexArray ColorOutputs;
+        public RHIAttachmentIndexArray SampledFeedbackInputs;
     }
 
     public struct RHITransferPassDescriptor
@@ -235,7 +234,7 @@ namespace SharpGPU
         public RHITimestampDescriptor? Timestamp;
         public RHIOcclusionDescriptor? Occlusion;
         public RHIStatisticsDescriptor? Statistics;
-        public RHITexture ShadingRateTexture;
+        public RHITexture? ShadingRateTexture;
         public Memory<RHIColorAttachmentDescriptor> ColorAttachments;
         public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachment;
         public Memory<RHISubPassDescriptor> SubPassDescriptors;
@@ -256,7 +255,16 @@ namespace SharpGPU
         public abstract void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size);
         public abstract void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size);
         public abstract void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size);
-        public abstract void EndPass();
+        public void EndPass()
+        {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The transfer encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Transfer);
+            EndPassCore();
+            commandBuffer.MarkEncoderEndFromEncoder();
+        }
+
+        internal abstract void EndPassCore();
     }
 
     public abstract class RHIComputeEncoder : Disposal
@@ -278,7 +286,16 @@ namespace SharpGPU
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
         public abstract void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer);
-        public abstract void EndPass();
+        public void EndPass()
+        {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The compute encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Compute);
+            EndPassCore();
+            commandBuffer.MarkEncoderEndFromEncoder();
+        }
+
+        internal abstract void EndPassCore();
     }
 
     public abstract class RHIRaytracingEncoder : Disposal
@@ -301,7 +318,16 @@ namespace SharpGPU
         public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable);
         public abstract void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer);
-        public abstract void EndPass();
+        public void EndPass()
+        {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The ray-tracing encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.RayTracing);
+            EndPassCore();
+            commandBuffer.MarkEncoderEndFromEncoder();
+        }
+
+        internal abstract void EndPassCore();
     }
     
     public struct RHIMLPassDescriptor
@@ -325,15 +351,51 @@ namespace SharpGPU
         public abstract void SetPipeline(RHIMLPipeline pipeline);
         public abstract void SetBindingSet(RHIMLBindingSet bindingSet);
         public abstract void Dispatch();
-        public abstract void EndPass();
+        public void EndPass()
+        {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The machine-learning encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.MachineLearning);
+            EndPassCore();
+            commandBuffer.MarkEncoderEndFromEncoder();
+        }
+
+        internal abstract void EndPassCore();
     }
 
     public abstract class RHIRasterEncoder : Disposal
     {
         protected RHICommandBuffer? m_CommandBuffer;
         protected RHIRasterPipeline? m_CachedPipeline;
+        private RasterPassPlan? m_RasterPassPlan;
+        private int m_CurrentSubPassIndex = -1;
+        private int m_PipelineSubPassIndex = -1;
 
-        internal abstract void BeginPass(in RHIRasterPassDescriptor descriptor);
+        internal void BeginPass(in RHIRasterPassDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            if (m_RasterPassPlan != null)
+            {
+                throw new InvalidOperationException("A raster pass is already active on this encoder.");
+            }
+
+            RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+            m_RasterPassPlan = plan;
+            m_CurrentSubPassIndex = 0;
+            m_PipelineSubPassIndex = -1;
+            m_CachedPipeline = null;
+            try
+            {
+                BeginPassCore(plan);
+            }
+            catch
+            {
+                ClearRasterPassState();
+                throw;
+            }
+        }
+
+        internal abstract void BeginPassCore(RasterPassPlan plan);
         public abstract void Barrier(in RHIBarrier barrier);
         public abstract void Barriers(ReadOnlySpan<RHIBarrier> barriers);
         public abstract void PushDebugGroup(string name);
@@ -343,27 +405,231 @@ namespace SharpGPU
         public abstract void EndOcclusion(in uint index);
         public abstract void BeginStatistics(in uint index);
         public abstract void EndStatistics(in uint index);
-        public abstract void NextSubPass();
+        public void NextSubPass()
+        {
+            ThrowIfDisposed();
+            RasterPassPlan plan = RequireActiveRasterPass();
+            int nextSubPassIndex = m_CurrentSubPassIndex + 1;
+            if (nextSubPassIndex >= plan.SubPassCount)
+            {
+                throw new InvalidOperationException(
+                    $"Raster pass '{plan.Name}' has no subpass after index {m_CurrentSubPassIndex}.");
+            }
+
+            NextSubPassCore(plan, m_CurrentSubPassIndex, nextSubPassIndex);
+            m_CurrentSubPassIndex = nextSubPassIndex;
+            m_PipelineSubPassIndex = -1;
+            m_CachedPipeline = null;
+        }
+
+        internal abstract void NextSubPassCore(
+            RasterPassPlan plan,
+            int sourceSubPassIndex,
+            int destinationSubPassIndex);
         public abstract void SetScissor(in Rect rect);
         public abstract void SetScissors(in Memory<Rect> rects);
         public abstract void SetViewport(in Viewport viewport);
         public abstract void SetViewports(in Memory<Viewport> viewports);
         public abstract void SetStencilRef(in uint value);
         public abstract void SetBlendFactor(in float4 value);
-        public abstract void SetPipeline(RHIRasterPipeline pipeline);
+        public void SetPipeline(RHIRasterPipeline pipeline)
+        {
+            ThrowIfDisposed();
+            RasterPassPlan plan = RequireActiveRasterPass();
+            ValidatePipelineCompatibility(plan, m_CurrentSubPassIndex, pipeline);
+            SetPipelineCore(pipeline);
+            m_CachedPipeline = pipeline;
+            m_PipelineSubPassIndex = m_CurrentSubPassIndex;
+        }
+
+        internal abstract void SetPipelineCore(RHIRasterPipeline pipeline);
         public abstract void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex);
         public abstract void SetPushConstants(IntPtr data, in uint size, in uint offset = 0);
         public abstract void SetIndexBuffer(RHIBuffer buffer, in uint offset);
         public abstract void SetVertexBuffer(RHIBuffer buffer, in uint slot, in uint offset);
         public abstract void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner);
-        public abstract void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance);
-        public abstract void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance);
-        public abstract void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
-        public abstract void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
-        public abstract void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
-        public abstract void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset);
-        public abstract void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer);
-        public abstract void EndPass();
+        public void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
+        {
+            ValidateDrawState();
+            DrawCore(vertexCount, instanceCount, firstVertex, firstInstance);
+        }
+
+        public void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
+        {
+            ValidateDrawState();
+            DrawIndexedCore(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
+        }
+
+        public void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        {
+            ValidateDrawState();
+            DrawIndirectCore(argsBuffer, offset, drawCount);
+        }
+
+        public void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        {
+            ValidateDrawState();
+            DrawIndexedIndirectCore(argsBuffer, offset, drawCount);
+        }
+
+        public void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
+        {
+            ValidateDrawState();
+            DispatchMeshCore(groupCountX, groupCountY, groupCountZ);
+        }
+
+        public void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
+        {
+            ValidateDrawState();
+            DispatchMeshIndirectCore(argsBuffer, argsOffset);
+        }
+
+        public void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
+        {
+            ValidateDrawState();
+            ExecuteIndirectCommandBufferCore(indirectCmdBuffer);
+        }
+
+        internal abstract void DrawCore(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance);
+        internal abstract void DrawIndexedCore(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance);
+        internal abstract void DrawIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
+        internal abstract void DrawIndexedIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
+        internal abstract void DispatchMeshCore(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
+        internal abstract void DispatchMeshIndirectCore(RHIBuffer argsBuffer, in uint argsOffset);
+        internal abstract void ExecuteIndirectCommandBufferCore(RHIRasterIndirectCommandBuffer indirectCmdBuffer);
+        public void EndPass()
+        {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The raster encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Raster);
+            RasterPassPlan plan = RequireActiveRasterPass();
+            if (m_CurrentSubPassIndex != plan.SubPassCount - 1)
+            {
+                throw new InvalidOperationException(
+                    $"Raster pass '{plan.Name}' ended at subpass {m_CurrentSubPassIndex}, " +
+                    $"but {plan.SubPassCount} subpasses were declared.");
+            }
+
+            EndPassCore();
+            commandBuffer.MarkEncoderEndFromEncoder();
+            ClearRasterPassState();
+        }
+
+        internal abstract void EndPassCore();
+
+        internal int CurrentSubPassIndex => m_CurrentSubPassIndex;
+
+        private RasterPassPlan RequireActiveRasterPass()
+        {
+            return m_RasterPassPlan ??
+                throw new InvalidOperationException("No raster pass is active on this encoder.");
+        }
+
+        private void ValidateDrawState()
+        {
+            ThrowIfDisposed();
+            RasterPassPlan plan = RequireActiveRasterPass();
+            if (m_CachedPipeline == null || m_PipelineSubPassIndex != m_CurrentSubPassIndex)
+            {
+                throw new InvalidOperationException(
+                    $"A compatible raster pipeline must be set for subpass {m_CurrentSubPassIndex} before drawing.");
+            }
+            if (m_CachedPipeline.IsDisposed)
+            {
+                throw new ObjectDisposedException(m_CachedPipeline.GetType().FullName);
+            }
+
+            ValidatePipelineCompatibility(plan, m_CurrentSubPassIndex, m_CachedPipeline);
+        }
+
+        private static void ValidatePipelineCompatibility(
+            RasterPassPlan plan,
+            int subPassIndex,
+            RHIRasterPipeline pipeline)
+        {
+            if (pipeline == null)
+            {
+                throw new ArgumentNullException(nameof(pipeline));
+            }
+            if (pipeline.IsDisposed)
+            {
+                throw new ObjectDisposedException(pipeline.GetType().FullName);
+            }
+
+            RHIRasterPipelineDescriptor descriptor =
+                pipeline.DescriptorInternal;
+            ERHISampleCount pipelineSampleCount =
+                RHIRasterPipelineContract.ValidateSampleCount(
+                    descriptor.SampleCount,
+                    nameof(descriptor.SampleCount));
+            if (pipelineSampleCount != plan.SampleCount)
+            {
+                throw new ArgumentException(
+                    $"Raster pipeline sample count {pipelineSampleCount} does not match pass sample count {plan.SampleCount}.",
+                    nameof(pipeline));
+            }
+
+            ERHIPixelFormat[] colorFormats = descriptor.ColorFormats ??
+                throw new ArgumentException("Raster pipeline ColorFormats cannot be null.", nameof(pipeline));
+            if (colorFormats.Length != plan.ColorAttachmentCount)
+            {
+                throw new ArgumentException(
+                    $"Raster pipeline declares {colorFormats.Length} color formats, " +
+                    $"but the pass declares {plan.ColorAttachmentCount} color attachments.",
+                    nameof(pipeline));
+            }
+            for (int i = 0; i < colorFormats.Length; ++i)
+            {
+                ERHIPixelFormat attachmentFormat =
+                    plan.GetColorAttachment(i).RenderTarget.Descriptor.Format;
+                if (colorFormats[i] != attachmentFormat)
+                {
+                    throw new ArgumentException(
+                        $"Raster pipeline color format {colorFormats[i]} at index {i} " +
+                        $"does not match pass attachment format {attachmentFormat}.",
+                        nameof(pipeline));
+                }
+            }
+
+            if (descriptor.DepthFormat != plan.DepthStencilFormat)
+            {
+                throw new ArgumentException(
+                    $"Raster pipeline depth/stencil format {descriptor.DepthFormat} " +
+                    $"does not match pass format {plan.DepthStencilFormat}.",
+                    nameof(pipeline));
+            }
+
+            bool usesDualSourceColor =
+                RHIRasterPipelineContract.UsesDualSourceBlend(
+                    descriptor.RenderState.BlendState,
+                    colorFormats.Length);
+            RHIAttachmentInterfaceSignature pipelineSignature =
+                descriptor.AttachmentInterface.NormalizeForPipeline(
+                    colorFormats.Length,
+                    usesDualSourceColor);
+            RHIAttachmentInterfaceSignature passSignature =
+                plan.GetSubPass(subPassIndex).AttachmentInterface;
+            RHIRasterPipelineContract.ValidateDepthStencilCompatibility(
+                in descriptor,
+                in passSignature,
+                plan.DepthStencilAspects,
+                nameof(pipeline));
+            if (!passSignature.IsPassCompatibleWith(pipelineSignature))
+            {
+                throw new ArgumentException(
+                    $"Raster pipeline attachment interface {pipelineSignature} " +
+                    $"does not match subpass interface {passSignature}.",
+                    nameof(pipeline));
+            }
+        }
+
+        private void ClearRasterPassState()
+        {
+            m_RasterPassPlan = null;
+            m_CurrentSubPassIndex = -1;
+            m_PipelineSubPassIndex = -1;
+            m_CachedPipeline = null;
+        }
     }
 
     public struct RHIWorkGraphPassDescriptor
@@ -388,6 +654,15 @@ namespace SharpGPU
         public abstract void SetPushConstants(IntPtr data, in uint size, in uint offset = 0);
         public abstract void SetBackingMemory(RHIBuffer backingMemory, ulong byteOffset, ulong byteSize);
         public abstract void DispatchGraph(string entrypoint, uint numRecords, ulong inputRecordByteStride, RHIBuffer? inputRecordBuffer = null);
-        public abstract void EndPass();
+        public void EndPass()
+        {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The work-graph encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.WorkGraph);
+            EndPassCore();
+            commandBuffer.MarkEncoderEndFromEncoder();
+        }
+
+        internal abstract void EndPassCore();
     }
 }

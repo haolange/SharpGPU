@@ -309,7 +309,7 @@ namespace SharpGPU
         internal MTLVisibleFunctionTable VisibleFunctionTable => m_VisibleFunctionTable;
         internal bool IsGenerated => m_IsGenerated;
 
-        private MetalRaytracingPipeline m_GeneratedPipeline;
+        private MetalRaytracingPipeline? m_GeneratedPipeline;
         private MetalFunctionTableEntry m_RayGenerationRecord;
         private bool m_HasRayGenerationRecord;
         private readonly List<MetalFunctionTableEntry> m_MissRecords;
