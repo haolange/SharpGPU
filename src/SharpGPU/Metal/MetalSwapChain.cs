@@ -7,7 +7,7 @@ using SharpMetal.ObjectiveCCore;
 
 namespace SharpGPU
 {
-    internal sealed class MetalSwapChain : RHISwapChain
+    internal sealed partial class MetalSwapChain : RHISwapChain
     {
         private static readonly ObjectiveCClass s_NSWindowClass = new("NSWindow");
         private static readonly ObjectiveCClass s_NSViewClass = new("NSView");
@@ -18,7 +18,23 @@ namespace SharpGPU
         private static readonly IntPtr s_RootViewControllerSelector = new Selector("rootViewController");
         private static readonly IntPtr s_ViewSelector = new Selector("view");
 
-        public override int BackTextureIndex => m_BackTextureIndex;
+        public override int BackTextureIndex
+        {
+            get
+            {
+                ThrowIfSwapChainUnavailable();
+                return m_BackTextureIndex;
+            }
+        }
+
+        public override int ImageCount
+        {
+            get
+            {
+                ThrowIfSwapChainUnavailable();
+                return m_ImageCount;
+            }
+        }
 
         private readonly MetalDevice m_MetalDevice;
         private RHISwapChainDescriptor m_Descriptor;
@@ -26,72 +42,59 @@ namespace SharpGPU
         private CAMetalDrawable m_CurrentDrawable;
         private MetalTexture? m_CurrentBackTexture;
         private int m_BackTextureIndex;
+        private int m_ImageCount;
+        private ERHISwapChainStatus m_TerminalStatus;
+        private RHIException? m_TerminalDiagnostic;
 
-        public MetalSwapChain(MetalDevice device, in RHISwapChainDescriptor descriptor)
+        public MetalSwapChain(
+            MetalDevice device,
+            in RHISwapChainDescriptor descriptor)
+            : base(device)
         {
             m_MetalDevice = device;
             m_Descriptor = descriptor;
-            m_Layer = CAMetalLayer.New();
             m_CurrentDrawable = default;
             m_CurrentBackTexture = null;
             m_BackTextureIndex = -1;
-
-            if (m_Layer.NativePtr == IntPtr.Zero)
+            ValidateCreateDescriptor(in descriptor);
+            m_Layer = CreateConfiguredLayer(in descriptor);
+            try
             {
-                throw new InvalidOperationException("Failed to create CAMetalLayer.");
+                AttachLayerToSurface(
+                    m_Layer,
+                    descriptor.WindowHandle);
+                uint2 createExtent = descriptor.Extent;
+                ApplyExtent(in createExtent);
             }
-
-            m_Layer.Device = device.NativeDevice;
-            m_Layer.PixelFormat = MetalUtility.ConvertToMetalSwapchainFormat(descriptor.Format);
-            m_Layer.FramebufferOnly = descriptor.FrameBufferOnly;
-            m_Layer.DisplaySyncEnabled = descriptor.PresentMode != ERHIPresentMode.Immediately;
-            m_Layer.Opaque = true;
-
-            AttachLayerToSurface(descriptor.WindowHandle);
-            Resize(descriptor.Extent);
+            catch
+            {
+                ReleaseLayer(ref m_Layer);
+                throw;
+            }
         }
 
-        public override RHITexture AcquireBackBufferTexture()
+        protected override RHISwapChainAcquireResult AcquireCore(
+            in RHISwapChainAcquireDescriptor descriptor)
         {
-            if (m_CurrentBackTexture != null)
-            {
-                return m_CurrentBackTexture;
-            }
-
-            m_CurrentDrawable = m_Layer.NextDrawable();
-            if (m_CurrentDrawable.NativePtr == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("Failed to acquire CAMetalDrawable.");
-            }
-
-            RHITextureDescriptor backTextureDescriptor = MetalTexture.BuildDescriptorFromNative(m_CurrentDrawable.Texture);
-            backTextureDescriptor.StorageMode = ERHIStorageMode.GPULocal;
-            backTextureDescriptor.UsageFlag = ERHITextureUsage.RenderTarget;
-            if (!m_Descriptor.FrameBufferOnly)
-            {
-                backTextureDescriptor.UsageFlag |= ERHITextureUsage.ShaderResource;
-            }
-            m_CurrentBackTexture = new MetalTexture(m_MetalDevice, backTextureDescriptor, m_CurrentDrawable.Texture, false, m_CurrentDrawable);
-
-            int count = Math.Max(1, (int)m_Descriptor.Count);
-            m_BackTextureIndex = (m_BackTextureIndex + 1) % count;
-            return m_CurrentBackTexture;
+            return AcquireTyped(in descriptor);
         }
 
-        public override void Resize(in uint2 extent)
+        protected override RHISwapChainOperationResult ResizeCore(
+            in RHISwapChainResizeDescriptor descriptor)
         {
-            m_Descriptor.Extent = extent;
-            m_Layer.DrawableSize = new CGSize(extent.x, extent.y);
-            m_Layer.Frame = new CGRect(new CGPoint(0, 0), new CGSize(extent.x, extent.y));
-            ClearFrameState();
+            return ResizeTyped(in descriptor);
         }
 
-        public override void Present()
+        protected override bool PresentCore(
+            in RHISwapChainPresentDescriptor descriptor,
+            out RHISwapChainOperationResult result)
         {
-            ClearFrameState();
+            return PresentTyped(in descriptor, out result);
         }
 
-        private void AttachLayerToSurface(in IntPtr surface)
+        private void AttachLayerToSurface(
+            CAMetalLayer layer,
+            in IntPtr surface)
         {
             if (surface == IntPtr.Zero)
             {
@@ -101,8 +104,8 @@ namespace SharpGPU
             if (ResolveContentView(surface) is NSView appKitView)
             {
                 appKitView.WantsLayer = true;
-                appKitView.Layer = m_Layer;
-                m_Layer.Frame = appKitView.Frame;
+                appKitView.Layer = layer;
+                layer.Frame = appKitView.Frame;
                 return;
             }
 
@@ -113,7 +116,7 @@ namespace SharpGPU
                 throw new InvalidOperationException("UIView layer pointer is null while attaching CAMetalLayer.");
             }
 
-            ObjectiveCRuntime.objc_msgSend(baseLayer, new Selector("addSublayer:"), m_Layer.NativePtr);
+            ObjectiveCRuntime.objc_msgSend(baseLayer, new Selector("addSublayer:"), layer.NativePtr);
         }
 
         private static NSView? ResolveContentView(IntPtr surface)
@@ -171,12 +174,7 @@ namespace SharpGPU
         protected override void Release()
         {
             ClearFrameState();
-
-            if (m_Layer.NativePtr != IntPtr.Zero)
-            {
-                ObjectiveCRuntime.Release(m_Layer);
-                m_Layer = default;
-            }
+            ReleaseLayer(ref m_Layer);
         }
     }
 }

@@ -1,69 +1,261 @@
+using System;
 using SharpGPU.Mathematics;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8600, CS8602, CA1416, CS8602, CS8604
+#pragma warning disable CA1416
     internal unsafe class Dx12SwapChain : RHISwapChain
     {
-        public override int BackTextureIndex => m_NativeSwapChain3 != null ? (int)m_NativeSwapChain3.CurrentBackBufferIndex : m_FallbackBackTextureIndex;
+        public override int BackTextureIndex
+        {
+            get
+            {
+                ThrowIfSwapChainUnavailable();
+                Vortice.DXGI.IDXGISwapChain3 swapChain =
+                    m_NativeSwapChain3 ??
+                    throw new InvalidOperationException(
+                        "The DXGI swapchain3 interface is unavailable.");
+                return checked((int)swapChain.CurrentBackBufferIndex);
+            }
+        }
+
+        public override int ImageCount
+        {
+            get
+            {
+                ThrowIfSwapChainUnavailable();
+                return m_Textures.Length;
+            }
+        }
 
         private Dx12Device m_Dx12Device;
         private Dx12Texture[] m_Textures;
         private Vortice.DXGI.IDXGISwapChain1 m_NativeSwapChain;
         private Vortice.DXGI.IDXGISwapChain3? m_NativeSwapChain3;
-        private int m_FallbackBackTextureIndex;
         private RHISwapChainDescriptor m_Descriptor;
+        private bool m_HasAcquiredImage;
+        private ERHISwapChainStatus m_TerminalStatus;
+        private RHIException? m_TerminalDiagnostic;
 
-        public Dx12SwapChain(Dx12Device device, in RHISwapChainDescriptor descriptor)
+        public Dx12SwapChain(
+            Dx12Device device,
+            in RHISwapChainDescriptor descriptor)
+            : base(device)
         {
             m_Dx12Device = device;
             m_Descriptor = descriptor;
-            m_Textures = new Dx12Texture[m_Descriptor.Count];
+            m_Textures = Array.Empty<Dx12Texture>();
+            ValidateCreateDescriptor(in descriptor);
             CreateDX12SwapChain(descriptor);
-            FetchDx12Textures(descriptor);
-        }
-
-        public override RHITexture AcquireBackBufferTexture()
-        {
-            return m_Textures[BackTextureIndex];
-        }
-
-        public override void Resize(in uint2 extent)
-        {
-            ReleaseBackBufferTextures();
-
-            Vortice.DXGI.SwapChainDescription desc = m_NativeSwapChain.Description;
-            SharpGen.Runtime.Result hResult = m_NativeSwapChain.ResizeBuffers(m_Descriptor.Count, extent.x, extent.y, desc.BufferDescription.Format/*Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(m_Descriptor.Format))*/, desc.Flags/*Vortice.DXGI.SwapChainFlags.AllowModeSwitch*/);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            m_Descriptor.Extent = extent;
-            m_FallbackBackTextureIndex = 0;
-            FetchDx12Textures(m_Descriptor);
-        }
-
-        public override void Present()
-        {
-            m_NativeSwapChain.Present(Dx12Utility.ConvertToDx12SyncInterval(m_Descriptor.PresentMode), 0);
-            if (m_NativeSwapChain3 == null)
+            try
             {
-                m_FallbackBackTextureIndex = (m_FallbackBackTextureIndex + 1) % m_Textures.Length;
+                FetchDx12Textures(descriptor);
+            }
+            catch
+            {
+                ReleaseNativeSwapChain();
+                throw;
             }
         }
 
-        private void CreateDX12SwapChain(in RHISwapChainDescriptor descriptor) 
+        protected override RHISwapChainAcquireResult AcquireCore(
+            in RHISwapChainAcquireDescriptor descriptor)
+        {
+            if (m_TerminalStatus != ERHISwapChainStatus.Undefined)
+            {
+                return TerminalAcquireResult();
+            }
+            if (descriptor.SignalSemaphore != null ||
+                descriptor.CompletionFence != null)
+            {
+                throw new NotSupportedException(
+                    "DXGI swapchain acquisition has no native semaphore/fence signal contract.");
+            }
+            if (m_HasAcquiredImage)
+            {
+                throw new InvalidOperationException(
+                    "The DX12 back buffer has already been acquired for this frame.");
+            }
+
+            int imageIndex = BackTextureIndex;
+            if ((uint)imageIndex >= (uint)m_Textures.Length)
+            {
+                throw new InvalidOperationException(
+                    $"DXGI returned back-buffer index {imageIndex}, " +
+                    $"but exposes {m_Textures.Length} images.");
+            }
+
+            m_HasAcquiredImage = true;
+            return RHISwapChainAcquireResult.Acquired(
+                m_Textures[imageIndex],
+                imageIndex);
+        }
+
+        protected override RHISwapChainOperationResult ResizeCore(
+            in RHISwapChainResizeDescriptor descriptor)
+        {
+            if (m_TerminalStatus != ERHISwapChainStatus.Undefined)
+            {
+                return TerminalOperationResult();
+            }
+            if (m_HasAcquiredImage)
+            {
+                throw new InvalidOperationException(
+                    "A DX12 swapchain cannot be resized while an image is acquired.");
+            }
+            if (descriptor.SurfaceGeneration <
+                m_Descriptor.SurfaceGeneration)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(descriptor),
+                    "Surface generation cannot move backwards.");
+            }
+            if (descriptor.Extent.x == 0 || descriptor.Extent.y == 0)
+            {
+                return RHISwapChainOperationResult.FromStatus(
+                    ERHISwapChainStatus.NotReady);
+            }
+            if (descriptor.SurfaceKind != RHINativeSurfaceKind.Win32Hwnd ||
+                descriptor.WindowHandle == IntPtr.Zero)
+            {
+                return EnterTerminal(
+                    ERHISwapChainStatus.SurfaceLost,
+                    CreateSurfaceLostDiagnostic(
+                        "DX12 resize requires a valid Win32 HWND."));
+            }
+            if (descriptor.WindowHandle != m_Descriptor.WindowHandle)
+            {
+                return EnterTerminal(
+                    ERHISwapChainStatus.SurfaceLost,
+                    CreateSurfaceLostDiagnostic(
+                        "DXGI ResizeBuffers cannot replace the swapchain HWND; " +
+                        "the Renderer must create a new swapchain."));
+            }
+
+            RHISwapChainDescriptor previousDescriptor = m_Descriptor;
+            ReleaseBackBufferTextures();
+
+            Vortice.DXGI.SwapChainDescription desc = m_NativeSwapChain.Description;
+            SharpGen.Runtime.Result nativeResult = m_NativeSwapChain.ResizeBuffers(
+                m_Descriptor.Count,
+                descriptor.Extent.x,
+                descriptor.Extent.y,
+                desc.BufferDescription.Format,
+                desc.Flags);
+            if (nativeResult.Failure)
+            {
+                RHISwapChainOperationResult? typedFailure =
+                    TryMapFailure(
+                        nativeResult.Code,
+                        "IDXGISwapChain::ResizeBuffers");
+                if (typedFailure.HasValue)
+                {
+                    return EnterTerminal(
+                        typedFailure.Value.Status,
+                        typedFailure.Value.Diagnostic);
+                }
+
+                // ResizeBuffers leaves the original swapchain unchanged on
+                // ordinary failure. Restore its public wrappers before
+                // surfacing the native exception.
+                try
+                {
+                    FetchDx12Textures(previousDescriptor);
+                }
+                catch
+                {
+                    _ = EnterTerminal(
+                        ERHISwapChainStatus.OutOfDate,
+                        diagnostic: null);
+                    throw;
+                }
+                Dx12Utility.CHECK_HR(nativeResult);
+            }
+
+            m_Descriptor.Extent = descriptor.Extent;
+            m_Descriptor.SurfaceGeneration =
+                descriptor.SurfaceGeneration;
+            try
+            {
+                FetchDx12Textures(m_Descriptor);
+            }
+            catch
+            {
+                _ = EnterTerminal(
+                    ERHISwapChainStatus.OutOfDate,
+                    diagnostic: null);
+                throw;
+            }
+            return RHISwapChainOperationResult.FromStatus(
+                ERHISwapChainStatus.Success);
+        }
+
+        protected override bool PresentCore(
+            in RHISwapChainPresentDescriptor descriptor,
+            out RHISwapChainOperationResult result)
+        {
+            if (m_TerminalStatus != ERHISwapChainStatus.Undefined)
+            {
+                result = TerminalOperationResult();
+                return false;
+            }
+            if (!m_HasAcquiredImage)
+            {
+                throw new InvalidOperationException(
+                    "Present requires one successfully acquired DX12 back buffer.");
+            }
+            if (!descriptor.WaitSemaphores.IsEmpty ||
+                descriptor.CompletionFence != null)
+            {
+                throw new NotSupportedException(
+                    "DXGI Present does not consume SharpGPU binary semaphores " +
+                    "or expose a native per-present fence.");
+            }
+
+            SharpGen.Runtime.Result nativeResult = m_NativeSwapChain.Present(
+                Dx12Utility.ConvertToDx12SyncInterval(
+                    m_Descriptor.PresentMode),
+                0);
+            m_HasAcquiredImage = false;
+
+            if (nativeResult.Code == DxgiStatusOccluded)
+            {
+                result = RHISwapChainOperationResult.FromStatus(
+                    ERHISwapChainStatus.Occluded);
+                return true;
+            }
+            if (nativeResult.Failure)
+            {
+                RHISwapChainOperationResult? typedFailure =
+                    TryMapFailure(
+                        nativeResult.Code,
+                        "IDXGISwapChain::Present");
+                if (typedFailure.HasValue)
+                {
+                    result = EnterTerminal(
+                        typedFailure.Value.Status,
+                        typedFailure.Value.Diagnostic);
+                    return true;
+                }
+
+                Dx12Utility.CHECK_HR(nativeResult);
+            }
+
+            result = RHISwapChainOperationResult.FromStatus(
+                ERHISwapChainStatus.Success);
+            return true;
+        }
+
+        private void CreateDX12SwapChain(in RHISwapChainDescriptor descriptor)
         {
             Dx12CommandQueue dx12Queue = (Dx12CommandQueue)descriptor.PresentQueue;
             Dx12Instance dx12Instance = m_Dx12Device.Dx12Instance;
 
-#if true
             Vortice.DXGI.SwapChainDescription1 desc = new Vortice.DXGI.SwapChainDescription1();
             desc.BufferCount = descriptor.Count;
             desc.Width = descriptor.Extent.x;
             desc.Height = descriptor.Extent.y;
-            //desc.Flags = (uint)Vortice.DXGI.SwapChainFlags.AllowModeSwitch;
             desc.Format = Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(descriptor.Format));
-            //desc.Scaling = Vortice.DXGI.Scaling.None;
             desc.SampleDescription = new Vortice.DXGI.SampleDescription(1, 0);
             desc.SwapEffect = Dx12Utility.ConvertToDx12SwapEffect(m_Descriptor.PresentMode);
             desc.BufferUsage = descriptor.FrameBufferOnly ? Vortice.DXGI.Usage.RenderTargetOutput : (Vortice.DXGI.Usage.ShaderInput | Vortice.DXGI.Usage.RenderTargetOutput);
@@ -76,38 +268,12 @@ namespace SharpGPU
                 null);
             m_NativeSwapChain = dx12SwapChain1;
             m_NativeSwapChain3 = dx12SwapChain1.QueryInterfaceOrNull<Vortice.DXGI.IDXGISwapChain3>();
-            m_FallbackBackTextureIndex = 0;
-#else
-            Vortice.DXGI.SwapChainDescription desc = new Vortice.DXGI.SwapChainDescription();
-            //desc.Flags = (uint)Vortice.DXGI.SwapChainFlags.AllowModeSwitch;
-            desc.Windowed = true;
-            desc.BufferCount = descriptor.Count;
-            desc.SampleDescription = new Vortice.DXGI.SampleDescription(1, 0);
-            desc.SwapEffect = Dx12Utility.ConvertToDx12SwapEffect(m_Descriptor.PresentMode);
-            desc.OutputWindow = descriptor.WindowHandle;
-            desc.BufferDescription.Width = descriptor.Extent.x;
-            desc.BufferDescription.Height = descriptor.Extent.y;
-            desc.BufferDescription.Format = Dx12Utility.ConvertToDx12ViewFormat(RHIUtility.ConvertToPixelFormat(descriptor.Format));
-            //desc.BufferDescription.Scaling = Vortice.DXGI.ModeScaling.Unspecified;
-            desc.BufferDescription.RefreshRate.Numerator = descriptor.FPS;
-            desc.BufferDescription.RefreshRate.Denominator = 1;
-            //desc.BufferDescription.ScanlineOrdering = Vortice.DXGI.ModeScanlineOrder.Unspecified;
-            desc.BufferUsage = descriptor.FrameBufferOnly ? Vortice.DXGI.DXGI.RenderTargetOutput : (Vortice.DXGI.DXGI.ShaderInput | Vortice.DXGI.DXGI.RenderTargetOutput);
-
-            Vortice.DXGI.IDXGISwapChain dx12SwapChain1;
-            SharpGen.Runtime.Result hResult = dx12Instance.DXGIFactory.CreateSwapChain(dx12Queue.NativeCommandQueue, &desc, &dx12SwapChain1);
-#if DEBUG
-            Dx12Utility.CHECK_HR(hResult);
-#endif
-            m_NativeSwapChain = dx12SwapChain1.QueryInterfaceOrNull<Vortice.DXGI.IDXGISwapChain1>();
-            m_NativeSwapChain3 = m_NativeSwapChain?.QueryInterfaceOrNull<Vortice.DXGI.IDXGISwapChain3>();
-            m_FallbackBackTextureIndex = 0;
-            dx12SwapChain1.Release();
-            if (m_NativeSwapChain == null)
+            if (m_NativeSwapChain3 == null)
             {
-                throw new System.InvalidOperationException("Failed to query IDXGISwapChain1 from DXGI swap chain.");
+                m_NativeSwapChain.Release();
+                throw new NotSupportedException(
+                    "DXGI 1.4 IDXGISwapChain3 is required for exact back-buffer indexing.");
             }
-#endif
         }
 
         private void FetchDx12Textures(in RHISwapChainDescriptor descriptor)
@@ -123,14 +289,51 @@ namespace SharpGPU
                 textureDescriptor.StorageMode = ERHIStorageMode.GPULocal;
             }
 
-            for (int i = 0; i < descriptor.Count; ++i)
+            int imageCount = checked(
+                (int)m_NativeSwapChain.Description.BufferCount);
+            if (imageCount <= 0)
             {
-                Vortice.Direct3D12.ID3D12Resource dx12Resource;
-                SharpGen.Runtime.Result hResult = m_NativeSwapChain.GetBuffer((uint)i, out dx12Resource);
-#if DEBUG
-                Dx12Utility.CHECK_HR(hResult);
-#endif
-                m_Textures[i] = new Dx12Texture(m_Dx12Device, textureDescriptor, dx12Resource);
+                throw new InvalidOperationException(
+                    "DXGI reported a swapchain with no images.");
+            }
+
+            Dx12Texture[] textures = new Dx12Texture[imageCount];
+            int createdCount = 0;
+            try
+            {
+                for (; createdCount < imageCount; ++createdCount)
+                {
+                    SharpGen.Runtime.Result nativeResult =
+                        m_NativeSwapChain.GetBuffer(
+                            (uint)createdCount,
+                            out Vortice.Direct3D12.ID3D12Resource? resource);
+                    Vortice.Direct3D12.ID3D12Resource nativeBackBuffer =
+                        Dx12Utility.RequireCreatedObject(
+                            resource,
+                            nativeResult,
+                            $"IDXGISwapChain.GetBuffer({createdCount})");
+                    try
+                    {
+                        textures[createdCount] = new Dx12Texture(
+                            m_Dx12Device,
+                            textureDescriptor,
+                            nativeBackBuffer);
+                    }
+                    catch
+                    {
+                        nativeBackBuffer.Release();
+                        throw;
+                    }
+                }
+                m_Textures = textures;
+            }
+            catch
+            {
+                for (int index = 0; index < createdCount; ++index)
+                {
+                    textures[index].Dispose();
+                }
+                throw;
             }
         }
 
@@ -138,15 +341,138 @@ namespace SharpGPU
         {
             for (int i = 0; i < m_Textures.Length; ++i)
             {
-                m_Textures[i]?.Dispose();
-                m_Textures[i] = null!;
+                m_Textures[i].Dispose();
+            }
+            m_Textures = Array.Empty<Dx12Texture>();
+        }
+
+        private RHISwapChainOperationResult? TryMapFailure(
+            int nativeCode,
+            string operation)
+        {
+            switch (nativeCode)
+            {
+                case DxgiErrorDeviceRemoved:
+                case DxgiErrorDeviceHung:
+                case DxgiErrorDeviceReset:
+                    return RHISwapChainOperationResult.FromStatus(
+                        ERHISwapChainStatus.DeviceLost,
+                        Dx12DeviceLossDiagnostics.Capture(
+                            m_Dx12Device,
+                            nativeCode,
+                            operation));
+                case DxgiErrorAccessLost:
+                    return RHISwapChainOperationResult.FromStatus(
+                        ERHISwapChainStatus.SurfaceLost,
+                        new RHIException(
+                            ERHIErrorCode.SurfaceLost,
+                            ERHIBackend.DirectX12,
+                            unchecked((uint)nativeCode),
+                            $"{operation} reported that the DXGI presentation surface was lost.",
+                            ERHIDeviceState.Operational));
+                default:
+                    return null;
+            }
+        }
+
+        private static RHIException CreateSurfaceLostDiagnostic(
+            string message)
+        {
+            return new RHIException(
+                ERHIErrorCode.SurfaceLost,
+                ERHIBackend.DirectX12,
+                nativeCode: 0,
+                nativeMessage: message,
+                deviceState: ERHIDeviceState.Operational);
+        }
+
+        private RHISwapChainOperationResult EnterTerminal(
+            ERHISwapChainStatus status,
+            RHIException? diagnostic)
+        {
+            if (status is not
+                (ERHISwapChainStatus.OutOfDate or
+                 ERHISwapChainStatus.SurfaceLost or
+                 ERHISwapChainStatus.DeviceLost))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(status),
+                    status,
+                    "DX12 terminal status must be OutOfDate, SurfaceLost, or DeviceLost.");
+            }
+            m_TerminalStatus = status;
+            m_TerminalDiagnostic = diagnostic;
+            m_HasAcquiredImage = false;
+            return TerminalOperationResult();
+        }
+
+        private RHISwapChainAcquireResult TerminalAcquireResult()
+        {
+            return RHISwapChainAcquireResult.Unavailable(
+                m_TerminalStatus,
+                m_TerminalDiagnostic);
+        }
+
+        private RHISwapChainOperationResult TerminalOperationResult()
+        {
+            return RHISwapChainOperationResult.FromStatus(
+                m_TerminalStatus,
+                m_TerminalDiagnostic);
+        }
+
+        private void ValidateCreateDescriptor(
+            in RHISwapChainDescriptor descriptor)
+        {
+            if (descriptor.SurfaceKind !=
+                RHINativeSurfaceKind.Win32Hwnd)
+            {
+                throw new NotSupportedException(
+                    "DX12 swapchains require a Win32 HWND surface.");
+            }
+            if (descriptor.WindowHandle == IntPtr.Zero)
+            {
+                throw new ArgumentException(
+                    "DX12 swapchain HWND must not be null.",
+                    nameof(descriptor));
+            }
+            if (descriptor.Count == 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(descriptor),
+                    "DX12 swapchain image count must be positive.");
+            }
+            if (descriptor.Extent.x == 0 ||
+                descriptor.Extent.y == 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(descriptor),
+                    "DX12 swapchain extent must be non-zero.");
+            }
+            if (descriptor.PresentQueue is not
+                    Dx12CommandQueue queue ||
+                !ReferenceEquals(queue.Dx12Device, m_Dx12Device))
+            {
+                throw new ArgumentException(
+                    "DX12 present queue must be a graphics queue from the same device.",
+                    nameof(descriptor));
+            }
+            if (queue.PipelineType !=
+                ERHIPipelineType.Graphics)
+            {
+                throw new ArgumentException(
+                    "DX12 present queue must be a graphics queue.",
+                    nameof(descriptor));
             }
         }
 
         protected override void Release()
         {
             ReleaseBackBufferTextures();
+            ReleaseNativeSwapChain();
+        }
 
+        private void ReleaseNativeSwapChain()
+        {
             if (m_NativeSwapChain3 != null)
             {
                 m_NativeSwapChain3.Release();
@@ -154,6 +480,17 @@ namespace SharpGPU
             }
             m_NativeSwapChain.Release();
         }
+
+        private const int DxgiStatusOccluded =
+            unchecked((int)0x087A0001);
+        private const int DxgiErrorDeviceRemoved =
+            unchecked((int)0x887A0005);
+        private const int DxgiErrorDeviceHung =
+            unchecked((int)0x887A0006);
+        private const int DxgiErrorDeviceReset =
+            unchecked((int)0x887A0007);
+        private const int DxgiErrorAccessLost =
+            unchecked((int)0x887A0026);
     }
-#pragma warning restore CS8600, CS8602, CA1416, CS8602, CS8604
+#pragma warning restore CA1416
 }
