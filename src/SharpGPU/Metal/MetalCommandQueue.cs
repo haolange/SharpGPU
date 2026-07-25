@@ -3,7 +3,6 @@ using SharpMetal.Metal;
 using SharpMetal.Foundation;
 using SharpMetal.QuartzCore;
 using SharpMetal.ObjectiveCCore;
-using System.Collections.Generic;
 
 namespace SharpGPU
 {
@@ -23,9 +22,6 @@ namespace SharpGPU
         private MTL4CommandQueue m_NativeQueue4;
         private MTLResidencySet m_ResidencySet;
         private bool m_HasLoggedMtl4SubmitOrder;
-        private readonly object m_FeedbackLock = new();
-        private readonly Dictionary<long, MTL4CommitFeedbackHandler> m_FeedbackHandlers = new();
-        private long m_NextFeedbackToken;
 
         public MetalCommandQueue(MetalDevice device, in ERHIPipelineType pipeline)
         {
@@ -475,6 +471,21 @@ namespace SharpGPU
             }
         }
 
+        /// <summary>
+        /// Registers an externally owned residency set (e.g. CAMetalLayer.residencySet)
+        /// with this MTL4 queue so drawable textures can be made resident.
+        /// </summary>
+        internal void AddExternalResidencySet(in MTLResidencySet residencySet)
+        {
+            if (m_NativeQueue4.NativePtr == IntPtr.Zero ||
+                residencySet.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            m_NativeQueue4.AddResidencySet(residencySet);
+        }
+
         internal void RemoveResidencyAllocation(in MTLAllocation allocation)
         {
             if (m_ResidencySet.NativePtr == IntPtr.Zero)
@@ -519,71 +530,17 @@ namespace SharpGPU
             IntPtr commandBuffers,
             ulong commandBufferCount)
         {
-            MTL4CommitOptions options = MTL4CommitOptions.New();
-            if (options.NativePtr == IntPtr.Zero)
-            {
-                throw new RHIException(
-                    ERHIErrorCode.InitializationFailed,
-                    ERHIBackend.Metal,
-                    0,
-                    "Failed to create MTL4CommitOptions.",
-                    ERHIDeviceState.Operational);
-            }
-
-            long token = ++m_NextFeedbackToken;
-            MTL4CommitFeedbackHandler handler =
-                (block, feedback) =>
-                {
-                    try
-                    {
-                        NSError error = feedback.Error;
-                        if (error.NativePtr != IntPtr.Zero)
-                        {
-                            m_MetalDevice.ReportCommandQueueFeedback(
-                                in error);
-                        }
-                    }
-                    finally
-                    {
-                        lock (m_FeedbackLock)
-                        {
-                            m_FeedbackHandlers.Remove(token);
-                        }
-                    }
-                };
-
-            lock (m_FeedbackLock)
-            {
-                m_FeedbackHandlers.Add(token, handler);
-            }
-            try
-            {
-                options.AddFeedbackHandler(handler);
-                m_NativeQueue4.Commit(
-                    commandBuffers,
-                    commandBufferCount,
-                    options);
-            }
-            catch
-            {
-                lock (m_FeedbackLock)
-                {
-                    m_FeedbackHandlers.Remove(token);
-                }
-                throw;
-            }
-            finally
-            {
-                ObjectiveCRuntime.Release(options.NativePtr);
-            }
+            // MTL4CommitOptions.addFeedbackHandler: requires a real ObjC block.
+            // Our C# block trampoline still trips PAC faults on
+            // com.Metal4.CompletionQueue (EXC_BAD_ACCESS in
+            // _MTL4CommitFeedbackDispatch), which wedges subsequent encodes.
+            // Commit without feedback until the trampoline is proven safe;
+            // device-loss diagnostics continue to flow through other paths.
+            m_NativeQueue4.Commit(commandBuffers, commandBufferCount);
         }
 
         private void ReleaseNativeObjects()
         {
-            lock (m_FeedbackLock)
-            {
-                m_FeedbackHandlers.Clear();
-            }
             if (m_ResidencySet.NativePtr != IntPtr.Zero)
             {
                 m_ResidencySet.EndResidency();

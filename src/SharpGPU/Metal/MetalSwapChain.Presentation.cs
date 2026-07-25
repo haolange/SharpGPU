@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Concurrent;
-using System.Threading;
 using SharpGPU.Mathematics;
 using SharpMetal.Foundation;
 using SharpMetal.Metal;
@@ -15,12 +13,6 @@ namespace SharpGPU
             "maximumDrawableCount";
         private static readonly Selector s_AllowsNextDrawableTimeoutSelector =
             "allowsNextDrawableTimeout";
-        private static readonly Selector s_AddPresentedHandlerSelector =
-            "addPresentedHandler:";
-        private static readonly ConcurrentDictionary<
-            long,
-            CAMetalDrawablePresentedHandler> s_PresentHandlers = new();
-        private static long s_NextPresentHandlerToken;
 
         private CAMetalLayer CreateConfiguredLayer(
             in RHISwapChainDescriptor descriptor)
@@ -214,7 +206,8 @@ namespace SharpGPU
                     uint2 replacementExtent = descriptor.Extent;
                     ApplyExtent(
                         in replacementExtent,
-                        newLayer);
+                        newLayer,
+                        descriptor.WindowHandle);
                 }
                 catch
                 {
@@ -269,97 +262,54 @@ namespace SharpGPU
                     "CAMetalDrawable Present does not consume RHI semaphores.");
             }
 
-            long handlerToken = 0;
+            MetalFence? completionFence = null;
+            ulong presentSignalValue = 0;
             if (descriptor.CompletionFence != null)
             {
                 m_MetalDevice.Capabilities.Presentation.PresentCompletion.Require(
                     "Metal swapchain presentation completion");
                 if (descriptor.CompletionFence is not
-                    MetalFence completionFence)
+                    MetalFence metalCompletionFence)
                 {
                     throw new ArgumentException(
                         "Present completion fence is not a Metal fence.",
                         nameof(descriptor));
                 }
-                NSObject drawableObject =
-                    new(m_CurrentDrawable.NativePtr);
-                if (!drawableObject.RespondsToSelector(
-                        s_AddPresentedHandlerSelector))
-                {
-                    throw new NotSupportedException(
-                        "CAMetalDrawable does not expose addPresentedHandler:.");
-                }
 
-                MTLSharedEvent nativeEvent =
-                    completionFence.NativeEvent;
-                ulong signalValue =
-                    completionFence.PrepareSignalValue();
-                handlerToken = Interlocked.Increment(
-                    ref s_NextPresentHandlerToken);
-                long callbackToken = handlerToken;
-                CAMetalDrawablePresentedHandler handler =
-                    (block, drawable) =>
-                    {
-                        nativeEvent.SignaledValue = signalValue;
-                        s_PresentHandlers.TryRemove(
-                            callbackToken,
-                            out CAMetalDrawablePresentedHandler? ignored);
-                    };
-                if (!s_PresentHandlers.TryAdd(
-                        handlerToken,
-                        handler))
-                {
-                    throw new InvalidOperationException(
-                        "Failed to reserve a Metal presentation callback token.");
-                }
-                try
-                {
-                    m_CurrentDrawable.AddPresentedHandler(
-                        handler);
-                }
-                catch
-                {
-                    s_PresentHandlers.TryRemove(
-                        handlerToken,
-                        out _);
-                    throw;
-                }
+                // addPresentedHandler: needs a real ObjC block; the C# trampoline
+                // still PAC-faults on Metal's completion queue. Signal the shared
+                // event after Present() until that trampoline is fixed.
+                completionFence = metalCompletionFence;
+                presentSignalValue =
+                    metalCompletionFence.PrepareSignalValue();
             }
 
-            try
+            m_CurrentDrawable.Present();
+            if (completionFence != null)
             {
-                m_CurrentDrawable.Present();
-                ClearFrameState();
-                result = RHISwapChainOperationResult.FromStatus(
-                    ERHISwapChainStatus.Success);
-                return true;
+                MTLSharedEvent nativeEvent = completionFence.NativeEvent;
+                nativeEvent.SignaledValue = presentSignalValue;
             }
-            catch
-            {
-                if (handlerToken != 0)
-                {
-                    s_PresentHandlers.TryRemove(
-                        handlerToken,
-                        out _);
-                }
-                throw;
-            }
+
+            ClearFrameState();
+            result = RHISwapChainOperationResult.FromStatus(
+                ERHISwapChainStatus.Success);
+            return true;
         }
 
         private void ApplyExtent(in uint2 extent)
         {
-            ApplyExtent(in extent, m_Layer);
+            ApplyExtent(in extent, m_Layer, m_Descriptor.WindowHandle);
         }
 
-        private static void ApplyExtent(
+        private void ApplyExtent(
             in uint2 extent,
-            CAMetalLayer layer)
+            CAMetalLayer layer,
+            IntPtr surfaceHandle)
         {
-            CGSize size = new(extent.x, extent.y);
-            layer.DrawableSize = size;
-            layer.Frame = new CGRect(
-                new CGPoint(0, 0),
-                size);
+            // DrawableSize is in pixels. Keep layer.Frame in points via the UIKit/AppKit view.
+            layer.DrawableSize = new CGSize(extent.x, extent.y);
+            SyncLayerFrameFromSurface(layer, surfaceHandle);
         }
 
         private void ValidateCreateDescriptor(

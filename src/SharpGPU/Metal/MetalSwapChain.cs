@@ -17,6 +17,9 @@ namespace SharpGPU
         private static readonly IntPtr s_IsKindOfClassSelector = new Selector("isKindOfClass:");
         private static readonly IntPtr s_RootViewControllerSelector = new Selector("rootViewController");
         private static readonly IntPtr s_ViewSelector = new Selector("view");
+        private static readonly IntPtr s_BoundsSelector = new Selector("bounds");
+        private static readonly IntPtr s_ContentScaleFactorSelector = new Selector("contentScaleFactor");
+        private static readonly IntPtr s_SetContentsScaleSelector = new Selector("setContentsScale:");
 
         public override int BackTextureIndex
         {
@@ -63,6 +66,7 @@ namespace SharpGPU
                 AttachLayerToSurface(
                     m_Layer,
                     descriptor.WindowHandle);
+                BindLayerResidencySet();
                 uint2 createExtent = descriptor.Extent;
                 ApplyExtent(in createExtent);
             }
@@ -70,6 +74,21 @@ namespace SharpGPU
             {
                 ReleaseLayer(ref m_Layer);
                 throw;
+            }
+        }
+
+        private void BindLayerResidencySet()
+        {
+            MTLResidencySet layerResidency = m_Layer.ResidencySet;
+            if (layerResidency.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (m_MetalDevice.GetCommandQueue(ERHIPipelineType.Graphics, 0)
+                is MetalCommandQueue graphicsQueue)
+            {
+                graphicsQueue.AddExternalResidencySet(layerResidency);
             }
         }
 
@@ -116,7 +135,40 @@ namespace SharpGPU
                 throw new InvalidOperationException("UIView layer pointer is null while attaching CAMetalLayer.");
             }
 
+            // UIKit frames are in points. Without mirroring bounds, CAMetalLayer stays at
+            // CGRectZero and presents an invisible zero-size layer over a black UIView.
+            SyncMetalLayerToUIKitView(layer, uiKitView);
             ObjectiveCRuntime.objc_msgSend(baseLayer, new Selector("addSublayer:"), layer.NativePtr);
+        }
+
+        private static void SyncLayerFrameFromSurface(CAMetalLayer layer, IntPtr surface)
+        {
+            if (surface == IntPtr.Zero)
+            {
+                return;
+            }
+
+            if (ResolveContentView(surface) is NSView appKitView)
+            {
+                layer.Frame = appKitView.Frame;
+                return;
+            }
+
+            SyncMetalLayerToUIKitView(layer, ResolveUIKitView(surface));
+        }
+
+        private static void SyncMetalLayerToUIKitView(CAMetalLayer layer, IntPtr uiKitView)
+        {
+            CGRect bounds = ObjectiveCRuntime.CGRect_objc_msgSend(uiKitView, s_BoundsSelector);
+            layer.Frame = bounds;
+
+            double scale = ObjectiveCRuntime.double_objc_msgSend(uiKitView, s_ContentScaleFactorSelector);
+            if (scale <= 0.0)
+            {
+                scale = 1.0;
+            }
+
+            ObjectiveCRuntime.objc_msgSend(layer.NativePtr, s_SetContentsScaleSelector, scale);
         }
 
         private static NSView? ResolveContentView(IntPtr surface)

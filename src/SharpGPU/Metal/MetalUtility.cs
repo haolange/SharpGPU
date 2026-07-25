@@ -274,7 +274,15 @@ namespace SharpGPU
 
         internal static MTLPixelFormat ConvertToMetalSwapchainFormat(in ERHISwapChainFormat format)
         {
-            return ConvertToMetalPixelFormat(RHIUtility.ConvertToPixelFormat(format));
+            // CAMetalLayer only accepts a small set of presentable formats. On Apple platforms the
+            // LDR 8-bit path is BGRA8, not RGBA8 — mapping R8G8B8A8_* to RGBA8Unorm produces a
+            // layer/drawable whose pixel format does not match the render pipeline color attachment
+            // (clear still runs; raster draws are discarded).
+            return format switch
+            {
+                ERHISwapChainFormat.R8G8B8A8_UNorm => MTLPixelFormat.BGRA8Unorm,
+                _ => ConvertToMetalPixelFormat(RHIUtility.ConvertToPixelFormat(format)),
+            };
         }
 
         internal static MTLTextureType ConvertToMetalTextureType(in ERHITextureDimension dimension)
@@ -910,17 +918,15 @@ namespace SharpGPU
                         "Metal synchronization contains an unknown stage bit.");
                 }
 
-                ERHISyncStageMask unsupportedStages =
-                    stages & unsupportedSharpGpuStages;
-                if (unsupportedStages != ERHISyncStageMask.None)
-                {
-                    throw new NotSupportedException(
-                        $"Metal synchronization stages '{unsupportedStages}' are unavailable because the corresponding SharpGPU backend capability is unavailable.");
-                }
+                // Convenience aggregates (AllGraphics/AllShading) embed Task/Mesh/ML.
+                // Call sites often OR those aggregates together (e.g. GraphicsCommonSync);
+                // strip unavailable bits instead of throwing so Metal can lower the rest.
+                normalizedStages = stages & ~unsupportedSharpGpuStages;
             }
 
+            // MTLStages (Metal 26+): Vertex=0, Fragment=1, Dispatch=27, Blit=28, AccelerationStructure=29.
             ulong result = 0;
-            if ((normalizedStages & ERHISyncStageMask.Transfer) != 0) result |= 1UL << 27;
+            if ((normalizedStages & ERHISyncStageMask.Transfer) != 0) result |= 1UL << 28;
             if ((normalizedStages & ERHISyncStageMask.Indirect) != 0) result |= 1UL << 27;
             if ((normalizedStages & ERHISyncStageMask.IndexInput) != 0) result |= 1UL << 0;
             if ((normalizedStages & ERHISyncStageMask.VertexInput) != 0) result |= 1UL << 0;

@@ -154,13 +154,119 @@ public sealed class MetalHalContractTests
         }
     }
 
-    private static RHITexture CreateRenderTarget(RHIDevice device)
+    [Fact]
+    public void Metal_BgraOffscreenRasterSmoke_ShouldWriteFragmentColor()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        using MetalTestContext context = MetalTestContext.Create();
+        using RHITexture renderTarget = CreateRenderTarget(context.Device, ERHIPixelFormat.B8G8R8A8_UNorm);
+        using RHIRasterPipeline pipeline = CreateRasterSmokePipeline(context.Device, ERHIPixelFormat.B8G8R8A8_UNorm);
+        const uint width = 4;
+        const uint height = 4;
+        const uint rowPitch = width * 4;
+        using RHIBuffer readback = context.Device.CreateBuffer(new RHIBufferDescriptor
+        {
+            ByteSize = checked((int)(rowPitch * height)),
+            UsageFlag = ERHIBufferUsage.CopyDst,
+            StorageMode = ERHIStorageMode.Readback,
+            Format = ERHIBufferFormat.Undefine,
+        });
+
+        using RHICommandBuffer commandBuffer = context.Queue.CreateCommandBuffer();
+        commandBuffer.Begin("Metal.Bgra.RasterSmoke.Readback");
+        RHIRasterEncoder raster = commandBuffer.BeginRasterPass(new RHIRasterPassDescriptor
+        {
+            Name = "BgraSmoke",
+            ArrayLength = 1,
+            SampleCount = ERHISampleCount.None,
+            ColorAttachments = new[]
+            {
+                new RHIColorAttachmentDescriptor
+                {
+                    SubresourceRange = new RHITextureSubresourceRange
+                    {
+                        BaseMipLevel = 0,
+                        MipLevelCount = 1,
+                        BaseArrayLayer = 0,
+                        ArrayLayerCount = 1,
+                        AspectMask = ERHITextureAspectMask.Color,
+                    },
+                    ClearValue = new float4(0, 0, 0, 1),
+                    LoadAction = ERHILoadAction.Clear,
+                    StoreAction = ERHIStoreAction.Store,
+                    RenderTarget = renderTarget,
+                },
+            },
+            SubPassDescriptors = Memory<RHISubPassDescriptor>.Empty,
+        });
+        raster.SetPipeline(pipeline);
+        raster.SetViewport(new Viewport(0, 0, width, height));
+        raster.SetScissor(new Rect(0, 0, width, height));
+        raster.Draw(3, 1, 0, 0);
+        commandBuffer.EndRasterPass();
+
+        RHITransferEncoder transfer = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor
+        {
+            Name = "BgraReadback",
+        });
+        transfer.Barrier(RHIBarrier.Texture(
+            renderTarget,
+            RHITextureSubresourceRange.Whole(ERHITextureAspectMask.Color),
+            ERHITextureLayout.RenderTarget,
+            ERHITextureLayout.CopySource,
+            ERHISyncStageMask.Fragment,
+            ERHISyncStageMask.Transfer,
+            ERHIAccessMask.RenderTargetWrite,
+            ERHIAccessMask.TransferRead));
+        transfer.CopyTextureToBuffer(
+            new RHITextureCopyDescriptor
+            {
+                Texture = renderTarget,
+                MipLevel = 0,
+                SliceBase = 0,
+                SliceCount = 1,
+                Origin = new uint3(0, 0, 0),
+            },
+            new RHIBufferCopyDescriptor
+            {
+                Buffer = readback,
+                Offset = 0,
+                RowPitch = rowPitch,
+                TextureHeight = new uint3(width, height, 1),
+            },
+            new int3((int)width, (int)height, 1));
+        commandBuffer.EndTransferPass();
+        commandBuffer.End();
+
+        SubmitAndWait(context, commandBuffer);
+
+        IntPtr mapped = readback.Map(0, rowPitch * height);
+        try
+        {
+            byte[] pixels = new byte[rowPitch * height];
+            Marshal.Copy(mapped, pixels, 0, pixels.Length);
+            // BGRA8: solid green FS → B=0, G=255, R=0, A=255
+            Assert.True(
+                pixels[0] == 0 && pixels[1] == 255 && pixels[2] == 0 && pixels[3] == 255,
+                $"Metal BGRA8 offscreen smoke pixel expected BGRA(0,255,0,255), got ({pixels[0]},{pixels[1]},{pixels[2]},{pixels[3]}).");
+        }
+        finally
+        {
+            readback.UnMap(0, 0);
+        }
+    }
+
+    private static RHITexture CreateRenderTarget(RHIDevice device, ERHIPixelFormat format = ERHIPixelFormat.R8G8B8A8_UNorm)
     {
         return device.CreateTexture(new RHITextureDescriptor
         {
             MipCount = 1,
             Extent = new uint3(4, 4, 1),
-            Format = ERHIPixelFormat.R8G8B8A8_UNorm,
+            Format = format,
             SampleCount = ERHISampleCount.None,
             StorageMode = ERHIStorageMode.GPULocal,
             UsageFlag = ERHITextureUsage.RenderTarget | ERHITextureUsage.CopySrc,
@@ -168,11 +274,13 @@ public sealed class MetalHalContractTests
         });
     }
 
-    private static RHIRasterPipeline CreateRasterSmokePipeline(RHIDevice device)
+    private static RHIRasterPipeline CreateRasterSmokePipeline(
+        RHIDevice device,
+        ERHIPixelFormat colorFormat = ERHIPixelFormat.R8G8B8A8_UNorm)
     {
         using RHIFunction vertexFunction = CreateMslFunction(device, ERHIFunctionType.Vertex, "vs_main", RasterSmokeMsl);
         using RHIFunction fragmentFunction = CreateMslFunction(device, ERHIFunctionType.Fragment, "fs_main", RasterSmokeMsl);
-        using RHIPipelineLayout layout = device.CreatePipelineLayout(new RHIPipelineLayoutDescriptor
+        RHIPipelineLayout layout = device.CreatePipelineLayout(new RHIPipelineLayoutDescriptor
         {
             bLocalSignature = false,
             bUseVertexLayout = false,
@@ -180,20 +288,28 @@ public sealed class MetalHalContractTests
             ArgumentTableLayouts = Array.Empty<RHIArgumentTableLayout>(),
         });
 
-        return device.CreateRasterPipeline(new RHIRasterPipelineDescriptor
+        try
         {
-            SampleCount = ERHISampleCount.None,
-            DepthFormat = ERHIPixelFormat.Unknown,
-            ColorFormats = new[] { ERHIPixelFormat.R8G8B8A8_UNorm },
-            PipelineLayout = layout,
-            FragmentFunction = fragmentFunction,
-            PrimitiveAssembler = new RHIPrimitiveAssemblerDescriptor
+            return device.CreateRasterPipeline(new RHIRasterPipelineDescriptor
             {
-                PrimitiveTopology = ERHIPrimitiveTopology.TriangleList,
-                VertexAssembler = new RHIVertexAssemblerDescriptor(vertexFunction, Array.Empty<RHIVertexLayoutDescriptor>()),
-            },
-            RenderState = CreateDefaultRenderState(),
-        });
+                SampleCount = ERHISampleCount.None,
+                DepthFormat = ERHIPixelFormat.Unknown,
+                ColorFormats = new[] { colorFormat },
+                PipelineLayout = layout,
+                FragmentFunction = fragmentFunction,
+                PrimitiveAssembler = new RHIPrimitiveAssemblerDescriptor
+                {
+                    PrimitiveTopology = ERHIPrimitiveTopology.TriangleList,
+                    VertexAssembler = new RHIVertexAssemblerDescriptor(vertexFunction, Array.Empty<RHIVertexLayoutDescriptor>()),
+                },
+                RenderState = CreateDefaultRenderState(),
+            });
+        }
+        catch
+        {
+            layout.Dispose();
+            throw;
+        }
     }
 
     private static RHIRenderStateDescriptor CreateDefaultRenderState()
@@ -339,7 +455,7 @@ vertex VSOut vs_main(uint vertexID [[vertex_id]])
 
 fragment float4 fs_main()
 {
-    return float4(1.0, 0.0, 0.0, 1.0);
+    return float4(0.0, 1.0, 0.0, 1.0);
 }
 """;
 }

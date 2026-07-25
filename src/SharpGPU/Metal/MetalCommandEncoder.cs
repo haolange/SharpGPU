@@ -49,7 +49,9 @@ namespace SharpGPU
     {
         // TODO: ThirdParty SharpMetal bindings still expose pre-Metal4 barrier APIs.
         // SharpGPU no longer references them; remove binding symbols after dependency audit.
-        private const ulong s_ValidMetal4StageMask = (1UL << 0) | (1UL << 1) | (1UL << 27) | (1UL << 29);
+        // Vertex | Fragment | Dispatch | Blit | AccelerationStructure
+        private const ulong s_ValidMetal4StageMask =
+            (1UL << 0) | (1UL << 1) | (1UL << 27) | (1UL << 28) | (1UL << 29);
 
         internal struct MetalBarrierBatchPlan
         {
@@ -1576,7 +1578,7 @@ namespace SharpGPU
             TrackResidency(src.NativeBuffer);
             TrackResidency(dst.NativeBuffer);
             m_NativeEncoder4.CopyFromBuffer(src.NativeBuffer, (ulong)srcOffset, dst.NativeBuffer, (ulong)dstOffset, (ulong)size);
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Transfer));
         }
 
         public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
@@ -1604,7 +1606,7 @@ namespace SharpGPU
                 dst.MipLevel,
                 new MTLOrigin(dst.Origin.x, dst.Origin.y, dst.Origin.z));
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Transfer));
         }
 
         public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size)
@@ -1632,7 +1634,7 @@ namespace SharpGPU
                 rowPitch,
                 imagePitch);
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Transfer));
         }
 
         public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
@@ -1657,7 +1659,7 @@ namespace SharpGPU
                 dst.MipLevel,
                 new MTLOrigin(dst.Origin.x, dst.Origin.y, dst.Origin.z));
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Transfer));
         }
 
         internal override void EndPassCore()
@@ -2963,6 +2965,12 @@ namespace SharpGPU
                     nativeColor.ResolveTexture = resolveTexture.NativeTexture;
                     nativeColor.ResolveLevel = colorAttachment.ResolveSubresourceRange.BaseMipLevel;
                     nativeColor.ResolveSlice = colorAttachment.ResolveSubresourceRange.BaseArrayLayer;
+                }
+
+                if (commandBuffer.CommandQueue is MetalCommandQueue metalQueue)
+                {
+                    metalQueue.AddResidencyAllocation(
+                        new MTLAllocation(colorTexture.NativeTexture.NativePtr));
                 }
 
                 if (i == 0 && colorTexture.HasBackingDrawable)

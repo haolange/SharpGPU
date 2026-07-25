@@ -511,9 +511,12 @@ namespace SharpGPU
             nativeDescriptor.ColorAttachmentMappingState =
                 MTL4LogicalToPhysicalColorAttachmentMappingState.Inherited;
 
-            ConfigureColorAttachments(nativeDescriptor, descriptor);
-            ConfigureDepthStencilAttachment(nativeDescriptor, descriptor.DepthFormat);
-            ConfigureVertexLayout(nativeDescriptor, descriptor, m_BufferBindingPlan);
+            // Use the SnapshotAndValidate'd descriptor: raw AttachmentInterface is
+            // often default (ColorOutputLocationCount=0), which skips PSO color
+            // pixelFormat setup and drops fragment writes on BGRA drawables.
+            ConfigureColorAttachments(nativeDescriptor, in m_Descriptor);
+            ConfigureDepthStencilAttachment(nativeDescriptor, m_Descriptor.DepthFormat);
+            ConfigureVertexLayout(nativeDescriptor, in m_Descriptor, m_BufferBindingPlan);
 
             MTL4PipelineOptions pipelineOptions = MTL4PipelineOptions.New();
             MTL4PipelineDescriptor pipelineDescriptor = nativeDescriptor;
