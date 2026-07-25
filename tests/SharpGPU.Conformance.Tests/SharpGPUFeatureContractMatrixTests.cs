@@ -36,14 +36,24 @@ public sealed class SharpGPUFeatureContractMatrixTests
             using RHICommandBuffer commandBuffer = context.CommandQueue.CreateCommandBuffer();
 
             commandBuffer.Begin("conformance.query.timestamp");
-            commandBuffer.TimestampQueryHeap = query;
-            RHITransferEncoder encoder = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor
+            commandBuffer.BeginTransferPass(new RHITransferPassDescriptor
             {
-                Name = "conformance.query.timestamp.transfer",
+                Name = "conformance.query.timestamp.write",
+                Timestamp = new RHITimestampDescriptor
+                {
+                    Query = query,
+                    BeginIndex = 0,
+                    EndIndex = 1,
+                },
             });
-            encoder.WriteTimestamp(0);
-            encoder.ResolveQuery(query, 0, 1);
-            commandBuffer.TimestampQueryHeap = null;
+            commandBuffer.EndTransferPass();
+
+            RHITransferEncoder resolveEncoder = commandBuffer.BeginTransferPass(
+                new RHITransferPassDescriptor
+                {
+                    Name = "conformance.query.timestamp.resolve",
+                });
+            resolveEncoder.ResolveQuery(query, 0, 2);
             commandBuffer.EndTransferPass();
             commandBuffer.End();
 
@@ -53,13 +63,13 @@ public sealed class SharpGPUFeatureContractMatrixTests
                 completionFence: context.Fence));
             context.Fence.Wait();
 
-            Assert.True(query.ResolveData());
+            Assert.Equal(ERHIQueryResultStatus.Ready, query.ResolveData());
             Assert.True(query.Results.Length >= 1);
         }
     }
 
     [Fact]
-    public void Dx12_BindlessArgumentTable_ShouldCreateAndUpdateArraySlots()
+    public void Dx12_DescriptorArrayArgumentTable_ShouldCreateAndUpdateArraySlots()
     {
         if (!FeatureContractContext.TryCreateDx12(out FeatureContractContext? context, out _))
         {
@@ -185,7 +195,7 @@ public sealed class SharpGPUFeatureContractMatrixTests
                     },
                     PrimitiveAssembler = new RHIPrimitiveAssemblerDescriptor
                     {
-                        MeshletAssembler = new RHIMeshletAssemblerDescriptor(null, null),
+                        MeshletAssembler = new RHIMeshletAssemblerDescriptor(null!, null!),
                     },
                 };
 
@@ -244,7 +254,7 @@ public sealed class SharpGPUFeatureContractMatrixTests
 #endif
 
     [Fact]
-    public void Vulkan_MLUnsupportedContract_ShouldReportFalseAndThrow()
+    public void Vulkan_MLUnsupportedContract_ShouldReportUnavailableAndThrow()
     {
         if (!FeatureContractContext.TryCreateInstance(ERHIBackend.Vulkan, out RHIInstance? instance, out _))
         {

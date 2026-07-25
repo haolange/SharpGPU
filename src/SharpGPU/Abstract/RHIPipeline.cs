@@ -933,8 +933,16 @@ namespace SharpGPU
 
     public abstract class RHIWorkGraphPipeline : Disposal
     {
-        public RHIWorkGraphPipelineDescriptor Descriptor => m_Descriptor;
-        public virtual RHIWorkGraphMemoryRequirements MemoryRequirements => default;
+        public RHIWorkGraphPipelineDescriptor Descriptor
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return m_Descriptor;
+            }
+        }
+
+        public abstract RHIWorkGraphMemoryRequirements MemoryRequirements { get; }
 
         protected RHIWorkGraphPipelineDescriptor m_Descriptor;
     }

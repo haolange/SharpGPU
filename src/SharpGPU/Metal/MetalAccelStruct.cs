@@ -30,6 +30,7 @@ namespace SharpGPU
 
     internal sealed class MetalBottomLevelAccelStruct : RHIBottomLevelAccelStruct
     {
+        internal MetalDevice Device => m_MetalDevice;
         internal MTLAccelerationStructure NativeAccelerationStructure => m_NativeAccelerationStructure;
         internal MTLPrimitiveAccelerationStructureDescriptor NativeDescriptor => m_NativeDescriptor;
         internal MTLBuffer NativeScratchBuffer => m_NativeScratchBuffer;

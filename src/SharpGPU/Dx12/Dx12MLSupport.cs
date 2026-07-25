@@ -368,6 +368,7 @@ namespace SharpGPU
 
         internal void ValidateDeviceSupport(Dx12Device device)
         {
+            ThrowIfDisposed();
             if (!device.SupportsDirectML)
             {
                 throw new NotSupportedException("DirectML is unavailable on this DX12 device.");
@@ -582,6 +583,7 @@ namespace SharpGPU
         internal IDMLBindingTable InitializerBindingTable => m_InitializerBindingTable ?? throw new InvalidOperationException("DX12 ML initializer binding table is unavailable.");
         internal bool IsInitialized => m_IsInitialized;
         internal bool InternalResourcesPrepared => m_InternalResourcesPrepared;
+        internal Dx12Device Device => m_Device;
 
         private readonly Dx12Device m_Device;
         private readonly BindingDescription[] m_ProgramInputBindings;
@@ -610,12 +612,22 @@ namespace SharpGPU
 
             if (descriptor.Pipeline is not Dx12MLPipeline dx12Pipeline)
             {
-                throw new InvalidOperationException($"DX12 ML binding set requires a {nameof(Dx12MLPipeline)}.");
+                throw new ArgumentException($"DX12 ML binding set requires a {nameof(Dx12MLPipeline)}.", nameof(descriptor));
+            }
+            if (dx12Pipeline.IsDisposed)
+            {
+                throw new ObjectDisposedException(dx12Pipeline.GetType().FullName);
+            }
+            if (!ReferenceEquals(dx12Pipeline.Device, device))
+            {
+                throw new ArgumentException(
+                    "DX12 ML binding-set pipeline belongs to a different device.",
+                    nameof(descriptor));
             }
 
             m_Pipeline = dx12Pipeline;
-            Inputs = ConvertTensors(dx12Pipeline, descriptor.Inputs.Span, ERHIMLTensorBindingKind.Input, dx12Pipeline.InputCount);
-            Outputs = ConvertTensors(dx12Pipeline, descriptor.Outputs.Span, ERHIMLTensorBindingKind.Output, dx12Pipeline.OutputCount);
+            Inputs = ConvertTensors(device, dx12Pipeline, descriptor.Inputs.Span, ERHIMLTensorBindingKind.Input, dx12Pipeline.InputCount);
+            Outputs = ConvertTensors(device, dx12Pipeline, descriptor.Outputs.Span, ERHIMLTensorBindingKind.Output, dx12Pipeline.OutputCount);
 
             m_ProgramInputBindings = CreateTensorBindings(Inputs);
             m_ProgramOutputBindings = CreateTensorBindings(Outputs);
@@ -848,6 +860,7 @@ namespace SharpGPU
         }
 
         private static Dx12Tensor[] ConvertTensors(
+            Dx12Device device,
             Dx12MLPipeline pipeline,
             ReadOnlySpan<RHITensor> tensors,
             ERHIMLTensorBindingKind kind,
@@ -873,14 +886,31 @@ namespace SharpGPU
                     throw new InvalidOperationException($"DX12 ML binding index out of range for {kind}. index={bindingInfo.Index}, count={tensors.Length}.");
                 }
 
-                Dx12Tensor tensor = tensors[(int)bindingInfo.Index] as Dx12Tensor
-                    ?? throw new InvalidOperationException($"DX12 ML binding tensor[{bindingInfo.Index}] must be a {nameof(Dx12Tensor)}.");
+                RHITensor candidate = tensors[(int)bindingInfo.Index]
+                    ?? throw new ArgumentException($"DX12 ML binding tensor[{bindingInfo.Index}] cannot be null.", nameof(tensors));
+                if (candidate.IsDisposed)
+                {
+                    throw new ObjectDisposedException(candidate.GetType().FullName);
+                }
+                Dx12Tensor tensor = candidate as Dx12Tensor
+                    ?? throw new ArgumentException($"DX12 ML binding tensor[{bindingInfo.Index}] must be a {nameof(Dx12Tensor)}.", nameof(tensors));
+                if (!ReferenceEquals(tensor.Device, device))
+                {
+                    throw new ArgumentException(
+                        $"DX12 ML {kind}[{bindingInfo.Index}] belongs to a different device.",
+                        nameof(tensors));
+                }
                 Dx12MLUtilities.ValidateTensorLayout($"{kind}[{bindingInfo.Index}] '{bindingInfo.Name}'", bindingInfo.Descriptor, tensor.Descriptor);
                 if (tensor.BackingBuffer.Descriptor.StorageMode != ERHIStorageMode.GPULocal)
                 {
                     throw new InvalidOperationException(
                         $"DX12 ML {kind}[{bindingInfo.Index}] '{bindingInfo.Name}' must be backed by a GPULocal buffer. " +
                         $"DirectML dispatch requires resources in COMMON/UAV-capable memory, but got {tensor.BackingBuffer.Descriptor.StorageMode}.");
+                }
+                if ((tensor.BackingBuffer.Descriptor.UsageFlag & ERHIBufferUsage.UnorderedAccess) == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"DX12 ML {kind}[{bindingInfo.Index}] '{bindingInfo.Name}' requires UnorderedAccess backing-buffer usage.");
                 }
                 result[bindingInfo.Index] = tensor;
             }

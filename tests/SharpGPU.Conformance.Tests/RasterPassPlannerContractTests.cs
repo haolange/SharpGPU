@@ -1419,10 +1419,6 @@ public sealed class RasterPassPlannerContractTests
         {
         }
 
-        internal override void ExecuteIndirectCommandBufferCore(
-            RHIRasterIndirectCommandBuffer indirectCmdBuffer)
-        {
-        }
 
         internal override void EndPassCore()
         {

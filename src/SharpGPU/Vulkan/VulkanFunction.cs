@@ -136,6 +136,12 @@ namespace SharpGPU
         public VkStridedDeviceAddressRegionKHR MissRegion => m_MissRegion;
         public VkStridedDeviceAddressRegionKHR HitGroupRegion => m_HitGroupRegion;
         public VkStridedDeviceAddressRegionKHR CallableRegion => m_CallableRegion;
+        internal bool IsGenerated =>
+            m_SbtBuffer.Handle != 0 &&
+            m_RayGenRegion.deviceAddress != 0 &&
+            m_CachedPipeline != null;
+        internal VulkanDevice Device => m_VulkanDevice;
+        internal VulkanRaytracingPipeline? GeneratedPipeline => m_CachedPipeline;
 
         private readonly VulkanDevice m_VulkanDevice;
         private readonly List<VulkanSbtRecord> m_MissRecords;
@@ -187,6 +193,7 @@ namespace SharpGPU
 
         public override void SetRayGenerationRecord(in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             ValidateGroupIndex(record.GroupIndex, nameof(record));
             m_RayGenerationRecord = CreateRecord(record);
             m_HasRayGenerationRecord = true;
@@ -194,6 +201,7 @@ namespace SharpGPU
 
         public override int AddMissRecord(in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             VulkanSbtRecord entry = CreateRecord(record);
             m_MissRecords.Add(entry);
             return m_MissRecords.Count - 1;
@@ -201,6 +209,7 @@ namespace SharpGPU
 
         public override int AddHitGroupRecord(in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             VulkanSbtRecord entry = CreateRecord(record);
             m_HitRecords.Add(entry);
             return m_HitRecords.Count - 1;
@@ -208,6 +217,7 @@ namespace SharpGPU
 
         public override int AddCallableRecord(in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             VulkanSbtRecord entry = CreateRecord(record);
             m_CallableRecords.Add(entry);
             return m_CallableRecords.Count - 1;
@@ -215,39 +225,46 @@ namespace SharpGPU
 
         public override void SetMissRecord(in int index, in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             ValidateRecordIndex(index, m_MissRecords.Count, nameof(index));
             m_MissRecords[index] = CreateRecord(record);
         }
 
         public override void SetHitGroupRecord(in int index, in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             ValidateRecordIndex(index, m_HitRecords.Count, nameof(index));
             m_HitRecords[index] = CreateRecord(record);
         }
 
         public override void SetCallableRecord(in int index, in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             ValidateRecordIndex(index, m_CallableRecords.Count, nameof(index));
             m_CallableRecords[index] = CreateRecord(record);
         }
 
         public override void ClearMissRecords()
         {
+            ThrowIfDisposed();
             m_MissRecords.Clear();
         }
 
         public override void ClearHitGroupRecords()
         {
+            ThrowIfDisposed();
             m_HitRecords.Clear();
         }
 
         public override void ClearCallableRecords()
         {
+            ThrowIfDisposed();
             m_CallableRecords.Clear();
         }
 
         public override void UpdateRecord(in ERHIRayShaderTableSection section, in int index, in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             switch (section)
             {
                 case ERHIRayShaderTableSection.RayGeneration:
@@ -294,6 +311,7 @@ namespace SharpGPU
 
         public override void Generate(RHIRaytracingPipeline pipeline)
         {
+            ThrowIfDisposed();
             VulkanRaytracingPipeline vkPipeline = pipeline as VulkanRaytracingPipeline
                 ?? throw new ArgumentException("Vulkan function table requires a VulkanRaytracingPipeline.", nameof(pipeline));
             m_CachedPipeline = vkPipeline;
@@ -302,6 +320,7 @@ namespace SharpGPU
 
         public override void Update()
         {
+            ThrowIfDisposed();
             if (m_CachedPipeline == null)
             {
                 throw new InvalidOperationException("Function table has not been generated yet.");

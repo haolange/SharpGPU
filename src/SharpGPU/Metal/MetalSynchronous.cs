@@ -12,14 +12,12 @@ namespace SharpGPU
     {
         internal MTLSharedEvent NativeEvent => m_NativeEvent;
 
-        private readonly MetalDevice m_MetalDevice;
         private MTLSharedEvent m_NativeEvent;
         private long m_NextSignalValue;
         private long m_TargetValue;
 
         internal MetalFence(MetalDevice device) : base(device)
         {
-            m_MetalDevice = device;
             m_NativeEvent = device.NativeDevice.NewSharedEvent();
             if (m_NativeEvent.NativePtr == IntPtr.Zero)
             {
@@ -34,7 +32,6 @@ namespace SharpGPU
         {
             get
             {
-                m_MetalDevice.ThrowIfCommandQueueFailed();
                 ThrowIfSynchronizationDisposed();
                 if (IsSignalKnownComplete)
                 {
@@ -74,7 +71,6 @@ namespace SharpGPU
 
         public override EFenceStatus Wait(ulong timeoutNanoseconds = ulong.MaxValue)
         {
-            m_MetalDevice.ThrowIfCommandQueueFailed();
             EnsureWaitable();
             if (IsSignalKnownComplete)
             {
@@ -102,7 +98,6 @@ namespace SharpGPU
             }
 
             m_NativeEvent.WaitUntilSignaledValue(targetValue, timeoutMilliseconds);
-            m_MetalDevice.ThrowIfCommandQueueFailed();
             if (m_NativeEvent.SignaledValue < targetValue)
             {
                 return EFenceStatus.NotReady;
@@ -185,9 +180,9 @@ namespace SharpGPU
 
         public MetalQuery(MetalDevice device, in RHIQueryDescriptor descriptor)
         {
+            m_Device = device;
             m_QueryDescriptor = descriptor;
             m_Results = new ulong[descriptor.Count];
-            Results = new ReadOnlyMemory<ulong>(m_Results);
             m_IsTimestampQuery = descriptor.Type == ERHIQueryType.TimestampTransfer || descriptor.Type == ERHIQueryType.Timestamp;
             m_IsOcclusionQuery = descriptor.Type == ERHIQueryType.Occlusion;
             m_IsStatisticsQuery = descriptor.Type == ERHIQueryType.Statistics;
@@ -330,7 +325,7 @@ namespace SharpGPU
             }
         }
 
-        public override bool ResolveData()
+        public override ERHIQueryResultStatus ResolveData()
         {
             if (m_IsOcclusionQuery)
             {
@@ -344,12 +339,12 @@ namespace SharpGPU
 
             if (!m_IsTimestampQuery)
             {
-                return false;
+                return ERHIQueryResultStatus.NotReady;
             }
 
             if (m_Results == null || m_Results.Length == 0)
             {
-                return false;
+                return ERHIQueryResultStatus.NotReady;
             }
 
             NSData data = new NSData(m_CounterHeap.ResolveCounterRange(new NSRange
@@ -360,13 +355,13 @@ namespace SharpGPU
             IntPtr bytes = data.NativePtr == IntPtr.Zero ? IntPtr.Zero : data.Bytes;
             if (bytes == IntPtr.Zero)
             {
-                return false;
+                return ERHIQueryResultStatus.NotReady;
             }
 
             ulong expectedBytes = m_ResultStrideInBytes * (ulong)m_Results.Length;
             if (data.Length < expectedBytes)
             {
-                return false;
+                return ERHIQueryResultStatus.NotReady;
             }
 
             double timestampToNs = m_TimestampFrequency == 0 ? 1.0 : 1_000_000_000.0 / m_TimestampFrequency;
@@ -377,9 +372,8 @@ namespace SharpGPU
                 m_Results[i] = (ulong)(entry.Timestamp * timestampToNs);
             }
 
-            Results = new ReadOnlyMemory<ulong>(m_Results);
 
-            return true;
+            return ERHIQueryResultStatus.Ready;
         }
 
         internal void BeginOcclusion(MTL4RenderCommandEncoder encoder, uint index)
@@ -455,26 +449,18 @@ namespace SharpGPU
             }
         }
 
-        private void ValidateRange(uint startIndex, uint queriesCount)
-        {
-            ulong endIndex = (ulong)startIndex + queriesCount;
-            if (endIndex > m_QueryDescriptor.Count)
-            {
-                throw new ArgumentOutOfRangeException(nameof(queriesCount), "Metal query resolve range exceeds the query heap count.");
-            }
-        }
 
-        private bool ResolveOcclusionData()
+        private ERHIQueryResultStatus ResolveOcclusionData()
         {
             if (m_ResultBuffer.NativePtr == IntPtr.Zero || m_Results == null)
             {
-                return false;
+                return ERHIQueryResultStatus.NotReady;
             }
 
             IntPtr contents = m_ResultBuffer.Contents;
             if (contents == IntPtr.Zero)
             {
-                return false;
+                return ERHIQueryResultStatus.NotReady;
             }
 
             for (int i = 0; i < m_Results.Length; ++i)
@@ -482,15 +468,14 @@ namespace SharpGPU
                 m_Results[i] = (ulong)Marshal.ReadInt64(contents, i * sizeof(ulong));
             }
 
-            Results = new ReadOnlyMemory<ulong>(m_Results);
-            return true;
+            return ERHIQueryResultStatus.Ready;
         }
 
-        private bool ResolveStatisticsData()
+        private ERHIQueryResultStatus ResolveStatisticsData()
         {
             if (m_StatisticsSampleBuffer.NativePtr == IntPtr.Zero || m_Results == null)
             {
-                return false;
+                return ERHIQueryResultStatus.NotReady;
             }
 
             NSData data = m_StatisticsSampleBuffer.ResolveCounterRange(new NSRange
@@ -501,7 +486,7 @@ namespace SharpGPU
             IntPtr bytes = data.NativePtr == IntPtr.Zero ? IntPtr.Zero : data.Bytes;
             if (bytes == IntPtr.Zero)
             {
-                return false;
+                return ERHIQueryResultStatus.NotReady;
             }
 
             int resultSize = Marshal.SizeOf<MTLCounterResultStatistic>();
@@ -516,8 +501,7 @@ namespace SharpGPU
                     : end.fragmentsPassed;
             }
 
-            Results = new ReadOnlyMemory<ulong>(m_Results);
-            return true;
+            return ERHIQueryResultStatus.Ready;
         }
 
         protected override void Release()

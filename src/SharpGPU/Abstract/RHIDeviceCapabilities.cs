@@ -58,7 +58,10 @@ namespace SharpGPU
         MaximumColorAttachments,
         MaximumTexture2DSize,
         MaximumTextureCubeSize,
-        MemoryHeapCount
+        MemoryHeapCount,
+        MaximumRootConstantBytes,
+        RootConstantAlignmentBytes,
+        SupportedRootConstantStageMask
     }
 
     public enum ERHIProjectionStrategy : byte

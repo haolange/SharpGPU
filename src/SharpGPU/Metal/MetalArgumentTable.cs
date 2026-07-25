@@ -13,7 +13,7 @@ namespace SharpGPU
         public readonly ERHIShaderStageMask Stages;
         public readonly ERHIArgumentBindingRequirement Requirement;
 
-        public bool IsBindless => Count > 1;
+        public bool HasDescriptorArray => Count > 1;
 
         public MetalBindInfo(
             in uint slot,

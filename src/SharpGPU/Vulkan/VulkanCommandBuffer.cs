@@ -27,8 +27,6 @@ namespace SharpGPU
         private VulkanComputeEncoder m_ComputeEncoder;
         private VulkanRasterEncoder m_RasterEncoder;
         private VulkanRaytracingEncoder m_RaytracingEncoder;
-        private VulkanMLEncoder m_MLEncoder;
-        private VulkanWorkGraphEncoder m_WorkGraphEncoder;
         private VkCommandPool m_NativeCommandPool;
         private VkCommandBuffer m_NativeCommandBuffer;
         private List<IntPtr>? m_TransientAllocations;
@@ -79,8 +77,6 @@ namespace SharpGPU
             m_ComputeEncoder = new VulkanComputeEncoder(this);
             m_RasterEncoder = new VulkanRasterSubpassEncoder(this);
             m_RaytracingEncoder = new VulkanRaytracingEncoder(this);
-            m_MLEncoder = new VulkanMLEncoder(this);
-            m_WorkGraphEncoder = new VulkanWorkGraphEncoder(this);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -531,13 +527,21 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIMLEncoder BeginMLPass(in RHIMLPassDescriptor descriptor)
         {
-            throw new NotSupportedException("Vulkan ML is not supported in SharpGPU v1.");
+            ThrowIfDisposed();
+            ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.MachineLearning.Execution.Require(
+                "Vulkan machine-learning passes");
+            throw new InvalidOperationException(
+                "Vulkan machine-learning capability is available without an encoder implementation.");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void EndMLPass()
         {
-            throw new NotSupportedException("Vulkan ML is not supported in SharpGPU v1.");
+            ThrowIfDisposed();
+            ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.MachineLearning.Execution.Require(
+                "Vulkan machine-learning passes");
+            throw new InvalidOperationException(
+                "Vulkan machine-learning capability is available without an encoder implementation.");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -575,29 +579,41 @@ namespace SharpGPU
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIMLEncoder GetMLEncoder()
         {
-            return m_MLEncoder;
+            ThrowIfDisposed();
+            ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.MachineLearning.Execution.Require(
+                "Vulkan machine-learning encoder");
+            throw new InvalidOperationException(
+                "Vulkan machine-learning capability is available without an encoder implementation.");
         }
 
         public override RHIWorkGraphEncoder BeginWorkGraphPass(in RHIWorkGraphPassDescriptor descriptor)
         {
-            ValidateCanBeginEncoder(ERHICommandEncoderKind.WorkGraph);
-            m_WorkGraphEncoder.BeginPass(descriptor);
-            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.WorkGraph);
-            return m_WorkGraphEncoder;
+            ThrowIfDisposed();
+            ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.WorkGraph.Execution.Require(
+                "Vulkan work-graph passes");
+            throw new InvalidOperationException(
+                "Vulkan work-graph capability is available without an encoder implementation.");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override void EndWorkGraphPass()
         {
-            m_WorkGraphEncoder.EndPass();
+            ThrowIfDisposed();
+            ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.WorkGraph.Execution.Require(
+                "Vulkan work-graph passes");
+            throw new InvalidOperationException(
+                "Vulkan work-graph capability is available without an encoder implementation.");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override RHIWorkGraphEncoder GetWorkGraphEncoder()
         {
-            return m_WorkGraphEncoder;
+            ThrowIfDisposed();
+            ((VulkanCommandQueue)m_CommandQueue).VulkanDevice.Capabilities.WorkGraph.Execution.Require(
+                "Vulkan work-graph encoder");
+            throw new InvalidOperationException(
+                "Vulkan work-graph capability is available without an encoder implementation.");
         }
-
         protected override void Release()
         {
             ReleaseTransientResources();

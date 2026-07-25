@@ -31,13 +31,6 @@ namespace SharpGPU
         public RHICommandQueue CommandQueue =>
             m_CommandQueue ?? throw new InvalidOperationException("Command buffer is not associated with a command queue.");
 
-        internal uint OcclusionQueryIndex;
-        internal uint TimestampQueryIndex;
-        internal uint StatisticsQueryIndex;
-        internal RHIQuery? OcclusionQueryHeap;
-        internal RHIQuery? TimestampQueryHeap;
-        internal RHIQuery? StatisticsQueryHeap;
-
         protected RHICommandQueue? m_CommandQueue;
 
         private protected void ValidateCanBegin()
@@ -196,33 +189,4 @@ namespace SharpGPU
         public abstract RHIWorkGraphEncoder GetWorkGraphEncoder();
     }
 
-    public struct RHIComputeIndirectCommandBufferDescription
-    {
-        public uint MaxCommandCount;
-    }
-
-    public abstract class RHIComputeIndirectCommandBuffer : Disposal
-    {
-
-    }
-
-    public struct RHIRayTracingIndirectCommandBufferDescription
-    {
-        public uint MaxCommandCount;
-    }
-
-    public abstract class RHIRayTracingIndirectCommandBuffer : Disposal
-    {
-
-    }
-
-    public struct RHIRasterIndirectCommandBufferDescription
-    {
-        public uint MaxCommandCount;
-    }
-
-    public abstract class RHIRasterIndirectCommandBuffer : Disposal
-    {
-
-    }
 }

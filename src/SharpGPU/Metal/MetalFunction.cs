@@ -308,8 +308,10 @@ namespace SharpGPU
         internal MTLIntersectionFunctionTable IntersectionFunctionTable => m_IntersectionFunctionTable;
         internal MTLVisibleFunctionTable VisibleFunctionTable => m_VisibleFunctionTable;
         internal bool IsGenerated => m_IsGenerated;
+        internal MetalDevice Device { get; }
+        internal MetalRaytracingPipeline? GeneratedPipeline => m_GeneratedPipeline;
 
-        private MetalRaytracingPipeline? m_GeneratedPipeline;
+        private MetalRaytracingPipeline m_GeneratedPipeline;
         private MetalFunctionTableEntry m_RayGenerationRecord;
         private bool m_HasRayGenerationRecord;
         private readonly List<MetalFunctionTableEntry> m_MissRecords;
@@ -320,8 +322,9 @@ namespace SharpGPU
         private bool m_IsGenerated;
         private uint m_LocalDataStrideInBytes;
 
-        public MetalFunctionTable()
+        public MetalFunctionTable(MetalDevice device)
         {
+            Device = device ?? throw new ArgumentNullException(nameof(device));
             m_GeneratedPipeline = null;
             m_RayGenerationRecord = default;
             m_HasRayGenerationRecord = false;
@@ -336,6 +339,7 @@ namespace SharpGPU
 
         public override void SetRayGenerationRecord(in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             ValidateGroupIndex(record.GroupIndex, nameof(record));
             m_RayGenerationRecord = CreateEntry(record);
             m_HasRayGenerationRecord = true;
@@ -343,60 +347,70 @@ namespace SharpGPU
 
         public override int AddMissRecord(in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             m_MissRecords.Add(CreateEntry(record));
             return m_MissRecords.Count - 1;
         }
 
         public override int AddHitGroupRecord(in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             m_HitRecords.Add(CreateEntry(record));
             return m_HitRecords.Count - 1;
         }
 
         public override int AddCallableRecord(in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             m_CallableRecords.Add(CreateEntry(record));
             return m_CallableRecords.Count - 1;
         }
 
         public override void SetMissRecord(in int index, in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             ValidateRecordIndex(index, m_MissRecords.Count, nameof(index));
             m_MissRecords[index] = CreateEntry(record);
         }
 
         public override void SetHitGroupRecord(in int index, in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             ValidateRecordIndex(index, m_HitRecords.Count, nameof(index));
             m_HitRecords[index] = CreateEntry(record);
         }
 
         public override void SetCallableRecord(in int index, in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             ValidateRecordIndex(index, m_CallableRecords.Count, nameof(index));
             m_CallableRecords[index] = CreateEntry(record);
         }
 
         public override void ClearMissRecords()
         {
+            ThrowIfDisposed();
             m_MissRecords.Clear();
             m_IsGenerated = false;
         }
 
         public override void ClearHitGroupRecords()
         {
+            ThrowIfDisposed();
             m_HitRecords.Clear();
             m_IsGenerated = false;
         }
 
         public override void ClearCallableRecords()
         {
+            ThrowIfDisposed();
             m_CallableRecords.Clear();
             m_IsGenerated = false;
         }
 
         public override void UpdateRecord(in ERHIRayShaderTableSection section, in int index, in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             switch (section)
             {
                 case ERHIRayShaderTableSection.RayGeneration:
@@ -441,6 +455,7 @@ namespace SharpGPU
 
         public override void Generate(RHIRaytracingPipeline pipeline)
         {
+            ThrowIfDisposed();
             MetalRaytracingPipeline metalPipeline = pipeline as MetalRaytracingPipeline
                 ?? throw new ArgumentException("Function table requires a Metal ray tracing pipeline.", nameof(pipeline));
 
@@ -497,6 +512,7 @@ namespace SharpGPU
 
         public override void Update()
         {
+            ThrowIfDisposed();
             if (m_GeneratedPipeline == null)
             {
                 throw new InvalidOperationException("Function table has not been generated yet.");

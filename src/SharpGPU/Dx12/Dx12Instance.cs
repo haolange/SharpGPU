@@ -105,6 +105,15 @@ namespace SharpGPU
 
         public override RHIDevice GetDevice(in int index)
         {
+            ThrowIfDisposed();
+            if ((uint)index >= (uint)m_Devices.Count)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(index),
+                    index,
+                    $"Device index must be in [0, {m_Devices.Count}).");
+            }
+
             return m_Devices[index];
         }
 

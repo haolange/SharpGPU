@@ -1913,47 +1913,49 @@ namespace SharpGPU
             return new VulkanPipelineCache(this);
         }
 
-        public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
-        {
-            return new VulkanComputeIndirectCommandBuffer(this, descriptor);
-        }
-
-        public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor)
-        {
-            return new VulkanRayTracingIndirectCommandBuffer(this, descriptor);
-        }
-
-        public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
-        {
-            return new VulkanRasterIndirectCommandBuffer(this, descriptor);
-        }
-
         public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
         {
-            throw new NotSupportedException("Vulkan ML is not supported in SharpGPU v1. No portable Vulkan core ML abstraction is enabled.");
+            ThrowIfDisposed();
+            Capabilities.MachineLearning.Execution.Require(
+                "Vulkan machine-learning pipelines");
+            throw new InvalidOperationException(
+                "Vulkan machine-learning capability is available without a pipeline implementation.");
         }
 
         public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
         {
-            throw new NotSupportedException("Vulkan ML is not supported in SharpGPU v1. No portable Vulkan core ML abstraction is enabled.");
+            ThrowIfDisposed();
+            Capabilities.MachineLearning.Execution.Require(
+                "Vulkan machine-learning binding sets");
+            throw new InvalidOperationException(
+                "Vulkan machine-learning capability is available without a binding-set implementation.");
         }
 
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
         {
-            throw new NotSupportedException("Vulkan ML tensors are not supported in SharpGPU v1.");
+            ThrowIfDisposed();
+            Capabilities.MachineLearning.Execution.Require(
+                "Vulkan machine-learning tensors");
+            throw new InvalidOperationException(
+                "Vulkan machine-learning capability is available without a tensor implementation.");
         }
 
         public override RHIMLProgram CreateMLProgram(in RHIMLProgramDescriptor descriptor)
         {
-            throw new NotSupportedException(
-                "Vulkan ML program construction is not supported in SharpGPU v1. " +
-                "The backend-neutral op-sequence program builder (ADR-0028) is currently implemented on DX12/DirectML only; " +
-                "a Vulkan ML execution path is an open question of RFC-0003.");
+            ThrowIfDisposed();
+            Capabilities.MachineLearning.Execution.Require(
+                "Vulkan machine-learning programs");
+            throw new InvalidOperationException(
+                "Vulkan machine-learning capability is available without a program implementation.");
         }
 
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
         {
-            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
+            ThrowIfDisposed();
+            Capabilities.WorkGraph.Execution.Require(
+                "Vulkan work-graph pipelines");
+            throw new InvalidOperationException(
+                "Vulkan work-graph capability is available without a pipeline implementation.");
         }
 
         public int GetQueueFamilyIndex(in ERHIPipelineType pipeline)

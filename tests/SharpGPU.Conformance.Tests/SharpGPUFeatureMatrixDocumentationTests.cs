@@ -21,7 +21,7 @@ public sealed class SharpGPUFeatureMatrixDocumentationTests
             "MachineLearning",
             "Raytracing",
             "MeshShading",
-            "Bindless",
+            "DescriptorIndexing",
             "StorageQueue",
             "PipelineCache",
             "WorkGraph",

@@ -860,28 +860,76 @@ namespace SharpGPU
                 return 0;
             }
 
+            const ERHISyncStageMask unsupportedSharpGpuStages =
+                ERHISyncStageMask.Task |
+                ERHISyncStageMask.Mesh |
+                ERHISyncStageMask.MachineLearning;
+            const ERHISyncStageMask knownStages =
+                ERHISyncStageMask.Transfer |
+                ERHISyncStageMask.Indirect |
+                ERHISyncStageMask.IndexInput |
+                ERHISyncStageMask.VertexInput |
+                ERHISyncStageMask.Vertex |
+                ERHISyncStageMask.Fragment |
+                ERHISyncStageMask.Compute |
+                unsupportedSharpGpuStages |
+                ERHISyncStageMask.RayTracing |
+                ERHISyncStageMask.AccelStructBuild |
+                ERHISyncStageMask.AccelStructCopy;
+
+            ERHISyncStageMask normalizedStages = stages;
+            if (stages == ERHISyncStageMask.All)
+            {
+                normalizedStages = knownStages & ~unsupportedSharpGpuStages;
+            }
+            else if (stages == ERHISyncStageMask.AllGraphics)
+            {
+                normalizedStages =
+                    ERHISyncStageMask.Indirect |
+                    ERHISyncStageMask.IndexInput |
+                    ERHISyncStageMask.VertexInput |
+                    ERHISyncStageMask.Vertex |
+                    ERHISyncStageMask.Fragment;
+            }
+            else if (stages == ERHISyncStageMask.AllShading)
+            {
+                normalizedStages =
+                    ERHISyncStageMask.Vertex |
+                    ERHISyncStageMask.Fragment |
+                    ERHISyncStageMask.Compute |
+                    ERHISyncStageMask.RayTracing;
+            }
+            else
+            {
+                ERHISyncStageMask unknownStages = stages & ~knownStages;
+                if (unknownStages != ERHISyncStageMask.None)
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(stages),
+                        stages,
+                        "Metal synchronization contains an unknown stage bit.");
+                }
+
+                ERHISyncStageMask unsupportedStages =
+                    stages & unsupportedSharpGpuStages;
+                if (unsupportedStages != ERHISyncStageMask.None)
+                {
+                    throw new NotSupportedException(
+                        $"Metal synchronization stages '{unsupportedStages}' are unavailable because the corresponding SharpGPU backend capability is unavailable.");
+                }
+            }
+
             ulong result = 0;
-            if ((stages & ERHISyncStageMask.Transfer) != 0) result |= 1UL << 27;
-            if ((stages & ERHISyncStageMask.Indirect) != 0) result |= 1UL << 27;
-            if ((stages & ERHISyncStageMask.IndexInput) != 0) result |= 1UL << 0;
-            if ((stages & ERHISyncStageMask.VertexInput) != 0) result |= 1UL << 0;
-            if ((stages & ERHISyncStageMask.Vertex) != 0) result |= 1UL << 0;
-            if ((stages & ERHISyncStageMask.Fragment) != 0) result |= 1UL << 1;
-            if ((stages & ERHISyncStageMask.Compute) != 0) result |= 1UL << 27;
-            if ((stages & ERHISyncStageMask.MachineLearning) != 0) result |= 1UL << 27;
-            if ((stages & ERHISyncStageMask.Task) != 0)
-            {
-                // TODO: validate Metal4 task stage bit in backend capability matrix.
-                result |= 1UL << 28;
-            }
-            if ((stages & ERHISyncStageMask.Mesh) != 0)
-            {
-                // TODO: validate Metal4 mesh stage bit in backend capability matrix.
-                result |= 1UL << 28;
-            }
-            if ((stages & ERHISyncStageMask.RayTracing) != 0) result |= 1UL << 29;
-            if ((stages & ERHISyncStageMask.AccelStructBuild) != 0) result |= 1UL << 29;
-            if ((stages & ERHISyncStageMask.AccelStructCopy) != 0) result |= 1UL << 29;
+            if ((normalizedStages & ERHISyncStageMask.Transfer) != 0) result |= 1UL << 27;
+            if ((normalizedStages & ERHISyncStageMask.Indirect) != 0) result |= 1UL << 27;
+            if ((normalizedStages & ERHISyncStageMask.IndexInput) != 0) result |= 1UL << 0;
+            if ((normalizedStages & ERHISyncStageMask.VertexInput) != 0) result |= 1UL << 0;
+            if ((normalizedStages & ERHISyncStageMask.Vertex) != 0) result |= 1UL << 0;
+            if ((normalizedStages & ERHISyncStageMask.Fragment) != 0) result |= 1UL << 1;
+            if ((normalizedStages & ERHISyncStageMask.Compute) != 0) result |= 1UL << 27;
+            if ((normalizedStages & ERHISyncStageMask.RayTracing) != 0) result |= 1UL << 29;
+            if ((normalizedStages & ERHISyncStageMask.AccelStructBuild) != 0) result |= 1UL << 29;
+            if ((normalizedStages & ERHISyncStageMask.AccelStructCopy) != 0) result |= 1UL << 29;
             return result;
         }
 

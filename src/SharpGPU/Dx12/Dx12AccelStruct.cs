@@ -194,6 +194,7 @@ namespace SharpGPU
 
     internal unsafe class Dx12BottomLevelAccelStruct : RHIBottomLevelAccelStruct
     {
+        public Dx12Device Device => m_Dx12Device;
         public Vortice.Direct3D12.ID3D12Resource NativeResultBuffer => m_NativeResultBuffer;
         public Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription NativeAccelStructDescriptor => m_NativeAccelStructDescriptor;
 

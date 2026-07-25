@@ -10,6 +10,14 @@ namespace SharpGPU
         internal Dx12Buffer BackingBuffer => m_BackingBuffer ?? throw new InvalidOperationException("DX12 tensor backing buffer is unavailable.");
         internal ulong BackingBufferOffset => m_BackingBufferOffset;
         internal ulong ByteLength => m_ByteLength;
+        internal Dx12Device Device
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return BackingBuffer.Dx12Device;
+            }
+        }
 
         private Dx12Buffer? m_BackingBuffer;
         private readonly ulong m_ByteLength;
@@ -24,9 +32,19 @@ namespace SharpGPU
 
             if (descriptor.BackingBuffer != null)
             {
+                if (descriptor.BackingBuffer.IsDisposed)
+                {
+                    throw new ObjectDisposedException(descriptor.BackingBuffer.GetType().FullName);
+                }
                 if (descriptor.BackingBuffer is not Dx12Buffer dx12BackingBuffer)
                 {
-                    throw new InvalidOperationException($"DX12 tensor requires a {nameof(Dx12Buffer)} backing buffer when BackingBuffer is supplied.");
+                    throw new ArgumentException($"DX12 tensor requires a {nameof(Dx12Buffer)} backing buffer when BackingBuffer is supplied.", nameof(descriptor));
+                }
+                if (!ReferenceEquals(dx12BackingBuffer.Dx12Device, device))
+                {
+                    throw new ArgumentException(
+                        "DX12 tensor backing buffer belongs to a different device.",
+                        nameof(descriptor));
                 }
 
                 ulong backingByteSize = checked((ulong)dx12BackingBuffer.Descriptor.ByteSize);

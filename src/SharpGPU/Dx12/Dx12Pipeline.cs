@@ -824,6 +824,14 @@ namespace SharpGPU
             Dx12PipelineCache? pipelineCache)
         {
             m_Descriptor = RHIRasterPipelineContract.SnapshotAndValidate(in descriptor);
+            if (descriptor.PrimitiveAssembler.PrimitiveType == ERHIPrimitiveType.Mesh)
+            {
+                device.Capabilities.Mesh.Shader.Require(
+                    "DX12 mesh-shader pipelines");
+                throw new InvalidOperationException(
+                    "DX12 mesh capability is available without a native pipeline-state-stream implementation.");
+            }
+
             m_PrimitiveTopology = Dx12Utility.ConvertToDx12PrimitiveTopology(descriptor.PrimitiveAssembler.PrimitiveTopology);
             m_VertexStrides = Array.Empty<uint>();
 
@@ -852,8 +860,7 @@ namespace SharpGPU
             switch (descriptor.PrimitiveAssembler.PrimitiveType)
             {
                 case ERHIPrimitiveType.Mesh:
-                    device.Capabilities.Mesh.Shader.Require("DX12 mesh shaders");
-                    throw new NotSupportedException("TODO(UNVERIFIED): DX12 mesh pipeline path must be migrated to Vortice pipeline-state-stream API.");
+                    throw new InvalidOperationException("DX12 mesh-shader capability gate was bypassed.");
 
                 case ERHIPrimitiveType.Vertex:
                     Dx12Function fragmentFunction = descriptor.FragmentFunction as Dx12Function
@@ -1073,6 +1080,7 @@ namespace SharpGPU
     {
         internal string Name => m_Name;
         internal Dx12MLProgram Program => m_Program;
+        internal Dx12Device Device => m_Dx12Device;
         internal int StageCount => m_CompiledOperators.Length;
         internal Vortice.DirectML.IDMLOperatorInitializer OperatorInitializer => m_OperatorInitializer ?? throw new InvalidOperationException("DX12 ML operator initializer is unavailable.");
         internal Vortice.DirectML.BindingProperties InitializerBindingProperties => m_InitializerBindingProperties;

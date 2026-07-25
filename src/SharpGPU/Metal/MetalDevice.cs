@@ -509,7 +509,9 @@ namespace SharpGPU
 
         public override RHIFunctionTable CreateFunctionTable()
         {
-            return new MetalFunctionTable();
+            ThrowIfDisposed();
+            Capabilities.RayTracing.Pipeline.Require("Metal ray-tracing function tables");
+            return new MetalFunctionTable(this);
         }
 
         public override RHIComputePipeline CreateComputePipeline(in RHIComputePipelineDescriptor descriptor)
@@ -529,95 +531,50 @@ namespace SharpGPU
 
         public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
         {
-            if (!SupportsMetalML)
-            {
-                throw new NotSupportedException(m_MetalMLUnavailableReason ?? "Metal ML is not supported on this device.");
-            }
-
-            return new MetalMLPipeline(this, descriptor);
+            ThrowIfDisposed();
+            Capabilities.MachineLearning.Execution.Require(
+                "Metal machine-learning pipelines");
+            throw new InvalidOperationException(
+                "Metal machine-learning capability is available without a pipeline implementation.");
         }
 
         public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
         {
-            if (!SupportsMetalML)
-            {
-                throw new NotSupportedException(m_MetalMLUnavailableReason ?? "Metal ML is not supported on this device.");
-            }
-
-            return new MetalMLBindingSet(this, descriptor);
+            ThrowIfDisposed();
+            Capabilities.MachineLearning.Execution.Require(
+                "Metal machine-learning binding sets");
+            throw new InvalidOperationException(
+                "Metal machine-learning capability is available without a binding-set implementation.");
         }
 
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
         {
-            if (!SupportsMetalML)
-            {
-                throw new NotSupportedException(m_MetalMLUnavailableReason ?? "Metal ML tensors are not supported on this device.");
-            }
-
-            return new MetalTensor(this, descriptor);
+            ThrowIfDisposed();
+            Capabilities.MachineLearning.Execution.Require(
+                "Metal machine-learning tensors");
+            throw new InvalidOperationException(
+                "Metal machine-learning capability is available without a tensor implementation.");
         }
 
         public override RHIMLProgram CreateMLProgram(in RHIMLProgramDescriptor descriptor)
         {
-            if (!SupportsMetalML)
-            {
-                throw new NotSupportedException(m_MetalMLUnavailableReason ?? "Metal ML is not supported on this device.");
-            }
-
-            if (descriptor.Ops.Length > 1)
-            {
-                throw new NotSupportedException(
-                    "Metal ML MPSGraph package lowering currently supports one RHI ML op per native artifact. " +
-                    "Multi-op packages execute once but corrupt subsequent MTL4MachineLearningCommandEncoder dispatches on macOS 26.5; " +
-                    "compute-kernel and CPU fallbacks are intentionally rejected.");
-            }
-
-            try
-            {
-                MetalMpsGraphPackage package = MetalMpsGraphPackageBuilder.Build(this, descriptor);
-                RegisterMetalMLPackageDirectory(package.PackageDirectory);
-                RegisterMetalMLLibrary(package.Library);
-                return new MetalMLProgram(
-                    descriptor.Name,
-                    package.Library,
-                    MetalMpsGraphPackageBuilder.EntryName,
-                    package.PackageDirectory,
-                    package.BindingInfos);
-            }
-            catch (NotSupportedException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException($"Metal ML program construction failed for '{descriptor.Name}': {ex.Message}", ex);
-            }
+            ThrowIfDisposed();
+            Capabilities.MachineLearning.Execution.Require(
+                "Metal machine-learning programs");
+            throw new InvalidOperationException(
+                "Metal machine-learning capability is available without a program implementation.");
         }
-
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
         {
-            throw new NotSupportedException("WorkGraph is not supported on the Metal backend.");
+            ThrowIfDisposed();
+            Capabilities.WorkGraph.Execution.Require("Metal work graphs");
+            throw new InvalidOperationException("Metal work-graph capability is available without an implementation.");
         }
 
         public override RHIPipelineCache CreatePipelineCache()
         {
             Capabilities.PipelineCache.NativeCache.Require("Metal pipeline cache");
             throw new InvalidOperationException("Metal pipeline-cache capability is available without a factory implementation.");
-        }
-
-        public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
-        {
-            return new MetalComputeIndirectCommandBuffer(this, descriptor);
-        }
-
-        public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor)
-        {
-            return new MetalRayTracingIndirectCommandBuffer(this, descriptor);
-        }
-
-        public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
-        {
-            return new MetalRasterIndirectCommandBuffer(this, descriptor);
         }
 
         public override bool TryToggleGpuCapture(string savedPath, string reason)
@@ -711,8 +668,8 @@ namespace SharpGPU
             bool isTimestampSupported = TryProbeTimestampCounterHeap(out string? timestampUnavailableReason);
             m_TimestampQueriesUnavailableReason = timestampUnavailableReason;
             bool isPipelineStatsSupported = TryGetStatisticsCounterSet(m_NativeDevice, out _);
-            bool isMLSupported = TryProbeMetalMLSupport(out string? metalMLUnavailableReason);
-            m_MetalMLUnavailableReason = metalMLUnavailableReason;
+            bool isMLSupported = false; string? metalMLUnavailableReason = "Metal has no qualified stable native ML artifact and dispatch route.";
+            m_MetalMLUnavailableReason = metalMLUnavailableReason; // W11: ML surface closed
 
             static RHICapability Probe(
                 bool available,
@@ -967,13 +924,10 @@ namespace SharpGPU
                         ERHICapabilityProbeKind.BackendContract,
                         "SharpGPU Metal factory surface")),
                 machineLearning: new RHIMachineLearningCapabilities(
-                    execution: RHICapability.FromProbe(
-                        isMLSupported,
-                        ERHICapabilityTier.Tier1,
-                        ERHICapabilityStrategy.NativeSpecialized,
-                        ERHICapabilityProbeKind.RuntimeObjectProbe,
-                        "Metal 4 ML compiler, tensor, and argument-table selectors",
-                        metalMLUnavailableReason ?? "Metal 4 ML runtime objects are unavailable.")),
+                    execution: RHICapability.Unavailable(
+                        "Metal has no qualified stable native ML artifact and dispatch route.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Metal stable native ML artifact and dispatch contract")),
                 workGraph: new RHIWorkGraphCapabilities(
                     execution: RHICapability.Unavailable(
                         "Metal Work Graph execution is not exposed by SharpGPU.",
@@ -1052,45 +1006,9 @@ namespace SharpGPU
 
         private bool TryProbeMetalMLSupport(out string? unavailableReason)
         {
-            unavailableReason = null;
-
-            if (!m_SupportsMetal4)
-            {
-                unavailableReason = "Metal ML requires Metal 4.";
-                return false;
-            }
-
-            if (!m_SupportsArgumentTable || !SafeSupportsSelector(s_NewArgumentTableWithDescriptorError))
-            {
-                unavailableReason = "Metal ML requires native MTL4 argument table support.";
-                return false;
-            }
-
-            if (!SafeSupportsSelector(s_NewCompilerWithDescriptorError))
-            {
-                unavailableReason = "Metal ML requires native MTL4 compiler support.";
-                return false;
-            }
-
-            if (!SafeSupportsSelector(s_NewTensorWithDescriptorError))
-            {
-                unavailableReason = "Metal ML requires native MTLTensor creation support.";
-                return false;
-            }
-
-            if (!MetalMpsGraphPackageBuilder.IsAvailable(out string? packageUnavailableReason))
-            {
-                unavailableReason = packageUnavailableReason ?? "Metal ML requires MPSGraph package serialization support.";
-                return false;
-            }
-
-            unavailableReason =
-                "Metal ML package artifacts are available, but the current MPSGraph-package route is disabled: " +
-                "matrix/intermediates-heap packages can dispatch once and then corrupt subsequent MTL4MachineLearningCommandEncoder dispatches in the same process on macOS 26.5. " +
-                "No compute-kernel or CPU fallback is allowed; keep Metal ML unsupported until a stable native artifact route is proven.";
+            unavailableReason = "Metal has no qualified stable native ML artifact and dispatch route.";
             return false;
         }
-
         internal void RegisterMetalMLPipelineState(in MTL4MachineLearningPipelineState pipelineState)
         {
             if (pipelineState.NativePtr == IntPtr.Zero)

@@ -19,8 +19,6 @@ namespace SharpGPU
         private readonly MetalComputeEncoder m_ComputeEncoder;
         private readonly MetalRasterEncoder m_RasterEncoder;
         private readonly MetalRaytracingEncoder m_RaytracingEncoder;
-        private readonly MetalMLEncoder m_MLEncoder;
-        private readonly MetalWorkGraphEncoder m_WorkGraphEncoder;
 
         private MTL4CommandBuffer m_NativeCommandBuffer4;
         private MTL4CommandAllocator m_NativeCommandAllocator4;
@@ -43,8 +41,6 @@ namespace SharpGPU
             m_ComputeEncoder = new MetalComputeEncoder(this);
             m_RasterEncoder = new MetalRasterEncoder(this);
             m_RaytracingEncoder = new MetalRaytracingEncoder(this);
-            m_MLEncoder = new MetalMLEncoder(this);
-            m_WorkGraphEncoder = new MetalWorkGraphEncoder(this);
 
             ResetState();
         }
@@ -122,31 +118,38 @@ namespace SharpGPU
 
         public override RHIMLEncoder BeginMLPass(in RHIMLPassDescriptor descriptor)
         {
-            ValidateCanBeginEncoder(ERHICommandEncoderKind.MachineLearning);
-            m_MLEncoder.BeginPass(descriptor);
-            BeginEncoderBarrierState();
-            m_UsesMachineLearning = true;
-            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.MachineLearning);
-            return m_MLEncoder;
+            ThrowIfDisposed();
+            ((MetalCommandQueue)m_CommandQueue).MetalDevice.Capabilities.MachineLearning.Execution.Require(
+                "Metal machine-learning passes");
+            throw new InvalidOperationException(
+                "Metal machine-learning capability is available without an encoder implementation.");
         }
 
         public override void EndMLPass()
         {
-            m_MLEncoder.EndPass();
-            EndEncoderBarrierState();
+            ThrowIfDisposed();
+            ((MetalCommandQueue)m_CommandQueue).MetalDevice.Capabilities.MachineLearning.Execution.Require(
+                "Metal machine-learning passes");
+            throw new InvalidOperationException(
+                "Metal machine-learning capability is available without an encoder implementation.");
         }
 
         public override RHIWorkGraphEncoder BeginWorkGraphPass(in RHIWorkGraphPassDescriptor descriptor)
         {
-            ValidateCanBeginEncoder(ERHICommandEncoderKind.WorkGraph);
-            m_WorkGraphEncoder.BeginPass(descriptor);
-            MarkEncoderBeginSucceeded(ERHICommandEncoderKind.WorkGraph);
-            return m_WorkGraphEncoder;
+            ThrowIfDisposed();
+            ((MetalCommandQueue)m_CommandQueue).MetalDevice.Capabilities.WorkGraph.Execution.Require(
+                "Metal work-graph passes");
+            throw new InvalidOperationException(
+                "Metal work-graph capability is available without an encoder implementation.");
         }
 
         public override void EndWorkGraphPass()
         {
-            m_WorkGraphEncoder.EndPass();
+            ThrowIfDisposed();
+            ((MetalCommandQueue)m_CommandQueue).MetalDevice.Capabilities.WorkGraph.Execution.Require(
+                "Metal work-graph passes");
+            throw new InvalidOperationException(
+                "Metal work-graph capability is available without an encoder implementation.");
         }
 
         public override void End()
@@ -183,14 +186,21 @@ namespace SharpGPU
 
         public override RHIMLEncoder GetMLEncoder()
         {
-            return m_MLEncoder;
+            ThrowIfDisposed();
+            ((MetalCommandQueue)m_CommandQueue).MetalDevice.Capabilities.MachineLearning.Execution.Require(
+                "Metal machine-learning encoder");
+            throw new InvalidOperationException(
+                "Metal machine-learning capability is available without an encoder implementation.");
         }
 
         public override RHIWorkGraphEncoder GetWorkGraphEncoder()
         {
-            return m_WorkGraphEncoder;
+            ThrowIfDisposed();
+            ((MetalCommandQueue)m_CommandQueue).MetalDevice.Capabilities.WorkGraph.Execution.Require(
+                "Metal work-graph encoder");
+            throw new InvalidOperationException(
+                "Metal work-graph capability is available without an encoder implementation.");
         }
-
         internal void SetPresentDrawable(in CAMetalDrawable drawable)
         {
             if (drawable.NativePtr != IntPtr.Zero)
@@ -317,107 +327,8 @@ namespace SharpGPU
             m_ComputeEncoder.Dispose();
             m_RasterEncoder.Dispose();
             m_RaytracingEncoder.Dispose();
-            m_MLEncoder.Dispose();
-            m_WorkGraphEncoder.Dispose();
             m_NativeTransientBatch.Dispose();
             ReleaseNativeCommandObjects();
-        }
-    }
-
-    internal sealed class MetalComputeIndirectCommandBuffer : RHIComputeIndirectCommandBuffer
-    {
-        internal MTLIndirectCommandBuffer NativeIndirectCommandBuffer => m_NativeICB;
-        internal uint MaxCommandCount => m_MaxCommandCount;
-
-        private MTLIndirectCommandBuffer m_NativeICB;
-        private readonly uint m_MaxCommandCount;
-
-        internal MetalComputeIndirectCommandBuffer(MetalDevice device, in RHIComputeIndirectCommandBufferDescription descriptor)
-        {
-            m_MaxCommandCount = descriptor.MaxCommandCount;
-
-            MTLIndirectCommandBufferDescriptor icbDesc = MTLIndirectCommandBufferDescriptor.New();
-            icbDesc.CommandTypes = MTLIndirectCommandType.ConcurrentDispatch;
-            icbDesc.MaxKernelBufferBindCount = 8;
-            icbDesc.InheritBuffers = false;
-            icbDesc.InheritPipelineState = false;
-
-            m_NativeICB = device.NativeDevice.NewIndirectCommandBuffer(icbDesc, m_MaxCommandCount, MTLResourceOptions.ResourceStorageModeShared);
-            ObjectiveCRuntime.Release(icbDesc);
-        }
-
-        protected override void Release()
-        {
-            if (m_NativeICB.NativePtr != IntPtr.Zero)
-            {
-                ObjectiveCRuntime.Release(m_NativeICB);
-                m_NativeICB = default;
-            }
-        }
-    }
-
-    internal sealed class MetalRayTracingIndirectCommandBuffer : RHIRayTracingIndirectCommandBuffer
-    {
-        internal MTLIndirectCommandBuffer NativeIndirectCommandBuffer => m_NativeICB;
-        internal uint MaxCommandCount => m_MaxCommandCount;
-
-        private MTLIndirectCommandBuffer m_NativeICB;
-        private readonly uint m_MaxCommandCount;
-
-        internal MetalRayTracingIndirectCommandBuffer(MetalDevice device, in RHIRayTracingIndirectCommandBufferDescription descriptor)
-        {
-            m_MaxCommandCount = descriptor.MaxCommandCount;
-
-            MTLIndirectCommandBufferDescriptor icbDesc = MTLIndirectCommandBufferDescriptor.New();
-            icbDesc.CommandTypes = MTLIndirectCommandType.ConcurrentDispatch;
-            icbDesc.MaxKernelBufferBindCount = 8;
-            icbDesc.InheritBuffers = false;
-            icbDesc.InheritPipelineState = false;
-
-            m_NativeICB = device.NativeDevice.NewIndirectCommandBuffer(icbDesc, m_MaxCommandCount, MTLResourceOptions.ResourceStorageModeShared);
-            ObjectiveCRuntime.Release(icbDesc);
-        }
-
-        protected override void Release()
-        {
-            if (m_NativeICB.NativePtr != IntPtr.Zero)
-            {
-                ObjectiveCRuntime.Release(m_NativeICB);
-                m_NativeICB = default;
-            }
-        }
-    }
-
-    internal sealed class MetalRasterIndirectCommandBuffer : RHIRasterIndirectCommandBuffer
-    {
-        internal MTLIndirectCommandBuffer NativeIndirectCommandBuffer => m_NativeICB;
-        internal uint MaxCommandCount => m_MaxCommandCount;
-
-        private MTLIndirectCommandBuffer m_NativeICB;
-        private readonly uint m_MaxCommandCount;
-
-        internal MetalRasterIndirectCommandBuffer(MetalDevice device, in RHIRasterIndirectCommandBufferDescription descriptor)
-        {
-            m_MaxCommandCount = descriptor.MaxCommandCount;
-
-            MTLIndirectCommandBufferDescriptor icbDesc = MTLIndirectCommandBufferDescriptor.New();
-            icbDesc.CommandTypes = MTLIndirectCommandType.Draw | MTLIndirectCommandType.DrawIndexed;
-            icbDesc.MaxVertexBufferBindCount = 8;
-            icbDesc.MaxFragmentBufferBindCount = 8;
-            icbDesc.InheritBuffers = false;
-            icbDesc.InheritPipelineState = false;
-
-            m_NativeICB = device.NativeDevice.NewIndirectCommandBuffer(icbDesc, m_MaxCommandCount, MTLResourceOptions.ResourceStorageModeShared);
-            ObjectiveCRuntime.Release(icbDesc);
-        }
-
-        protected override void Release()
-        {
-            if (m_NativeICB.NativePtr != IntPtr.Zero)
-            {
-                ObjectiveCRuntime.Release(m_NativeICB);
-                m_NativeICB = default;
-            }
         }
     }
 }

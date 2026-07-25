@@ -555,21 +555,6 @@ namespace SharpGPU
             return new Dx12PipelineCache(this);
         }
 
-        public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
-        {
-            return new Dx12ComputeIndirectCommandBuffer(this, descriptor);
-        }
-
-        public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor)
-        {
-            return new Dx12RayTracingIndirectCommandBuffer(this, descriptor);
-        }
-
-        public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
-        {
-            return new Dx12RasterIndirectCommandBuffer(this, descriptor);
-        }
-
         public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
         {
             Capabilities.MachineLearning.Execution.Require("DX12 machine learning");

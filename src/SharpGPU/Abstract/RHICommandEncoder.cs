@@ -285,7 +285,6 @@ namespace SharpGPU
         public abstract void SetPushConstants(IntPtr data, in uint size, in uint offset = 0);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
-        public abstract void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer);
         public void EndPass()
         {
             RHICommandBuffer commandBuffer = m_CommandBuffer ??
@@ -317,7 +316,6 @@ namespace SharpGPU
         public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct);
         public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable);
-        public abstract void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer);
         public void EndPass()
         {
             RHICommandBuffer commandBuffer = m_CommandBuffer ??
@@ -484,19 +482,12 @@ namespace SharpGPU
             DispatchMeshIndirectCore(argsBuffer, argsOffset);
         }
 
-        public void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
-        {
-            ValidateDrawState();
-            ExecuteIndirectCommandBufferCore(indirectCmdBuffer);
-        }
-
         internal abstract void DrawCore(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance);
         internal abstract void DrawIndexedCore(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance);
         internal abstract void DrawIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
         internal abstract void DrawIndexedIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount);
         internal abstract void DispatchMeshCore(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         internal abstract void DispatchMeshIndirectCore(RHIBuffer argsBuffer, in uint argsOffset);
-        internal abstract void ExecuteIndirectCommandBufferCore(RHIRasterIndirectCommandBuffer indirectCmdBuffer);
         public void EndPass()
         {
             RHICommandBuffer commandBuffer = m_CommandBuffer ??

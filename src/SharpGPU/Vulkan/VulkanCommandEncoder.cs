@@ -1167,11 +1167,6 @@ namespace SharpGPU
             VulkanNative.vkCmdDispatchIndirect(vkCmdBuf.NativeCommandBuffer, vkArgsBuffer.NativeBuffer, argsOffset);
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
-        {
-            // Vulkan indirect command buffers are handled via VkIndirectCommandsLayoutNV (not yet supported)
-        }
-
         internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
@@ -1714,11 +1709,6 @@ namespace SharpGPU
             VulkanNative.vkCmdDrawMeshTasksIndirectEXT(vkCmdBuf.NativeCommandBuffer, vkArgs.NativeBuffer, argsOffset, 1, 0);
         }
 
-        internal override void ExecuteIndirectCommandBufferCore(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
-        {
-            // Requires VK_NV_device_generated_commands
-        }
-
         internal override void EndPassCore()
         {
             EndRenderingIfNeeded();
@@ -2169,10 +2159,6 @@ namespace SharpGPU
                 indirectAddress);
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
-        {
-        }
-
         internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
@@ -2191,175 +2177,7 @@ namespace SharpGPU
     // Vulkan ML encoder uses a compute shader bridge approach since Vulkan
     // has no native ML inference API. Tensors are backed by VkBuffer and
     // the ML pipeline wraps a compute pipeline when available.
-    internal unsafe class VulkanMLEncoder : RHIMLEncoder
-    {
-        private RHIMLPassDescriptor m_PassDescriptor;
-
-        public VulkanMLEncoder(VulkanCommandBuffer cmdBuffer)
-        {
-            m_CommandBuffer = cmdBuffer;
-        }
-
-        internal override void BeginPass(in RHIMLPassDescriptor descriptor)
-        {
-            m_PassDescriptor = descriptor;
-#if DEBUG
-            PushDebugGroup(descriptor.Name);
-#endif
-            if (descriptor.Timestamp.HasValue)
-            {
-                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
-            }
-        }
-
-        public override void Barrier(in RHIBarrier barrier)
-        {
-            VulkanBarrierEmitter.EmitBarrier(VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer)!, barrier);
-        }
-
-        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
-        {
-            VulkanBarrierEmitter.EmitBarriers(VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer)!, barriers);
-        }
-
-        public override void PushDebugGroup(string name)
-        {
-            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
-            vkQueue.VulkanDevice.VulkanInstance.CmdBeginDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer, name);
-        }
-
-        public override void PopDebugGroup()
-        {
-            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue);
-            vkQueue.VulkanDevice.VulkanInstance.CmdEndDebugUtilsLabel(vkCmdBuf.NativeCommandBuffer);
-        }
-
-        public override void WriteTimestamp(in uint index)
-        {
-            if (m_PassDescriptor.Timestamp.HasValue)
-            {
-                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-                VulkanQuery vkQuery = m_PassDescriptor.Timestamp.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
-                VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
-                VulkanNative.vkCmdWriteTimestamp(vkCmdBuf.NativeCommandBuffer, VkPipelineStageFlags.ComputeShader, vkQuery.NativeQueryPool, index);
-            }
-        }
-
-        public override void SetPipeline(RHIMLPipeline pipeline)
-        {
-            m_CachedPipeline = pipeline as VulkanMLPipeline ?? throw new InvalidOperationException("Vulkan ML encoder requires a VulkanMLPipeline.")
-                ?? throw new InvalidOperationException($"Vulkan ML encoder expects {nameof(VulkanMLPipeline)} but got {pipeline?.GetType().Name ?? "<null>"}.");
-        }
-
-        public override void SetBindingSet(RHIMLBindingSet bindingSet)
-        {
-            m_CachedBindingSet = bindingSet as VulkanMLBindingSet ?? throw new InvalidOperationException("Vulkan ML encoder requires a VulkanMLBindingSet.")
-                ?? throw new InvalidOperationException($"Vulkan ML encoder expects {nameof(VulkanMLBindingSet)} but got {bindingSet?.GetType().Name ?? "<null>"}.");
-        }
-
-        public override void Dispatch()
-        {
-            if (m_CachedBindingSet is null)
-            {
-                throw new InvalidOperationException("Vulkan ML encoder requires a bound ML binding set before Dispatch.");
-            }
-
-            // Vulkan does not have native ML inference.
-            // The compute bridge approach dispatches a pre-compiled compute shader
-            // that implements the neural network layers. This is a no-op placeholder
-            // because the actual compute shaders for ML layers must be provided by
-            // the application's ML compiler toolchain.
-        }
-
-        internal override void EndPassCore()
-        {
-            if (m_PassDescriptor.Timestamp.HasValue)
-            {
-                WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
-            }
-#if DEBUG
-            PopDebugGroup();
-#endif
-            m_CachedPipeline = null;
-            m_CachedBindingSet = null;
-        }
-
-        protected override void Release() { }
-    }
-
 #pragma warning restore CS0414
 
     // ========== WorkGraph Encoder ==========
-    internal sealed class VulkanWorkGraphEncoder : RHIWorkGraphEncoder
-    {
-        internal VulkanWorkGraphEncoder(RHICommandBuffer commandBuffer)
-        {
-            m_CommandBuffer = commandBuffer;
-        }
-
-        internal override void BeginPass(in RHIWorkGraphPassDescriptor descriptor)
-        {
-            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
-        }
-
-        public override void Barrier(in RHIBarrier barrier)
-        {
-            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
-        }
-
-        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
-        {
-            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
-        }
-        public override void PushDebugGroup(string name)
-        {
-            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
-        }
-
-        public override void PopDebugGroup()
-        {
-            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
-        }
-
-        public override void WriteTimestamp(in uint index)
-        {
-            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
-        }
-
-        public override void SetPipeline(RHIWorkGraphPipeline pipeline)
-        {
-            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
-        }
-
-        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
-        {
-            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
-        }
-
-        public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
-        {
-            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
-        }
-
-        public override void SetBackingMemory(RHIBuffer backingMemory, ulong byteOffset, ulong byteSize)
-        {
-            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
-        }
-
-        public override void DispatchGraph(string entrypoint, uint numRecords, ulong inputRecordByteStride, RHIBuffer? inputRecordBuffer = null)
-        {
-            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
-        }
-
-        internal override void EndPassCore()
-        {
-            throw new NotSupportedException("WorkGraph is not supported on the Vulkan backend.");
-        }
-
-        protected override void Release()
-        {
-        }
-    }
 }

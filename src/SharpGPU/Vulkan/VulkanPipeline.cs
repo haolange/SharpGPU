@@ -1025,56 +1025,6 @@ namespace SharpGPU
         }
     }
 
-    internal sealed class VulkanWorkGraphPipeline : RHIWorkGraphPipeline
-    {
-        internal VulkanWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
-        {
-            m_Descriptor = descriptor;
-        }
-
-        protected override void Release()
-        {
-        }
-    }
-
-    internal unsafe class VulkanMLPipeline : RHIMLPipeline
-    {
-        internal string Name => m_Name;
-
-        private readonly string m_Name;
-        private readonly VulkanDevice m_VulkanDevice;
-        private readonly VulkanMLProgram? m_Program;
-
-        public VulkanMLPipeline(VulkanDevice device, in RHIMLPipelineDescriptor descriptor)
-        {
-            m_Descriptor = descriptor;
-            m_VulkanDevice = device;
-            m_Name = descriptor.Name;
-            m_Program = descriptor.Program as VulkanMLProgram;
-            m_BindingInfos = m_Program?.BindingInfos ?? Array.Empty<RHIMLTensorBindingInfo>();
-
-            for (int i = 0; i < m_BindingInfos.Length; ++i)
-            {
-                ref readonly RHIMLTensorBindingInfo bindingInfo = ref m_BindingInfos[i];
-                switch (bindingInfo.Kind)
-                {
-                    case ERHIMLTensorBindingKind.Input:
-                        ++m_InputCount;
-                        break;
-                    case ERHIMLTensorBindingKind.Output:
-                        ++m_OutputCount;
-                        break;
-                }
-            }
-
-            m_TemporaryResourceSize = 0;
-            m_PersistentResourceSize = 0;
-        }
-
-        protected override void Release()
-        {
-        }
-    }
 }
 
 

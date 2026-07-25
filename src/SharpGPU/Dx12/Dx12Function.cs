@@ -158,6 +158,8 @@ namespace SharpGPU
     internal unsafe class Dx12FunctionTable : RHIFunctionTable
     {
         internal bool IsGenerated => m_NativeResource != null;
+        internal Dx12Device Device => m_Dx12Device;
+        internal Dx12RaytracingPipeline? GeneratedPipeline => m_CachedPipeline;
         public ulong RayGenSize => m_EntryStride;
         public ulong RayGeStride => m_EntryStride;
         public ulong RayGenAddress => m_NativeResource != null ? m_NativeResource.GPUVirtualAddress : 0;
@@ -197,6 +199,7 @@ namespace SharpGPU
 
         public override void SetRayGenerationRecord(in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             ValidateGroupIndex(record.GroupIndex, nameof(record));
             m_RayGenerationProgram = CreateEntry(record);
             m_HasRayGenerationRecord = true;
@@ -204,57 +207,67 @@ namespace SharpGPU
 
         public override int AddMissRecord(in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             Dx12FunctionTableEntry missEntry = CreateEntry(record);
             return m_MissPrograms.Add(missEntry);
         }
 
         public override int AddHitGroupRecord(in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             Dx12FunctionTableEntry hitGroupEntry = CreateEntry(record);
             return m_HitGroupPrograms.Add(hitGroupEntry);
         }
 
         public override int AddCallableRecord(in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             Dx12FunctionTableEntry callableEntry = CreateEntry(record);
             return m_CallablePrograms.Add(callableEntry);
         }
 
         public override void SetMissRecord(in int index, in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             ValidateEntryIndex(index, m_MissPrograms.length, nameof(index));
             m_MissPrograms[index] = CreateEntry(record);
         }
 
         public override void SetHitGroupRecord(in int index, in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             ValidateEntryIndex(index, m_HitGroupPrograms.length, nameof(index));
             m_HitGroupPrograms[index] = CreateEntry(record);
         }
 
         public override void SetCallableRecord(in int index, in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             ValidateEntryIndex(index, m_CallablePrograms.length, nameof(index));
             m_CallablePrograms[index] = CreateEntry(record);
         }
 
         public override void ClearMissRecords()
         {
+            ThrowIfDisposed();
             m_MissPrograms.Clear();
         }
 
         public override void ClearHitGroupRecords()
         {
+            ThrowIfDisposed();
             m_HitGroupPrograms.Clear();
         }
 
         public override void ClearCallableRecords()
         {
+            ThrowIfDisposed();
             m_CallablePrograms.Clear();
         }
 
         public override void UpdateRecord(in ERHIRayShaderTableSection section, in int index, in RHIRayRecordDescriptor record)
         {
+            ThrowIfDisposed();
             switch (section)
             {
                 case ERHIRayShaderTableSection.RayGeneration:
@@ -297,6 +310,7 @@ namespace SharpGPU
 
         public override void Generate(RHIRaytracingPipeline pipeline)
         {
+            ThrowIfDisposed();
             Dx12RaytracingPipeline dx12RaytracingPipeline = pipeline as Dx12RaytracingPipeline
                 ?? throw new ArgumentException("DX12 function table requires a Dx12RaytracingPipeline.", nameof(pipeline));
 
@@ -368,9 +382,7 @@ namespace SharpGPU
 
         public override void Update()
         {
-#if DEBUG
-            System.Diagnostics.Debug.Assert(m_NativeResource != null, "SBT buffer not initialized. Call Generate() before Update().");
-#endif
+            ThrowIfDisposed();
             if (m_NativeResource == null || m_CachedPipeline == null)
             {
                 throw new InvalidOperationException("SBT buffer not initialized. Call Generate() before Update().");

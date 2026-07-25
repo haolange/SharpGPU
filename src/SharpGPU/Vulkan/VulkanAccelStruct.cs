@@ -245,6 +245,7 @@ namespace SharpGPU
             public float MaxZ;
         }
 
+        internal VulkanDevice Device { get { ThrowIfDisposed(); return m_VulkanDevice; } }
         public VkAccelerationStructureKHR NativeAccelerationStructure => m_NativeAccelStruct;
         public VkBuffer NativeBuffer => m_NativeBuffer;
         public VkBuffer NativeScratchBuffer => m_NativeScratchBuffer;

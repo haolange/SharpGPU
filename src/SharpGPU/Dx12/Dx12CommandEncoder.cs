@@ -177,12 +177,13 @@ namespace SharpGPU
     {
         internal static (Dx12Query Query, Dx12CommandBuffer CommandBuffer) RequireTimestampQuery(
             RHICommandBuffer? commandBuffer,
+            RHIQuery? queryHeap,
             uint index)
         {
             Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(commandBuffer);
             return RequireQueryHeap(
                 dx12CommandBuffer,
-                dx12CommandBuffer.TimestampQueryHeap,
+                queryHeap,
                 "timestamp",
                 index,
                 ERHIQueryType.Timestamp,
@@ -191,12 +192,13 @@ namespace SharpGPU
 
         internal static (Dx12Query Query, Dx12CommandBuffer CommandBuffer) RequireOcclusionQuery(
             RHICommandBuffer? commandBuffer,
+            RHIQuery? queryHeap,
             uint index)
         {
             Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(commandBuffer);
             return RequireQueryHeap(
                 dx12CommandBuffer,
-                dx12CommandBuffer.OcclusionQueryHeap,
+                queryHeap,
                 "occlusion",
                 index,
                 ERHIQueryType.Occlusion);
@@ -204,12 +206,13 @@ namespace SharpGPU
 
         internal static (Dx12Query Query, Dx12CommandBuffer CommandBuffer) RequireStatisticsQuery(
             RHICommandBuffer? commandBuffer,
+            RHIQuery? queryHeap,
             uint index)
         {
             Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(commandBuffer);
             return RequireQueryHeap(
                 dx12CommandBuffer,
-                dx12CommandBuffer.StatisticsQueryHeap,
+                queryHeap,
                 "statistics",
                 index,
                 ERHIQueryType.Statistics);
@@ -260,7 +263,6 @@ namespace SharpGPU
             return (dx12Query, commandBuffer);
         }
     }
-
     internal static unsafe class Dx12CommandListInteropExtensions
     {
         public static void ResourceBarrier(this Vortice.Direct3D12.ID3D12GraphicsCommandList7 commandList, uint barrierCount, Vortice.Direct3D12.ResourceBarrier* barriers)
@@ -1459,6 +1461,8 @@ namespace SharpGPU
 
     internal unsafe class Dx12TransferEncoder : RHITransferEncoder
     {
+        private RHITransferPassDescriptor m_PassDescriptor;
+
         public Dx12TransferEncoder(Dx12CommandBuffer cmdBuffer)
         {
             m_CommandBuffer = cmdBuffer;
@@ -1466,10 +1470,14 @@ namespace SharpGPU
 
         internal override void BeginPass(in RHITransferPassDescriptor descriptor)
         {
+            m_PassDescriptor = descriptor;
 #if DEBUG
             PushDebugGroup(descriptor.Name);
 #endif
-        }
+            if (descriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
+            }        }
 
         public override void Barrier(in RHIBarrier barrier)
         {
@@ -1498,7 +1506,7 @@ namespace SharpGPU
         public override void WriteTimestamp(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, index);
+                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, m_PassDescriptor.Timestamp?.Query, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, index);
         }
 
@@ -1658,6 +1666,8 @@ namespace SharpGPU
 
     internal unsafe class Dx12ComputeEncoder : RHIComputeEncoder
     {
+        private RHIComputePassDescriptor m_PassDescriptor;
+
         public Dx12ComputeEncoder(Dx12CommandBuffer cmdBuffer)
         {
             m_CommandBuffer = cmdBuffer;
@@ -1665,10 +1675,14 @@ namespace SharpGPU
 
         internal override void BeginPass(in RHIComputePassDescriptor descriptor)
         {
+            m_PassDescriptor = descriptor;
 #if DEBUG
             PushDebugGroup(descriptor.Name);
 #endif
-        }
+            if (descriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
+            }        }
 
         public override void Barrier(in RHIBarrier barrier)
         {
@@ -1697,21 +1711,21 @@ namespace SharpGPU
         public override void WriteTimestamp(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, index);
+                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, m_PassDescriptor.Timestamp?.Query, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, index);
         }
 
         public override void BeginStatistics(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, index);
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, index);
             dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
         public override void EndStatistics(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, index);
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
@@ -1759,13 +1773,6 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DispatchComputeIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
-        {
-            Dx12ComputeIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12ComputeIndirectCommandBuffer ?? throw new InvalidOperationException("DX12 compute indirect dispatch requires a Dx12ComputeIndirectCommandBuffer.");
-            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
-        }
-
         internal override void EndPassCore()
         {
 #if DEBUG
@@ -1782,6 +1789,8 @@ namespace SharpGPU
 
     internal unsafe class Dx12RaytracingEncoder : RHIRaytracingEncoder
     {
+        private RHIRayTracingPassDescriptor m_PassDescriptor;
+
         public Dx12RaytracingEncoder(Dx12CommandBuffer cmdBuffer)
         {
             m_CommandBuffer = cmdBuffer;
@@ -1789,10 +1798,14 @@ namespace SharpGPU
 
         internal override void BeginPass(in RHIRayTracingPassDescriptor descriptor)
         {
+            m_PassDescriptor = descriptor;
 #if DEBUG
             PushDebugGroup(descriptor.Name);
 #endif
-        }
+            if (descriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
+            }        }
 
         public override void Barrier(in RHIBarrier barrier)
         {
@@ -1821,21 +1834,21 @@ namespace SharpGPU
         public override void WriteTimestamp(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, index);
+                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, m_PassDescriptor.Timestamp?.Query, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, index);
         }
 
         public override void BeginStatistics(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, index);
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, index);
             dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
         public override void EndStatistics(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, index);
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
@@ -1928,13 +1941,6 @@ namespace SharpGPU
             }
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
-        {
-            Dx12RayTracingIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RayTracingIndirectCommandBuffer ?? throw new InvalidOperationException("DX12 ray-tracing indirect dispatch requires a Dx12RayTracingIndirectCommandBuffer.");
-            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
-        }
-
         internal override void EndPassCore()
         {
 #if DEBUG
@@ -1994,9 +2000,6 @@ namespace SharpGPU
 #endif
             if (descriptor.Timestamp.HasValue)
             {
-                Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-                commandBuffer.TimestampQueryHeap = descriptor.Timestamp.Value.Query;
-                commandBuffer.TimestampQueryIndex = descriptor.Timestamp.Value.BeginIndex;
                 WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
             }
             m_AttachmentInfos.Clear();
@@ -3248,35 +3251,35 @@ namespace SharpGPU
         public override void WriteTimestamp(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, index);
+                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, m_PassDescriptor.Timestamp?.Query, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, index);
         }
 
         public override void BeginOcclusion(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireOcclusionQuery(m_CommandBuffer, index);
+                Dx12QueryEncoderValidation.RequireOcclusionQuery(m_CommandBuffer, m_PassDescriptor.Occlusion?.Query, index);
             dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Occlusion, index);
         }
 
         public override void EndOcclusion(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireOcclusionQuery(m_CommandBuffer, index);
+                Dx12QueryEncoderValidation.RequireOcclusionQuery(m_CommandBuffer, m_PassDescriptor.Occlusion?.Query, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Occlusion, index);
         }
 
         public override void BeginStatistics(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, index);
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, index);
             dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
         public override void EndStatistics(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, index);
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
         }
 
@@ -3577,21 +3580,12 @@ namespace SharpGPU
             }
         }
 
-        internal override void ExecuteIndirectCommandBufferCore(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
-        {
-            EnsureNativeRenderPassActive();
-            Dx12RasterIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RasterIndirectCommandBuffer ?? throw new InvalidOperationException("DX12 raster indirect draw requires a Dx12RasterIndirectCommandBuffer.");
-            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
-        }
-
         internal override void EndPassCore()
         {
             if (m_PassDescriptor.Timestamp.HasValue)
             {
                 WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
                 Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-                commandBuffer.TimestampQueryHeap = null;
             }
 #if DEBUG
             PopDebugGroup();
@@ -3671,6 +3665,8 @@ namespace SharpGPU
 
     internal unsafe class Dx12MLEncoder : RHIMLEncoder
     {
+        private RHIMLPassDescriptor m_PassDescriptor;
+
         private static readonly RHIBufferRange s_WholeBufferRange = RHIBufferRange.Whole();
 
 #if DEBUG
@@ -3684,10 +3680,14 @@ namespace SharpGPU
 
         internal override void BeginPass(in RHIMLPassDescriptor descriptor)
         {
+            m_PassDescriptor = descriptor;
 #if DEBUG
             PushDebugGroup(descriptor.Name);
 #endif
-        }
+            if (descriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
+            }        }
 
         public override void Barrier(in RHIBarrier barrier)
         {
@@ -3716,7 +3716,7 @@ namespace SharpGPU
         public override void WriteTimestamp(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, index);
+                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer, m_PassDescriptor.Timestamp?.Query, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, index);
         }
 
@@ -3948,8 +3948,6 @@ namespace SharpGPU
 
             if (descriptor.Timestamp.HasValue)
             {
-                commandBuffer.TimestampQueryHeap = descriptor.Timestamp.Value.Query;
-                commandBuffer.TimestampQueryIndex = descriptor.Timestamp.Value.BeginIndex;
                 WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
             }
         }
@@ -3976,7 +3974,7 @@ namespace SharpGPU
         public override void WriteTimestamp(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer!, index);
+                Dx12QueryEncoderValidation.RequireTimestampQuery(m_CommandBuffer!, m_PassDescriptor.Timestamp?.Query, index);
             dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.Timestamp, index);
         }
 
@@ -4053,7 +4051,9 @@ namespace SharpGPU
         {
             if (numRecords == 0)
             {
-                return;
+                throw new ArgumentOutOfRangeException(
+                    nameof(numRecords),
+                    "Work-graph dispatch record count must be non-zero.");
             }
 
             Dx12WorkGraphPipeline pipeline = RequirePipeline();
@@ -4123,7 +4123,6 @@ namespace SharpGPU
             if (m_PassDescriptor.Timestamp.HasValue)
             {
                 WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
-                m_CommandBuffer!.TimestampQueryHeap = null;
             }
 
             if (!string.IsNullOrWhiteSpace(m_PassDescriptor.Name))
