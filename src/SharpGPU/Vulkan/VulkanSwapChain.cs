@@ -1,8 +1,10 @@
 using System;
 using Vortice.Vulkan;
 using SharpGPU.Mathematics;
+#if !INFINITY_TARGET_ANDROID
 using SharpMetal.QuartzCore;
 using SharpMetal.ObjectiveCCore;
+#endif
 using System.Runtime.InteropServices;
 
 namespace SharpGPU
@@ -48,22 +50,25 @@ namespace SharpGPU
         private ERHISwapChainStatus m_TerminalStatus;
         private RHIException? m_TerminalDiagnostic;
 
+#if !INFINITY_TARGET_ANDROID
         private static ObjectiveCClass s_NSWindowClass;
         private static ObjectiveCClass s_NSViewClass;
-        private static readonly ObjectiveCClass s_CAMetalLayerClass = new ObjectiveCClass("CAMetalLayer");
+        private static ObjectiveCClass s_CAMetalLayerClass;
         private static ObjectiveCClass s_UIWindowClass;
         private static ObjectiveCClass s_UIViewClass;
         private static bool s_AppKitClassesInitialized;
         private static bool s_UIKitClassesInitialized;
+        private static bool s_MetalLayerClassInitialized;
 
-        private static readonly Selector s_IsKindOfClassSelector = "isKindOfClass:";
-        private static readonly Selector s_ContentViewSelector = "contentView";
-        private static readonly Selector s_RootViewControllerSelector = "rootViewController";
-        private static readonly Selector s_ViewSelector = "view";
-        private static readonly Selector s_LayerSelector = "layer";
-        private static readonly Selector s_SetWantsLayerSelector = "setWantsLayer:";
-        private static readonly Selector s_SetLayerSelector = "setLayer:";
-        private static readonly Selector s_AddSublayerSelector = "addSublayer:";
+        private static Selector s_IsKindOfClassSelector;
+        private static Selector s_ContentViewSelector;
+        private static Selector s_RootViewControllerSelector;
+        private static Selector s_ViewSelector;
+        private static Selector s_LayerSelector;
+        private static Selector s_SetWantsLayerSelector;
+        private static Selector s_SetLayerSelector;
+        private static Selector s_AddSublayerSelector;
+#endif
 
         public VulkanSwapChain(
             VulkanDevice device,
@@ -179,6 +184,10 @@ namespace SharpGPU
                 case RHINativeSurfaceKind.AppKitNsWindow:
                 case RHINativeSurfaceKind.UIKitUiWindow:
                 {
+#if INFINITY_TARGET_ANDROID
+                    throw new PlatformNotSupportedException(
+                        "Apple Metal surfaces are unavailable on Android Vulkan builds.");
+#else
                     // TODO(UNVERIFIED): iOS path requires device runtime verification.
                     EOSPlatform platform = descriptor.SurfaceKind == RHINativeSurfaceKind.AppKitNsWindow ? EOSPlatform.MacOS : EOSPlatform.iOS;
                     metalLayerHandle = ResolveMetalLayer(descriptor.WindowHandle, platform);
@@ -187,7 +196,7 @@ namespace SharpGPU
                         throw new InvalidOperationException("Failed to resolve CAMetalLayer for Vulkan surface creation.");
                     }
 
-                    VkMetalSurfaceCreateInfoEXT surfaceCreateInfo = new VkMetalSurfaceCreateInfoEXT()
+                    VkMetalSurfaceCreateInfoEXT metalSurfaceCreateInfo = new VkMetalSurfaceCreateInfoEXT()
                     {
                         sType = VkStructureType.MetalSurfaceCreateInfoEXT,
                         pLayer = metalLayerHandle,
@@ -196,7 +205,7 @@ namespace SharpGPU
                     {
                         surface = CreateMetalSurface(
                             vkInstance.NativeInstance,
-                            in surfaceCreateInfo);
+                            in metalSurfaceCreateInfo);
                     }
                     catch
                     {
@@ -205,6 +214,7 @@ namespace SharpGPU
                         metalLayerHandle = IntPtr.Zero;
                         throw;
                     }
+#endif
                     break;
                 }
                 default:
@@ -214,8 +224,29 @@ namespace SharpGPU
             return surface;
         }
 
+#if !INFINITY_TARGET_ANDROID
+        private static void EnsureMetalSelectorsLoaded()
+        {
+            if (s_MetalLayerClassInitialized)
+            {
+                return;
+            }
+
+            s_CAMetalLayerClass = new ObjectiveCClass("CAMetalLayer");
+            s_IsKindOfClassSelector = "isKindOfClass:";
+            s_ContentViewSelector = "contentView";
+            s_RootViewControllerSelector = "rootViewController";
+            s_ViewSelector = "view";
+            s_LayerSelector = "layer";
+            s_SetWantsLayerSelector = "setWantsLayer:";
+            s_SetLayerSelector = "setLayer:";
+            s_AddSublayerSelector = "addSublayer:";
+            s_MetalLayerClassInitialized = true;
+        }
+
         private static bool IsObjectOfClass(IntPtr objectPtr, ObjectiveCClass cls)
         {
+            EnsureMetalSelectorsLoaded();
             return objectPtr != IntPtr.Zero && cls.NativePtr != IntPtr.Zero && ObjectiveCRuntime.bool_objc_msgSend(objectPtr, (IntPtr)s_IsKindOfClassSelector, cls.NativePtr);
         }
 
@@ -236,6 +267,7 @@ namespace SharpGPU
                 return;
             }
 
+            EnsureMetalSelectorsLoaded();
             s_UIWindowClass = new ObjectiveCClass("UIWindow");
             s_UIViewClass = new ObjectiveCClass("UIView");
             s_UIKitClassesInitialized = true;
@@ -248,6 +280,7 @@ namespace SharpGPU
                 return;
             }
 
+            EnsureMetalSelectorsLoaded();
             s_NSWindowClass = new ObjectiveCClass("NSWindow");
             s_NSViewClass = new ObjectiveCClass("NSView");
             s_AppKitClassesInitialized = true;
@@ -255,6 +288,7 @@ namespace SharpGPU
 
         private static IntPtr ResolveMetalLayer(IntPtr surfaceHandle, EOSPlatform platform)
         {
+            EnsureMetalSelectorsLoaded();
             if (surfaceHandle == IntPtr.Zero)
             {
                 throw new InvalidOperationException("SwapChain surface pointer is null.");
@@ -355,6 +389,7 @@ namespace SharpGPU
             ObjectiveCRuntime.objc_msgSend(baseLayer, s_AddSublayerSelector, newLayer.NativePtr);
             return newLayer.NativePtr;
         }
+#endif
 
         private VulkanSwapchainBuild BuildSwapchain(
             in RHISwapChainDescriptor descriptor,

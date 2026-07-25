@@ -285,13 +285,14 @@ namespace SharpGPU
             switch (format)
             {
                 case ERHISwapChainFormat.R8G8B8A8_UNorm:
-                    return VkFormat.B8G8R8A8Unorm;
+                    return VkFormat.R8G8B8A8Unorm;
                 case ERHISwapChainFormat.R10G10B10A2_UNorm:
                     return VkFormat.A2B10G10R10UnormPack32;
                 case ERHISwapChainFormat.R16G16B16A16_Float:
                     return VkFormat.R16G16B16A16Sfloat;
                 default:
-                    return VkFormat.B8G8R8A8Unorm;
+                    throw new NotSupportedException(
+                        $"Vulkan swapchain format '{format}' is not supported.");
             }
         }
 

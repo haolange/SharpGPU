@@ -2,7 +2,9 @@ using System;
 using System.Runtime.ExceptionServices;
 using Vortice.Vulkan;
 using SharpGPU.Mathematics;
+#if !INFINITY_TARGET_ANDROID
 using SharpMetal.ObjectiveCCore;
+#endif
 
 namespace SharpGPU
 {
@@ -661,16 +663,51 @@ namespace SharpGPU
                 return selected;
             }
 
+            // Prefer exact match, then same-bit layout channel order
+            // (RGBA ↔ BGRA). Android commonly exposes only RGBA; Windows
+            // Vulkan often prefers BGRA. Report the selected VkFormat via
+            // ConvertSwapchainVkFormatToRhiPixelFormat — no silent fake.
+            VkFormat channelOrderFallback =
+                GetSwapchainChannelOrderFallback(requestedFormat);
+            int fallbackIndex = -1;
             for (int index = 0; index < formatCount; ++index)
             {
                 if (formats[index].format == requestedFormat)
                 {
                     return formats[index];
                 }
+                if (fallbackIndex < 0 &&
+                    channelOrderFallback != VkFormat.Undefined &&
+                    formats[index].format == channelOrderFallback)
+                {
+                    fallbackIndex = index;
+                }
             }
+
+            if (fallbackIndex >= 0)
+            {
+                return formats[fallbackIndex];
+            }
+
             throw new NotSupportedException(
                 $"The Vulkan surface does not support requested format " +
-                $"'{requestedFormat}'.");
+                $"'{requestedFormat}'" +
+                (channelOrderFallback == VkFormat.Undefined
+                    ? "."
+                    : $" or channel-order fallback '{channelOrderFallback}'."));
+        }
+
+        private static VkFormat GetSwapchainChannelOrderFallback(
+            VkFormat requestedFormat)
+        {
+            return requestedFormat switch
+            {
+                VkFormat.R8G8B8A8Unorm => VkFormat.B8G8R8A8Unorm,
+                VkFormat.B8G8R8A8Unorm => VkFormat.R8G8B8A8Unorm,
+                VkFormat.R8G8B8A8Srgb => VkFormat.B8G8R8A8Srgb,
+                VkFormat.B8G8R8A8Srgb => VkFormat.R8G8B8A8Srgb,
+                _ => VkFormat.Undefined,
+            };
         }
 
         private VkPresentModeKHR SelectPresentMode(
@@ -940,7 +977,12 @@ namespace SharpGPU
             }
             if (metalLayerHandle != IntPtr.Zero)
             {
+#if INFINITY_TARGET_ANDROID
+                throw new InvalidOperationException(
+                    "Android Vulkan swapchains must not own a Metal layer handle.");
+#else
                 ObjectiveCRuntime.Release(metalLayerHandle);
+#endif
             }
         }
 

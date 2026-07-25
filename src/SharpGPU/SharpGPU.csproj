@@ -62,12 +62,15 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Direct3D.D3D12" Version="1.619.3" GeneratePathProperty="true" />
 		<PackageReference Include="SharpGen.Runtime" Version="2.4.2-beta" />
+		<PackageReference Include="Vortice.Vulkan" Version="3.2.1" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(InfinityBuildOS)' == 'Win'">
+		<PackageReference Include="Microsoft.Direct3D.D3D12" Version="1.619.3" GeneratePathProperty="true" />
 		<PackageReference Include="Vortice.DirectML" Version="3.8.3" GeneratePathProperty="true" />
 		<PackageReference Include="Vortice.DirectStorage" Version="3.8.3" />
 		<PackageReference Include="Vortice.Pix.Native" Version="1.0.1" />
-		<PackageReference Include="Vortice.Vulkan" Version="3.2.1" />
 	</ItemGroup>
 
 	<!--

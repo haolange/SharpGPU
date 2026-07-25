@@ -10,12 +10,14 @@ namespace SharpGPU
         internal VulkanDevice Device { get { ThrowIfDisposed(); return m_VulkanTexture.VulkanDevice; } }
 
         private VulkanTexture m_VulkanTexture;
+        private readonly VulkanDevice m_VulkanDevice;
         private VkImageView m_NativeImageView;
         private readonly RHITextureViewDescriptor m_Descriptor;
 
         public VulkanTextureView(VulkanTexture texture, in RHITextureViewDescriptor descriptor)
         {
             m_VulkanTexture = texture;
+            m_VulkanDevice = texture.VulkanDevice;
             m_Descriptor = descriptor;
 
             VkImageAspectFlags aspect = VkImageAspectFlags.Color;
@@ -61,7 +63,7 @@ namespace SharpGPU
 
         protected override void Release()
         {
-            VulkanNative.vkDestroyImageView(m_VulkanTexture.VulkanDevice.NativeDevice, m_NativeImageView, null);
+            VulkanNative.vkDestroyImageView(m_VulkanDevice.NativeDevice, m_NativeImageView, null);
         }
     }
 }
