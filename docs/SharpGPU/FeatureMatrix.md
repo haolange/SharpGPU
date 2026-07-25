@@ -15,8 +15,8 @@ documented exception/status model.
 
 | Platform | Artifact | Current status |
 |---|---|---|
-| Windows x64 | `Engine/Artifacts/SharpGPU/feature-report-win-x64.json` | W12 must regenerate the report with the typed schema after all applicable qualified gates pass |
-| Android ARM64 | `Engine/Artifacts/SharpGPU/feature-report-android-arm64.json` | Generated only after matching-device build/install/runtime qualification; no placeholder is permitted |
+| Windows x64 | `Engine/Artifacts/SharpGPU/feature-report-win-x64.json` | W12 regenerated schema revision 2 (no absolute workspace paths) |
+| Android ARM64 | `Engine/Artifacts/SharpGPU/feature-report-android-arm64.json` | W12 generated after API30/ARM64/Adreno650 device qualification; DirectStorage=NotApplicable; not a full-Android certification |
 | Linux x64 | none | `BLOCKED_PLATFORM` until matching-host Vulkan qualification passes |
 | macOS ARM64 | none | `BLOCKED_PLATFORM` until matching-host Metal qualification passes |
 | iOS/iPadOS ARM64 | none | `BLOCKED_PLATFORM` until matching-device Metal qualification passes |
