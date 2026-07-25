@@ -18,7 +18,7 @@ documented exception/status model.
 | Windows x64 | `Engine/Artifacts/SharpGPU/feature-report-win-x64.json` | W12 regenerated schema revision 2 (no absolute workspace paths) |
 | Android ARM64 | `Engine/Artifacts/SharpGPU/feature-report-android-arm64.json` | W12 generated after API30/ARM64/Adreno650 device qualification; DirectStorage=NotApplicable; not a full-Android certification |
 | Linux x64 | none (do not invent placeholders) | `BLOCKED_PLATFORM` / Unverified until matching-host Vulkan qualification passes (`P13-LINUX`) |
-| macOS ARM64 | historical pre-rev2 file may exist; not current evidence | `BLOCKED_PLATFORM` / Unverified until matching-host Metal qualification regenerates schema rev2 (`P13-MACOS`) |
+| macOS ARM64 | `Engine/Artifacts/SharpGPU/feature-report-macos-arm64.json` | P13-MACOS regenerated schema revision 2 on Apple M3 Max (Metal/Vulkan Passed; DX12 NotApplicable; no absolute workspace paths) |
 | iOS/iPadOS ARM64 | none (do not invent placeholders) | `BLOCKED_PLATFORM` / Unverified until matching-device Metal qualification passes (`P13-IOS`) |
 
 ## Hard Gate Categories (RFC-0021)
