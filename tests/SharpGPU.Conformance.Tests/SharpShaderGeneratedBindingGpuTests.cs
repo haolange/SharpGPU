@@ -135,7 +135,7 @@ namespace SharpGPU.Conformance.Tests
             ShaderProgramCompilation compilation,
             ERHIBackend backend)
         {
-            using RHIInstance? instance = RHIInstance.Create(
+            using RHIInstance instance = RHIInstance.Create(
                 new RHIInstanceDescriptor
                 {
                     Backend = backend,
@@ -144,12 +144,12 @@ namespace SharpGPU.Conformance.Tests
                             ? GetVulkanSurfaceKind()
                             : RHINativeSurfaceKind.Headless,
                     EnableDebugLayer = backend == ERHIBackend.DirectX12,
-                    EnableValidatior = backend == ERHIBackend.Vulkan,
+                    EnableValidation = backend == ERHIBackend.Vulkan,
                     GraphicsQueueRequestCount = 1,
                 });
             Assert.NotNull(instance);
             Assert.True(
-                instance!.DeviceCount > 0,
+                instance.DeviceCount > 0,
                 $"{backend} exposed no devices.");
 
             VulkanValidationCollector? vulkanValidation = null;
@@ -417,7 +417,9 @@ namespace SharpGPU.Conformance.Tests
                     commandBuffer.End();
 
                     fence.Reset();
-                    queue.Submit(commandBuffer, fence, null!, null!);
+                    queue.Submit(new RHIQueueSubmitDescriptor(
+                        new RHICommandBuffer[] { commandBuffer },
+                        completionFence: fence));
                     fence.Wait();
 
                     IntPtr pointer = readback.Map(0, sizeof(uint));
