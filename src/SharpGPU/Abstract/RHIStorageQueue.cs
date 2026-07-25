@@ -36,5 +36,6 @@ namespace SharpGPU
         public abstract void RequestBuffer(in RHIStorageBufferRequest request);
         public abstract void RequestTexture(in RHIStorageTextureRequest request);
         public abstract void Submit(RHIFence signalFence);
+        public abstract void ThrowIfSubmissionFailed();
     }
 }

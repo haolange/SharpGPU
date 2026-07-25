@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Threading;
-using System.Diagnostics;
 using Vortice.Mathematics;
 using Vortice.DirectStorage;
 using System.Collections.Generic;
@@ -9,7 +8,7 @@ using System.Runtime.InteropServices;
 
 namespace SharpGPU
 {
-#pragma warning disable CS8600, CS8602, CA1416
+#pragma warning disable CA1416
     internal unsafe class Dx12StorageQueue : RHIStorageQueue
     {
         public Dx12Device Dx12Device
@@ -21,200 +20,191 @@ namespace SharpGPU
         }
 
         private readonly Dx12Device m_Dx12Device;
-        private readonly List<Action> m_PendingRequests;
-
-        private bool m_DirectStorageRuntimeAvailable;
         private IDStorageFactory? m_DStorageFactory;
         private IDStorageQueue? m_DStorageQueue;
         private Vortice.Direct3D12.ID3D12Device? m_DStorageDevice;
 
-        // Keep wrappers alive so GC/finalizer cannot release wrapped native objects unexpectedly.
-        private readonly Dictionary<nint, Vortice.Direct3D12.ID3D12Resource> m_DStorageResources = new();
-        private readonly Dictionary<nint, Vortice.Direct3D12.ID3D12Fence> m_DStorageFences = new();
+        private static readonly object s_DirectStorageResolverGate = new();
+        private static bool s_DirectStorageResolverRegistered;
+        private static bool s_DirectStorageRuntimeConfigured;
+        private static nint s_DirectStorageCoreHandle;
+
         private readonly Dictionary<nint, IDStorageFile> m_DStorageFilesByHandle = new();
         private readonly Dictionary<nint, string> m_FilePathByHandle = new();
         private long m_NextFileHandle = 1;
 
-        // Win32 file constants
-        private const uint GENERIC_READ_ACCESS = 0x80000000;
-        private const uint FILE_SHARE_READ_FLAG = 0x00000001;
-        private const uint OPEN_EXISTING_DISP = 3;
-        private const uint FILE_ATTRIBUTE_NORMAL_FLAG = 0x00000080;
-        private const uint FILE_FLAG_OVERLAPPED_FLAG = 0x40000000;
-        private const uint FILE_FLAG_NO_BUFFERING_FLAG = 0x20000000;
         private const string DirectStorageRuntimeCore = "dstoragecore.dll";
         private const string DirectStorageRuntime = "dstorage.dll";
 
         public Dx12StorageQueue(Dx12Device device)
         {
-            m_Dx12Device = device;
-            m_PendingRequests = new List<Action>();
+            m_Dx12Device = device ?? throw new ArgumentNullException(nameof(device));
 
-            ThirdPartyNativeLibraryResolver.EnsureResolverRegistered(typeof(DirectStorage).Assembly);
-            m_DirectStorageRuntimeAvailable = ProbeDirectStorageRuntime();
-            if (m_DirectStorageRuntimeAvailable)
-            {
-                InitializeDirectStorageQueue();
-            }
+            InitializeDirectStorageQueue();
         }
 
         public override RHIStorageFileHandle OpenFile(string absPath)
         {
-            RHIStorageFileHandle result;
-            result.NativeHandle = (IntPtr)Interlocked.Increment(ref m_NextFileHandle);
-            m_FilePathByHandle[(nint)result.NativeHandle] = absPath;
-            return result;
+            ThrowIfDisposed();
+            if (string.IsNullOrWhiteSpace(absPath))
+            {
+                throw new ArgumentException("A non-empty absolute file path is required.", nameof(absPath));
+            }
+
+            if (!Path.IsPathFullyQualified(absPath))
+            {
+                throw new ArgumentException("DirectStorage file paths must be absolute.", nameof(absPath));
+            }
+
+            IDStorageFactory factory = m_DStorageFactory
+                ?? throw new InvalidOperationException("The DirectStorage factory is not initialized.");
+            try
+            {
+                IDStorageFile storageFile = factory.OpenFile<IDStorageFile>(absPath);
+                nint handle = (nint)Interlocked.Increment(ref m_NextFileHandle);
+                m_DStorageFilesByHandle.Add(handle, storageFile);
+                m_FilePathByHandle.Add(handle, absPath);
+                return new RHIStorageFileHandle { NativeHandle = handle };
+            }
+            catch (SharpGen.Runtime.SharpGenException exception)
+            {
+                throw CreateNativeFailure(
+                    ERHIErrorCode.NativeFailure,
+                    exception.HResult,
+                    "DirectStorage failed to open the requested source file.",
+                    exception);
+            }
         }
 
         public override void CloseFile(in RHIStorageFileHandle fileHandle)
         {
+            ThrowIfDisposed();
             nint handleKey = (nint)fileHandle.NativeHandle;
-            if (m_DStorageFilesByHandle.TryGetValue(handleKey, out IDStorageFile? storageFile))
+            if (!m_DStorageFilesByHandle.Remove(handleKey, out IDStorageFile? storageFile))
             {
-                storageFile.Dispose();
-                m_DStorageFilesByHandle.Remove(handleKey);
+                throw new ArgumentException(
+                    "The DirectStorage file handle is not owned by this queue.",
+                    nameof(fileHandle));
             }
+
+            storageFile.Dispose();
             m_FilePathByHandle.Remove(handleKey);
         }
 
         public override ulong QueryFileSize(in RHIStorageFileHandle fileHandle)
         {
+            ThrowIfDisposed();
             if (!m_FilePathByHandle.TryGetValue((nint)fileHandle.NativeHandle, out string? absPath))
             {
-                return 0;
+                throw new ArgumentException(
+                    "The DirectStorage file handle is not owned by this queue.",
+                    nameof(fileHandle));
             }
 
             FileInfo fileInfo = new FileInfo(absPath);
-            return fileInfo.Exists ? (ulong)fileInfo.Length : 0;
+            if (!fileInfo.Exists)
+            {
+                throw new FileNotFoundException(
+                    "The DirectStorage source file no longer exists.",
+                    absPath);
+            }
+
+            return checked((ulong)fileInfo.Length);
         }
 
         public override void RequestBuffer(in RHIStorageBufferRequest request)
         {
-            RHIStorageBufferRequest capturedRequest = request;
-            if (TryEnqueueDirectStorageBuffer(in capturedRequest))
-            {
-                return;
-            }
-
-            // CPU fallback path for conformance and machines without DirectStorage runtime.
-            m_PendingRequests.Add(() =>
-            {
-                if (!m_FilePathByHandle.TryGetValue((nint)capturedRequest.FileHandle.NativeHandle, out string? absPath))
-                {
-                    throw new NotSupportedException("DX12 StorageQueue buffer request cannot resolve the source file handle.");
-                }
-
-                Dx12Buffer dx12Buffer = capturedRequest.DestinationBuffer as Dx12Buffer;
-                if (dx12Buffer == null)
-                {
-                    throw new NotSupportedException("DX12 StorageQueue CPU fallback requires a DX12 destination buffer.");
-                }
-
-                if (dx12Buffer.Descriptor.StorageMode == ERHIStorageMode.GPULocal)
-                {
-                    throw new NotSupportedException("DX12 StorageQueue CPU fallback requires a mappable destination buffer; GPULocal uploads require DirectStorage.");
-                }
-
-                if (capturedRequest.FileOffset > long.MaxValue || capturedRequest.FileSize > int.MaxValue || capturedRequest.DestinationOffset > int.MaxValue)
-                {
-                    throw new NotSupportedException("DX12 StorageQueue CPU fallback supports requests up to Int32-sized file/destination offsets and Int64-sized file offsets.");
-                }
-
-                ulong destinationEnd;
-                try
-                {
-                    destinationEnd = checked(capturedRequest.DestinationOffset + capturedRequest.FileSize);
-                }
-                catch (OverflowException ex)
-                {
-                    throw new NotSupportedException("DX12 StorageQueue CPU fallback request destination range overflowed.", ex);
-                }
-
-                if (destinationEnd > (ulong)dx12Buffer.Descriptor.ByteSize)
-                {
-                    throw new NotSupportedException("DX12 StorageQueue CPU fallback request exceeds the destination buffer size.");
-                }
-
-                int fileSize = checked((int)capturedRequest.FileSize);
-                byte[] tempBuffer = new byte[fileSize];
-                using FileStream fileStream = File.OpenRead(absPath);
-                fileStream.Seek((long)capturedRequest.FileOffset, SeekOrigin.Begin);
-                fileStream.ReadExactly(tempBuffer, 0, tempBuffer.Length);
-
-                IntPtr mapped = dx12Buffer.Map(0, 0);
-                Marshal.Copy(tempBuffer, 0, IntPtr.Add(mapped, checked((int)capturedRequest.DestinationOffset)), tempBuffer.Length);
-                dx12Buffer.UnMap(
-                    checked((uint)capturedRequest.DestinationOffset),
-                    checked((uint)destinationEnd));
-            });
+            ThrowIfDisposed();
+            EnqueueDirectStorageBuffer(in request);
         }
 
         public override void RequestTexture(in RHIStorageTextureRequest request)
         {
-            if (TryEnqueueDirectStorageTexture(in request))
-            {
-                return;
-            }
-
-            m_PendingRequests.Add(static () =>
-            {
-                throw new NotSupportedException("DX12 StorageQueue CPU fallback for texture requests is not implemented; DirectStorage runtime is required.");
-            });
+            ThrowIfDisposed();
+            EnqueueDirectStorageTexture(in request);
         }
 
         public override void Submit(RHIFence signalFence)
         {
-            foreach (Action request in m_PendingRequests)
+            ThrowIfDisposed();
+            IDStorageQueue queue = m_DStorageQueue
+                ?? throw new InvalidOperationException("The DirectStorage queue is not initialized.");
+            if (signalFence is not Dx12Fence dx12Fence)
             {
-                request();
+                throw new ArgumentException(
+                    "DirectStorage submission requires a DX12 completion fence.",
+                    nameof(signalFence));
             }
-            m_PendingRequests.Clear();
-
-            if (m_DStorageQueue != null)
+            if (!ReferenceEquals(dx12Fence.OwnerDevice, m_Dx12Device))
             {
-                if (signalFence != null)
-                {
-                    Dx12Fence dx12Fence = signalFence as Dx12Fence;
-                    if (dx12Fence != null && dx12Fence.NativeFence != null)
-                    {
-                        Vortice.Direct3D12.ID3D12Fence wrappedFence = GetOrCreateFenceWrapper(dx12Fence.NativeFence);
-                        m_DStorageQueue.EnqueueSignal(wrappedFence, 1);
-                    }
-                }
+                throw new ArgumentException(
+                    "The DirectStorage completion fence belongs to a different DX12 device.",
+                    nameof(signalFence));
+            }
 
-                m_DStorageQueue.Submit();
+            dx12Fence.ReserveSignal();
+            try
+            {
+                ulong signalValue = dx12Fence.PrepareSignalValue();
+                queue.EnqueueSignal(dx12Fence.NativeFence, signalValue);
+                queue.Submit();
+            }
+            catch (SharpGen.Runtime.SharpGenException exception)
+            {
+                dx12Fence.RollbackSignal();
+                throw CreateNativeFailure(
+                    ERHIErrorCode.SubmissionFailed,
+                    exception.HResult,
+                    "DirectStorage failed to submit the native file queue.",
+                    exception);
+            }
+            catch
+            {
+                dx12Fence.RollbackSignal();
+                throw;
+            }
+        }
+
+        public override void ThrowIfSubmissionFailed()
+        {
+            ThrowIfDisposed();
+            IDStorageQueue queue = m_DStorageQueue
+                ?? throw new InvalidOperationException("The DirectStorage queue is not initialized.");
+            ErrorRecord errorRecord;
+            try
+            {
+                errorRecord = queue.RetrieveErrorRecord();
+            }
+            catch (SharpGen.Runtime.SharpGenException exception)
+            {
+                throw CreateNativeFailure(
+                    ERHIErrorCode.NativeFailure,
+                    exception.HResult,
+                    "DirectStorage failed to retrieve the native queue error record.",
+                    exception);
+            }
+            if (errorRecord.FailureCount == 0 ||
+                !errorRecord.FirstFailure.HResult.Failure)
+            {
                 return;
             }
 
-            if (signalFence != null)
-            {
-                Dx12Fence dx12Fence = signalFence as Dx12Fence;
-                dx12Fence.NativeFence.Signal(1);
-            }
+            int nativeCode = errorRecord.FirstFailure.HResult.Code;
+            throw CreateNativeFailure(
+                ERHIErrorCode.SubmissionFailed,
+                nativeCode,
+                $"DirectStorage reported {errorRecord.FailureCount} failed command(s); " +
+                $"first command type was {errorRecord.FirstFailure.CommandType}.");
         }
 
         protected override void Release()
         {
-            m_PendingRequests.Clear();
-
             foreach (IDStorageFile storageFile in m_DStorageFilesByHandle.Values)
             {
                 storageFile.Dispose();
             }
             m_DStorageFilesByHandle.Clear();
             m_FilePathByHandle.Clear();
-
-            foreach (Vortice.Direct3D12.ID3D12Fence fence in m_DStorageFences.Values)
-            {
-                fence.Dispose();
-            }
-            m_DStorageFences.Clear();
-
-            foreach (Vortice.Direct3D12.ID3D12Resource resource in m_DStorageResources.Values)
-            {
-                resource.Dispose();
-            }
-            m_DStorageResources.Clear();
 
             m_DStorageQueue?.Dispose();
             m_DStorageQueue = null;
@@ -226,8 +216,45 @@ namespace SharpGPU
             m_DStorageDevice = null;
         }
 
+        internal static bool TryProbeNativeSupport(Dx12Device device, out string reason)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+
+            IDStorageFactory? factory = null;
+            IDStorageQueue? queue = null;
+            Vortice.Direct3D12.ID3D12Device? storageDevice = null;
+            try
+            {
+                CreateNativeQueueResources(
+                    device,
+                    out factory,
+                    out queue,
+                    out storageDevice);
+
+                reason =
+                    "A native Microsoft DirectStorage file queue was created for the current DX12 device " +
+                    "using the explicitly configured file-buffered Tier-1 strategy.";
+                return true;
+            }
+            catch (Exception exception)
+            {
+                reason =
+                    $"Native Microsoft DirectStorage file-queue probing failed " +
+                    $"({exception.GetType().Name}, HRESULT 0x{exception.HResult:X8}).";
+                return false;
+            }
+            finally
+            {
+                queue?.Dispose();
+                factory?.Dispose();
+                storageDevice?.Dispose();
+            }
+        }
+
         private static bool ProbeDirectStorageRuntime()
         {
+            EnsureDirectStorageResolverRegistered();
+
             string? resolvedPath = null;
 
             if (TryProbeRuntimeLibrary(DirectStorageRuntimeCore, out resolvedPath, out nint coreHandle))
@@ -259,233 +286,466 @@ namespace SharpGPU
             return false;
         }
 
-        private void InitializeDirectStorageQueue()
+        private static void EnsureDirectStorageResolverRegistered()
         {
-            try
+            lock (s_DirectStorageResolverGate)
             {
-                m_DStorageFactory = DirectStorage.DStorageGetFactory<IDStorageFactory>();
-
-                m_Dx12Device.NativeDevice.AddRef();
-                m_DStorageDevice = new Vortice.Direct3D12.ID3D12Device((nint)m_Dx12Device.NativeDevice);
-
-                ushort queueCapacity = (ushort)Math.Clamp(256, DirectStorage.MinQueueCapacity, DirectStorage.MaxQueueCapacity);
-                QueueDesc queueDesc = new QueueDesc
+                if (s_DirectStorageResolverRegistered &&
+                    s_DirectStorageRuntimeConfigured)
                 {
-                    SourceType = RequestSourceType.File,
-                    Capacity = queueCapacity,
-                    Priority = Priority.Normal,
-                    Name = "SharpGPU.Dx12StorageQueue",
-                    Device = m_DStorageDevice,
-                };
+                    return;
+                }
 
-                m_DStorageQueue = m_DStorageFactory.CreateQueue<IDStorageQueue>(queueDesc);
-                m_DirectStorageRuntimeAvailable = m_DStorageQueue != null;
-            }
-            catch (Exception ex)
-            {
-                m_DirectStorageRuntimeAvailable = false;
-                _ = ex;
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine($"DirectStorage initialization failed: {ex}");
-#endif
+                if (!s_DirectStorageResolverRegistered)
+                {
+                    // Vortice.DirectStorage owns the DllImportResolver for its assembly.
+                    // Subscribe to its supported resolution hook instead of trying to replace it.
+                    DirectStorage.ResolveLibrary += ResolveDirectStorageLibrary;
+                    s_DirectStorageResolverRegistered = true;
+                }
 
-                m_DStorageQueue?.Dispose();
-                m_DStorageQueue = null;
-
-                m_DStorageFactory?.Dispose();
-                m_DStorageFactory = null;
-
-                m_DStorageDevice?.Dispose();
-                m_DStorageDevice = null;
+                if (!s_DirectStorageRuntimeConfigured)
+                {
+                    // The bundled DirectStorage 1.2.1 runtime was qualified on this host with a
+                    // file -> DEFAULT-heap -> readback test. Its default BypassIO path reported
+                    // success while leaving the destination zeroed; DisableBypassIO alone behaved
+                    // the same. The official file-buffered DirectStorage mode produced the exact
+                    // bytes without introducing a SharpGPU CPU read/copy path.
+                    Configuration1 configuration = new Configuration1
+                    {
+                        DisableBypassIO = true,
+                        ForceFileBuffering = true,
+                    };
+                    DirectStorage.DStorageSetConfiguration1(configuration).CheckError();
+                    s_DirectStorageRuntimeConfigured = true;
+                }
             }
         }
 
-        private bool TryEnqueueDirectStorageBuffer(in RHIStorageBufferRequest request)
+        private static nint ResolveDirectStorageLibrary(
+            string libraryName,
+            System.Reflection.Assembly assembly,
+            DllImportSearchPath? searchPath)
         {
-            if (m_DStorageQueue == null || request.FileSize > uint.MaxValue)
+            _ = assembly;
+            _ = searchPath;
+            if (!string.Equals(
+                    libraryName,
+                    DirectStorageRuntime,
+                    StringComparison.OrdinalIgnoreCase))
             {
-                return false;
+                return 0;
             }
 
-            if (!TryGetStorageFile(request.FileHandle, out IDStorageFile storageFile))
+            lock (s_DirectStorageResolverGate)
             {
-                return false;
+                if (s_DirectStorageCoreHandle == 0 &&
+                    !ThirdPartyNativeLibraryResolver.TryResolve(
+                        DirectStorageRuntimeCore,
+                        out s_DirectStorageCoreHandle,
+                        out _))
+                {
+                    return 0;
+                }
+
+                return ThirdPartyNativeLibraryResolver.TryResolve(
+                    DirectStorageRuntime,
+                    out nint runtimeHandle,
+                    out _)
+                    ? runtimeHandle
+                    : 0;
+            }
+        }
+
+        private void InitializeDirectStorageQueue()
+        {
+            IDStorageFactory? factory = null;
+            IDStorageQueue? queue = null;
+            Vortice.Direct3D12.ID3D12Device? storageDevice = null;
+            try
+            {
+                CreateNativeQueueResources(
+                    m_Dx12Device,
+                    out factory,
+                    out queue,
+                    out storageDevice);
+                m_DStorageFactory = factory;
+                m_DStorageQueue = queue;
+                m_DStorageDevice = storageDevice;
+            }
+            catch (NotSupportedException)
+            {
+                queue?.Dispose();
+                factory?.Dispose();
+                storageDevice?.Dispose();
+
+                throw;
+            }
+            catch (SharpGen.Runtime.SharpGenException exception)
+            {
+                queue?.Dispose();
+                factory?.Dispose();
+                storageDevice?.Dispose();
+
+                throw CreateNativeFailure(
+                    ERHIErrorCode.InitializationFailed,
+                    exception.HResult,
+                    "DX12 StorageQueue could not initialize a native DirectStorage file queue.",
+                    exception);
+            }
+            catch (Exception exception)
+            {
+                queue?.Dispose();
+                factory?.Dispose();
+                storageDevice?.Dispose();
+
+                throw CreateNativeFailure(
+                    ERHIErrorCode.InitializationFailed,
+                    exception.HResult,
+                    "DX12 StorageQueue could not initialize a native DirectStorage file queue.",
+                    exception);
+            }
+        }
+
+        private static void CreateNativeQueueResources(
+            Dx12Device device,
+            out IDStorageFactory factory,
+            out IDStorageQueue queue,
+            out Vortice.Direct3D12.ID3D12Device storageDevice)
+        {
+            EnsureDirectStorageResolverRegistered();
+            if (!ProbeDirectStorageRuntime())
+            {
+                throw new NotSupportedException(
+                    "DX12 StorageQueue requires the native Microsoft DirectStorage runtime.");
             }
 
-            Dx12Buffer dx12Buffer = request.DestinationBuffer as Dx12Buffer;
-            if (dx12Buffer == null || dx12Buffer.NativeResource == null)
+            factory = DirectStorage.DStorageGetFactory<IDStorageFactory>();
+
+            storageDevice =
+                device.NativeDevice.QueryInterface<Vortice.Direct3D12.ID3D12Device>();
+
+            ushort queueCapacity =
+                (ushort)Math.Clamp(
+                    256,
+                    DirectStorage.MinQueueCapacity,
+                    DirectStorage.MaxQueueCapacity);
+            QueueDesc queueDesc = new QueueDesc
             {
-                return false;
+                SourceType = RequestSourceType.File,
+                Capacity = queueCapacity,
+                Priority = Priority.Normal,
+                Name = "SharpGPU.Dx12StorageQueue",
+                Device = storageDevice,
+            };
+
+            queue = factory.CreateQueue<IDStorageQueue>(queueDesc)
+                ?? throw new NotSupportedException(
+                    "The DirectStorage runtime did not create a native file queue.");
+        }
+
+        private void EnqueueDirectStorageBuffer(in RHIStorageBufferRequest request)
+        {
+            IDStorageQueue queue = m_DStorageQueue
+                ?? throw new InvalidOperationException("The DirectStorage queue is not initialized.");
+            uint fileSize = ValidateFileSize(request.FileSize, nameof(request));
+            IDStorageFile storageFile = GetStorageFile(request.FileHandle, nameof(request));
+
+            if (request.DestinationBuffer is not Dx12Buffer dx12Buffer ||
+                !ReferenceEquals(dx12Buffer.Dx12Device, m_Dx12Device))
+            {
+                throw new ArgumentException(
+                    "The destination buffer must be owned by this DX12 device.",
+                    nameof(request));
+            }
+
+            if (dx12Buffer.IsDisposed)
+            {
+                throw new ObjectDisposedException(dx12Buffer.GetType().FullName);
             }
 
             if (dx12Buffer.Descriptor.StorageMode != ERHIStorageMode.GPULocal)
             {
-                return false;
+                throw new ArgumentException(
+                    "Native DirectStorage buffer requests require a GPU-local destination.",
+                    nameof(request));
+            }
+            if ((dx12Buffer.Descriptor.UsageFlag & ERHIBufferUsage.CopyDst) == 0)
+            {
+                throw new ArgumentException(
+                    "Native DirectStorage buffer destinations must declare CopyDst usage.",
+                    nameof(request));
             }
 
-            Vortice.Direct3D12.ID3D12Resource wrappedResource = GetOrCreateResourceWrapper(dx12Buffer.NativeResource);
-
-            RequestOptions options = default;
-            options.SourceType = RequestSourceType.File;
-            options.DestinationType = RequestDestinationType.Buffer;
-            options.CompressionFormat = CompressionFormat.None;
-
-            Source source = default;
-            source.File = new SourceFile
+            ulong destinationEnd;
+            try
             {
-                Source = storageFile,
-                Offset = request.FileOffset,
-                Size = (uint)request.FileSize,
-            };
-
-            Destination destination = default;
-            destination.Buffer = new DestinationBuffer
+                destinationEnd = checked(request.DestinationOffset + request.FileSize);
+            }
+            catch (OverflowException)
             {
-                Resource = wrappedResource,
-                Offset = request.DestinationOffset,
-                Size = (uint)request.FileSize,
-            };
-
-            Request directStorageRequest = new Request
-            {
-                Options = options,
-                Source = source,
-                Destination = destination,
-                UncompressedSize = (uint)request.FileSize,
-                CancellationTag = 0,
-                Name = "SharpGPU.Dx12.BufferUpload",
-            };
-
-            m_DStorageQueue.EnqueueRequest(directStorageRequest);
-            return true;
-        }
-
-        private bool TryEnqueueDirectStorageTexture(in RHIStorageTextureRequest request)
-        {
-            if (m_DStorageQueue == null || request.FileSize > uint.MaxValue)
-            {
-                return false;
+                throw new ArgumentOutOfRangeException(
+                    nameof(request),
+                    request.DestinationOffset,
+                    "The destination range overflows UInt64.");
             }
 
-            if (!TryGetStorageFile(request.FileHandle, out IDStorageFile storageFile))
+            if (destinationEnd > checked((ulong)dx12Buffer.Descriptor.ByteSize))
             {
-                return false;
+                throw new ArgumentOutOfRangeException(
+                    nameof(request),
+                    destinationEnd,
+                    "The destination range exceeds the buffer size.");
             }
 
-            Dx12Texture dx12Texture = request.DestinationTexture as Dx12Texture;
-            if (dx12Texture == null || dx12Texture.NativeResource == null)
-            {
-                return false;
-            }
+            ValidateSourceRange(in request.FileHandle, request.FileOffset, request.FileSize, nameof(request));
 
-            Vortice.Direct3D12.ID3D12Resource wrappedResource = GetOrCreateResourceWrapper(dx12Texture.NativeResource);
-
-            uint mipLevel = request.MipLevel;
-            uint subresourceIndex = mipLevel + (request.ArraySlice * dx12Texture.Descriptor.MipCount);
-
-            uint width = Math.Max(1u, dx12Texture.Descriptor.Extent.x >> (int)mipLevel);
-            uint height = Math.Max(1u, dx12Texture.Descriptor.Extent.y >> (int)mipLevel);
-            uint depth = Math.Max(1u, dx12Texture.Descriptor.Extent.z >> (int)mipLevel);
-
-            RequestOptions options = default;
-            options.SourceType = RequestSourceType.File;
-            options.DestinationType = RequestDestinationType.TextureRegion;
-            options.CompressionFormat = CompressionFormat.None;
-
-            Source source = default;
-            source.File = new SourceFile
-            {
-                Source = storageFile,
-                Offset = request.FileOffset,
-                Size = (uint)request.FileSize,
-            };
-
-            Destination destination = default;
-            destination.Texture = new DestinationTextureRegion
-            {
-                Resource = wrappedResource,
-                SubresourceIndex = subresourceIndex,
-                Region = new Box(0, 0, 0, (int)width, (int)height, (int)depth),
-            };
-
-            Request directStorageRequest = new Request
-            {
-                Options = options,
-                Source = source,
-                Destination = destination,
-                UncompressedSize = (uint)request.FileSize,
-                CancellationTag = 0,
-                Name = "SharpGPU.Dx12.TextureUpload",
-            };
-
-            m_DStorageQueue.EnqueueRequest(directStorageRequest);
-            return true;
-        }
-
-        private bool TryGetStorageFile(in RHIStorageFileHandle fileHandle, out IDStorageFile storageFile)
-        {
-            storageFile = null!;
-            if (m_DStorageFactory == null)
-            {
-                return false;
-            }
-
-            nint handleKey = (nint)fileHandle.NativeHandle;
-            if (m_DStorageFilesByHandle.TryGetValue(handleKey, out IDStorageFile existingFile))
-            {
-                storageFile = existingFile;
-                return true;
-            }
-
-            if (!m_FilePathByHandle.TryGetValue(handleKey, out string? absPath))
-            {
-                return false;
-            }
+            Request directStorageRequest = new Request();
+            directStorageRequest.Options.SourceType = RequestSourceType.File;
+            directStorageRequest.Options.DestinationType = RequestDestinationType.Buffer;
+            directStorageRequest.Options.CompressionFormat = CompressionFormat.None;
+            directStorageRequest.Source.File.Source = storageFile;
+            directStorageRequest.Source.File.Offset = request.FileOffset;
+            directStorageRequest.Source.File.Size = fileSize;
+            directStorageRequest.UncompressedSize = fileSize;
+            directStorageRequest.Destination.Buffer.Resource = dx12Buffer.NativeResource;
+            directStorageRequest.Destination.Buffer.Offset = request.DestinationOffset;
+            directStorageRequest.Destination.Buffer.Size = fileSize;
+            directStorageRequest.CancellationTag = 0;
+            directStorageRequest.Name = null;
 
             try
             {
-                IDStorageFile openedFile = m_DStorageFactory.OpenFile<IDStorageFile>(absPath);
-                m_DStorageFilesByHandle[handleKey] = openedFile;
-                storageFile = openedFile;
-                return true;
+                queue.EnqueueRequest(directStorageRequest);
             }
-            catch (Exception ex)
+            catch (SharpGen.Runtime.SharpGenException exception)
             {
-                _ = ex;
-#if DEBUG
-                System.Diagnostics.Debug.WriteLine($"DirectStorage OpenFile failed: {absPath}. {ex}");
-#endif
-                return false;
+                throw CreateNativeFailure(
+                    ERHIErrorCode.SubmissionFailed,
+                    exception.HResult,
+                    "DirectStorage failed to enqueue a native buffer request.",
+                    exception);
             }
         }
 
-        private Vortice.Direct3D12.ID3D12Resource GetOrCreateResourceWrapper(Vortice.Direct3D12.ID3D12Resource nativeResource)
+        private void EnqueueDirectStorageTexture(in RHIStorageTextureRequest request)
         {
-            nint key = (nint)nativeResource;
-            if (m_DStorageResources.TryGetValue(key, out Vortice.Direct3D12.ID3D12Resource existingResource))
+            IDStorageQueue queue = m_DStorageQueue
+                ?? throw new InvalidOperationException("The DirectStorage queue is not initialized.");
+            uint fileSize = ValidateFileSize(request.FileSize, nameof(request));
+            IDStorageFile storageFile = GetStorageFile(request.FileHandle, nameof(request));
+
+            if (request.DestinationTexture is not Dx12Texture dx12Texture ||
+                !ReferenceEquals(dx12Texture.Dx12Device, m_Dx12Device))
             {
-                return existingResource;
+                throw new ArgumentException(
+                    "The destination texture must be owned by this DX12 device.",
+                    nameof(request));
             }
 
-            nativeResource.AddRef();
-            Vortice.Direct3D12.ID3D12Resource wrappedResource = new Vortice.Direct3D12.ID3D12Resource(key);
-            m_DStorageResources[key] = wrappedResource;
-            return wrappedResource;
+            if (dx12Texture.IsDisposed)
+            {
+                throw new ObjectDisposedException(dx12Texture.GetType().FullName);
+            }
+
+            if (dx12Texture.Descriptor.StorageMode != ERHIStorageMode.GPULocal)
+            {
+                throw new ArgumentException(
+                    "Native DirectStorage texture requests require a GPU-local destination.",
+                    nameof(request));
+            }
+            if ((dx12Texture.Descriptor.UsageFlag & ERHITextureUsage.CopyDst) == 0)
+            {
+                throw new ArgumentException(
+                    "Native DirectStorage texture destinations must declare CopyDst usage.",
+                    nameof(request));
+            }
+
+            if (request.MipLevel >= dx12Texture.Descriptor.MipCount)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(request),
+                    request.MipLevel,
+                    "The mip level is outside the destination texture.");
+            }
+
+            uint arrayLayerCount;
+            bool isVolume;
+            switch (dx12Texture.Descriptor.Dimension)
+            {
+                case ERHITextureDimension.Texture2D:
+                    arrayLayerCount = 1;
+                    isVolume = false;
+                    break;
+
+                case ERHITextureDimension.Texture2DArray:
+                case ERHITextureDimension.TextureCube:
+                case ERHITextureDimension.TextureCubeArray:
+                    arrayLayerCount = dx12Texture.Descriptor.Extent.z;
+                    isVolume = false;
+                    break;
+
+                case ERHITextureDimension.Texture3D:
+                    arrayLayerCount = 1;
+                    isVolume = true;
+                    break;
+
+                case ERHITextureDimension.Texture2DMS:
+                case ERHITextureDimension.Texture2DArrayMS:
+                    throw new NotSupportedException(
+                        "Native DirectStorage texture requests do not target multisampled resources.");
+
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(request),
+                        dx12Texture.Descriptor.Dimension,
+                        "The destination texture dimension is invalid.");
+            }
+
+            if (request.ArraySlice >= arrayLayerCount)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(request),
+                    request.ArraySlice,
+                    "The array slice is outside the destination texture.");
+            }
+
+            ValidateSourceRange(in request.FileHandle, request.FileOffset, request.FileSize, nameof(request));
+
+            uint mipLevel = request.MipLevel;
+            uint subresourceIndex = isVolume
+                ? mipLevel
+                : mipLevel + (request.ArraySlice * dx12Texture.Descriptor.MipCount);
+            uint width = Math.Max(1u, dx12Texture.Descriptor.Extent.x >> (int)mipLevel);
+            uint height = Math.Max(1u, dx12Texture.Descriptor.Extent.y >> (int)mipLevel);
+            uint depth = isVolume
+                ? Math.Max(1u, dx12Texture.Descriptor.Extent.z >> (int)mipLevel)
+                : 1u;
+            m_Dx12Device.NativeDevice.GetCopyableFootprints(
+                dx12Texture.NativeResource.Description,
+                subresourceIndex,
+                1,
+                0,
+                out ulong conditionedSourceSize);
+            if (conditionedSourceSize > uint.MaxValue ||
+                request.FileSize != conditionedSourceSize)
+            {
+                throw new ArgumentException(
+                    $"Native DirectStorage texture source data must use the exact D3D12 " +
+                    $"GetCopyableFootprints layout ({conditionedSourceSize} bytes for subresource " +
+                    $"{subresourceIndex}); received {request.FileSize} bytes.",
+                    nameof(request));
+            }
+
+            Request directStorageRequest = new Request();
+            directStorageRequest.Options.SourceType = RequestSourceType.File;
+            directStorageRequest.Options.DestinationType = RequestDestinationType.TextureRegion;
+            directStorageRequest.Options.CompressionFormat = CompressionFormat.None;
+            directStorageRequest.Source.File.Source = storageFile;
+            directStorageRequest.Source.File.Offset = request.FileOffset;
+            directStorageRequest.Source.File.Size = fileSize;
+            directStorageRequest.UncompressedSize = checked((uint)conditionedSourceSize);
+            directStorageRequest.Destination.Texture.Resource = dx12Texture.NativeResource;
+            directStorageRequest.Destination.Texture.SubresourceIndex = subresourceIndex;
+            directStorageRequest.Destination.Texture.Region =
+                new Box(0, 0, 0, (int)width, (int)height, (int)depth);
+            directStorageRequest.CancellationTag = 0;
+            directStorageRequest.Name = null;
+
+            try
+            {
+                queue.EnqueueRequest(directStorageRequest);
+            }
+            catch (SharpGen.Runtime.SharpGenException exception)
+            {
+                throw CreateNativeFailure(
+                    ERHIErrorCode.SubmissionFailed,
+                    exception.HResult,
+                    "DirectStorage failed to enqueue a native texture request.",
+                    exception);
+            }
         }
 
-        private Vortice.Direct3D12.ID3D12Fence GetOrCreateFenceWrapper(Vortice.Direct3D12.ID3D12Fence nativeFence)
+        private IDStorageFile GetStorageFile(
+            in RHIStorageFileHandle fileHandle,
+            string parameterName)
         {
-            nint key = (nint)nativeFence;
-            if (m_DStorageFences.TryGetValue(key, out Vortice.Direct3D12.ID3D12Fence existingFence))
+            if (!m_DStorageFilesByHandle.TryGetValue(
+                    (nint)fileHandle.NativeHandle,
+                    out IDStorageFile? storageFile))
             {
-                return existingFence;
+                throw new ArgumentException(
+                    "The DirectStorage file handle is not owned by this queue.",
+                    parameterName);
             }
 
-            nativeFence.AddRef();
-            Vortice.Direct3D12.ID3D12Fence wrappedFence = new Vortice.Direct3D12.ID3D12Fence(key);
-            m_DStorageFences[key] = wrappedFence;
-            return wrappedFence;
+            return storageFile;
+        }
+
+        private static uint ValidateFileSize(ulong fileSize, string parameterName)
+        {
+            if (fileSize == 0 || fileSize > uint.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(
+                    parameterName,
+                    fileSize,
+                    "Native DirectStorage requests must contain between 1 and UInt32.MaxValue bytes.");
+            }
+
+            return (uint)fileSize;
+        }
+
+        private void ValidateSourceRange(
+            in RHIStorageFileHandle fileHandle,
+            ulong fileOffset,
+            ulong fileSize,
+            string parameterName)
+        {
+            ulong sourceEnd;
+            try
+            {
+                sourceEnd = checked(fileOffset + fileSize);
+            }
+            catch (OverflowException)
+            {
+                throw new ArgumentOutOfRangeException(
+                    parameterName,
+                    fileOffset,
+                    "The source range overflows UInt64.");
+            }
+
+            if (sourceEnd > QueryFileSize(fileHandle))
+            {
+                throw new ArgumentOutOfRangeException(
+                    parameterName,
+                    sourceEnd,
+                    "The source range exceeds the DirectStorage file size.");
+            }
+        }
+
+        private RHIException CreateNativeFailure(
+            ERHIErrorCode errorCode,
+            int nativeCode,
+            string nativeMessage,
+            Exception? innerException = null)
+        {
+            SharpGen.Runtime.Result deviceRemovedReason =
+                m_Dx12Device.NativeDevice.DeviceRemovedReason;
+            ERHIDeviceState deviceState =
+                deviceRemovedReason.Failure
+                    ? ERHIDeviceState.Removed
+                    : ERHIDeviceState.Operational;
+            string message = deviceRemovedReason.Failure
+                ? $"{nativeMessage} DeviceRemovedReason=0x{deviceRemovedReason.Code:X8}."
+                : nativeMessage;
+            return new RHIException(
+                errorCode,
+                ERHIBackend.DirectX12,
+                nativeCode,
+                message,
+                deviceState,
+                innerException);
         }
     }
-#pragma warning restore CS8600, CS8602, CA1416
+#pragma warning restore CA1416
 }
