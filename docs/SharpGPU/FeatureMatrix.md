@@ -17,9 +17,26 @@ documented exception/status model.
 |---|---|---|
 | Windows x64 | `Engine/Artifacts/SharpGPU/feature-report-win-x64.json` | W12 regenerated schema revision 2 (no absolute workspace paths) |
 | Android ARM64 | `Engine/Artifacts/SharpGPU/feature-report-android-arm64.json` | W12 generated after API30/ARM64/Adreno650 device qualification; DirectStorage=NotApplicable; not a full-Android certification |
-| Linux x64 | none | `BLOCKED_PLATFORM` until matching-host Vulkan qualification passes |
-| macOS ARM64 | none | `BLOCKED_PLATFORM` until matching-host Metal qualification passes |
-| iOS/iPadOS ARM64 | none | `BLOCKED_PLATFORM` until matching-device Metal qualification passes |
+| Linux x64 | none (do not invent placeholders) | `BLOCKED_PLATFORM` / Unverified until matching-host Vulkan qualification passes (`P13-LINUX`) |
+| macOS ARM64 | historical pre-rev2 file may exist; not current evidence | `BLOCKED_PLATFORM` / Unverified until matching-host Metal qualification regenerates schema rev2 (`P13-MACOS`) |
+| iOS/iPadOS ARM64 | none (do not invent placeholders) | `BLOCKED_PLATFORM` / Unverified until matching-device Metal qualification passes (`P13-IOS`) |
+
+## Hard Gate Categories (RFC-0021)
+
+Aligned with `docs/Canonical/VERIFICATION.md` and conformance `Trait("Category", ...)`.
+
+| Category | Runs on ordinary hosted CI? | Matching host/device required for PASSED |
+|---|---|---|
+| `SharpGpuPortable` | Yes (contracts only) | No |
+| `SharpGpuWindowsQualified` | No | Windows x64 + real DX12 GPU |
+| `SharpGpuAndroidQualified` | No | Android ARM64 device |
+| `SharpGpuVulkanQualified` | No | Windows or Linux Vulkan GPU host |
+| `SharpGpuMetalQualified` | No | macOS ARM64 or iOS/iPadOS ARM64 |
+| `SharpGpuDirectStorageQualified` | No | Windows DirectStorage; else NotApplicable |
+| `RendererFrameResourceQualified` | Portable policy subset only | Full frame/presentation scenarios need matching renderer host |
+| `SharpShaderAttachment` | Host compile OK | Metal runtime still requires matching Apple host; Windows MSL/metallib is supplementary |
+
+A Successful native capability probe is never a substitute for a Passed Qualified scenario.
 
 ## Public Contract Rows
 
