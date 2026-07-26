@@ -1,4 +1,8 @@
 using System;
+using System.Buffers.Binary;
+using System.Text;
+using System.Security.Cryptography;
+using System.IO;
 using SharpGPU.Core;
 using SharpGPU.Mathematics;
 
@@ -9,7 +13,7 @@ namespace SharpGPU
         public bool bLocalSignature;
         public bool bUseVertexLayout;
         public uint PushConstantSize;
-        public RHIArgumentTableLayout[] ArgumentTableLayouts;
+        public RHIBindingTableLayout[] BindingTableLayouts;
         //public RHIPipelineConstantLayout[] PipelineConstantLayouts;
         public Memory<RHIStaticSamplerDescriptor>? StaticSamplers;
     };
@@ -946,4 +950,1154 @@ namespace SharpGPU
 
         protected RHIWorkGraphPipelineDescriptor m_Descriptor;
     }
+    #region MachineLearning
+    public enum ERHIMLTensorBindingKind : byte
+    {
+        Input = 0,
+        Output = 1,
+        Pending = 255
+    }
+
+    public struct RHIMLTensorBindingInfo
+    {
+        public string Name;
+        public uint Index;
+        public ERHIMLTensorBindingKind Kind;
+        public RHIMLTensorDescriptor Descriptor;
+    }
+
+    public abstract class RHIMLProgram : Disposal
+    {
+        public string? Name => m_Name;
+
+        protected string? m_Name;
+    }
+
+    public struct RHIMLPipelineDescriptor
+    {
+        public string Name;
+        public RHIMLBinary Binary;
+    }
+
+    public abstract class RHIMLPipeline : Disposal
+    {
+        public RHIMLPipelineDescriptor Descriptor => m_Descriptor;
+
+        public ulong TemporaryResourceSize => m_TemporaryResourceSize;
+        public ulong PersistentResourceSize => m_PersistentResourceSize;
+        public uint InputCount => m_InputCount;
+        public uint OutputCount => m_OutputCount;
+        public ReadOnlyMemory<RHIMLTensorBindingInfo> BindingInfos => m_BindingInfos ?? ReadOnlyMemory<RHIMLTensorBindingInfo>.Empty;
+
+        protected RHIMLPipelineDescriptor m_Descriptor;
+        protected ulong m_TemporaryResourceSize;
+        protected ulong m_PersistentResourceSize;
+        protected uint m_InputCount;
+        protected uint m_OutputCount;
+        protected RHIMLTensorBindingInfo[]? m_BindingInfos;
+    }
+
+    public struct RHIMLBindingTableDescriptor
+    {
+        public RHIMLPipeline Pipeline;
+        public Memory<RHITensor> Inputs;
+        public Memory<RHITensor> Outputs;
+    }
+
+    public abstract class RHIMLBindingTable : Disposal
+    {
+        public RHIMLPipeline? Pipeline => m_Pipeline;
+
+        protected RHIMLPipeline? m_Pipeline;
+    }
+
+    internal static class RHIMLHelpers
+    {
+        internal static bool HasExplicitStrides(in RHIMLTensorDescriptor descriptor)
+        {
+            return descriptor.Strides is Memory<uint> strides && strides.Length > 0;
+        }
+
+        public static uint GetElementSize(in ERHIMLDataType dataType)
+        {
+            return dataType switch
+            {
+                ERHIMLDataType.Float32 => 4,
+                ERHIMLDataType.Float16 => 2,
+                ERHIMLDataType.BFloat16 => 2,
+                ERHIMLDataType.Int32 => 4,
+                ERHIMLDataType.Int16 => 2,
+                ERHIMLDataType.Int8 => 1,
+                ERHIMLDataType.UInt32 => 4,
+                ERHIMLDataType.UInt16 => 2,
+                ERHIMLDataType.UInt8 => 1,
+                _ => throw new ArgumentOutOfRangeException(nameof(dataType), $"Unsupported ML data type '{dataType}'."),
+            };
+        }
+
+        public static ulong CalculateElementCount(in RHIMLTensorDescriptor descriptor)
+        {
+            ulong elementCount = 1;
+            ReadOnlySpan<uint> dimensions = descriptor.Dimensions.Span;
+            for (int i = 0; i < dimensions.Length; ++i)
+            {
+                elementCount *= dimensions[i];
+            }
+
+            return elementCount;
+        }
+
+        public static ulong CalculateMinimumByteLength(in RHIMLTensorDescriptor descriptor)
+        {
+            ReadOnlySpan<uint> dimensions = descriptor.Dimensions.Span;
+            if (dimensions.Length == 0)
+            {
+                return 0;
+            }
+
+            uint elementSize = GetElementSize(descriptor.DataType);
+            if (descriptor.Strides is Memory<uint> explicitStrides && explicitStrides.Length > 0)
+            {
+                ReadOnlySpan<uint> strides = explicitStrides.Span;
+                if (strides.Length != dimensions.Length)
+                {
+                    throw new InvalidOperationException($"Tensor stride rank mismatch. dimensions={dimensions.Length}, strides={strides.Length}.");
+                }
+
+                ulong offsetInElements = 0;
+                for (int i = 0; i < dimensions.Length; ++i)
+                {
+                    if (dimensions[i] == 0)
+                    {
+                        return 0;
+                    }
+
+                    offsetInElements += (ulong)(dimensions[i] - 1) * strides[i];
+                }
+
+                return (offsetInElements + 1) * elementSize;
+            }
+
+            return CalculateElementCount(descriptor) * elementSize;
+        }
+
+        public static uint[] GetEffectiveStrides(in RHIMLTensorDescriptor descriptor)
+        {
+            if (descriptor.Strides is Memory<uint> explicitStrides && explicitStrides.Length > 0)
+            {
+                return explicitStrides.ToArray();
+            }
+
+            ReadOnlySpan<uint> dimensions = descriptor.Dimensions.Span;
+            uint[] strides = new uint[dimensions.Length];
+            ulong runningStride = 1;
+            for (int i = dimensions.Length - 1; i >= 0; --i)
+            {
+                strides[i] = checked((uint)runningStride);
+                runningStride *= dimensions[i];
+            }
+
+            return strides;
+        }
+
+        public static RHIMLTensorDescriptor CloneLayoutDescriptor(in RHIMLTensorDescriptor descriptor)
+        {
+            RHIMLTensorDescriptor clone = descriptor;
+            clone.Dimensions = descriptor.Dimensions.ToArray();
+            clone.Strides =
+                descriptor.Strides is Memory<uint> explicitStrides && explicitStrides.Length > 0
+                    ? explicitStrides.ToArray() : null;
+            clone.BackingBuffer = null;
+            clone.BackingBufferOffset = 0;
+            return clone;
+        }
+
+        public static bool HasCompatibleLayout(in RHIMLTensorDescriptor expected, in RHIMLTensorDescriptor actual)
+        {
+            if (expected.DataType != actual.DataType)
+            {
+                return false;
+            }
+
+            ReadOnlySpan<uint> expectedDimensions = expected.Dimensions.Span;
+            ReadOnlySpan<uint> actualDimensions = actual.Dimensions.Span;
+            if (expectedDimensions.Length != actualDimensions.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < expectedDimensions.Length; ++i)
+            {
+                if (expectedDimensions[i] != actualDimensions[i])
+                {
+                    return false;
+                }
+            }
+
+            ReadOnlySpan<uint> expectedStrides = GetEffectiveStrides(expected);
+            ReadOnlySpan<uint> actualStrides = GetEffectiveStrides(actual);
+            if (expectedStrides.Length != actualStrides.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < expectedStrides.Length; ++i)
+            {
+                if (expectedStrides[i] != actualStrides[i])
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public static string DescribeLayout(in RHIMLTensorDescriptor descriptor)
+        {
+            string dimensions = string.Join("x", descriptor.Dimensions.ToArray());
+            string strides = string.Join(",", GetEffectiveStrides(descriptor));
+            return $"{descriptor.DataType}[{dimensions}] strides=[{strides}]";
+        }
+    }
+    #endregion
+
+    #region MLBinary
+    public enum ERHIMLBinaryFormat : byte
+    {
+        Unknown = 0,
+        DirectMLProgramV1 = 1,
+        MetalPackageV1 = 2,
+    }
+
+    public struct RHIMLBinaryReflection
+    {
+        public string EntryName;
+        public RHIMLTensorBindingInfo[] Bindings;
+        public ulong IntermediateHeapSizeHint;
+    }
+
+    /// <summary>
+    /// Opaque ML binary artifact consumed by <see cref="RHIDevice.CreateMLPipeline"/>.
+    /// Public RHI ML surface is Binary ??Pipeline ??BindingSet ??Encoder only (ADR-0052).
+    /// </summary>
+    public sealed class RHIMLBinary
+    {
+        public ERHIMLBinaryFormat Format { get; }
+        public ReadOnlyMemory<byte> Payload { get; }
+        public ulong ContentHash { get; }
+        public RHIMLBinaryReflection Reflection { get; }
+
+        public RHIMLBinary(
+            ERHIMLBinaryFormat format,
+            ReadOnlyMemory<byte> payload,
+            in RHIMLBinaryReflection reflection,
+            ulong contentHash)
+        {
+            if (format == ERHIMLBinaryFormat.Unknown)
+            {
+                throw new ArgumentOutOfRangeException(nameof(format), "ML binary format must be specified.");
+            }
+
+            if (payload.IsEmpty)
+            {
+                throw new ArgumentException("ML binary payload must not be empty.", nameof(payload));
+            }
+
+            Format = format;
+            Payload = payload;
+            Reflection = reflection;
+            ContentHash = contentHash;
+        }
+    }
+    #endregion
+
+    #region MLProgramIR
+    /// <summary>
+    /// Backend-private ML operator kinds used by cook tools and internal program IR.
+    /// Not part of the RHI public surface (ADR-0052).
+    /// </summary>
+    internal enum ERHIMLOpKind : ushort
+    {
+        Unknown = 0,
+
+        ElementWiseAdd = 1,
+        ElementWiseSubtract = 2,
+        ElementWiseMultiply = 3,
+        ElementWiseDivide = 4,
+        ElementWiseNegate = 5,
+
+        ActivationRelu = 10,
+        ActivationSigmoid = 11,
+        ActivationTanh = 12,
+
+        MatrixMultiply = 20,
+        GeneralMatrixMultiply = 21,
+
+        ActivationSoftmax = 30,
+        MeanVarianceNormalization = 31,
+        ReduceMean = 32,
+
+        Reshape = 40,
+        Transpose = 41,
+
+        ElementWiseIdentity = 50,
+    }
+
+    internal enum ERHIMLMatrixTransform : byte
+    {
+        None = 0,
+        Transpose = 1,
+    }
+
+    internal enum ERHIMLFusedActivation : byte
+    {
+        None = 0,
+        Relu = 1,
+        Sigmoid = 2,
+        Tanh = 3,
+    }
+
+    internal struct RHIMLOpTensorRef
+    {
+        public int InputIndex;
+        public int OpIndex;
+        public bool IsOpOutput;
+
+        public static RHIMLOpTensorRef FromInput(int inputIndex)
+        {
+            return new RHIMLOpTensorRef { InputIndex = inputIndex, OpIndex = -1, IsOpOutput = false };
+        }
+
+        public static RHIMLOpTensorRef FromOpOutput(int opIndex)
+        {
+            if (opIndex < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(opIndex), "Op index must be non-negative.");
+            }
+
+            return new RHIMLOpTensorRef { InputIndex = -1, OpIndex = opIndex, IsOpOutput = true };
+        }
+
+        public readonly override string ToString() => IsOpOutput ? $"op[{OpIndex}].out" : $"input[{InputIndex}]";
+    }
+
+    internal struct RHIMLOpDescriptor
+    {
+        public ERHIMLOpKind Kind;
+        public RHIMLOpTensorRef[] Inputs;
+        public RHIMLTensorDescriptor Output;
+        public string Name;
+
+        public float Alpha;
+        public float Beta;
+        public ERHIMLMatrixTransform TransformA;
+        public ERHIMLMatrixTransform TransformB;
+        public ERHIMLFusedActivation FusedActivation;
+        public float Epsilon;
+        public int[]? Axes;
+
+        public static RHIMLOpDescriptor Create(ERHIMLOpKind kind, RHIMLOpTensorRef[] inputs, in RHIMLTensorDescriptor output, string? name = null)
+        {
+            return new RHIMLOpDescriptor
+            {
+                Kind = kind,
+                Inputs = inputs ?? Array.Empty<RHIMLOpTensorRef>(),
+                Output = output,
+                Name = name ?? string.Empty,
+                Alpha = 1.0f,
+                Beta = 1.0f,
+                TransformA = ERHIMLMatrixTransform.None,
+                TransformB = ERHIMLMatrixTransform.None,
+                FusedActivation = ERHIMLFusedActivation.None,
+                Epsilon = 0.0f,
+                Axes = null,
+            };
+        }
+    }
+
+    /// <summary>
+    /// Backend-private ordered op-sequence program IR. Cook tools serialize this into
+    /// <see cref="RHIMLBinary"/> payloads; runtime never exposes it publicly (ADR-0052).
+    /// </summary>
+    internal struct RHIMLProgramIR
+    {
+        public string Name;
+        public RHIMLTensorDescriptor[] Inputs;
+        public RHIMLTensorDescriptor[] Outputs;
+        public RHIMLOpDescriptor[] Ops;
+
+        public static RHIMLProgramIR Create(string name, RHIMLTensorDescriptor[] inputs, RHIMLTensorDescriptor[] outputs, RHIMLOpDescriptor[] ops)
+        {
+            return new RHIMLProgramIR
+            {
+                Name = name,
+                Inputs = inputs ?? Array.Empty<RHIMLTensorDescriptor>(),
+                Outputs = outputs ?? Array.Empty<RHIMLTensorDescriptor>(),
+                Ops = ops ?? Array.Empty<RHIMLOpDescriptor>(),
+            };
+        }
+    }
+    #endregion
+
+    #region MLBinaryHash
+    internal static class RHIMLBinaryHash
+    {
+        internal static ulong ComputeContentHash(ReadOnlySpan<byte> payload)
+        {
+            const ulong offsetBasis = 0xCBF29CE484222325UL;
+            const ulong prime = 0x100000001B3UL;
+            ulong hash = offsetBasis;
+            for (int i = 0; i < payload.Length; ++i)
+            {
+                hash ^= payload[i];
+                hash *= prime;
+            }
+
+            return hash;
+        }
+    }
+    #endregion
+
+    #region MLBinaryLoader
+    internal static class RHIMLBinaryLoader
+    {
+        internal static RHIMLBinary Load(ReadOnlyMemory<byte> container)
+        {
+            ReadOnlySpan<byte> bytes = container.Span;
+            if (bytes.Length < 5)
+            {
+                throw new InvalidOperationException("ML binary container is too small.");
+            }
+
+            uint magic = BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(0, 4));
+            return magic switch
+            {
+                Dx12MlBinaryCodec.Magic => LoadDirectMl(container),
+                MetalMlBinaryCodec.Magic => LoadMetalPackage(container),
+                _ => throw new InvalidOperationException($"Unknown ML binary magic 0x{magic:X8}."),
+            };
+        }
+
+        private static RHIMLBinary LoadDirectMl(ReadOnlyMemory<byte> container)
+        {
+            Dx12MlBinaryCodec.ValidateContainer(container, ERHIMLBinaryFormat.DirectMLProgramV1);
+            RHIMLBinaryReflection reflection = Dx12MlBinaryCodec.ReadReflection(container);
+            ulong contentHash = BinaryPrimitives.ReadUInt64LittleEndian(container.Span.Slice(5, 8));
+            return new RHIMLBinary(
+                ERHIMLBinaryFormat.DirectMLProgramV1,
+                container,
+                reflection,
+                contentHash);
+        }
+
+        private static RHIMLBinary LoadMetalPackage(ReadOnlyMemory<byte> container)
+        {
+            RHIMLBinaryReflection reflection = MetalMlBinaryCodec.ReadReflection(container);
+            ulong contentHash = BinaryPrimitives.ReadUInt64LittleEndian(container.Span.Slice(5, 8));
+            return new RHIMLBinary(
+                ERHIMLBinaryFormat.MetalPackageV1,
+                container,
+                reflection,
+                contentHash);
+        }
+    }
+    #endregion
+
+    #region PipelineCache
+    public enum ERHIPipelineCacheImportStatus : byte
+    {
+        Empty = 0,
+        Loaded = 1,
+        Incompatible = 2,
+        Corrupt = 3,
+    }
+
+    public readonly struct RHIPipelineCacheImportResult
+    {
+        public ERHIPipelineCacheImportStatus Status { get; }
+        public string Reason { get; }
+        public bool IsLoaded => Status == ERHIPipelineCacheImportStatus.Loaded;
+
+        internal RHIPipelineCacheImportResult(
+            in ERHIPipelineCacheImportStatus status,
+            string reason)
+        {
+            Status = status;
+            Reason = reason ?? string.Empty;
+        }
+    }
+
+    public abstract class RHIPipelineCache : Disposal
+    {
+        private readonly RHIPipelineCacheIdentity m_Identity;
+
+        internal RHIPipelineCache(RHIDevice device)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+            if (device.IsDisposed)
+            {
+                throw new ObjectDisposedException(device.GetType().FullName);
+            }
+
+            m_Identity = RHIPipelineCacheIdentity.FromDevice(device);
+        }
+
+        public RHIPipelineCacheImportResult Import(in ReadOnlyMemory<byte> blob)
+        {
+            ThrowIfDisposed();
+
+            if (blob.IsEmpty)
+            {
+                if (!TryReplaceNativePayload(ReadOnlySpan<byte>.Empty, out string reason))
+                {
+                    return new RHIPipelineCacheImportResult(
+                        ERHIPipelineCacheImportStatus.Corrupt,
+                        string.IsNullOrWhiteSpace(reason)
+                            ? "The backend rejected an empty pipeline cache."
+                            : reason);
+                }
+
+                return new RHIPipelineCacheImportResult(
+                    ERHIPipelineCacheImportStatus.Empty,
+                    "An empty cache was initialized.");
+            }
+
+            RHIPipelineCacheImportResult decodeResult = RHIPipelineCacheBlob.TryDecode(
+                blob.Span,
+                m_Identity,
+                out byte[] nativePayload);
+            if (decodeResult.Status != ERHIPipelineCacheImportStatus.Loaded)
+            {
+                return decodeResult;
+            }
+
+            if (!TryReplaceNativePayload(nativePayload, out string nativeReason))
+            {
+                return new RHIPipelineCacheImportResult(
+                    ERHIPipelineCacheImportStatus.Corrupt,
+                    string.IsNullOrWhiteSpace(nativeReason)
+                        ? "The backend rejected the compatible native pipeline-cache payload."
+                        : nativeReason);
+            }
+
+            return decodeResult;
+        }
+
+        public byte[] Export()
+        {
+            ThrowIfDisposed();
+            byte[] nativePayload = ExportNativePayload();
+            return RHIPipelineCacheBlob.Encode(m_Identity, nativePayload);
+        }
+
+        public abstract RHIComputePipeline CreateComputePipeline(
+            in RHIComputePipelineDescriptor descriptor);
+
+        public abstract RHIRasterPipeline CreateRasterPipeline(
+            in RHIRasterPipelineDescriptor descriptor);
+
+        protected string BuildComputePipelineCacheKey(
+            in RHIComputePipelineDescriptor descriptor)
+        {
+            return RHIPipelineCacheKeyBuilder.CreateComputeKey(descriptor, m_Identity);
+        }
+
+        protected string BuildRasterPipelineCacheKey(
+            in RHIRasterPipelineDescriptor descriptor)
+        {
+            return RHIPipelineCacheKeyBuilder.CreateRasterKey(descriptor, m_Identity);
+        }
+
+        protected abstract bool TryReplaceNativePayload(
+            ReadOnlySpan<byte> nativePayload,
+            out string reason);
+
+        protected abstract byte[] ExportNativePayload();
+    }
+
+    internal readonly struct RHIPipelineCacheIdentity
+    {
+        public const uint CurrentSchemaRevision = 1;
+        public const uint CurrentPipelineAbiRevision = 4;
+
+        public ERHIBackend Backend { get; }
+        public uint VendorId { get; }
+        public uint DeviceId { get; }
+        public string DriverVersion { get; }
+
+        public RHIPipelineCacheIdentity(
+            in ERHIBackend backend,
+            in uint vendorId,
+            in uint deviceId,
+            string driverVersion)
+        {
+            Backend = backend;
+            VendorId = vendorId;
+            DeviceId = deviceId;
+            DriverVersion = driverVersion ?? string.Empty;
+        }
+
+        public static RHIPipelineCacheIdentity FromDevice(RHIDevice device)
+        {
+            return new RHIPipelineCacheIdentity(
+                device.BackendType,
+                device.VendorId.IntValue,
+                device.DeviceId.IntValue,
+                device.DriverVersion);
+        }
+    }
+
+    internal static class RHIPipelineCacheBlob
+    {
+        private static readonly byte[] s_Magic = Encoding.ASCII.GetBytes("SGPUCACH");
+        private const int DigestSize = 32;
+        private const int MaxDriverVersionByteCount = 4096;
+
+        public static byte[] Encode(
+            in RHIPipelineCacheIdentity identity,
+            ReadOnlySpan<byte> nativePayload)
+        {
+            byte[] payloadDigest = SHA256.HashData(nativePayload);
+            byte[] driverBytes = Encoding.UTF8.GetBytes(identity.DriverVersion);
+            if (driverBytes.Length > MaxDriverVersionByteCount)
+            {
+                throw new InvalidOperationException(
+                    $"Driver identity is {driverBytes.Length} bytes, exceeding the {MaxDriverVersionByteCount}-byte pipeline-cache limit.");
+            }
+
+            using MemoryStream stream = new MemoryStream(
+                checked(8 + 4 + 4 + 1 + 4 + 4 + 4 + driverBytes.Length + 4 + DigestSize + nativePayload.Length));
+            using BinaryWriter writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
+            writer.Write(s_Magic);
+            writer.Write(RHIPipelineCacheIdentity.CurrentSchemaRevision);
+            writer.Write(RHIPipelineCacheIdentity.CurrentPipelineAbiRevision);
+            writer.Write((byte)identity.Backend);
+            writer.Write(identity.VendorId);
+            writer.Write(identity.DeviceId);
+            writer.Write(driverBytes.Length);
+            writer.Write(driverBytes);
+            writer.Write(nativePayload.Length);
+            writer.Write(payloadDigest);
+            writer.Write(nativePayload);
+            writer.Flush();
+            return stream.ToArray();
+        }
+
+        public static RHIPipelineCacheImportResult TryDecode(
+            ReadOnlySpan<byte> blob,
+            in RHIPipelineCacheIdentity expectedIdentity,
+            out byte[] nativePayload)
+        {
+            nativePayload = Array.Empty<byte>();
+            try
+            {
+                using MemoryStream stream = new MemoryStream(blob.ToArray(), writable: false);
+                using BinaryReader reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
+
+                byte[] magic = reader.ReadBytes(s_Magic.Length);
+                if (magic.Length != s_Magic.Length || !magic.AsSpan().SequenceEqual(s_Magic))
+                {
+                    return Corrupt("Pipeline-cache magic is invalid.");
+                }
+
+                uint schemaRevision = reader.ReadUInt32();
+                uint pipelineAbiRevision = reader.ReadUInt32();
+                byte backendValue = reader.ReadByte();
+                uint vendorId = reader.ReadUInt32();
+                uint deviceId = reader.ReadUInt32();
+
+                int driverByteCount = reader.ReadInt32();
+                if (driverByteCount < 0 || driverByteCount > MaxDriverVersionByteCount)
+                {
+                    return Corrupt("Pipeline-cache driver identity length is invalid.");
+                }
+
+                byte[] driverBytes = reader.ReadBytes(driverByteCount);
+                if (driverBytes.Length != driverByteCount)
+                {
+                    return Corrupt("Pipeline-cache driver identity is truncated.");
+                }
+
+                string driverVersion = new UTF8Encoding(
+                    encoderShouldEmitUTF8Identifier: false,
+                    throwOnInvalidBytes: true).GetString(driverBytes);
+
+                int payloadLength = reader.ReadInt32();
+                if (payloadLength < 0)
+                {
+                    return Corrupt("Pipeline-cache native payload length is invalid.");
+                }
+
+                byte[] expectedDigest = reader.ReadBytes(DigestSize);
+                if (expectedDigest.Length != DigestSize)
+                {
+                    return Corrupt("Pipeline-cache payload digest is truncated.");
+                }
+
+                long remaining = stream.Length - stream.Position;
+                if (remaining != payloadLength)
+                {
+                    return Corrupt(
+                        $"Pipeline-cache native payload length is {payloadLength}, but {remaining} bytes remain.");
+                }
+
+                nativePayload = reader.ReadBytes(payloadLength);
+                if (!CryptographicOperations.FixedTimeEquals(
+                        expectedDigest,
+                        SHA256.HashData(nativePayload)))
+                {
+                    nativePayload = Array.Empty<byte>();
+                    return Corrupt("Pipeline-cache native payload checksum does not match.");
+                }
+
+                if (schemaRevision != RHIPipelineCacheIdentity.CurrentSchemaRevision)
+                {
+                    nativePayload = Array.Empty<byte>();
+                    return Incompatible(
+                        $"Pipeline-cache schema revision {schemaRevision} does not match {RHIPipelineCacheIdentity.CurrentSchemaRevision}.");
+                }
+
+                if (pipelineAbiRevision != RHIPipelineCacheIdentity.CurrentPipelineAbiRevision)
+                {
+                    nativePayload = Array.Empty<byte>();
+                    return Incompatible(
+                        $"Pipeline ABI revision {pipelineAbiRevision} does not match {RHIPipelineCacheIdentity.CurrentPipelineAbiRevision}.");
+                }
+
+                if (!Enum.IsDefined(typeof(ERHIBackend), backendValue)
+                    || (ERHIBackend)backendValue != expectedIdentity.Backend)
+                {
+                    nativePayload = Array.Empty<byte>();
+                    return Incompatible(
+                        $"Pipeline-cache backend {(ERHIBackend)backendValue} does not match {expectedIdentity.Backend}.");
+                }
+
+                if (vendorId != expectedIdentity.VendorId || deviceId != expectedIdentity.DeviceId)
+                {
+                    nativePayload = Array.Empty<byte>();
+                    return Incompatible(
+                        $"Pipeline-cache adapter {vendorId:X8}:{deviceId:X8} does not match {expectedIdentity.VendorId:X8}:{expectedIdentity.DeviceId:X8}.");
+                }
+
+                if (!string.Equals(
+                        driverVersion,
+                        expectedIdentity.DriverVersion,
+                        StringComparison.Ordinal))
+                {
+                    nativePayload = Array.Empty<byte>();
+                    return Incompatible("Pipeline-cache driver identity does not match the active device.");
+                }
+
+                return new RHIPipelineCacheImportResult(
+                    ERHIPipelineCacheImportStatus.Loaded,
+                    "The compatible pipeline cache was loaded.");
+            }
+            catch (Exception exception) when (
+                exception is EndOfStreamException
+                or IOException
+                or DecoderFallbackException
+                or ArgumentException
+                or OverflowException)
+            {
+                nativePayload = Array.Empty<byte>();
+                return Corrupt($"Pipeline-cache blob is malformed: {exception.Message}");
+            }
+        }
+
+        private static RHIPipelineCacheImportResult Corrupt(string reason)
+        {
+            return new RHIPipelineCacheImportResult(
+                ERHIPipelineCacheImportStatus.Corrupt,
+                reason);
+        }
+
+        private static RHIPipelineCacheImportResult Incompatible(string reason)
+        {
+            return new RHIPipelineCacheImportResult(
+                ERHIPipelineCacheImportStatus.Incompatible,
+                reason);
+        }
+    }
+
+    internal static unsafe class RHIPipelineCacheKeyBuilder
+    {
+        public static byte[] CreatePipelineLayoutIdentity(
+            in RHIPipelineLayoutDescriptor descriptor)
+        {
+            using MemoryStream stream = new MemoryStream();
+            using BinaryWriter writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
+            writer.Write(descriptor.bLocalSignature);
+            writer.Write(descriptor.bUseVertexLayout);
+            writer.Write(descriptor.PushConstantSize);
+
+            RHIBindingTableLayout[] layouts =
+                descriptor.BindingTableLayouts ?? Array.Empty<RHIBindingTableLayout>();
+            writer.Write(layouts.Length);
+            for (int index = 0; index < layouts.Length; ++index)
+            {
+                WriteBindingTableLayout(writer, layouts[index], index);
+            }
+
+            if (descriptor.StaticSamplers.HasValue)
+            {
+                Span<RHIStaticSamplerDescriptor> staticSamplers =
+                    descriptor.StaticSamplers.Value.Span;
+                writer.Write(staticSamplers.Length);
+                for (int samplerGroupIndex = 0;
+                     samplerGroupIndex < staticSamplers.Length;
+                     ++samplerGroupIndex)
+                {
+                    ref RHIStaticSamplerDescriptor samplerGroup =
+                        ref staticSamplers[samplerGroupIndex];
+                    writer.Write(samplerGroup.Index);
+                    Span<RHIStaticSamplerElement> elements = samplerGroup.Elements.Span;
+                    writer.Write(elements.Length);
+                    for (int elementIndex = 0;
+                         elementIndex < elements.Length;
+                         ++elementIndex)
+                    {
+                        ref RHIStaticSamplerElement element = ref elements[elementIndex];
+                        writer.Write(element.BindSlot);
+                        WriteSampler(writer, element.SamplerDescriptor);
+                    }
+                }
+            }
+            else
+            {
+                writer.Write(0);
+            }
+
+            writer.Flush();
+            return SHA256.HashData(stream.ToArray());
+        }
+
+        public static string CreateComputeKey(
+            in RHIComputePipelineDescriptor descriptor,
+            in RHIPipelineCacheIdentity identity)
+        {
+            ValidatePipelineLayout(descriptor.PipelineLayout);
+            using MemoryStream stream = new MemoryStream();
+            using BinaryWriter writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
+            writer.Write("SharpGPU.ComputePipeline");
+            WriteCacheIdentity(writer, identity);
+            writer.Write(descriptor.ThreadSize.x);
+            writer.Write(descriptor.ThreadSize.y);
+            writer.Write(descriptor.ThreadSize.z);
+            WriteFunction(writer, descriptor.ComputeFunction, "compute");
+            writer.Write(descriptor.PipelineLayout.PipelineCacheIdentity.Span);
+            writer.Flush();
+            return Convert.ToHexString(SHA256.HashData(stream.ToArray()));
+        }
+
+        public static string CreateRasterKey(
+            in RHIRasterPipelineDescriptor descriptor,
+            in RHIPipelineCacheIdentity identity)
+        {
+            ValidatePipelineLayout(descriptor.PipelineLayout);
+            RHIRasterPipelineDescriptor snapshot =
+                RHIRasterPipelineContract.SnapshotAndValidate(in descriptor);
+            using MemoryStream stream = new MemoryStream();
+            using BinaryWriter writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
+            writer.Write("SharpGPU.RasterPipeline");
+            WriteCacheIdentity(writer, identity);
+            writer.Write((byte)snapshot.SampleCount);
+            writer.Write((ushort)snapshot.DepthFormat);
+
+            ERHIPixelFormat[] colorFormats = snapshot.ColorFormats;
+            writer.Write(colorFormats.Length);
+            for (int index = 0; index < colorFormats.Length; ++index)
+            {
+                writer.Write((ushort)colorFormats[index]);
+            }
+
+            RHIAttachmentInterfaceSignature attachment =
+                snapshot.AttachmentInterface;
+            writer.Write(attachment.ColorAttachmentCount);
+            writer.Write(attachment.ColorInputSlotCount);
+            for (int inputIndex = 0;
+                 inputIndex < attachment.ColorInputSlotCount;
+                 ++inputIndex)
+            {
+                writer.Write(attachment.GetColorInputLogicalAttachment(inputIndex));
+            }
+            writer.Write(attachment.ColorOutputLocationCount);
+            for (int outputLocation = 0;
+                 outputLocation < attachment.ColorOutputLocationCount;
+                 ++outputLocation)
+            {
+                writer.Write(
+                    attachment.GetColorOutputLogicalAttachment(outputLocation));
+            }
+            writer.Write(attachment.SampledFeedbackSlotCount);
+            for (int sampledOrdinal = 0;
+                 sampledOrdinal < attachment.SampledFeedbackSlotCount;
+                 ++sampledOrdinal)
+            {
+                writer.Write(
+                    attachment.GetSampledFeedbackLogicalAttachment(sampledOrdinal));
+            }
+            writer.Write(attachment.RasterOrderedReadWriteMask);
+            writer.Write(attachment.LayeredAccessMask);
+            writer.Write((byte)attachment.DepthStencilFlags);
+            writer.Write(attachment.UsesDualSourceColor);
+
+            WriteRenderState(writer, snapshot.RenderState);
+            WritePrimitiveAssembler(writer, snapshot.PrimitiveAssembler);
+            WriteFunction(writer, snapshot.FragmentFunction, "fragment");
+            RHIPipelineLayout pipelineLayout = snapshot.PipelineLayout
+                ?? throw new ArgumentNullException(nameof(snapshot), "Raster pipeline cache key requires a PipelineLayout.");
+            ValidatePipelineLayout(pipelineLayout);
+            writer.Write(pipelineLayout.PipelineCacheIdentity.Span);
+            writer.Flush();
+            return Convert.ToHexString(SHA256.HashData(stream.ToArray()));
+        }
+
+        private static void WriteCacheIdentity(
+            BinaryWriter writer,
+            in RHIPipelineCacheIdentity identity)
+        {
+            writer.Write(RHIPipelineCacheIdentity.CurrentSchemaRevision);
+            writer.Write(RHIPipelineCacheIdentity.CurrentPipelineAbiRevision);
+            writer.Write((byte)identity.Backend);
+            writer.Write(identity.VendorId);
+            writer.Write(identity.DeviceId);
+            writer.Write(identity.DriverVersion);
+        }
+
+        private static void ValidatePipelineLayout(RHIPipelineLayout? layout)
+        {
+            ArgumentNullException.ThrowIfNull(layout);
+            if (layout.IsDisposed)
+            {
+                throw new ObjectDisposedException(layout.GetType().FullName);
+            }
+            if (layout.PipelineCacheIdentity.IsEmpty)
+            {
+                throw new InvalidOperationException(
+                    $"{layout.GetType().Name} has no canonical pipeline-layout cache identity.");
+            }
+        }
+
+        private static void WriteBindingTableLayout(
+            BinaryWriter writer,
+            RHIBindingTableLayout? layout,
+            in int layoutIndex)
+        {
+            ArgumentNullException.ThrowIfNull(layout);
+            if (layout.IsDisposed)
+            {
+                throw new ObjectDisposedException(
+                    layout.GetType().FullName,
+                    $"Pipeline argument-table layout {layoutIndex} is disposed.");
+            }
+
+            writer.Write(layout.CanonicalIndex);
+            ReadOnlySpan<RHIBindingTableLayoutElement> elements =
+                layout.CanonicalElements;
+            writer.Write(elements.Length);
+            for (int index = 0; index < elements.Length; ++index)
+            {
+                ref readonly RHIBindingTableLayoutElement element =
+                    ref elements[index];
+                WriteArgumentElement(
+                    writer,
+                    element.Slot,
+                    element.Count,
+                    element.Type,
+                    element.Stages,
+                    element.Requirement);
+            }
+        }
+
+        private static void WriteArgumentElement(
+            BinaryWriter writer,
+            in uint slot,
+            in uint count,
+            in ERHIBindType type,
+            in ERHIShaderStageMask stages,
+            in ERHIBindingRequirement requirement)
+        {
+            writer.Write(slot);
+            writer.Write(count);
+            writer.Write((byte)type);
+            writer.Write((ushort)stages);
+            writer.Write((byte)requirement);
+        }
+
+        private static void WriteSampler(
+            BinaryWriter writer,
+            in RHISamplerDescriptor descriptor)
+        {
+            writer.Write(descriptor.LodMin);
+            writer.Write(descriptor.LodMax);
+            writer.Write(descriptor.MipLODBias);
+            writer.Write(descriptor.Anisotropy);
+            writer.Write((byte)descriptor.MinFilter);
+            writer.Write((byte)descriptor.MagFilter);
+            writer.Write((byte)descriptor.MipFilter);
+            writer.Write((byte)descriptor.AddressModeU);
+            writer.Write((byte)descriptor.AddressModeV);
+            writer.Write((byte)descriptor.AddressModeW);
+            writer.Write((byte)descriptor.ComparisonMode);
+        }
+
+        private static void WriteFunction(
+            BinaryWriter writer,
+            RHIFunction? function,
+            string role)
+        {
+            writer.Write(function != null);
+            if (function == null)
+            {
+                return;
+            }
+            if (function.IsDisposed)
+            {
+                throw new ObjectDisposedException(
+                    function.GetType().FullName,
+                    $"The {role} shader function is disposed.");
+            }
+
+            RHIFunctionDescriptor descriptor = function.Descriptor;
+            writer.Write((byte)descriptor.Type);
+            writer.Write((byte)descriptor.PayloadKind);
+            writer.Write(descriptor.EntryName ?? string.Empty);
+            writer.Write(descriptor.ByteSize);
+            if (descriptor.ByteSize == 0 || descriptor.ByteCode == IntPtr.Zero)
+            {
+                throw new ArgumentException(
+                    $"The {role} shader function has no bytecode.",
+                    nameof(function));
+            }
+            if (descriptor.ByteSize > int.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(function),
+                    $"The {role} shader function is larger than the supported cache-key input.");
+            }
+
+            ReadOnlySpan<byte> byteCode = new ReadOnlySpan<byte>(
+                descriptor.ByteCode.ToPointer(),
+                checked((int)descriptor.ByteSize));
+            writer.Write(SHA256.HashData(byteCode));
+        }
+
+        private static void WritePrimitiveAssembler(
+            BinaryWriter writer,
+            in RHIPrimitiveAssemblerDescriptor descriptor)
+        {
+            writer.Write((byte)descriptor.PrimitiveType);
+            writer.Write((byte)descriptor.PrimitiveTopology);
+            writer.Write(descriptor.VertexAssembler.HasValue);
+            if (descriptor.VertexAssembler.HasValue)
+            {
+                RHIVertexAssemblerDescriptor vertexAssembler =
+                    descriptor.VertexAssembler.Value;
+                WriteFunction(writer, vertexAssembler.VertexFunction, "vertex");
+                Span<RHIVertexLayoutDescriptor> layouts =
+                    vertexAssembler.VertexLayouts.Span;
+                writer.Write(layouts.Length);
+                for (int layoutIndex = 0; layoutIndex < layouts.Length; ++layoutIndex)
+                {
+                    ref RHIVertexLayoutDescriptor layout = ref layouts[layoutIndex];
+                    writer.Write(layout.Index);
+                    writer.Write(layout.Stride);
+                    writer.Write(layout.StepRate);
+                    writer.Write((byte)layout.StepMode);
+                    Span<RHIVertexElementDescriptor> elements =
+                        layout.VertexElements.Span;
+                    writer.Write(elements.Length);
+                    for (int elementIndex = 0;
+                         elementIndex < elements.Length;
+                         ++elementIndex)
+                    {
+                        ref RHIVertexElementDescriptor element =
+                            ref elements[elementIndex];
+                        writer.Write(element.Slot);
+                        writer.Write(element.Offset);
+                        writer.Write((byte)element.Type);
+                        writer.Write((byte)element.Format);
+                    }
+                }
+            }
+
+            writer.Write(descriptor.MeshletAssembler.HasValue);
+            if (descriptor.MeshletAssembler.HasValue)
+            {
+                RHIMeshletAssemblerDescriptor meshletAssembler =
+                    descriptor.MeshletAssembler.Value;
+                WriteFunction(writer, meshletAssembler.TaskFunction, "task");
+                WriteFunction(writer, meshletAssembler.MeshFunction, "mesh");
+            }
+        }
+
+        private static void WriteRenderState(
+            BinaryWriter writer,
+            in RHIRenderStateDescriptor descriptor)
+        {
+            writer.Write(descriptor.SampleMask.HasValue);
+            if (descriptor.SampleMask.HasValue)
+            {
+                writer.Write(descriptor.SampleMask.Value);
+            }
+
+            writer.Write(descriptor.BlendState.AlphaToCoverage);
+            writer.Write(descriptor.BlendState.IndependentBlend);
+            WriteBlend(writer, descriptor.BlendState.BlendDescriptor0);
+            WriteBlend(writer, descriptor.BlendState.BlendDescriptor1);
+            WriteBlend(writer, descriptor.BlendState.BlendDescriptor2);
+            WriteBlend(writer, descriptor.BlendState.BlendDescriptor3);
+            WriteBlend(writer, descriptor.BlendState.BlendDescriptor4);
+            WriteBlend(writer, descriptor.BlendState.BlendDescriptor5);
+            WriteBlend(writer, descriptor.BlendState.BlendDescriptor6);
+            WriteBlend(writer, descriptor.BlendState.BlendDescriptor7);
+
+            RHIRasterizerStateDescriptor rasterizer = descriptor.RasterizerState;
+            writer.Write((byte)rasterizer.FillMode);
+            writer.Write((byte)rasterizer.CullMode);
+            writer.Write(rasterizer.DepthClipEnable);
+            writer.Write(rasterizer.ConservativeRaster);
+            writer.Write(rasterizer.AntialiasedLineEnable);
+            writer.Write(rasterizer.FrontCounterClockwise);
+            writer.Write(rasterizer.DepthBias);
+            writer.Write(rasterizer.DepthBiasClamp);
+            writer.Write(rasterizer.SlopeScaledDepthBias);
+
+            RHIDepthStencilStateDescriptor depthStencil =
+                descriptor.DepthStencilState;
+            writer.Write(depthStencil.DepthEnable);
+            writer.Write(depthStencil.DepthWriteMask);
+            writer.Write(depthStencil.StencilEnable);
+            writer.Write(depthStencil.StencilReadMask);
+            writer.Write(depthStencil.StencilWriteMask);
+            writer.Write((byte)depthStencil.ComparisonMode);
+            WriteStencil(writer, depthStencil.FrontFace);
+            WriteStencil(writer, depthStencil.BackFace);
+        }
+
+        private static void WriteBlend(
+            BinaryWriter writer,
+            in RHIBlendDescriptor descriptor)
+        {
+            writer.Write(descriptor.BlendEnable);
+            writer.Write((byte)descriptor.BlendOpColor);
+            writer.Write((byte)descriptor.SrcBlendColor);
+            writer.Write((byte)descriptor.DstBlendColor);
+            writer.Write((byte)descriptor.BlendOpAlpha);
+            writer.Write((byte)descriptor.SrcBlendAlpha);
+            writer.Write((byte)descriptor.DstBlendAlpha);
+            writer.Write((byte)descriptor.ColorWriteChannel);
+        }
+
+        private static void WriteStencil(
+            BinaryWriter writer,
+            in RHIStencilStateDescriptor descriptor)
+        {
+            writer.Write((byte)descriptor.StencilPassOp);
+            writer.Write((byte)descriptor.StencilFailOp);
+            writer.Write((byte)descriptor.StencilDepthFailOp);
+            writer.Write((byte)descriptor.ComparisonMode);
+        }
+    }
+    #endregion
 }

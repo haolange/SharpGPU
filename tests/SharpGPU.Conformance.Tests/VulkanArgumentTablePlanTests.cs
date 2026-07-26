@@ -4,12 +4,12 @@ using Xunit;
 
 namespace SharpGPU.Conformance.Tests
 {
-    public sealed class VulkanArgumentTablePlanTests
+    public sealed class VulkanBindingTablePlanTests
     {
         [Fact]
         public void Plan_ShouldMapLogicalNamespacesToDensePhysicalBindings()
         {
-            VulkanArgumentTablePlan plan = CreatePlan(
+            VulkanBindingTablePlan plan = CreatePlan(
                 3,
                 AllFeatures(),
                 GenerousLimits(),
@@ -63,7 +63,7 @@ namespace SharpGPU.Conformance.Tests
                 Element(
                     0,
                     ERHIBindType.Buffer,
-                    requirement: (ERHIArgumentBindingRequirement)byte.MaxValue)));
+                    requirement: (ERHIBindingRequirement)byte.MaxValue)));
             Assert.Throws<ArgumentException>(() => CreatePlan(
                 0,
                 AllFeatures(),
@@ -113,7 +113,7 @@ namespace SharpGPU.Conformance.Tests
                 GenerousLimits(),
                 Element(0, ERHIBindType.Texture2D, count: 2)));
 
-            VulkanArgumentTablePlan supported = CreatePlan(
+            VulkanBindingTablePlan supported = CreatePlan(
                 0,
                 AllFeatures(),
                 GenerousLimits(),
@@ -139,18 +139,18 @@ namespace SharpGPU.Conformance.Tests
                 Element(
                     0,
                     ERHIBindType.Buffer,
-                    requirement: ERHIArgumentBindingRequirement.Optional)));
+                    requirement: ERHIBindingRequirement.Optional)));
 
-            VulkanArgumentTablePlan supported = CreatePlan(
+            VulkanBindingTablePlan supported = CreatePlan(
                 0,
                 AllFeatures(),
                 GenerousLimits(),
                 Element(
                     0,
                     ERHIBindType.Buffer,
-                    requirement: ERHIArgumentBindingRequirement.Optional));
+                    requirement: ERHIBindingRequirement.Optional));
             Assert.Equal(
-                ERHIArgumentBindingRequirement.Optional,
+                ERHIBindingRequirement.Optional,
                 supported.BindInfos[0].Requirement);
         }
 
@@ -204,25 +204,25 @@ namespace SharpGPU.Conformance.Tests
         [Fact]
         public void StructuralIdentity_ShouldIncludeCountStageTypeAndRequirement()
         {
-            VulkanArgumentTablePlan expected = CreatePlan(
+            VulkanBindingTablePlan expected = CreatePlan(
                 2,
                 AllFeatures(),
                 GenerousLimits(),
                 Element(5, ERHIBindType.Buffer));
-            VulkanArgumentTablePlan equivalent = CreatePlan(
+            VulkanBindingTablePlan equivalent = CreatePlan(
                 2,
                 AllFeatures(),
                 GenerousLimits(),
                 Element(5, ERHIBindType.Buffer));
-            VulkanArgumentTablePlan optional = CreatePlan(
+            VulkanBindingTablePlan optional = CreatePlan(
                 2,
                 AllFeatures(),
                 GenerousLimits(),
                 Element(
                     5,
                     ERHIBindType.Buffer,
-                    requirement: ERHIArgumentBindingRequirement.Optional));
-            VulkanArgumentTablePlan differentStage = CreatePlan(
+                    requirement: ERHIBindingRequirement.Optional));
+            VulkanBindingTablePlan differentStage = CreatePlan(
                 2,
                 AllFeatures(),
                 GenerousLimits(),
@@ -230,7 +230,7 @@ namespace SharpGPU.Conformance.Tests
                     5,
                     ERHIBindType.Buffer,
                     stages: ERHIShaderStageMask.Fragment));
-            VulkanArgumentTablePlan differentType = CreatePlan(
+            VulkanBindingTablePlan differentType = CreatePlan(
                 2,
                 AllFeatures(),
                 GenerousLimits(),
@@ -243,14 +243,14 @@ namespace SharpGPU.Conformance.Tests
             Assert.False(expected.StructurallyEquals(null));
         }
 
-        private static VulkanArgumentTablePlan CreatePlan(
+        private static VulkanBindingTablePlan CreatePlan(
             uint index,
             VulkanDescriptorFeatures features,
             VulkanDescriptorLimits limits,
-            params RHIArgumentTableLayoutElement[] elements)
+            params RHIBindingTableLayoutElement[] elements)
         {
-            return new VulkanArgumentTablePlan(
-                new RHIArgumentTableLayoutDescriptor
+            return new VulkanBindingTablePlan(
+                new RHIBindingTableLayoutDescriptor
                 {
                     Index = index,
                     Elements = elements,
@@ -287,15 +287,15 @@ namespace SharpGPU.Conformance.Tests
                 maximumStorageBuffersPerStage: 64);
         }
 
-        private static RHIArgumentTableLayoutElement Element(
+        private static RHIBindingTableLayoutElement Element(
             uint slot,
             ERHIBindType type,
             uint count = 1,
             ERHIShaderStageMask stages = ERHIShaderStageMask.Compute,
-            ERHIArgumentBindingRequirement requirement =
-                ERHIArgumentBindingRequirement.Required)
+            ERHIBindingRequirement requirement =
+                ERHIBindingRequirement.Required)
         {
-            return new RHIArgumentTableLayoutElement
+            return new RHIBindingTableLayoutElement
             {
                 Slot = slot,
                 Count = count,

@@ -154,8 +154,8 @@ public sealed class VulkanRasterSubpassQualifiedGpuTests
             device.CreatePipelineLayout(
                 new RHIPipelineLayoutDescriptor
                 {
-                    ArgumentTableLayouts =
-                        Array.Empty<RHIArgumentTableLayout>(),
+                    BindingTableLayouts =
+                        Array.Empty<RHIBindingTableLayout>(),
                 });
         using RHIFunction vertex = CompileFunction(
             device,

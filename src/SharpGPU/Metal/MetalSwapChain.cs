@@ -92,23 +92,184 @@ namespace SharpGPU
             }
         }
 
-        protected override RHISwapChainAcquireResult AcquireCore(
+        public override RHISwapChainAcquireResult AcquireBackBuffer(
             in RHISwapChainAcquireDescriptor descriptor)
         {
-            return AcquireTyped(in descriptor);
+            ThrowIfSwapChainUnavailable();
+            ValidateAcquire(in descriptor);
+
+            bool semaphoreReserved = false;
+            bool fenceReserved = false;
+            try
+            {
+                if (descriptor.SignalSemaphore != null)
+                {
+                    descriptor.SignalSemaphore.ReserveSignal();
+                    semaphoreReserved = true;
+                }
+                if (descriptor.CompletionFence != null)
+                {
+                    descriptor.CompletionFence.ReserveSignal();
+                    fenceReserved = true;
+                }
+
+                RHISwapChainAcquireResult result = AcquireTyped(in descriptor);
+                bool signalSubmitted = result.Status is
+                    ERHISwapChainStatus.Success or
+                    ERHISwapChainStatus.Suboptimal;
+
+                if (signalSubmitted)
+                {
+                    descriptor.SignalSemaphore?.CommitSignal();
+                    semaphoreReserved = false;
+                    fenceReserved = false;
+                }
+                else
+                {
+                    if (fenceReserved)
+                    {
+                        descriptor.CompletionFence!.RollbackSignal();
+                        fenceReserved = false;
+                    }
+                    if (semaphoreReserved)
+                    {
+                        descriptor.SignalSemaphore!.RollbackSignal();
+                        semaphoreReserved = false;
+                    }
+                }
+
+                result.Validate(OwnerDevice.BackendType, ImageCount);
+                InvalidateDeviceIfNeeded(in result);
+                return result;
+            }
+            catch (RHIException exception)
+            {
+                if (fenceReserved)
+                {
+                    descriptor.CompletionFence!.RollbackSignal();
+                }
+                if (semaphoreReserved)
+                {
+                    descriptor.SignalSemaphore!.RollbackSignal();
+                }
+                if (exception.ErrorCode == ERHIErrorCode.DeviceLost)
+                {
+                    OwnerDevice.MarkDeviceLost(exception);
+                }
+                throw;
+            }
+            catch
+            {
+                if (fenceReserved)
+                {
+                    descriptor.CompletionFence!.RollbackSignal();
+                }
+                if (semaphoreReserved)
+                {
+                    descriptor.SignalSemaphore!.RollbackSignal();
+                }
+                throw;
+            }
         }
 
-        protected override RHISwapChainOperationResult ResizeCore(
+        public override RHISwapChainOperationResult Resize(
             in RHISwapChainResizeDescriptor descriptor)
         {
-            return ResizeTyped(in descriptor);
+            ThrowIfSwapChainUnavailable();
+            try
+            {
+                RHISwapChainOperationResult result = ResizeTyped(in descriptor);
+                result.Validate(OwnerDevice.BackendType);
+                InvalidateDeviceIfNeeded(in result);
+                return result;
+            }
+            catch (RHIException exception)
+            {
+                if (exception.ErrorCode == ERHIErrorCode.DeviceLost)
+                {
+                    OwnerDevice.MarkDeviceLost(exception);
+                }
+                throw;
+            }
         }
 
-        protected override bool PresentCore(
-            in RHISwapChainPresentDescriptor descriptor,
-            out RHISwapChainOperationResult result)
+        public override RHISwapChainOperationResult Present(
+            in RHISwapChainPresentDescriptor descriptor)
         {
-            return PresentTyped(in descriptor, out result);
+            ThrowIfSwapChainUnavailable();
+            ValidatePresent(in descriptor);
+
+            int reservedWaits = 0;
+            bool fenceReserved = false;
+            try
+            {
+                ReadOnlySpan<RHISemaphore> waits =
+                    descriptor.WaitSemaphores.Span;
+                for (; reservedWaits < waits.Length; ++reservedWaits)
+                {
+                    waits[reservedWaits].ReserveWait();
+                }
+                if (descriptor.CompletionFence != null)
+                {
+                    descriptor.CompletionFence.ReserveSignal();
+                    fenceReserved = true;
+                }
+
+                bool waitsConsumed = PresentTyped(
+                    in descriptor,
+                    out RHISwapChainOperationResult result);
+                if (waitsConsumed)
+                {
+                    for (int index = 0; index < waits.Length; ++index)
+                    {
+                        waits[index].CommitWait();
+                    }
+                    fenceReserved = false;
+                }
+                else
+                {
+                    for (int index = waits.Length - 1; index >= 0; --index)
+                    {
+                        waits[index].RollbackWait();
+                    }
+                    if (fenceReserved)
+                    {
+                        descriptor.CompletionFence!.RollbackSignal();
+                        fenceReserved = false;
+                    }
+                }
+                reservedWaits = 0;
+
+                result.Validate(OwnerDevice.BackendType);
+                InvalidateDeviceIfNeeded(in result);
+                return result;
+            }
+            catch (RHIException exception)
+            {
+                RollbackPresentWaits(
+                    descriptor.WaitSemaphores.Span,
+                    reservedWaits);
+                if (fenceReserved)
+                {
+                    descriptor.CompletionFence!.RollbackSignal();
+                }
+                if (exception.ErrorCode == ERHIErrorCode.DeviceLost)
+                {
+                    OwnerDevice.MarkDeviceLost(exception);
+                }
+                throw;
+            }
+            catch
+            {
+                RollbackPresentWaits(
+                    descriptor.WaitSemaphores.Span,
+                    reservedWaits);
+                if (fenceReserved)
+                {
+                    descriptor.CompletionFence!.RollbackSignal();
+                }
+                throw;
+            }
         }
 
         private void AttachLayerToSurface(

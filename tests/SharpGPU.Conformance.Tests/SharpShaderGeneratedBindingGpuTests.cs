@@ -219,8 +219,8 @@ namespace SharpGPU.Conformance.Tests
                         ?? throw new InvalidOperationException(
                             $"{backend} graphics queue is unavailable for '{device.Name}'.");
 
-                    SharpGpuArgumentTableLayoutPlan plan =
-                        SharpGpuShaderInterfaceAdapter.CreateArgumentTableLayoutPlan(
+                    SharpGpuBindingTableLayoutPlan plan =
+                        SharpGpuShaderInterfaceAdapter.CreateBindingTableLayoutPlan(
                             compilation.Manifest,
                             VariantKey,
                             EntryPoint,
@@ -228,12 +228,12 @@ namespace SharpGPU.Conformance.Tests
                             backend);
                     AssertPlan(compilation, plan, backend);
 
-                    using SharpGpuArgumentTableLayouts ownedLayouts =
-                        plan.CreateArgumentTableLayouts(device);
+                    using SharpGpuBindingTableLayouts ownedLayouts =
+                        plan.CreateBindingTableLayouts(device);
                     using RHIPipelineLayout pipelineLayout =
                         device.CreatePipelineLayout(new RHIPipelineLayoutDescriptor
                         {
-                            ArgumentTableLayouts = ownedLayouts.Layouts.ToArray(),
+                            BindingTableLayouts = ownedLayouts.Layouts.ToArray(),
                         });
                     using RHIFunction function = CreateFunction(
                         device,
@@ -305,30 +305,30 @@ namespace SharpGPU.Conformance.Tests
                         });
                     using RHISampler sampler =
                         device.CreateSampler(CreatePointSampler());
-                    using ArgumentTableSet tables = new(
+                    using BindingTableSet tables = new(
                         device,
                         plan,
                         ownedLayouts);
 
                     tables.Set(
                         plan.GetBinding(s_TextureKey),
-                        new RHIArgumentTableElement { TextureView = textureView });
+                        new RHIBindingTableElement { TextureView = textureView });
                     tables.Set(
                         plan.GetBinding(s_SamplerKey),
-                        new RHIArgumentTableElement { Sampler = sampler });
+                        new RHIBindingTableElement { Sampler = sampler });
                     tables.Set(
                         plan.GetBinding(s_ConstantsKey),
-                        new RHIArgumentTableElement { BufferView = constantsView });
+                        new RHIBindingTableElement { BufferView = constantsView });
                     tables.Set(
                         plan.GetBinding(s_OutputKey),
-                        new RHIArgumentTableElement { BufferView = outputView });
+                        new RHIBindingTableElement { BufferView = outputView });
                     tables.Set(
                         plan.GetBinding(s_InputsKey),
-                        new RHIArgumentTableElement { BufferView = input0View },
+                        new RHIBindingTableElement { BufferView = input0View },
                         0);
                     tables.Set(
                         plan.GetBinding(s_InputsKey),
-                        new RHIArgumentTableElement { BufferView = input1View },
+                        new RHIBindingTableElement { BufferView = input1View },
                         1);
 
                     using RHIFence fence = device.CreateFence();
@@ -530,14 +530,14 @@ namespace SharpGPU.Conformance.Tests
 
         private static void AssertPlan(
             ShaderProgramCompilation compilation,
-            SharpGpuArgumentTableLayoutPlan plan,
+            SharpGpuBindingTableLayoutPlan plan,
             ERHIBackend backend)
         {
             Assert.Equal(backend, plan.Backend);
             ShaderInterfaceLayout logical =
                 Assert.Single(compilation.Manifest.LogicalLayouts);
             Assert.Equal(logical.Signature, plan.LogicalLayoutSignature);
-            Assert.Equal(2, plan.ArgumentTableCount);
+            Assert.Equal(2, plan.BindingTableCount);
 
             SharpGpuBindingLocation texture =
                 plan.GetBinding(s_TextureKey);
@@ -553,11 +553,11 @@ namespace SharpGPU.Conformance.Tests
 
             if (backend == ERHIBackend.DirectX12)
             {
-                Assert.Equal(4u, texture.ArgumentTableIndex);
-                Assert.Equal(4u, sampler.ArgumentTableIndex);
-                Assert.Equal(4u, constants.ArgumentTableIndex);
-                Assert.Equal(4u, output.ArgumentTableIndex);
-                Assert.Equal(9u, inputs.ArgumentTableIndex);
+                Assert.Equal(4u, texture.BindingTableIndex);
+                Assert.Equal(4u, sampler.BindingTableIndex);
+                Assert.Equal(4u, constants.BindingTableIndex);
+                Assert.Equal(4u, output.BindingTableIndex);
+                Assert.Equal(9u, inputs.BindingTableIndex);
                 Assert.All(
                     new[] { texture, sampler, constants, output, inputs },
                     binding => Assert.Equal(0u, binding.Slot));
@@ -566,7 +566,7 @@ namespace SharpGPU.Conformance.Tests
             {
                 Assert.Equal(
                     new[] { 0u, 1u },
-                    plan.CreateArgumentTableLayoutDescriptors()
+                    plan.CreateBindingTableLayoutDescriptors()
                         .Select(descriptor => descriptor.Index));
                 Assert.Equal(
                     new uint[] { 0, 1, 2, 3 },
@@ -577,7 +577,7 @@ namespace SharpGPU.Conformance.Tests
                         constants.Slot,
                         output.Slot,
                     });
-                Assert.Equal(1u, inputs.ArgumentTableIndex);
+                Assert.Equal(1u, inputs.BindingTableIndex);
                 Assert.Equal(0u, inputs.Slot);
             }
         }
@@ -911,25 +911,25 @@ namespace SharpGPU.Conformance.Tests
         }
 #endif
 
-        private sealed class ArgumentTableSet : IDisposable
+        private sealed class BindingTableSet : IDisposable
         {
-            private readonly RHIArgumentTable[] m_Tables;
-            private readonly Dictionary<uint, RHIArgumentTable>
+            private readonly RHIBindingTable[] m_Tables;
+            private readonly Dictionary<uint, RHIBindingTable>
                 m_TablesByIndex;
             private readonly uint[] m_TableIndices;
             private bool m_IsDisposed;
 
-            public ArgumentTableSet(
+            public BindingTableSet(
                 RHIDevice device,
-                SharpGpuArgumentTableLayoutPlan plan,
-                SharpGpuArgumentTableLayouts layouts)
+                SharpGpuBindingTableLayoutPlan plan,
+                SharpGpuBindingTableLayouts layouts)
             {
                 ArgumentNullException.ThrowIfNull(device);
                 ArgumentNullException.ThrowIfNull(plan);
                 ArgumentNullException.ThrowIfNull(layouts);
 
-                RHIArgumentTableLayoutDescriptor[] descriptors =
-                    plan.CreateArgumentTableLayoutDescriptors();
+                RHIBindingTableLayoutDescriptor[] descriptors =
+                    plan.CreateBindingTableLayoutDescriptors();
                 if (descriptors.Length != layouts.Layouts.Count)
                 {
                     throw new InvalidOperationException(
@@ -937,9 +937,9 @@ namespace SharpGPU.Conformance.Tests
                 }
 
                 m_Tables =
-                    new RHIArgumentTable[descriptors.Length];
+                    new RHIBindingTable[descriptors.Length];
                 m_TablesByIndex =
-                    new Dictionary<uint, RHIArgumentTable>(
+                    new Dictionary<uint, RHIBindingTable>(
                         descriptors.Length);
                 m_TableIndices = new uint[descriptors.Length];
                 int created = 0;
@@ -950,14 +950,14 @@ namespace SharpGPU.Conformance.Tests
                          ++index)
                     {
                         uint tableIndex = descriptors[index].Index;
-                        RHIArgumentTable table =
-                            device.CreateArgumentTable(
-                                new RHIArgumentTableDescriptor
+                        RHIBindingTable table =
+                            device.CreateBindingTable(
+                                new RHIBindingTableDescriptor
                                 {
                                     Layout = layouts.Layouts[index],
                                     Elements =
                                         Array.Empty<
-                                            RHIArgumentTableElement>(),
+                                            RHIBindingTableElement>(),
                                 });
                         if (!m_TablesByIndex.TryAdd(
                                 tableIndex,
@@ -988,7 +988,7 @@ namespace SharpGPU.Conformance.Tests
 
             public void Set(
                 SharpGpuBindingLocation binding,
-                in RHIArgumentTableElement element)
+                in RHIBindingTableElement element)
             {
                 ThrowIfDisposed();
                 if (binding.Count != 1)
@@ -1006,7 +1006,7 @@ namespace SharpGPU.Conformance.Tests
 
             public void Set(
                 SharpGpuBindingLocation binding,
-                in RHIArgumentTableElement element,
+                in RHIBindingTableElement element,
                 int arrayIndex)
             {
                 ThrowIfDisposed();
@@ -1035,7 +1035,7 @@ namespace SharpGPU.Conformance.Tests
                      index < m_Tables.Length;
                      ++index)
                 {
-                    encoder.SetArgumentTable(
+                    encoder.SetBindingTable(
                         m_Tables[index],
                         m_TableIndices[index]);
                 }
@@ -1059,15 +1059,15 @@ namespace SharpGPU.Conformance.Tests
                 m_IsDisposed = true;
             }
 
-            private RHIArgumentTable GetTable(
+            private RHIBindingTable GetTable(
                 SharpGpuBindingLocation binding)
             {
                 return m_TablesByIndex.TryGetValue(
-                        binding.ArgumentTableIndex,
-                        out RHIArgumentTable? table)
+                        binding.BindingTableIndex,
+                        out RHIBindingTable? table)
                     ? table
                     : throw new KeyNotFoundException(
-                        $"Generated SharpGPU table {binding.ArgumentTableIndex} for {binding.LogicalBinding} does not exist.");
+                        $"Generated SharpGPU table {binding.BindingTableIndex} for {binding.LogicalBinding} does not exist.");
             }
 
             private void ThrowIfDisposed()

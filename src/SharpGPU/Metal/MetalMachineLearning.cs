@@ -59,7 +59,7 @@ namespace SharpGPU
         }
     }
 
-    internal sealed class MetalMLBindingSet : RHIMLBindingSet
+    internal sealed class MetalMLBindingTable : RHIMLBindingTable
     {
         internal MetalMLPipeline PipelineTyped => (MetalMLPipeline)(m_Pipeline ?? throw new InvalidOperationException("Metal ML binding set pipeline is unavailable."));
         internal MetalTensor[] Inputs { get; }
@@ -70,7 +70,7 @@ namespace SharpGPU
         private MTL4ArgumentTable m_NativeArgumentTable;
         private MetalHeap? m_IntermediatesHeap;
 
-        internal MetalMLBindingSet(MetalDevice device, in RHIMLBindingSetDescriptor descriptor)
+        internal MetalMLBindingTable(MetalDevice device, in RHIMLBindingTableDescriptor descriptor)
         {
             if (descriptor.Pipeline is not MetalMLPipeline metalPipeline)
             {
@@ -81,12 +81,12 @@ namespace SharpGPU
             Inputs = ConvertTensors(descriptor.Inputs.Span, ERHIMLTensorBindingKind.Input, metalPipeline.InputCount);
             Outputs = ConvertTensors(descriptor.Outputs.Span, ERHIMLTensorBindingKind.Output, metalPipeline.OutputCount);
 
-            MTL4ArgumentTableDescriptor argumentTableDescriptor = MTL4ArgumentTableDescriptor.New();
-            argumentTableDescriptor.MaxBufferBindCount = Math.Max(1UL, metalPipeline.ArgumentTableBufferBindCount);
-            argumentTableDescriptor.InitializeBindings = true;
+            MTL4ArgumentTableDescriptor bindingTableDescriptor = MTL4ArgumentTableDescriptor.New();
+            bindingTableDescriptor.MaxBufferBindCount = Math.Max(1UL, metalPipeline.NativeArgumentTableBufferBindCount);
+            bindingTableDescriptor.InitializeBindings = true;
             SharpMetal.Foundation.NSError error = default;
-            m_NativeArgumentTable = device.NativeDevice.NewArgumentTable(argumentTableDescriptor, ref error);
-            SharpMetal.ObjectiveCCore.ObjectiveCRuntime.Release(argumentTableDescriptor);
+            m_NativeArgumentTable = device.NativeDevice.NewArgumentTable(bindingTableDescriptor, ref error);
+            SharpMetal.ObjectiveCCore.ObjectiveCRuntime.Release(bindingTableDescriptor);
 
             if (m_NativeArgumentTable.NativePtr == IntPtr.Zero)
             {
@@ -94,16 +94,16 @@ namespace SharpGPU
                 throw new InvalidOperationException($"Failed to create MTL4ArgumentTable for ML binding set: {errorText}");
             }
 
-            device.RegisterMetalMLArgumentTable(m_NativeArgumentTable);
+            device.RegisterMetalMLNativeArgumentTable(m_NativeArgumentTable);
 
             // WWDC25 / Apple docs: MTLHeapTypePlacement with size >= pipeline.intermediatesHeapSize.
-            // Do not force ResourceOptions on this heap — MetalHeap.CreateMachineLearningIntermediates
+            // Do not force ResourceOptions on this heap �?MetalHeap.CreateMachineLearningIntermediates
             // mirrors Apple's minimal descriptor (type + size only).
             ulong intermediatesHeapSize = Math.Max(metalPipeline.TemporaryResourceSize, 1UL);
             m_IntermediatesHeap = MetalHeap.CreateMachineLearningIntermediates(device, intermediatesHeapSize);
             device.RegisterMetalMLIntermediatesHeap(m_IntermediatesHeap);
 
-            PopulateArgumentTable(device, metalPipeline);
+            PopulateNativeArgumentTable(device, metalPipeline);
         }
 
         private static MetalTensor[] ConvertTensors(ReadOnlySpan<RHITensor> tensors, ERHIMLTensorBindingKind kind, uint expectedCount)
@@ -123,7 +123,7 @@ namespace SharpGPU
             return result;
         }
 
-        private void PopulateArgumentTable(MetalDevice device, MetalMLPipeline pipeline)
+        private void PopulateNativeArgumentTable(MetalDevice device, MetalMLPipeline pipeline)
         {
             _ = device;
             if (pipeline.ReflectionBindingCount != 0UL && pipeline.ReflectionBindingCount != (ulong)pipeline.BindingInfos.Length)
@@ -177,12 +177,12 @@ namespace SharpGPU
         internal MetalMLProgram Program => m_Program;
         internal ulong ReflectionBindingCount => m_ReflectionBindingCount;
         internal ReadOnlyMemory<ulong> NativeBindingSlots => m_NativeBindingSlots;
-        internal ulong ArgumentTableBufferBindCount => m_ArgumentTableBufferBindCount;
+        internal ulong NativeArgumentTableBufferBindCount => m_NativeArgumentTableBufferBindCount;
 
         private MTL4MachineLearningPipelineState m_NativePipelineState;
         private readonly MetalMLProgram m_Program;
         private readonly ulong[] m_NativeBindingSlots;
-        private readonly ulong m_ArgumentTableBufferBindCount;
+        private readonly ulong m_NativeArgumentTableBufferBindCount;
         private ulong m_ReflectionBindingCount;
 
         public MetalMLPipeline(MetalDevice device, in RHIMLPipelineDescriptor descriptor)
@@ -252,7 +252,7 @@ namespace SharpGPU
 
             device.RegisterMetalMLPipelineState(m_NativePipelineState);
             m_NativeBindingSlots = ResolveNativeBindingSlots();
-            m_ArgumentTableBufferBindCount = CalculateArgumentTableBufferBindCount(m_NativeBindingSlots);
+            m_NativeArgumentTableBufferBindCount = CalculateNativeNativeArgumentTableBufferBindCount(m_NativeBindingSlots);
 
             for (int i = 0; i < m_BindingInfos.Length; ++i)
             {
@@ -433,7 +433,7 @@ namespace SharpGPU
             return name.NativePtr == IntPtr.Zero ? string.Empty : name.ToString();
         }
 
-        private static ulong CalculateArgumentTableBufferBindCount(ReadOnlySpan<ulong> bindingSlots)
+        private static ulong CalculateNativeNativeArgumentTableBufferBindCount(ReadOnlySpan<ulong> bindingSlots)
         {
             ulong maxSlot = 0;
             for (int i = 0; i < bindingSlots.Length; ++i)
@@ -550,15 +550,16 @@ namespace SharpGPU
             }
         }
 
-        public override void SetBindingSet(RHIMLBindingSet bindingSet)
+        public override void SetBindingTable(RHIMLBindingTable bindingSet)
         {
-            MetalMLBindingSet metalBindingSet = bindingSet as MetalMLBindingSet
-                ?? throw new InvalidOperationException($"Metal ML encoder expects {nameof(MetalMLBindingSet)} but got {bindingSet?.GetType().Name ?? "<null>"}.");
-            m_CachedBindingSet = metalBindingSet;
-            if (metalBindingSet.NativeArgumentTable.NativePtr != IntPtr.Zero)
+            MetalMLBindingTable metalBindingTable = bindingSet as MetalMLBindingTable
+                ?? throw new InvalidOperationException($"Metal ML encoder expects {nameof(MetalMLBindingTable)} but got {bindingSet?.GetType().Name ?? "<null>"}.");
+            m_CachedBindingSet = metalBindingTable;
+            if (metalBindingTable.NativeArgumentTable.NativePtr != IntPtr.Zero)
             {
-                TrackBindingResidency(metalBindingSet);
-                m_NativeEncoder.SetArgumentTable(metalBindingSet.NativeArgumentTable);
+                TrackBindingResidency(metalBindingTable);
+                // Native MTL4 ML API name (not RHI BindingTable).
+                m_NativeEncoder.SetArgumentTable(metalBindingTable.NativeArgumentTable);
             }
         }
 
@@ -569,17 +570,21 @@ namespace SharpGPU
                 throw new InvalidOperationException("Metal ML encoder requires SetPipeline before Dispatch.");
             }
 
-            if (m_CachedBindingSet is not MetalMLBindingSet metalBindingSet)
+            if (m_CachedBindingSet is not MetalMLBindingTable metalBindingTable)
             {
                 throw new InvalidOperationException("Metal ML encoder requires SetBindingSet before Dispatch.");
             }
 
-            m_NativeEncoder.DispatchNetworkWithIntermediatesHeap(metalBindingSet.NativeIntermediatesHeap);
+            m_NativeEncoder.DispatchNetworkWithIntermediatesHeap(metalBindingTable.NativeIntermediatesHeap);
             ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.MachineLearning));
         }
 
-        internal override void EndPassCore()
+        public override void EndPass()
         {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The machine-learning encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.MachineLearning);
+
             if (m_PassDescriptor.Timestamp.HasValue)
             {
                 WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
@@ -594,13 +599,14 @@ namespace SharpGPU
             m_CachedPipeline = null;
             m_CachedBindingSet = null;
             m_PassDescriptor = default;
+            commandBuffer.MarkEncoderEndFromEncoder();
         }
 
         protected override void Release()
         {
         }
 
-        private void TrackBindingResidency(MetalMLBindingSet bindingSet)
+        private void TrackBindingResidency(MetalMLBindingTable bindingSet)
         {
             if (m_CommandBuffer?.CommandQueue is not MetalCommandQueue queue)
             {

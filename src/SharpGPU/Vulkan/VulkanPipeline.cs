@@ -22,7 +22,7 @@ namespace SharpGPU
             NativeTableLayouts => m_NativeTableLayouts;
 
         private readonly VulkanDevice m_VulkanDevice;
-        private readonly Dictionary<uint, VulkanArgumentTablePlan> m_TablePlans;
+        private readonly Dictionary<uint, VulkanBindingTablePlan> m_TablePlans;
         private readonly Dictionary<uint, VkDescriptorSetLayout>
             m_NativeTableLayouts;
         private VkPipelineLayout m_NativePipelineLayout;
@@ -35,34 +35,34 @@ namespace SharpGPU
             m_VulkanDevice = device;
             m_PushConstantSize = descriptor.PushConstantSize;
 
-            RHIArgumentTableLayout[] sourceLayouts =
-                descriptor.ArgumentTableLayouts
-                ?? Array.Empty<RHIArgumentTableLayout>();
+            RHIBindingTableLayout[] sourceLayouts =
+                descriptor.BindingTableLayouts
+                ?? Array.Empty<RHIBindingTableLayout>();
             int layoutCount = sourceLayouts.Length;
             m_TablePlans =
-                new Dictionary<uint, VulkanArgumentTablePlan>(layoutCount);
+                new Dictionary<uint, VulkanBindingTablePlan>(layoutCount);
             m_NativeTableLayouts =
                 new Dictionary<uint, VkDescriptorSetLayout>(layoutCount);
             int maxSetIndex = -1;
             for (int index = 0; index < layoutCount; ++index)
             {
-                VulkanArgumentTableLayout layout =
-                    sourceLayouts[index] as VulkanArgumentTableLayout
+                VulkanBindingTableLayout layout =
+                    sourceLayouts[index] as VulkanBindingTableLayout
                     ?? throw new ArgumentException(
-                        $"Vulkan pipeline argument table {index} must be a "
-                        + $"{nameof(VulkanArgumentTableLayout)}.",
+                        $"Vulkan pipeline binding table {index} must be a "
+                        + $"{nameof(VulkanBindingTableLayout)}.",
                         nameof(descriptor));
                 if (layout.IsDisposed)
                 {
                     throw new ObjectDisposedException(
                         nameof(descriptor),
-                        $"Vulkan pipeline argument table "
+                        $"Vulkan pipeline binding table "
                         + $"{layout.Plan.Index} is disposed.");
                 }
                 if (!ReferenceEquals(layout.Device, device))
                 {
                     throw new ArgumentException(
-                        $"Vulkan pipeline argument table "
+                        $"Vulkan pipeline binding table "
                         + $"{layout.Plan.Index} belongs to a different "
                         + "Vulkan device.",
                         nameof(descriptor));
@@ -70,7 +70,7 @@ namespace SharpGPU
                 if (!m_TablePlans.TryAdd(layout.Plan.Index, layout.Plan))
                 {
                     throw new ArgumentException(
-                        $"Vulkan pipeline contains duplicate argument table "
+                        $"Vulkan pipeline contains duplicate binding table "
                         + $"index {layout.Plan.Index}.",
                         nameof(descriptor));
                 }
@@ -123,8 +123,8 @@ namespace SharpGPU
                     }
                     for (int index = 0; index < layoutCount; ++index)
                     {
-                        VulkanArgumentTableLayout layout =
-                            (VulkanArgumentTableLayout)sourceLayouts[index];
+                        VulkanBindingTableLayout layout =
+                            (VulkanBindingTableLayout)sourceLayouts[index];
                         setLayouts[(int)layout.Plan.Index] =
                             layout.NativeDescriptorSetLayout;
                     }
@@ -175,47 +175,47 @@ namespace SharpGPU
             }
         }
 
-        internal VulkanArgumentTable ResolveReadyTable(
-            RHIArgumentTable argumentTable,
+        internal VulkanBindingTable ResolveReadyTable(
+            RHIBindingTable bindingTable,
             in uint tableIndex)
         {
             ThrowIfDisposed();
-            VulkanArgumentTable table =
-                argumentTable as VulkanArgumentTable
+            VulkanBindingTable table =
+                bindingTable as VulkanBindingTable
                 ?? throw new ArgumentException(
-                    "Vulkan encoder requires a VulkanArgumentTable from the "
+                    "Vulkan encoder requires a VulkanBindingTable from the "
                     + "same backend.",
-                    nameof(argumentTable));
+                    nameof(bindingTable));
             if (!ReferenceEquals(m_VulkanDevice, table.Device))
             {
                 throw new ArgumentException(
-                    "Vulkan encoder cannot bind an argument table allocated "
+                    "Vulkan encoder cannot bind an binding table allocated "
                     + "from a different Vulkan device.",
-                    nameof(argumentTable));
+                    nameof(bindingTable));
             }
             if (table.Layout.Plan.Index != tableIndex)
             {
                 throw new ArgumentException(
-                    $"Vulkan argument table reports index "
-                    + $"{table.Layout.Plan.Index}, but SetArgumentTable "
+                    $"Vulkan binding table reports index "
+                    + $"{table.Layout.Plan.Index}, but SetBindingTable "
                     + $"requested {tableIndex}.",
                     nameof(tableIndex));
             }
             if (!m_TablePlans.TryGetValue(
                     tableIndex,
-                    out VulkanArgumentTablePlan? expectedPlan))
+                    out VulkanBindingTablePlan? expectedPlan))
             {
                 throw new ArgumentException(
-                    $"Vulkan pipeline layout does not declare argument table "
+                    $"Vulkan pipeline layout does not declare binding table "
                     + $"index {tableIndex}.",
                     nameof(tableIndex));
             }
             if (!expectedPlan.StructurallyEquals(table.Layout.Plan))
             {
                 throw new ArgumentException(
-                    $"Vulkan argument table {tableIndex} is structurally "
+                    $"Vulkan binding table {tableIndex} is structurally "
                     + "incompatible with the pipeline layout.",
-                    nameof(argumentTable));
+                    nameof(bindingTable));
             }
 
             table.EnsureReadyForBinding();

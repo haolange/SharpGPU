@@ -8,7 +8,7 @@ namespace SharpGPU.Conformance.Tests;
 
 /// <summary>
 /// Real-device behavioral coverage for the Vulkan backend-private descriptor
-/// clone used by an ordinary SampledFeedback argument table. The caller table
+/// clone used by an ordinary SampledFeedback binding table. The caller table
 /// remains caller-owned and is never rewritten by the HAL.
 /// </summary>
 public sealed class VulkanSampledFeedbackCloneQualifiedGpuTests
@@ -70,39 +70,39 @@ public sealed class VulkanSampledFeedbackCloneQualifiedGpuTests
                     ArrayCount = 1,
                     ViewType = ERHITextureViewType.ShaderResource,
                 });
-            using RHIArgumentTableLayout layout =
-                device.CreateArgumentTableLayout(
-                    new RHIArgumentTableLayoutDescriptor
+            using RHIBindingTableLayout layout =
+                device.CreateBindingTableLayout(
+                    new RHIBindingTableLayoutDescriptor
                     {
                         Index = 0,
-                        Elements = new RHIArgumentTableLayoutElement[]
+                        Elements = new RHIBindingTableLayoutElement[]
                         {
-                            new RHIArgumentTableLayoutElement
+                            new RHIBindingTableLayoutElement
                             {
                                 Slot = 7,
                                 Count = 2,
                                 Type = ERHIBindType.Texture2DArray,
                                 Stages = ERHIShaderStageMask.Fragment,
                                 Requirement =
-                                    ERHIArgumentBindingRequirement.Required,
+                                    ERHIBindingRequirement.Required,
                             },
                         },
                     });
-            using RHIArgumentTable publicTable = device.CreateArgumentTable(
-                new RHIArgumentTableDescriptor
+            using RHIBindingTable publicTable = device.CreateBindingTable(
+                new RHIBindingTableDescriptor
                 {
                     Layout = layout,
-                    Elements = Array.Empty<RHIArgumentTableElement>(),
+                    Elements = Array.Empty<RHIBindingTableElement>(),
                 });
-            VulkanArgumentTable table = Assert.IsType<VulkanArgumentTable>(
+            VulkanBindingTable table = Assert.IsType<VulkanBindingTable>(
                 publicTable);
             table.SetBindElement(
-                new RHIArgumentTableElement { TextureView = exactView },
+                new RHIBindingTableElement { TextureView = exactView },
                 ERHIBindType.Texture2DArray,
                 slot: 7,
                 arrayIndex: 0);
             table.SetBindElement(
-                new RHIArgumentTableElement { TextureView = disjointView },
+                new RHIBindingTableElement { TextureView = disjointView },
                 ERHIBindType.Texture2DArray,
                 slot: 7,
                 arrayIndex: 1);

@@ -44,7 +44,7 @@ public sealed class MetalIcbAndViewportQualifiedTests
             bLocalSignature = false,
             bUseVertexLayout = false,
             PushConstantSize = 0,
-            ArgumentTableLayouts = Array.Empty<RHIArgumentTableLayout>(),
+            BindingTableLayouts = Array.Empty<RHIBindingTableLayout>(),
         });
         using RHIComputePipeline pipeline = context.Device.CreateComputePipeline(new RHIComputePipelineDescriptor
         {
@@ -316,7 +316,7 @@ public sealed class MetalIcbAndViewportQualifiedTests
             bLocalSignature = false,
             bUseVertexLayout = false,
             PushConstantSize = 0,
-            ArgumentTableLayouts = Array.Empty<RHIArgumentTableLayout>(),
+            BindingTableLayouts = Array.Empty<RHIBindingTableLayout>(),
         });
 
         try

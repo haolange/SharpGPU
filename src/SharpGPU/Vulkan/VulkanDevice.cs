@@ -1244,7 +1244,7 @@ namespace SharpGPU
             RHICapabilityLimits bindingLimits = new RHICapabilityLimits(
                 new RHICapabilityLimit(ERHICapabilityLimitKind.UniformBufferAlignment, limits.minUniformBufferOffsetAlignment),
                 new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumBoundTextures, limits.maxDescriptorSetSampledImages),
-                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumArgumentTables, limits.maxBoundDescriptorSets),
+                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumBindingTables, limits.maxBoundDescriptorSets),
                 new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumSamplerDescriptorsPerTable, limits.maxDescriptorSetSamplers),
                 new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumSampledImageDescriptorsPerTable, limits.maxDescriptorSetSampledImages),
                 new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumStorageImageDescriptorsPerTable, limits.maxDescriptorSetStorageImages),
@@ -1423,7 +1423,7 @@ namespace SharpGPU
                     updateAfterBindDescriptors: Probe(
                         false,
                         "SharpGPU SetBindElement external-synchronization contract",
-                        "Update-after-bind is deliberately not enabled for mutable public argument tables."),
+                        "Update-after-bind is deliberately not enabled for mutable public binding tables."),
                     nullDescriptors: Probe(
                         false,
                         "VK_KHR/EXT_robustness2 nullDescriptor feature",
@@ -1868,14 +1868,14 @@ namespace SharpGPU
             return new VulkanBottomLevelAccelStruct(this, descriptor);
         }
 
-        public override RHIArgumentTableLayout CreateArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor)
+        public override RHIBindingTableLayout CreateBindingTableLayout(in RHIBindingTableLayoutDescriptor descriptor)
         {
-            return new VulkanArgumentTableLayout(this, descriptor);
+            return new VulkanBindingTableLayout(this, descriptor);
         }
 
-        public override RHIArgumentTable CreateArgumentTable(in RHIArgumentTableDescriptor descriptor)
+        public override RHIBindingTable CreateBindingTable(in RHIBindingTableDescriptor descriptor)
         {
-            return new VulkanArgumentTable(this, descriptor);
+            return new VulkanBindingTable(this, descriptor);
         }
 
         public override RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor)
@@ -1964,7 +1964,7 @@ namespace SharpGPU
                 + Capabilities.MachineLearning.Execution.UnavailableReason);
         }
 
-        public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
+        public override RHIMLBindingTable CreateMLBindingTable(in RHIMLBindingTableDescriptor descriptor)
         {
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(

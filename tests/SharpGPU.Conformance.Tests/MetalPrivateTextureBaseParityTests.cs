@@ -16,7 +16,7 @@ public sealed class MetalPrivateTextureBaseParityTests
             new(0, 1),
             new(3, 2),
         };
-        using MetalArgumentTableLayout layout =
+        using MetalBindingTableLayout layout =
             CreateLayout(
                 index: 0,
                 Element(31, 1, ERHIBindType.UniformBuffer),
@@ -42,7 +42,7 @@ public sealed class MetalPrivateTextureBaseParityTests
             new(4u * sizeof(ulong), 3),
             new(9u * sizeof(ulong), 2),
         };
-        using MetalArgumentTableLayout layout =
+        using MetalBindingTableLayout layout =
             CreateLayout(
                 index: 0,
                 Element(0, 4, ERHIBindType.StorageBuffer),
@@ -69,12 +69,12 @@ public sealed class MetalPrivateTextureBaseParityTests
             new(2u * sizeof(ulong), 4),
             new(11u * sizeof(ulong), 2),
         };
-        using MetalArgumentTableLayout table0 =
+        using MetalBindingTableLayout table0 =
             CreateLayout(
                 index: 0,
                 Element(63, 1, ERHIBindType.UniformBuffer),
                 Element(2, 4, ERHIBindType.Texture2DArray));
-        using MetalArgumentTableLayout table1 =
+        using MetalBindingTableLayout table1 =
             CreateLayout(
                 index: 3,
                 Element(11, 2, ERHIBindType.StorageTexture2D),
@@ -127,17 +127,17 @@ public sealed class MetalPrivateTextureBaseParityTests
         return end;
     }
 
-    private static MetalArgumentTableLayout CreateLayout(
+    private static MetalBindingTableLayout CreateLayout(
         uint index,
-        params RHIArgumentTableLayoutElement[] elements) =>
+        params RHIBindingTableLayoutElement[] elements) =>
         new(
-            new RHIArgumentTableLayoutDescriptor
+            new RHIBindingTableLayoutDescriptor
             {
                 Index = index,
                 Elements = elements,
             });
 
-    private static RHIArgumentTableLayoutElement Element(
+    private static RHIBindingTableLayoutElement Element(
         uint slot,
         uint count,
         ERHIBindType type) =>
@@ -147,7 +147,7 @@ public sealed class MetalPrivateTextureBaseParityTests
             Count = count,
             Type = type,
             Stages = ERHIShaderStageMask.Fragment,
-            Requirement = ERHIArgumentBindingRequirement.Required,
+            Requirement = ERHIBindingRequirement.Required,
         };
 
     private static RHIAttachmentInterfaceSignature

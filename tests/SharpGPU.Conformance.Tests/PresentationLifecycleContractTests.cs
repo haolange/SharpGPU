@@ -842,8 +842,9 @@ public sealed class PresentationLifecycleContractTests
             ++SubmitCount;
         }
 
-        protected override void WaitIdleCore()
+        public override void WaitIdle()
         {
+            ThrowIfDisposed();
             ++WaitIdleCount;
         }
     }

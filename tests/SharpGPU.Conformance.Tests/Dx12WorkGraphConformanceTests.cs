@@ -115,12 +115,12 @@ public sealed class Dx12WorkGraphConformanceTests
     private static WorkGraphSmokeFixture CreateFixture(RHIDevice device, byte[] dxilLibrary)
     {
         TraceStep("fixture-table-layout-begin");
-        RHIArgumentTableLayout tableLayout = device.CreateArgumentTableLayout(new RHIArgumentTableLayoutDescriptor
+        RHIBindingTableLayout tableLayout = device.CreateBindingTableLayout(new RHIBindingTableLayoutDescriptor
         {
             Index = 0,
             Elements = new[]
             {
-                new RHIArgumentTableLayoutElement
+                new RHIBindingTableLayoutElement
                 {
                     Slot = 0,
                     Count = 1,
@@ -137,7 +137,7 @@ public sealed class Dx12WorkGraphConformanceTests
             bLocalSignature = false,
             bUseVertexLayout = false,
             PushConstantSize = 0,
-            ArgumentTableLayouts = new[] { tableLayout },
+            BindingTableLayouts = new[] { tableLayout },
         });
         TraceStep("fixture-pipeline-layout-end");
 
@@ -171,12 +171,12 @@ public sealed class Dx12WorkGraphConformanceTests
             Stride = sizeof(int),
             ViewType = ERHIBufferViewType.UnorderedAccess,
         });
-        RHIArgumentTable argumentTable = device.CreateArgumentTable(new RHIArgumentTableDescriptor
+        RHIBindingTable bindingTable = device.CreateBindingTable(new RHIBindingTableDescriptor
         {
             Layout = tableLayout,
             Elements = new[]
             {
-                new RHIArgumentTableElement
+                new RHIBindingTableElement
                 {
                     BufferView = outputView,
                 },
@@ -196,7 +196,7 @@ public sealed class Dx12WorkGraphConformanceTests
             pipelineLayout,
             functionLibrary,
             pipeline,
-            argumentTable,
+            bindingTable,
             outputView,
             backingMemory,
             inputRecordBuffer,
@@ -214,7 +214,7 @@ public sealed class Dx12WorkGraphConformanceTests
             Name = "WorkGraph",
         });
         workGraph.SetPipeline(fixture.Pipeline);
-        workGraph.SetArgumentTable(fixture.ArgumentTable, 0);
+        workGraph.SetBindingTable(fixture.BindingTable, 0);
         workGraph.Barrier(RHIBarrier.Buffer(
             fixture.BackingMemory,
             RHIBufferRange.Whole(),
@@ -427,11 +427,11 @@ void WorkNode(ThreadNodeInputRecord<InputRecord> input)
 
     private sealed class WorkGraphSmokeFixture : IDisposable
     {
-        public RHIArgumentTableLayout TableLayout { get; }
+        public RHIBindingTableLayout TableLayout { get; }
         public RHIPipelineLayout PipelineLayout { get; }
         public RHIFunctionLibrary FunctionLibrary { get; }
         public RHIWorkGraphPipeline Pipeline { get; }
-        public RHIArgumentTable ArgumentTable { get; }
+        public RHIBindingTable BindingTable { get; }
         public RHIBufferView OutputView { get; }
         public RHIBuffer BackingMemory { get; }
         public RHIBuffer InputRecordBuffer { get; }
@@ -440,11 +440,11 @@ void WorkNode(ThreadNodeInputRecord<InputRecord> input)
         public int BackingMemorySize { get; }
 
         public WorkGraphSmokeFixture(
-            RHIArgumentTableLayout tableLayout,
+            RHIBindingTableLayout tableLayout,
             RHIPipelineLayout pipelineLayout,
             RHIFunctionLibrary functionLibrary,
             RHIWorkGraphPipeline pipeline,
-            RHIArgumentTable argumentTable,
+            RHIBindingTable bindingTable,
             RHIBufferView outputView,
             RHIBuffer backingMemory,
             RHIBuffer inputRecordBuffer,
@@ -456,7 +456,7 @@ void WorkNode(ThreadNodeInputRecord<InputRecord> input)
             PipelineLayout = pipelineLayout;
             FunctionLibrary = functionLibrary;
             Pipeline = pipeline;
-            ArgumentTable = argumentTable;
+            BindingTable = bindingTable;
             OutputView = outputView;
             BackingMemory = backingMemory;
             InputRecordBuffer = inputRecordBuffer;
@@ -467,7 +467,7 @@ void WorkNode(ThreadNodeInputRecord<InputRecord> input)
 
         public void Dispose()
         {
-            ArgumentTable.Dispose();
+            BindingTable.Dispose();
             OutputView.Dispose();
             Pipeline.Dispose();
             FunctionLibrary.Dispose();

@@ -275,25 +275,57 @@ namespace SharpGPU.Conformance.Tests
                 }
             }
 
-            protected override RHISwapChainAcquireResult AcquireCore(
+            public override RHISwapChainAcquireResult AcquireBackBuffer(
                 in RHISwapChainAcquireDescriptor descriptor)
             {
-                return AcquireResult;
+                ThrowIfSwapChainUnavailable();
+                ValidateAcquire(in descriptor);
+                RHISwapChainAcquireResult result = AcquireResult;
+                InvalidateDeviceIfNeeded(in result);
+                return result;
             }
 
-            protected override RHISwapChainOperationResult ResizeCore(
+            public override RHISwapChainOperationResult Resize(
                 in RHISwapChainResizeDescriptor descriptor)
             {
+                ThrowIfSwapChainUnavailable();
                 ++ResizeCoreCount;
-                return ResizeResult;
+                RHISwapChainOperationResult result = ResizeResult;
+                InvalidateDeviceIfNeeded(in result);
+                return result;
             }
 
-            protected override bool PresentCore(
-                in RHISwapChainPresentDescriptor descriptor,
-                out RHISwapChainOperationResult result)
+            public override RHISwapChainOperationResult Present(
+                in RHISwapChainPresentDescriptor descriptor)
             {
-                result = PresentResult;
-                return PresentWaitsConsumed;
+                ThrowIfSwapChainUnavailable();
+                ValidatePresent(in descriptor);
+
+                ReadOnlySpan<RHISemaphore> waits =
+                    descriptor.WaitSemaphores.Span;
+                for (int index = 0; index < waits.Length; ++index)
+                {
+                    waits[index].ReserveWait();
+                }
+
+                if (PresentWaitsConsumed)
+                {
+                    for (int index = 0; index < waits.Length; ++index)
+                    {
+                        waits[index].CommitWait();
+                    }
+                }
+                else
+                {
+                    for (int index = waits.Length - 1; index >= 0; --index)
+                    {
+                        waits[index].RollbackWait();
+                    }
+                }
+
+                RHISwapChainOperationResult result = PresentResult;
+                InvalidateDeviceIfNeeded(in result);
+                return result;
             }
         }
 
@@ -326,8 +358,10 @@ namespace SharpGPU.Conformance.Tests
                 CommitSubmit(in descriptor);
             }
 
-            protected override void WaitIdleCore()
+            public override void WaitIdle()
             {
+                ThrowIfDisposed();
+                m_Device.ThrowIfDeviceUnavailable();
                 ++WaitIdleCoreCount;
             }
         }
@@ -465,14 +499,14 @@ namespace SharpGPU.Conformance.Tests
                     in RHIBottomLevelAccelStructDescriptor descriptor) =>
                 Unsupported<RHIBottomLevelAccelStruct>();
 
-            public override RHIArgumentTableLayout
-                CreateArgumentTableLayout(
-                    in RHIArgumentTableLayoutDescriptor descriptor) =>
-                Unsupported<RHIArgumentTableLayout>();
+            public override RHIBindingTableLayout
+                CreateBindingTableLayout(
+                    in RHIBindingTableLayoutDescriptor descriptor) =>
+                Unsupported<RHIBindingTableLayout>();
 
-            public override RHIArgumentTable CreateArgumentTable(
-                in RHIArgumentTableDescriptor descriptor) =>
-                Unsupported<RHIArgumentTable>();
+            public override RHIBindingTable CreateBindingTable(
+                in RHIBindingTableDescriptor descriptor) =>
+                Unsupported<RHIBindingTable>();
 
             public override RHIPipelineLayout CreatePipelineLayout(
                 in RHIPipelineLayoutDescriptor descriptor) =>
@@ -521,9 +555,9 @@ namespace SharpGPU.Conformance.Tests
                 in RHIMLPipelineDescriptor descriptor) =>
                 Unsupported<RHIMLPipeline>();
 
-            public override RHIMLBindingSet CreateMLBindingSet(
-                in RHIMLBindingSetDescriptor descriptor) =>
-                Unsupported<RHIMLBindingSet>();
+            public override RHIMLBindingTable CreateMLBindingTable(
+                in RHIMLBindingTableDescriptor descriptor) =>
+                Unsupported<RHIMLBindingTable>();
 
             public override RHITensor CreateTensor(
                 in RHIMLTensorDescriptor descriptor) =>

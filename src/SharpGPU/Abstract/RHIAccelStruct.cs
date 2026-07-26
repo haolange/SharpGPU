@@ -238,10 +238,10 @@ namespace SharpGPU
             m_Length = alignedLength;
         }
 
-        public void WriteResourceIndex(in uint argumentTableIndex, in uint slot, in uint arrayIndex)
+        public void WriteResourceIndex(in uint bindingTableIndex, in uint slot, in uint arrayIndex)
         {
             // Standard token payload layout: {tableIndex, slot, arrayIndex}.
-            WriteU32(argumentTableIndex);
+            WriteU32(bindingTableIndex);
             WriteU32(slot);
             WriteU32(arrayIndex);
         }

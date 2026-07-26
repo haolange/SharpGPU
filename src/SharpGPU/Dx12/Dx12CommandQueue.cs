@@ -153,7 +153,7 @@ namespace SharpGPU
             }
         }
 
-        protected override void WaitIdleCore()
+        public override void WaitIdle()
         {
             using Dx12Fence completion = new(m_Dx12Device);
             RHIQueueSubmitDescriptor descriptor =

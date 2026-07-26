@@ -1042,8 +1042,8 @@ public sealed class Dx12RasterSubpassQualifiedTests
                 bLocalSignature = false,
                 bUseVertexLayout = false,
                 PushConstantSize = 0,
-                ArgumentTableLayouts =
-                    Array.Empty<RHIArgumentTableLayout>(),
+                BindingTableLayouts =
+                    Array.Empty<RHIBindingTableLayout>(),
             });
     }
 

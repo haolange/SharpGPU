@@ -10,7 +10,7 @@ public sealed class PrivateRasterBindingAbiTests
     [Fact]
     public void MetalPrivateTextureBase_FollowsCompleteOrdinaryTextureRange()
     {
-        using MetalArgumentTableLayout direct =
+        using MetalBindingTableLayout direct =
             CreateMetalLayout(
                 Element(
                     slot: 0,
@@ -35,7 +35,7 @@ public sealed class PrivateRasterBindingAbiTests
     [Fact]
     public void MetalPrivateTextureBase_MatchesReferenceArrayFlattening()
     {
-        using MetalArgumentTableLayout reference =
+        using MetalBindingTableLayout reference =
             CreateMetalLayout(
                 Element(
                     slot: 0,
@@ -68,7 +68,7 @@ public sealed class PrivateRasterBindingAbiTests
                     count: 1,
                     ERHIBindType.Texture2D)));
 
-        using MetalArgumentTableLayout nearLimit =
+        using MetalBindingTableLayout nearLimit =
             CreateMetalLayout(
                 Element(
                     slot: 125,
@@ -106,7 +106,7 @@ public sealed class PrivateRasterBindingAbiTests
                     actualDevice: otherDevice,
                     expectedDevice: device));
 
-        MetalArgumentTableLayout disposed =
+        MetalBindingTableLayout disposed =
             CreateMetalLayout(
                 Element(
                     slot: 0,
@@ -188,30 +188,30 @@ public sealed class PrivateRasterBindingAbiTests
                     expectedDevice: device));
     }
 
-    private static MetalArgumentTableLayout CreateMetalLayout(
-        params RHIArgumentTableLayoutElement[] elements)
+    private static MetalBindingTableLayout CreateMetalLayout(
+        params RHIBindingTableLayoutElement[] elements)
     {
-        return new MetalArgumentTableLayout(
-            new RHIArgumentTableLayoutDescriptor
+        return new MetalBindingTableLayout(
+            new RHIBindingTableLayoutDescriptor
             {
                 Index = 0,
                 Elements = elements,
             });
     }
 
-    private static RHIArgumentTableLayoutElement Element(
+    private static RHIBindingTableLayoutElement Element(
         uint slot,
         uint count,
         ERHIBindType type)
     {
-        return new RHIArgumentTableLayoutElement
+        return new RHIBindingTableLayoutElement
         {
             Slot = slot,
             Count = count,
             Type = type,
             Stages = ERHIShaderStageMask.Fragment,
             Requirement =
-                ERHIArgumentBindingRequirement.Required,
+                ERHIBindingRequirement.Required,
         };
     }
 

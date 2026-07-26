@@ -1,4 +1,6 @@
 using System;
+using System.Buffers.Binary;
+using System.IO;
 using SharpGPU.Mathematics;
 using System.Collections.Generic;
 using System.Text;
@@ -7,15 +9,15 @@ using System.Runtime.InteropServices;
 namespace SharpGPU
 {
 #pragma warning disable CS0169, CS0649, CA1416
-    internal sealed class Dx12PipelineArgumentTablePlan
+    internal sealed class Dx12PipelineBindingTablePlan
     {
         public uint TableIndex { get; }
-        public Dx12ArgumentTableLayout Layout { get; }
+        public Dx12BindingTableLayout Layout { get; }
         public uint[] RootParameterIndices { get; }
 
-        public Dx12PipelineArgumentTablePlan(
+        public Dx12PipelineBindingTablePlan(
             in uint tableIndex,
-            Dx12ArgumentTableLayout layout,
+            Dx12BindingTableLayout layout,
             uint[] rootParameterIndices)
         {
             TableIndex = tableIndex;
@@ -28,13 +30,13 @@ namespace SharpGPU
     {
         internal const uint AttachmentRegisterSpace = 0xFFFFu;
 
-        public Dx12PipelineArgumentTablePlan[] TablePlans { get; }
+        public Dx12PipelineBindingTablePlan[] TablePlans { get; }
         public int DescriptorTableParameterCount { get; }
         public int TotalRootParameterCount { get; }
         public uint PushConstantRootParameterIndex { get; }
         public uint PushConstantSize { get; }
 
-        private readonly Dictionary<uint, Dx12PipelineArgumentTablePlan> m_TablePlanMap;
+        private readonly Dictionary<uint, Dx12PipelineBindingTablePlan> m_TablePlanMap;
 
         public Dx12PipelineLayoutPlan(in RHIPipelineLayoutDescriptor descriptor)
         {
@@ -46,21 +48,21 @@ namespace SharpGPU
             }
 
             PushConstantSize = descriptor.PushConstantSize;
-            RHIArgumentTableLayout[] layouts = descriptor.ArgumentTableLayouts ?? Array.Empty<RHIArgumentTableLayout>();
-            TablePlans = new Dx12PipelineArgumentTablePlan[layouts.Length];
-            m_TablePlanMap = new Dictionary<uint, Dx12PipelineArgumentTablePlan>(layouts.Length);
+            RHIBindingTableLayout[] layouts = descriptor.BindingTableLayouts ?? Array.Empty<RHIBindingTableLayout>();
+            TablePlans = new Dx12PipelineBindingTablePlan[layouts.Length];
+            m_TablePlanMap = new Dictionary<uint, Dx12PipelineBindingTablePlan>(layouts.Length);
 
             int rootCursor = 0;
             for (int tableIndex = 0; tableIndex < layouts.Length; ++tableIndex)
             {
-                Dx12ArgumentTableLayout layout = layouts[tableIndex] as Dx12ArgumentTableLayout
+                Dx12BindingTableLayout layout = layouts[tableIndex] as Dx12BindingTableLayout
                     ?? throw new ArgumentException(
-                        $"DX12 pipeline layout table {tableIndex} must be a Dx12ArgumentTableLayout from the same backend.",
+                        $"DX12 pipeline layout table {tableIndex} must be a Dx12BindingTableLayout from the same backend.",
                         nameof(descriptor));
                 if (m_TablePlanMap.ContainsKey(layout.Index))
                 {
                     throw new ArgumentException(
-                        $"DX12 pipeline layout contains duplicate argument table space/index {layout.Index}.",
+                        $"DX12 pipeline layout contains duplicate binding table space/index {layout.Index}.",
                         nameof(descriptor));
                 }
                 if (layout.Index == AttachmentRegisterSpace)
@@ -76,7 +78,7 @@ namespace SharpGPU
                     rootParameterIndices[groupIndex] = checked((uint)rootCursor++);
                 }
 
-                Dx12PipelineArgumentTablePlan tablePlan = new Dx12PipelineArgumentTablePlan(
+                Dx12PipelineBindingTablePlan tablePlan = new Dx12PipelineBindingTablePlan(
                     layout.Index,
                     layout,
                     rootParameterIndices);
@@ -100,20 +102,20 @@ namespace SharpGPU
             TotalRootParameterCount = checked(rootCursor + (hasPushConstants ? 1 : 0));
         }
 
-        public Dx12PipelineArgumentTablePlan Resolve(
+        public Dx12PipelineBindingTablePlan Resolve(
             in uint tableIndex,
-            Dx12ArgumentTableLayout actualLayout)
+            Dx12BindingTableLayout actualLayout)
         {
-            if (!m_TablePlanMap.TryGetValue(tableIndex, out Dx12PipelineArgumentTablePlan? tablePlan))
+            if (!m_TablePlanMap.TryGetValue(tableIndex, out Dx12PipelineBindingTablePlan? tablePlan))
             {
                 throw new ArgumentException(
-                    $"DX12 pipeline layout does not declare argument table space/index {tableIndex}.",
+                    $"DX12 pipeline layout does not declare binding table space/index {tableIndex}.",
                     nameof(tableIndex));
             }
             if (!tablePlan.Layout.IsStructurallyCompatibleWith(actualLayout))
             {
                 throw new ArgumentException(
-                    $"DX12 argument table space/index {tableIndex} is structurally incompatible with the pipeline layout.",
+                    $"DX12 binding table space/index {tableIndex} is structurally incompatible with the pipeline layout.",
                     nameof(actualLayout));
             }
 
@@ -121,25 +123,25 @@ namespace SharpGPU
         }
     }
 
-    internal static class Dx12ArgumentTableBinder
+    internal static class Dx12BindingTableBinder
     {
         public static int BindCompute(
             Vortice.Direct3D12.ID3D12GraphicsCommandList7 commandList,
             Dx12PipelineLayout pipelineLayout,
-            RHIArgumentTable argumentTable,
+            RHIBindingTable bindingTable,
             in uint tableIndex)
         {
-            Dx12ArgumentTable dx12ArgumentTable = ResolveReadyTable(
+            Dx12BindingTable dx12BindingTable = ResolveReadyTable(
                 pipelineLayout,
-                argumentTable,
+                bindingTable,
                 tableIndex,
-                out Dx12PipelineArgumentTablePlan tablePlan);
+                out Dx12PipelineBindingTablePlan tablePlan);
 
             for (int groupIndex = 0; groupIndex < tablePlan.RootParameterIndices.Length; ++groupIndex)
             {
                 commandList.SetComputeRootDescriptorTable(
                     tablePlan.RootParameterIndices[groupIndex],
-                    dx12ArgumentTable.GetGroupGpuHandle(groupIndex));
+                    dx12BindingTable.GetGroupGpuHandle(groupIndex));
             }
 
             return tablePlan.RootParameterIndices.Length;
@@ -148,20 +150,20 @@ namespace SharpGPU
         public static int BindGraphics(
             Vortice.Direct3D12.ID3D12GraphicsCommandList7 commandList,
             Dx12PipelineLayout pipelineLayout,
-            RHIArgumentTable argumentTable,
+            RHIBindingTable bindingTable,
             in uint tableIndex)
         {
-            Dx12ArgumentTable dx12ArgumentTable = ResolveReadyTable(
+            Dx12BindingTable dx12BindingTable = ResolveReadyTable(
                 pipelineLayout,
-                argumentTable,
+                bindingTable,
                 tableIndex,
-                out Dx12PipelineArgumentTablePlan tablePlan);
+                out Dx12PipelineBindingTablePlan tablePlan);
 
             for (int groupIndex = 0; groupIndex < tablePlan.RootParameterIndices.Length; ++groupIndex)
             {
                 commandList.SetGraphicsRootDescriptorTable(
                     tablePlan.RootParameterIndices[groupIndex],
-                    dx12ArgumentTable.GetGroupGpuHandle(groupIndex));
+                    dx12BindingTable.GetGroupGpuHandle(groupIndex));
             }
 
             return tablePlan.RootParameterIndices.Length;
@@ -196,40 +198,40 @@ namespace SharpGPU
             return true;
         }
 
-        private static Dx12ArgumentTable ResolveReadyTable(
+        private static Dx12BindingTable ResolveReadyTable(
             Dx12PipelineLayout pipelineLayout,
-            RHIArgumentTable argumentTable,
+            RHIBindingTable bindingTable,
             in uint tableIndex,
-            out Dx12PipelineArgumentTablePlan tablePlan)
+            out Dx12PipelineBindingTablePlan tablePlan)
         {
-            Dx12ArgumentTable dx12ArgumentTable = argumentTable as Dx12ArgumentTable
-                ?? throw new ArgumentException("DX12 encoder requires a Dx12ArgumentTable from the same backend.", nameof(argumentTable));
+            Dx12BindingTable dx12BindingTable = bindingTable as Dx12BindingTable
+                ?? throw new ArgumentException("DX12 encoder requires a Dx12BindingTable from the same backend.", nameof(bindingTable));
             if (pipelineLayout.IsDisposed)
             {
                 throw new ObjectDisposedException(nameof(Dx12PipelineLayout));
             }
-            if (!ReferenceEquals(pipelineLayout.Device, dx12ArgumentTable.Device))
+            if (!ReferenceEquals(pipelineLayout.Device, dx12BindingTable.Device))
             {
                 throw new ArgumentException(
-                    "DX12 encoder cannot bind an argument table allocated from a different DX12 device.",
-                    nameof(argumentTable));
+                    "DX12 encoder cannot bind an binding table allocated from a different DX12 device.",
+                    nameof(bindingTable));
             }
-            if (dx12ArgumentTable.ArgumentTableLayout.Index != tableIndex)
+            if (dx12BindingTable.BindingTableLayout.Index != tableIndex)
             {
                 throw new ArgumentException(
-                    $"DX12 argument table reports space/index {dx12ArgumentTable.ArgumentTableLayout.Index}, but SetArgumentTable requested {tableIndex}.",
+                    $"DX12 binding table reports space/index {dx12BindingTable.BindingTableLayout.Index}, but SetBindingTable requested {tableIndex}.",
                     nameof(tableIndex));
             }
 
-            tablePlan = pipelineLayout.Plan.Resolve(tableIndex, dx12ArgumentTable.ArgumentTableLayout);
-            if (dx12ArgumentTable.GroupCount != tablePlan.RootParameterIndices.Length)
+            tablePlan = pipelineLayout.Plan.Resolve(tableIndex, dx12BindingTable.BindingTableLayout);
+            if (dx12BindingTable.GroupCount != tablePlan.RootParameterIndices.Length)
             {
                 throw new InvalidOperationException(
-                    $"DX12 argument table space/index {tableIndex} has {dx12ArgumentTable.GroupCount} descriptor groups, but the pipeline plan expects {tablePlan.RootParameterIndices.Length}.");
+                    $"DX12 binding table space/index {tableIndex} has {dx12BindingTable.GroupCount} descriptor groups, but the pipeline plan expects {tablePlan.RootParameterIndices.Length}.");
             }
 
-            dx12ArgumentTable.EnsureReadyForBinding();
-            return dx12ArgumentTable;
+            dx12BindingTable.EnsureReadyForBinding();
+            return dx12BindingTable;
         }
     }
 
@@ -250,14 +252,14 @@ namespace SharpGPU
         public Dx12PipelineLayout(Dx12Device device, in RHIPipelineLayoutDescriptor descriptor)
         {
             Device = device;
-            RHIArgumentTableLayout[]? argumentTableLayouts = descriptor.ArgumentTableLayouts;
-            if (argumentTableLayouts != null)
+            RHIBindingTableLayout[]? bindingTableLayouts = descriptor.BindingTableLayouts;
+            if (bindingTableLayouts != null)
             {
-                for (int index = 0; index < argumentTableLayouts.Length; ++index)
+                for (int index = 0; index < bindingTableLayouts.Length; ++index)
                 {
-                    Dx12ArgumentTableLayout layout = argumentTableLayouts[index] as Dx12ArgumentTableLayout
+                    Dx12BindingTableLayout layout = bindingTableLayouts[index] as Dx12BindingTableLayout
                         ?? throw new ArgumentException(
-                            $"DX12 pipeline argument table {index} must be a {nameof(Dx12ArgumentTableLayout)}.",
+                            $"DX12 pipeline binding table {index} must be a {nameof(Dx12BindingTableLayout)}.",
                             nameof(descriptor));
                     if (layout.IsDisposed)
                     {
@@ -266,7 +268,7 @@ namespace SharpGPU
                     if (!ReferenceEquals(layout.Device, device))
                     {
                         throw new ArgumentException(
-                            $"DX12 pipeline argument table {layout.Index} belongs to a different DX12 device.",
+                            $"DX12 pipeline binding table {layout.Index} belongs to a different DX12 device.",
                             nameof(descriptor));
                     }
                 }
@@ -279,11 +281,11 @@ namespace SharpGPU
 
             for (int tableIndex = 0; tableIndex < Plan.TablePlans.Length; ++tableIndex)
             {
-                Dx12PipelineArgumentTablePlan tablePlan = Plan.TablePlans[tableIndex];
-                Dx12ArgumentTableLayout layout = tablePlan.Layout;
+                Dx12PipelineBindingTablePlan tablePlan = Plan.TablePlans[tableIndex];
+                Dx12BindingTableLayout layout = tablePlan.Layout;
                 for (int groupIndex = 0; groupIndex < layout.Groups.Length; ++groupIndex)
                 {
-                    Dx12ArgumentTableGroupPlan group = layout.Groups[groupIndex];
+                    Dx12BindingTableGroupPlan group = layout.Groups[groupIndex];
                     Vortice.Direct3D12.DescriptorRange1[] ranges = new Vortice.Direct3D12.DescriptorRange1[group.BindingIndices.Length];
                     for (int rangeIndex = 0; rangeIndex < group.BindingIndices.Length; ++rangeIndex)
                     {
@@ -1240,4 +1242,400 @@ namespace SharpGPU
             }
         }
     }
+
+    #region MLBinaryCodec
+    /// <summary>
+    /// DirectMLProgramV1 (.dmlbin) container: magic "DMLB", version 1, content hash, program IR payload.
+    /// </summary>
+    internal static class Dx12MlBinaryCodec
+    {
+        internal const uint Magic = 0x424C4D44; // "DMLB" little-endian
+        internal const byte Version = 1;
+        internal const int HeaderSize = 13;
+
+        internal static RHIMLBinary Pack(in RHIMLProgramIR program)
+        {
+            RHIMLBinaryReflection reflection = BuildReflection(program);
+            byte[] payload = SerializeProgram(program);
+            byte[] container = WriteContainer(payload);
+            ulong contentHash = RHIMLBinaryHash.ComputeContentHash(payload);
+            return new RHIMLBinary(
+                ERHIMLBinaryFormat.DirectMLProgramV1,
+                container,
+                reflection,
+                contentHash);
+        }
+
+        internal static RHIMLProgramIR DeserializeProgram(ReadOnlyMemory<byte> container)
+        {
+            ReadOnlyMemory<byte> programPayload = ValidateContainer(container, ERHIMLBinaryFormat.DirectMLProgramV1);
+            return ReadProgram(programPayload.Span);
+        }
+
+        internal static RHIMLBinaryReflection ReadReflection(ReadOnlyMemory<byte> container)
+        {
+            RHIMLProgramIR program = DeserializeProgram(container);
+            return BuildReflection(program);
+        }
+
+        internal static byte[] SerializeProgram(in RHIMLProgramIR program)
+        {
+            using MemoryStream stream = new MemoryStream();
+            using BinaryWriter writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
+            WriteProgram(writer, program);
+            return stream.ToArray();
+        }
+
+        private static byte[] WriteContainer(ReadOnlySpan<byte> programPayload)
+        {
+            byte[] container = new byte[HeaderSize + programPayload.Length];
+            BinaryPrimitives.WriteUInt32LittleEndian(container.AsSpan(0, 4), Magic);
+            container[4] = Version;
+            ulong hash = RHIMLBinaryHash.ComputeContentHash(programPayload);
+            BinaryPrimitives.WriteUInt64LittleEndian(container.AsSpan(5, 8), hash);
+            programPayload.CopyTo(container.AsSpan(HeaderSize));
+            return container;
+        }
+
+        internal static ReadOnlyMemory<byte> ValidateContainer(ReadOnlyMemory<byte> container, ERHIMLBinaryFormat expectedFormat)
+        {
+            if (expectedFormat != ERHIMLBinaryFormat.DirectMLProgramV1)
+            {
+                throw new InvalidOperationException($"DX12 ML binary codec cannot decode format '{expectedFormat}'.");
+            }
+
+            ReadOnlySpan<byte> bytes = container.Span;
+            if (bytes.Length < HeaderSize)
+            {
+                throw new InvalidOperationException("DirectMLProgramV1 container is too small.");
+            }
+
+            uint magic = BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(0, 4));
+            if (magic != Magic)
+            {
+                throw new InvalidOperationException($"DirectMLProgramV1 magic mismatch. expected=0x{Magic:X8}, actual=0x{magic:X8}.");
+            }
+
+            byte version = bytes[4];
+            if (version != Version)
+            {
+                throw new InvalidOperationException($"DirectMLProgramV1 version mismatch. expected={Version}, actual={version}.");
+            }
+
+            ulong storedHash = BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(5, 8));
+            ReadOnlySpan<byte> programPayload = bytes.Slice(HeaderSize);
+            ulong computedHash = RHIMLBinaryHash.ComputeContentHash(programPayload);
+            if (storedHash != computedHash)
+            {
+                throw new InvalidOperationException(
+                    $"DirectMLProgramV1 content hash mismatch. expected=0x{storedHash:X16}, actual=0x{computedHash:X16}.");
+            }
+
+            return container.Slice(HeaderSize);
+        }
+
+        private static RHIMLBinaryReflection BuildReflection(in RHIMLProgramIR program)
+        {
+            int bindingCount = program.Inputs.Length + program.Outputs.Length;
+            RHIMLTensorBindingInfo[] bindings = new RHIMLTensorBindingInfo[bindingCount];
+            int writeIndex = 0;
+            for (uint index = 0; index < program.Inputs.Length; ++index)
+            {
+                bindings[writeIndex++] = new RHIMLTensorBindingInfo
+                {
+                    Name = $"input{index}",
+                    Index = index,
+                    Kind = ERHIMLTensorBindingKind.Input,
+                    Descriptor = RHIMLHelpers.CloneLayoutDescriptor(in program.Inputs[index]),
+                };
+            }
+
+            for (uint index = 0; index < program.Outputs.Length; ++index)
+            {
+                bindings[writeIndex++] = new RHIMLTensorBindingInfo
+                {
+                    Name = $"output{index}",
+                    Index = index,
+                    Kind = ERHIMLTensorBindingKind.Output,
+                    Descriptor = RHIMLHelpers.CloneLayoutDescriptor(in program.Outputs[index]),
+                };
+            }
+
+            return new RHIMLBinaryReflection
+            {
+                EntryName = "main",
+                Bindings = bindings,
+                IntermediateHeapSizeHint = 0,
+            };
+        }
+
+        private static void WriteProgram(BinaryWriter writer, in RHIMLProgramIR program)
+        {
+            WriteString(writer, program.Name ?? string.Empty);
+            WriteTensorDescriptors(writer, program.Inputs);
+            WriteTensorDescriptors(writer, program.Outputs);
+            writer.Write(program.Ops.Length);
+            for (int i = 0; i < program.Ops.Length; ++i)
+            {
+                WriteOp(writer, in program.Ops[i]);
+            }
+        }
+
+        private static RHIMLProgramIR ReadProgram(ReadOnlySpan<byte> payload)
+        {
+            int offset = 0;
+            string name = ReadString(payload, ref offset);
+            RHIMLTensorDescriptor[] inputs = ReadTensorDescriptors(payload, ref offset);
+            RHIMLTensorDescriptor[] outputs = ReadTensorDescriptors(payload, ref offset);
+            int opCount = ReadInt32(payload, ref offset);
+            RHIMLOpDescriptor[] ops = new RHIMLOpDescriptor[opCount];
+            for (int i = 0; i < opCount; ++i)
+            {
+                ops[i] = ReadOp(payload, ref offset);
+            }
+
+            if (offset != payload.Length)
+            {
+                throw new InvalidOperationException($"DirectMLProgramV1 payload has trailing bytes. consumed={offset}, total={payload.Length}.");
+            }
+
+            return RHIMLProgramIR.Create(name, inputs, outputs, ops);
+        }
+
+        private static void WriteOp(BinaryWriter writer, in RHIMLOpDescriptor op)
+        {
+            writer.Write((ushort)op.Kind);
+            WriteString(writer, op.Name ?? string.Empty);
+            writer.Write(op.Inputs.Length);
+            for (int i = 0; i < op.Inputs.Length; ++i)
+            {
+                RHIMLOpTensorRef input = op.Inputs[i];
+                writer.Write(input.InputIndex);
+                writer.Write(input.OpIndex);
+                writer.Write(input.IsOpOutput);
+            }
+
+            WriteTensorDescriptor(writer, in op.Output);
+            writer.Write(op.Alpha);
+            writer.Write(op.Beta);
+            writer.Write((byte)op.TransformA);
+            writer.Write((byte)op.TransformB);
+            writer.Write((byte)op.FusedActivation);
+            writer.Write(op.Epsilon);
+            if (op.Axes is { Length: > 0 } axes)
+            {
+                writer.Write(axes.Length);
+                for (int i = 0; i < axes.Length; ++i)
+                {
+                    writer.Write(axes[i]);
+                }
+            }
+            else
+            {
+                writer.Write(0);
+            }
+        }
+
+        private static RHIMLOpDescriptor ReadOp(ReadOnlySpan<byte> payload, ref int offset)
+        {
+            ERHIMLOpKind kind = (ERHIMLOpKind)ReadUInt16(payload, ref offset);
+            string name = ReadString(payload, ref offset);
+            int inputCount = ReadInt32(payload, ref offset);
+            RHIMLOpTensorRef[] inputs = new RHIMLOpTensorRef[inputCount];
+            for (int i = 0; i < inputCount; ++i)
+            {
+                inputs[i] = new RHIMLOpTensorRef
+                {
+                    InputIndex = ReadInt32(payload, ref offset),
+                    OpIndex = ReadInt32(payload, ref offset),
+                    IsOpOutput = ReadBoolean(payload, ref offset),
+                };
+            }
+
+            RHIMLTensorDescriptor output = ReadTensorDescriptor(payload, ref offset);
+            RHIMLOpDescriptor op = RHIMLOpDescriptor.Create(kind, inputs, in output, name);
+            op.Alpha = ReadSingle(payload, ref offset);
+            op.Beta = ReadSingle(payload, ref offset);
+            op.TransformA = (ERHIMLMatrixTransform)ReadByte(payload, ref offset);
+            op.TransformB = (ERHIMLMatrixTransform)ReadByte(payload, ref offset);
+            op.FusedActivation = (ERHIMLFusedActivation)ReadByte(payload, ref offset);
+            op.Epsilon = ReadSingle(payload, ref offset);
+            int axisCount = ReadInt32(payload, ref offset);
+            if (axisCount > 0)
+            {
+                int[] axes = new int[axisCount];
+                for (int i = 0; i < axisCount; ++i)
+                {
+                    axes[i] = ReadInt32(payload, ref offset);
+                }
+
+                op.Axes = axes;
+            }
+
+            return op;
+        }
+
+        private static void WriteTensorDescriptors(BinaryWriter writer, RHIMLTensorDescriptor[] descriptors)
+        {
+            writer.Write(descriptors.Length);
+            for (int i = 0; i < descriptors.Length; ++i)
+            {
+                WriteTensorDescriptor(writer, in descriptors[i]);
+            }
+        }
+
+        private static RHIMLTensorDescriptor[] ReadTensorDescriptors(ReadOnlySpan<byte> payload, ref int offset)
+        {
+            int count = ReadInt32(payload, ref offset);
+            RHIMLTensorDescriptor[] descriptors = new RHIMLTensorDescriptor[count];
+            for (int i = 0; i < count; ++i)
+            {
+                descriptors[i] = ReadTensorDescriptor(payload, ref offset);
+            }
+
+            return descriptors;
+        }
+
+        private static void WriteTensorDescriptor(BinaryWriter writer, in RHIMLTensorDescriptor descriptor)
+        {
+            writer.Write((byte)descriptor.DataType);
+            writer.Write((uint)descriptor.UsageFlag);
+            writer.Write((byte)descriptor.StorageMode);
+            uint[] dimensions = descriptor.Dimensions.ToArray();
+            writer.Write(dimensions.Length);
+            for (int i = 0; i < dimensions.Length; ++i)
+            {
+                writer.Write(dimensions[i]);
+            }
+
+            if (descriptor.Strides is Memory<uint> explicitStrides && explicitStrides.Length > 0)
+            {
+                uint[] strides = explicitStrides.ToArray();
+                writer.Write((byte)1);
+                writer.Write(strides.Length);
+                for (int i = 0; i < strides.Length; ++i)
+                {
+                    writer.Write(strides[i]);
+                }
+            }
+            else
+            {
+                writer.Write((byte)0);
+            }
+        }
+
+        private static RHIMLTensorDescriptor ReadTensorDescriptor(ReadOnlySpan<byte> payload, ref int offset)
+        {
+            ERHIMLDataType dataType = (ERHIMLDataType)ReadByte(payload, ref offset);
+            ERHITensorUsage usage = (ERHITensorUsage)ReadUInt32(payload, ref offset);
+            ERHIStorageMode storageMode = (ERHIStorageMode)ReadByte(payload, ref offset);
+            int dimensionCount = ReadInt32(payload, ref offset);
+            uint[] dimensions = new uint[dimensionCount];
+            for (int i = 0; i < dimensionCount; ++i)
+            {
+                dimensions[i] = ReadUInt32(payload, ref offset);
+            }
+
+            Memory<uint>? strides = null;
+            byte hasStrides = ReadByte(payload, ref offset);
+            if (hasStrides != 0)
+            {
+                int strideCount = ReadInt32(payload, ref offset);
+                uint[] strideValues = new uint[strideCount];
+                for (int i = 0; i < strideCount; ++i)
+                {
+                    strideValues[i] = ReadUInt32(payload, ref offset);
+                }
+
+                strides = strideValues;
+            }
+
+            return new RHIMLTensorDescriptor
+            {
+                DataType = dataType,
+                UsageFlag = usage,
+                StorageMode = storageMode,
+                Dimensions = dimensions,
+                Strides = strides,
+                BackingBuffer = null,
+                BackingBufferOffset = 0,
+            };
+        }
+
+        private static void WriteString(BinaryWriter writer, string value)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(value);
+            writer.Write(bytes.Length);
+            writer.Write(bytes);
+        }
+
+        private static string ReadString(ReadOnlySpan<byte> payload, ref int offset)
+        {
+            int length = ReadInt32(payload, ref offset);
+            if (length < 0 || offset + length > payload.Length)
+            {
+                throw new InvalidOperationException("DirectMLProgramV1 string length is out of range.");
+            }
+
+            string value = Encoding.UTF8.GetString(payload.Slice(offset, length));
+            offset += length;
+            return value;
+        }
+
+        private static byte ReadByte(ReadOnlySpan<byte> payload, ref int offset)
+        {
+            EnsureRemaining(payload, offset, 1);
+            byte value = payload[offset];
+            ++offset;
+            return value;
+        }
+
+        private static bool ReadBoolean(ReadOnlySpan<byte> payload, ref int offset)
+        {
+            return ReadByte(payload, ref offset) != 0;
+        }
+
+        private static ushort ReadUInt16(ReadOnlySpan<byte> payload, ref int offset)
+        {
+            EnsureRemaining(payload, offset, 2);
+            ushort value = BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(offset, 2));
+            offset += 2;
+            return value;
+        }
+
+        private static uint ReadUInt32(ReadOnlySpan<byte> payload, ref int offset)
+        {
+            EnsureRemaining(payload, offset, 4);
+            uint value = BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(offset, 4));
+            offset += 4;
+            return value;
+        }
+
+        private static int ReadInt32(ReadOnlySpan<byte> payload, ref int offset)
+        {
+            // Must preserve signed values (e.g. OpIndex/InputIndex sentinel -1).
+            EnsureRemaining(payload, offset, 4);
+            int value = BinaryPrimitives.ReadInt32LittleEndian(payload.Slice(offset, 4));
+            offset += 4;
+            return value;
+        }
+
+        private static float ReadSingle(ReadOnlySpan<byte> payload, ref int offset)
+        {
+            EnsureRemaining(payload, offset, 4);
+            float value = BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(offset, 4));
+            offset += 4;
+            return value;
+        }
+
+        private static void EnsureRemaining(ReadOnlySpan<byte> payload, int offset, int required)
+        {
+            if (offset + required > payload.Length)
+            {
+                throw new InvalidOperationException("DirectMLProgramV1 payload is truncated.");
+            }
+        }
+    }
+    #endregion
+#pragma warning restore CS0169, CS0649, CA1416
 }

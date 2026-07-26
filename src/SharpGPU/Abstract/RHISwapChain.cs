@@ -324,7 +324,7 @@ namespace SharpGPU
             m_OwnerDevice.ThrowIfDeviceUnavailable();
         }
 
-        public RHISwapChainAcquireResult AcquireBackBuffer(
+        public virtual RHISwapChainAcquireResult AcquireBackBuffer(
             in RHISwapChainAcquireDescriptor descriptor)
         {
             ThrowIfSwapChainUnavailable();
@@ -345,37 +345,8 @@ namespace SharpGPU
                     fenceReserved = true;
                 }
 
-                RHISwapChainAcquireResult result =
-                    AcquireCore(in descriptor);
-                bool signalSubmitted = result.Status is
-                    ERHISwapChainStatus.Success or
-                    ERHISwapChainStatus.Suboptimal;
-
-                if (signalSubmitted)
-                {
-                    descriptor.SignalSemaphore?.CommitSignal();
-                    semaphoreReserved = false;
-                    // A fence deliberately remains Pending until its native
-                    // Status/Wait path observes completion and calls MarkSignaled.
-                    fenceReserved = false;
-                }
-                else
-                {
-                    if (fenceReserved)
-                    {
-                        descriptor.CompletionFence!.RollbackSignal();
-                        fenceReserved = false;
-                    }
-                    if (semaphoreReserved)
-                    {
-                        descriptor.SignalSemaphore!.RollbackSignal();
-                        semaphoreReserved = false;
-                    }
-                }
-
-                result.Validate(m_OwnerDevice.BackendType, ImageCount);
-                InvalidateDeviceIfNeeded(in result);
-                return result;
+                throw new NotSupportedException(
+                    $"{GetType().Name} does not implement swapchain back-buffer acquisition.");
             }
             catch (RHIException exception)
             {
@@ -407,17 +378,14 @@ namespace SharpGPU
             }
         }
 
-        public RHISwapChainOperationResult Resize(
+        public virtual RHISwapChainOperationResult Resize(
             in RHISwapChainResizeDescriptor descriptor)
         {
             ThrowIfSwapChainUnavailable();
             try
             {
-                RHISwapChainOperationResult result =
-                    ResizeCore(in descriptor);
-                result.Validate(m_OwnerDevice.BackendType);
-                InvalidateDeviceIfNeeded(in result);
-                return result;
+                throw new NotSupportedException(
+                    $"{GetType().Name} does not implement swapchain resize.");
             }
             catch (RHIException exception)
             {
@@ -429,7 +397,7 @@ namespace SharpGPU
             }
         }
 
-        public RHISwapChainOperationResult Present(
+        public virtual RHISwapChainOperationResult Present(
             in RHISwapChainPresentDescriptor descriptor)
         {
             ThrowIfSwapChainUnavailable();
@@ -451,36 +419,8 @@ namespace SharpGPU
                     fenceReserved = true;
                 }
 
-                bool waitsConsumed = PresentCore(
-                    in descriptor,
-                    out RHISwapChainOperationResult result);
-                if (waitsConsumed)
-                {
-                    for (int index = 0; index < waits.Length; ++index)
-                    {
-                        waits[index].CommitWait();
-                    }
-                    // The native fence remains Pending until Status/Wait
-                    // observes completion.
-                    fenceReserved = false;
-                }
-                else
-                {
-                    for (int index = waits.Length - 1; index >= 0; --index)
-                    {
-                        waits[index].RollbackWait();
-                    }
-                    if (fenceReserved)
-                    {
-                        descriptor.CompletionFence!.RollbackSignal();
-                        fenceReserved = false;
-                    }
-                }
-                reservedWaits = 0;
-
-                result.Validate(m_OwnerDevice.BackendType);
-                InvalidateDeviceIfNeeded(in result);
-                return result;
+                throw new NotSupportedException(
+                    $"{GetType().Name} does not implement swapchain presentation.");
             }
             catch (RHIException exception)
             {
@@ -510,21 +450,7 @@ namespace SharpGPU
             }
         }
 
-        protected abstract RHISwapChainAcquireResult AcquireCore(
-            in RHISwapChainAcquireDescriptor descriptor);
-
-        protected abstract RHISwapChainOperationResult ResizeCore(
-            in RHISwapChainResizeDescriptor descriptor);
-
-        /// <returns>
-        /// True only when the native presentation request enqueued every wait
-        /// semaphore. This includes Vulkan OutOfDate and SurfaceLost results.
-        /// </returns>
-        protected abstract bool PresentCore(
-            in RHISwapChainPresentDescriptor descriptor,
-            out RHISwapChainOperationResult result);
-
-        private void ValidateAcquire(
+        protected void ValidateAcquire(
             in RHISwapChainAcquireDescriptor descriptor)
         {
             ValidateSynchronization(
@@ -535,7 +461,7 @@ namespace SharpGPU
                 "acquire completion fence");
         }
 
-        private void ValidatePresent(
+        protected void ValidatePresent(
             in RHISwapChainPresentDescriptor descriptor)
         {
             ReadOnlySpan<RHISemaphore> waits =
@@ -609,7 +535,7 @@ namespace SharpGPU
             }
         }
 
-        private static void RollbackPresentWaits(
+        protected static void RollbackPresentWaits(
             ReadOnlySpan<RHISemaphore> waits,
             int reservedWaits)
         {
@@ -619,7 +545,7 @@ namespace SharpGPU
             }
         }
 
-        private void InvalidateDeviceIfNeeded(
+        protected void InvalidateDeviceIfNeeded(
             in RHISwapChainAcquireResult result)
         {
             if (result.Status == ERHISwapChainStatus.DeviceLost)
@@ -628,7 +554,7 @@ namespace SharpGPU
             }
         }
 
-        private void InvalidateDeviceIfNeeded(
+        protected void InvalidateDeviceIfNeeded(
             in RHISwapChainOperationResult result)
         {
             if (result.Status == ERHISwapChainStatus.DeviceLost)

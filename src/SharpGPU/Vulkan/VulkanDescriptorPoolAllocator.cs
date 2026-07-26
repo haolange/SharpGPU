@@ -68,7 +68,7 @@ namespace SharpGPU
             }
         }
 
-        public VulkanDescriptorSetLease Allocate(VulkanArgumentTableLayout layout)
+        public VulkanDescriptorSetLease Allocate(VulkanBindingTableLayout layout)
         {
             ArgumentNullException.ThrowIfNull(layout);
             return Allocate(

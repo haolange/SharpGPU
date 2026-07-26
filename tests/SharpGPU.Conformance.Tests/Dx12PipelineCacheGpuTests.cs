@@ -36,7 +36,7 @@ public sealed class Dx12PipelineCacheGpuTests
             using RHIPipelineLayout layout = device.CreatePipelineLayout(
                 new RHIPipelineLayoutDescriptor
                 {
-                    ArgumentTableLayouts = Array.Empty<RHIArgumentTableLayout>(),
+                    BindingTableLayouts = Array.Empty<RHIBindingTableLayout>(),
                 });
             RHIComputePipelineDescriptor descriptor = new()
             {

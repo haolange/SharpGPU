@@ -85,7 +85,7 @@ public sealed class SharpGPUDirectMLContractTests
             RHITensor output = context.Device.CreateTensor(CreateTensorDescriptor(dims, ERHITensorUsage.MachineLearning | ERHITensorUsage.Write, outputBacking));
             RHIBuffer readback = CreateReadbackBuffer(context.Device, checked((int)byteSize));
 
-            RHIMLBindingSet bindingSet = context.Device.CreateMLBindingSet(new RHIMLBindingSetDescriptor
+            RHIMLBindingTable bindingSet = context.Device.CreateMLBindingTable(new RHIMLBindingTableDescriptor
             {
                 Pipeline = pipeline,
                 Inputs = new[] { inputA, inputB },
@@ -115,7 +115,7 @@ public sealed class SharpGPUDirectMLContractTests
 
             RHIMLEncoder ml = commandBuffer.BeginMLPass(new RHIMLPassDescriptor { Name = "AddSigmoid" });
             ml.SetPipeline(pipeline);
-            ml.SetBindingSet(bindingSet);
+            ml.SetBindingTable(bindingSet);
             ml.Dispatch();
             commandBuffer.EndMLPass();
 
@@ -269,7 +269,7 @@ public sealed class SharpGPUDirectMLContractTests
 
         RHITensor[] inputs = { inputATensor, inputBTensor, inputCTensor };
         RHITensor[] outputs = { outputTensor };
-        RHIMLBindingSet bindingSet = context.Device.CreateMLBindingSet(new RHIMLBindingSetDescriptor
+        RHIMLBindingTable bindingSet = context.Device.CreateMLBindingTable(new RHIMLBindingTableDescriptor
         {
             Pipeline = pipeline,
             Inputs = inputs,
@@ -324,7 +324,7 @@ public sealed class SharpGPUDirectMLContractTests
             Name = "DirectML",
         });
         mlEncoder.SetPipeline(fixture.Pipeline);
-        mlEncoder.SetBindingSet(fixture.BindingSet);
+        mlEncoder.SetBindingTable(fixture.BindingSet);
         mlEncoder.Dispatch();
         commandBuffer.EndMLPass();
 
@@ -602,7 +602,7 @@ public sealed class SharpGPUDirectMLContractTests
     private sealed class DirectMLFixture : IDisposable
     {
         public RHIMLPipeline Pipeline { get; }
-        public RHIMLBindingSet BindingSet { get; }
+        public RHIMLBindingTable BindingSet { get; }
         public RHIBuffer UploadABacking { get; }
         public RHIBuffer UploadBBacking { get; }
         public RHIBuffer UploadCBacking { get; }
@@ -618,7 +618,7 @@ public sealed class SharpGPUDirectMLContractTests
 
         public DirectMLFixture(
             RHIMLPipeline pipeline,
-            RHIMLBindingSet bindingSet,
+            RHIMLBindingTable bindingSet,
             RHIBuffer uploadABacking,
             RHIBuffer uploadBBacking,
             RHIBuffer uploadCBacking,

@@ -44,7 +44,7 @@ public sealed class VulkanPipelineCacheGpuTests
             using RHIPipelineLayout layout = device.CreatePipelineLayout(
                 new RHIPipelineLayoutDescriptor
                 {
-                    ArgumentTableLayouts = Array.Empty<RHIArgumentTableLayout>(),
+                    BindingTableLayouts = Array.Empty<RHIBindingTableLayout>(),
                 });
             RHIComputePipelineDescriptor descriptor = new()
             {

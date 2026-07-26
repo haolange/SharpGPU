@@ -341,7 +341,7 @@ public sealed class MetalMLStabilityProbeTests
         using RHITensor tensorB = context.Device.CreateTensor(WithBacking(tensorDesc, inputB));
         using RHITensor tensorOut = context.Device.CreateTensor(WithBacking(tensorDesc, output));
 
-        using RHIMLBindingSet bindingSet = context.Device.CreateMLBindingSet(new RHIMLBindingSetDescriptor
+        using RHIMLBindingTable bindingSet = context.Device.CreateMLBindingTable(new RHIMLBindingTableDescriptor
         {
             Pipeline = pipeline,
             Inputs = new[] { tensorA, tensorB },
@@ -373,7 +373,7 @@ public sealed class MetalMLStabilityProbeTests
 
         RHIMLEncoder ml = commandBuffer.BeginMLPass(new RHIMLPassDescriptor { Name = "ML" });
         ml.SetPipeline(pipeline);
-        ml.SetBindingSet(bindingSet);
+        ml.SetBindingTable(bindingSet);
         ml.Dispatch();
         commandBuffer.EndMLPass();
 
@@ -421,7 +421,7 @@ public sealed class MetalMLStabilityProbeTests
         using RHITensor tensorC = context.Device.CreateTensor(WithBacking(cDesc, inputC));
         using RHITensor tensorOut = context.Device.CreateTensor(WithBacking(outDesc, output));
 
-        using RHIMLBindingSet bindingSet = context.Device.CreateMLBindingSet(new RHIMLBindingSetDescriptor
+        using RHIMLBindingTable bindingSet = context.Device.CreateMLBindingTable(new RHIMLBindingTableDescriptor
         {
             Pipeline = pipeline,
             Inputs = new[] { tensorA, tensorB, tensorC },
@@ -457,7 +457,7 @@ public sealed class MetalMLStabilityProbeTests
 
         RHIMLEncoder ml = commandBuffer.BeginMLPass(new RHIMLPassDescriptor { Name = "ML" });
         ml.SetPipeline(pipeline);
-        ml.SetBindingSet(bindingSet);
+        ml.SetBindingTable(bindingSet);
         ml.Dispatch();
         commandBuffer.EndMLPass();
 

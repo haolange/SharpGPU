@@ -285,7 +285,7 @@ public sealed class MetalHalContractTests
             bLocalSignature = false,
             bUseVertexLayout = false,
             PushConstantSize = 0,
-            ArgumentTableLayouts = Array.Empty<RHIArgumentTableLayout>(),
+            BindingTableLayouts = Array.Empty<RHIBindingTableLayout>(),
         });
 
         try

@@ -69,7 +69,7 @@ public sealed class SharpGPUFeatureContractMatrixTests
     }
 
     [Fact]
-    public void Dx12_DescriptorArrayArgumentTable_ShouldCreateAndUpdateArraySlots()
+    public void Dx12_DescriptorArrayBindingTable_ShouldCreateAndUpdateArraySlots()
     {
         if (!FeatureContractContext.TryCreateDx12(out FeatureContractContext? context, out _))
         {
@@ -78,12 +78,12 @@ public sealed class SharpGPUFeatureContractMatrixTests
 
         using (context)
         {
-            using RHIArgumentTableLayout layout = context.Device.CreateArgumentTableLayout(new RHIArgumentTableLayoutDescriptor
+            using RHIBindingTableLayout layout = context.Device.CreateBindingTableLayout(new RHIBindingTableLayoutDescriptor
             {
                 Index = 0,
                 Elements = new[]
                 {
-                    new RHIArgumentTableLayoutElement
+                    new RHIBindingTableLayoutElement
                     {
                         Slot = 0,
                         Count = 4,
@@ -101,14 +101,14 @@ public sealed class SharpGPUFeatureContractMatrixTests
                 ViewType = ERHIBufferViewType.UnorderedAccess,
             });
 
-            RHIArgumentTableElement element = new() { BufferView = view };
-            using RHIArgumentTable table = context.Device.CreateArgumentTable(new RHIArgumentTableDescriptor
+            RHIBindingTableElement element = new() { BufferView = view };
+            using RHIBindingTable table = context.Device.CreateBindingTable(new RHIBindingTableDescriptor
             {
                 Layout = layout,
                 Elements = new[] { element },
             });
 
-            Dx12ArgumentTable dx12Table = Assert.IsType<Dx12ArgumentTable>(table);
+            Dx12BindingTable dx12Table = Assert.IsType<Dx12BindingTable>(table);
             Assert.Equal(1, dx12Table.GroupCount);
             Assert.NotEqual(default, dx12Table.GetGroupGpuHandle(0));
             table.SetBindElement(element, ERHIBindType.StorageBuffer, 0, 0);
@@ -169,7 +169,7 @@ public sealed class SharpGPUFeatureContractMatrixTests
                     bLocalSignature = false,
                     bUseVertexLayout = false,
                     PushConstantSize = 0,
-                    ArgumentTableLayouts = Array.Empty<RHIArgumentTableLayout>(),
+                    BindingTableLayouts = Array.Empty<RHIBindingTableLayout>(),
                 });
                 RHIStencilStateDescriptor keepStencilFace = new()
                 {
@@ -246,7 +246,7 @@ public sealed class SharpGPUFeatureContractMatrixTests
                 }
 
                 Assert.Throws<NotSupportedException>(() => device.CreateMLPipeline(default));
-                Assert.Throws<NotSupportedException>(() => device.CreateMLBindingSet(default));
+                Assert.Throws<NotSupportedException>(() => device.CreateMLBindingTable(default));
                 Assert.Throws<NotSupportedException>(() => device.CreateTensor(default));
             }
         }
@@ -270,7 +270,7 @@ public sealed class SharpGPUFeatureContractMatrixTests
                     ERHICapabilityTier.Unavailable,
                     device.Capabilities.MachineLearning.Execution.Tier);
                 Assert.Throws<NotSupportedException>(() => device.CreateMLPipeline(default));
-                Assert.Throws<NotSupportedException>(() => device.CreateMLBindingSet(default));
+                Assert.Throws<NotSupportedException>(() => device.CreateMLBindingTable(default));
                 Assert.Throws<NotSupportedException>(() => device.CreateTensor(default));
             }
         }

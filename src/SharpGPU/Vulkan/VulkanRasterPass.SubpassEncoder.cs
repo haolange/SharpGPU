@@ -24,12 +24,11 @@ namespace SharpGPU
         private VkRenderingAttachmentInfo* m_StencilAttachmentInfo;
         private VulkanSampledFeedbackAttachmentFact[]?
             m_SampledFeedbackAttachments;
-        private WeakReference<VulkanArgumentTable>?[]?
+        private WeakReference<VulkanBindingTable>?[]?
             m_BoundFeedbackTables;
         private ulong[]? m_BoundFeedbackRevisions;
         private byte[]? m_BoundFeedbackMasks;
         private IVulkanRasterNativePipeline? m_ActiveNativePipeline;
-        private int m_CurrentSubPassIndex;
         private bool m_RenderingActive;
 
         internal VulkanRasterSubpassEncoder(
@@ -39,52 +38,72 @@ namespace SharpGPU
             m_VulkanCommandBuffer = commandBuffer;
         }
 
-        internal override void BeginPassCore(RasterPassPlan plan)
+        internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
         {
+            ThrowIfDisposed();
+            if (m_RasterPassPlan != null)
+            {
+                throw new InvalidOperationException("A raster pass is already active on this encoder.");
+            }
+
+            RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+            m_RasterPassPlan = plan;
+            m_CurrentSubPassIndex = 0;
+            m_PipelineSubPassIndex = -1;
+            m_CachedPipeline = null;
+
             VulkanDevice device = GetDevice();
             m_Plan = plan;
             m_PassDescriptor = plan.DescriptorSnapshot;
-            m_CurrentSubPassIndex = 0;
             m_ActiveNativePipeline = null;
-            VulkanRasterCapabilities capabilities =
-                device.RasterCapabilities;
-            m_Lowering = VulkanRasterPassLowering.Compile(
-                plan,
-                in capabilities,
-                VulkanRasterStrategyDiagnostics.ForcedStrategy);
-            InitializeSampledFeedbackState(
-                plan,
-                m_Lowering,
-                device);
-            ValidateRasterOrderedAttachmentStorageFormats(
-                plan,
-                m_Lowering,
-                device);
+            try
+            {
+                VulkanRasterCapabilities capabilities =
+                    device.RasterCapabilities;
+                m_Lowering = VulkanRasterPassLowering.Compile(
+                    plan,
+                    in capabilities,
+                    VulkanRasterStrategyDiagnostics.ForcedStrategy);
+                InitializeSampledFeedbackState(
+                    plan,
+                    m_Lowering,
+                    device);
+                ValidateRasterOrderedAttachmentStorageFormats(
+                    plan,
+                    m_Lowering,
+                    device);
 
 #if DEBUG
-            PushDebugGroup(plan.Name);
+                PushDebugGroup(plan.Name);
 #endif
-            if (m_PassDescriptor.Timestamp.HasValue)
-            {
-                WriteTimestamp(
-                    m_PassDescriptor.Timestamp.Value.BeginIndex);
-            }
-
-            CreateAttachmentViews(plan);
-            TransitionAttachmentScopeLayouts(plan, m_Lowering);
-            if (m_Lowering.UsesRenderPass2)
-            {
-                BeginRenderPass2(plan, m_Lowering);
-            }
-            else
-            {
-                BeginDynamicRendering(plan, m_Lowering);
-                if (m_Lowering.UsesDynamicRenderingLocalRead)
+                if (m_PassDescriptor.Timestamp.HasValue)
                 {
-                    ApplyDynamicAttachmentMapping(0);
+                    WriteTimestamp(
+                        m_PassDescriptor.Timestamp.Value.BeginIndex);
                 }
+
+                CreateAttachmentViews(plan);
+                TransitionAttachmentScopeLayouts(plan, m_Lowering);
+                if (m_Lowering.UsesRenderPass2)
+                {
+                    BeginRenderPass2(plan, m_Lowering);
+                }
+                else
+                {
+                    BeginDynamicRendering(plan, m_Lowering);
+                    if (m_Lowering.UsesDynamicRenderingLocalRead)
+                    {
+                        ApplyDynamicAttachmentMapping(0);
+                    }
+                }
+                m_RenderingActive = true;
             }
-            m_RenderingActive = true;
+            catch
+            {
+                AbortPassState();
+                ClearRasterPassState();
+                throw;
+            }
         }
 
         internal void AbortPassState()
@@ -110,15 +129,21 @@ namespace SharpGPU
             m_CurrentSubPassIndex = 0;
         }
 
-        internal override void NextSubPassCore(
-            RasterPassPlan plan,
-            int sourceSubPassIndex,
-            int destinationSubPassIndex)
+        public override void NextSubPass()
         {
+            ThrowIfDisposed();
+            RasterPassPlan plan = RequireActiveRasterPass();
+            int sourceSubPassIndex = m_CurrentSubPassIndex;
+            int destinationSubPassIndex = sourceSubPassIndex + 1;
+            if (destinationSubPassIndex >= plan.SubPassCount)
+            {
+                throw new InvalidOperationException(
+                    $"Raster pass '{plan.Name}' has no subpass after index {m_CurrentSubPassIndex}.");
+            }
+
             VulkanRasterPassLowering lowering =
                 RequireActiveLowering();
-            if (sourceSubPassIndex != m_CurrentSubPassIndex ||
-                destinationSubPassIndex != sourceSubPassIndex + 1)
+            if (destinationSubPassIndex != sourceSubPassIndex + 1)
             {
                 throw new InvalidOperationException(
                     "Vulkan subpasses must advance exactly once in order.");
@@ -151,10 +176,11 @@ namespace SharpGPU
                 }
             }
             m_CurrentSubPassIndex = destinationSubPassIndex;
+            m_PipelineSubPassIndex = -1;
             m_ActiveNativePipeline = null;
         }
 
-        internal override void SetPipelineCore(
+        public override void SetPipeline(
             RHIRasterPipeline pipeline)
         {
             if (pipeline is not VulkanRasterPipeline publicPipeline)
@@ -193,21 +219,21 @@ namespace SharpGPU
             BindPrivateAttachmentSet(nativePipeline);
         }
 
-        public override void SetArgumentTable(
-            RHIArgumentTable resourceTable,
+        public override void SetBindingTable(
+            RHIBindingTable resourceTable,
             in uint tableIndex)
         {
             IVulkanRasterNativePipeline nativePipeline =
                 m_ActiveNativePipeline
                 ?? throw new InvalidOperationException(
                     "A live Vulkan raster pipeline must be set before " +
-                    "binding an argument table.");
+                    "binding an binding table.");
             if (m_CachedPipeline is not VulkanRasterPipeline publicPipeline)
             {
                 throw new InvalidOperationException(
                     "The public Vulkan raster pipeline is unavailable.");
             }
-            VulkanArgumentTable table =
+            VulkanBindingTable table =
                 publicPipeline.VulkanPipelineLayout.ResolveReadyTable(
                     resourceTable,
                     tableIndex);
@@ -403,7 +429,7 @@ namespace SharpGPU
                 index);
         }
 
-        internal override void DrawCore(
+        public override void Draw(
             in uint vertexCount,
             in uint instanceCount,
             in uint firstVertex,
@@ -418,7 +444,7 @@ namespace SharpGPU
                 firstInstance);
         }
 
-        internal override void DrawIndexedCore(
+        public override void DrawIndexed(
             in uint indexCount,
             in uint instanceCount,
             in uint firstIndex,
@@ -435,7 +461,7 @@ namespace SharpGPU
                 firstInstance);
         }
 
-        internal override void DrawIndirectCore(
+        public override void DrawIndirect(
             RHIBuffer argsBuffer,
             in uint offset,
             in uint drawCount)
@@ -454,7 +480,7 @@ namespace SharpGPU
                 20);
         }
 
-        internal override void DrawIndexedIndirectCore(
+        public override void DrawIndexedIndirect(
             RHIBuffer argsBuffer,
             in uint offset,
             in uint drawCount)
@@ -473,7 +499,7 @@ namespace SharpGPU
                 20);
         }
 
-        internal override void DispatchMeshCore(
+        public override void DispatchMesh(
             in uint groupCountX,
             in uint groupCountY,
             in uint groupCountZ)
@@ -486,7 +512,7 @@ namespace SharpGPU
                 groupCountZ);
         }
 
-        internal override void DispatchMeshIndirectCore(
+        public override void DispatchMeshIndirect(
             RHIBuffer argsBuffer,
             in uint argsOffset)
         {
@@ -504,7 +530,7 @@ namespace SharpGPU
                 0);
         }
 
-        internal override void ExecuteIndirectCommandBufferCore(
+        public override void ExecuteIndirectCommandBuffer(
             RHIRasterIndirectCommandBuffer indirectCmdBuffer)
         {
             GetDevice().Capabilities.IndirectCommandBuffer.Execution.Require(
@@ -513,8 +539,19 @@ namespace SharpGPU
                 "Vulkan raster ExecuteIndirectCommandBuffer is unavailable.");
         }
 
-        internal override void EndPassCore()
+        public override void EndPass()
         {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The raster encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Raster);
+            RasterPassPlan plan = RequireActiveRasterPass();
+            if (m_CurrentSubPassIndex != plan.SubPassCount - 1)
+            {
+                throw new InvalidOperationException(
+                    $"Raster pass '{plan.Name}' ended at subpass {m_CurrentSubPassIndex}, " +
+                    $"but {plan.SubPassCount} subpasses were declared.");
+            }
+
             if (!m_RenderingActive)
             {
                 throw new InvalidOperationException(
@@ -567,6 +604,8 @@ namespace SharpGPU
             m_BoundFeedbackRevisions = null;
             m_BoundFeedbackMasks = null;
             m_PassDescriptor = default;
+            commandBuffer.MarkEncoderEndFromEncoder();
+            ClearRasterPassState();
         }
 
         private void CreateAttachmentViews(RasterPassPlan plan)
@@ -2087,7 +2126,7 @@ namespace SharpGPU
                 checked((int)device.DescriptorLimits.MaximumBoundSets);
             m_SampledFeedbackAttachments = attachments;
             m_BoundFeedbackTables =
-                new WeakReference<VulkanArgumentTable>?[
+                new WeakReference<VulkanBindingTable>?[
                     maximumBoundSets];
             m_BoundFeedbackRevisions =
                 new ulong[maximumBoundSets];
@@ -2097,11 +2136,11 @@ namespace SharpGPU
 
         private void RecordSampledFeedbackTable(
             uint tableIndex,
-            VulkanArgumentTable table,
+            VulkanBindingTable table,
             ulong descriptorRevision,
             byte matchedMask)
         {
-            WeakReference<VulkanArgumentTable>?[] tables =
+            WeakReference<VulkanBindingTable>?[] tables =
                 m_BoundFeedbackTables
                 ?? throw new InvalidOperationException(
                     "The Vulkan sampled-feedback table state is " +
@@ -2116,7 +2155,7 @@ namespace SharpGPU
             }
             int index = checked((int)tableIndex);
             tables[index] =
-                new WeakReference<VulkanArgumentTable>(table);
+                new WeakReference<VulkanBindingTable>(table);
             m_BoundFeedbackRevisions![index] =
                 descriptorRevision;
             m_BoundFeedbackMasks![index] = matchedMask;
@@ -2125,7 +2164,7 @@ namespace SharpGPU
         private void ClearBoundSampledFeedbackTable(
             uint tableIndex)
         {
-            WeakReference<VulkanArgumentTable>?[]? tables =
+            WeakReference<VulkanBindingTable>?[]? tables =
                 m_BoundFeedbackTables;
             if (tables == null)
             {
@@ -2176,7 +2215,7 @@ namespace SharpGPU
                 return;
             }
 
-            WeakReference<VulkanArgumentTable>?[] tables =
+            WeakReference<VulkanBindingTable>?[] tables =
                 m_BoundFeedbackTables
                 ?? throw new InvalidOperationException(
                     "The Vulkan sampled-feedback table state is " +
@@ -2192,15 +2231,15 @@ namespace SharpGPU
                 {
                     continue;
                 }
-                WeakReference<VulkanArgumentTable>? weakTable =
+                WeakReference<VulkanBindingTable>? weakTable =
                     tables[index];
                 if (weakTable == null ||
                     !weakTable.TryGetTarget(
-                        out VulkanArgumentTable? table))
+                        out VulkanBindingTable? table))
                 {
                     throw new ObjectDisposedException(
-                        $"VulkanArgumentTable[{index}]",
-                        "A SampledFeedback argument table is no " +
+                        $"VulkanBindingTable[{index}]",
+                        "A SampledFeedback binding table is no " +
                         "longer alive; rebind a live table.");
                 }
                 table.EnsureReadyForBinding();
@@ -2208,7 +2247,7 @@ namespace SharpGPU
                     m_BoundFeedbackRevisions![index])
                 {
                     throw new InvalidOperationException(
-                        $"Vulkan SampledFeedback argument table {index} " +
+                        $"Vulkan SampledFeedback binding table {index} " +
                         "changed after binding. Rebind it before Draw.");
                 }
                 coveredMask |= tableMask;

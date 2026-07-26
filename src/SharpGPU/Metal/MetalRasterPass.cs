@@ -515,13 +515,13 @@ namespace SharpGPU
             }
 
             return Compile(
-                pipelineLayout.ArgumentTableLayouts,
+                pipelineLayout.BindingTableLayouts,
                 checked((uint)maximumTextureBindings),
                 in attachmentInterface);
         }
 
         internal static MetalPrivateRasterBindingPlan Compile(
-            ReadOnlySpan<MetalArgumentTableLayout> layouts,
+            ReadOnlySpan<MetalBindingTableLayout> layouts,
             uint maximumTextureBindings,
             in RHIAttachmentInterfaceSignature attachmentInterface)
         {
@@ -566,14 +566,14 @@ namespace SharpGPU
         }
 
         internal static uint GetOrdinaryTextureRangeEnd(
-            ReadOnlySpan<MetalArgumentTableLayout> layouts)
+            ReadOnlySpan<MetalBindingTableLayout> layouts)
         {
             uint nextIndex = 0;
             for (int layoutIndex = 0;
                  layoutIndex < layouts.Length;
                  ++layoutIndex)
             {
-                MetalArgumentTableLayout layout =
+                MetalBindingTableLayout layout =
                     layouts[layoutIndex]
                     ?? throw new ArgumentException(
                         $"Metal pipeline layout slot {layoutIndex} is null.",
@@ -581,7 +581,7 @@ namespace SharpGPU
                 if (layout.IsDisposed)
                 {
                     throw new ObjectDisposedException(
-                        $"MetalArgumentTableLayout[{layout.Index}]");
+                        $"MetalBindingTableLayout[{layout.Index}]");
                 }
 
                 ReadOnlySpan<MetalBindInfo> bindings =
@@ -592,10 +592,10 @@ namespace SharpGPU
                 {
                     ref readonly MetalBindInfo binding =
                         ref bindings[bindingIndex];
-                    if (MetalArgumentTableValidation
+                    if (MetalBindingTableValidation
                             .GetDirectBindingNamespace(
                                 binding.Type) !=
-                        MetalArgumentTableValidation
+                        MetalBindingTableValidation
                             .BindingNamespace.Texture)
                     {
                         continue;
@@ -691,7 +691,7 @@ namespace SharpGPU
         internal const int MaxBufferIndex = MaxBufferBindCount - 1;
 
         internal static void ValidatePipelineBufferBudget(
-            ReadOnlySpan<MetalArgumentTableLayout> layouts,
+            ReadOnlySpan<MetalBindingTableLayout> layouts,
             in MetalBindingPipelineType pipelineType)
         {
             bool[] occupied = BuildPipelineBufferOccupancy(layouts);
@@ -709,7 +709,7 @@ namespace SharpGPU
         }
 
         internal static MetalRasterBufferBindingPlan CompileRaster(
-            ReadOnlySpan<MetalArgumentTableLayout> layouts,
+            ReadOnlySpan<MetalBindingTableLayout> layouts,
             ReadOnlySpan<RHIVertexLayoutDescriptor> vertexLayouts)
         {
             bool[] occupied = BuildPipelineBufferOccupancy(layouts);
@@ -750,8 +750,8 @@ namespace SharpGPU
             return new MetalRasterBufferBindingPlan(bindings);
         }
 
-        internal static ulong GetDirectArgumentTableBufferBindCount(
-            MetalArgumentTableLayout layout,
+        internal static ulong GetDirectBindingTableBufferBindCount(
+            MetalBindingTableLayout layout,
             in MetalBindingPipelineType pipelineType)
         {
             bool[] occupied = new bool[MaxBufferBindCount];
@@ -772,7 +772,7 @@ namespace SharpGPU
         }
 
         internal static ulong GetReferenceRootBufferBindCount(
-            ReadOnlySpan<MetalArgumentTableLayout> layouts,
+            ReadOnlySpan<MetalBindingTableLayout> layouts,
             in MetalBindingPipelineType pipelineType)
         {
             bool[] occupied = BuildReferenceBufferOccupancy(layouts);
@@ -800,12 +800,12 @@ namespace SharpGPU
                 _ => throw new ArgumentOutOfRangeException(
                     nameof(pipelineType),
                     pipelineType,
-                    "Only Metal raster and ray tracing pipelines use reserved-only argument tables.")
+                    "Only Metal raster and ray tracing pipelines use reserved-only binding tables.")
             };
         }
 
         private static bool[] BuildPipelineBufferOccupancy(
-            ReadOnlySpan<MetalArgumentTableLayout> layouts)
+            ReadOnlySpan<MetalBindingTableLayout> layouts)
         {
             if (MetalBindingHelpers.RequiresReferenceBuffers(layouts))
             {
@@ -822,12 +822,12 @@ namespace SharpGPU
         }
 
         private static bool[] BuildReferenceBufferOccupancy(
-            ReadOnlySpan<MetalArgumentTableLayout> layouts)
+            ReadOnlySpan<MetalBindingTableLayout> layouts)
         {
             bool[] occupied = new bool[MaxBufferBindCount];
             for (int index = 0; index < layouts.Length; ++index)
             {
-                MetalArgumentTableLayout layout = layouts[index];
+                MetalBindingTableLayout layout = layouts[index];
                 Reserve(
                     occupied,
                     layout.Index,
@@ -839,14 +839,14 @@ namespace SharpGPU
 
         private static void ReserveDirectBufferBindings(
             bool[] occupied,
-            MetalArgumentTableLayout layout)
+            MetalBindingTableLayout layout)
         {
             ReadOnlySpan<MetalBindInfo> binds = layout.BindInfos;
             for (int index = 0; index < binds.Length; ++index)
             {
                 ref readonly MetalBindInfo bind = ref binds[index];
-                if (MetalArgumentTableValidation.GetDirectBindingNamespace(bind.Type)
-                    != MetalArgumentTableValidation.BindingNamespace.Buffer)
+                if (MetalBindingTableValidation.GetDirectBindingNamespace(bind.Type)
+                    != MetalBindingTableValidation.BindingNamespace.Buffer)
                 {
                     continue;
                 }
@@ -855,7 +855,7 @@ namespace SharpGPU
                 if (end > MaxBufferBindCount)
                 {
                     throw new InvalidOperationException(
-                        $"Metal argument table {layout.Index} binding slot={bind.Slot}, type={bind.Type}, count={bind.Count} "
+                        $"Metal binding table {layout.Index} binding slot={bind.Slot}, type={bind.Type}, count={bind.Count} "
                         + $"exceeds the Metal 4 buffer index range [0, {MaxBufferIndex}].");
                 }
 
@@ -864,7 +864,7 @@ namespace SharpGPU
                     Reserve(
                         occupied,
                         physicalIndex,
-                        $"argument table {layout.Index} {bind.Type} binding");
+                        $"binding table {layout.Index} {bind.Type} binding");
                 }
             }
         }

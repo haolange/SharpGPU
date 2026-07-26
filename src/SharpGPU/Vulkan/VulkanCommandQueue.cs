@@ -157,7 +157,7 @@ namespace SharpGPU
             }
         }
 
-        protected override void WaitIdleCore()
+        public override void WaitIdle()
         {
             VkResult result =
                 VulkanNative.vkQueueWaitIdle(m_NativeQueue);

@@ -567,14 +567,14 @@ namespace SharpGPU
             Dx12PipelineLayoutPlan plan,
             Vortice.Direct3D12.RootParameter1[] rootParameters)
         {
-            foreach (Dx12PipelineArgumentTablePlan tablePlan in plan.TablePlans)
+            foreach (Dx12PipelineBindingTablePlan tablePlan in plan.TablePlans)
             {
-                Dx12ArgumentTableLayout layout = tablePlan.Layout;
+                Dx12BindingTableLayout layout = tablePlan.Layout;
                 for (int groupIndex = 0;
                      groupIndex < layout.Groups.Length;
                      ++groupIndex)
                 {
-                    Dx12ArgumentTableGroupPlan group = layout.Groups[groupIndex];
+                    Dx12BindingTableGroupPlan group = layout.Groups[groupIndex];
                     Vortice.Direct3D12.DescriptorRange1[] ranges =
                         new Vortice.Direct3D12.DescriptorRange1[
                             group.BindingIndices.Length];

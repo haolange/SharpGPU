@@ -58,192 +58,372 @@ namespace SharpGPU
             }
         }
 
-        protected override RHISwapChainAcquireResult AcquireCore(
+        public override RHISwapChainAcquireResult AcquireBackBuffer(
             in RHISwapChainAcquireDescriptor descriptor)
         {
-            if (m_TerminalStatus != ERHISwapChainStatus.Undefined)
-            {
-                return TerminalAcquireResult();
-            }
-            if (descriptor.SignalSemaphore != null ||
-                descriptor.CompletionFence != null)
-            {
-                throw new NotSupportedException(
-                    "DXGI swapchain acquisition has no native semaphore/fence signal contract.");
-            }
-            if (m_HasAcquiredImage)
-            {
-                throw new InvalidOperationException(
-                    "The DX12 back buffer has already been acquired for this frame.");
-            }
+            ThrowIfSwapChainUnavailable();
+            ValidateAcquire(in descriptor);
 
-            int imageIndex = BackTextureIndex;
-            if ((uint)imageIndex >= (uint)m_Textures.Length)
-            {
-                throw new InvalidOperationException(
-                    $"DXGI returned back-buffer index {imageIndex}, " +
-                    $"but exposes {m_Textures.Length} images.");
-            }
-
-            m_HasAcquiredImage = true;
-            return RHISwapChainAcquireResult.Acquired(
-                m_Textures[imageIndex],
-                imageIndex);
-        }
-
-        protected override RHISwapChainOperationResult ResizeCore(
-            in RHISwapChainResizeDescriptor descriptor)
-        {
-            if (m_TerminalStatus != ERHISwapChainStatus.Undefined)
-            {
-                return TerminalOperationResult();
-            }
-            if (m_HasAcquiredImage)
-            {
-                throw new InvalidOperationException(
-                    "A DX12 swapchain cannot be resized while an image is acquired.");
-            }
-            if (descriptor.SurfaceGeneration <
-                m_Descriptor.SurfaceGeneration)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(descriptor),
-                    "Surface generation cannot move backwards.");
-            }
-            if (descriptor.Extent.x == 0 || descriptor.Extent.y == 0)
-            {
-                return RHISwapChainOperationResult.FromStatus(
-                    ERHISwapChainStatus.NotReady);
-            }
-            if (descriptor.SurfaceKind != RHINativeSurfaceKind.Win32Hwnd ||
-                descriptor.WindowHandle == IntPtr.Zero)
-            {
-                return EnterTerminal(
-                    ERHISwapChainStatus.SurfaceLost,
-                    CreateSurfaceLostDiagnostic(
-                        "DX12 resize requires a valid Win32 HWND."));
-            }
-            if (descriptor.WindowHandle != m_Descriptor.WindowHandle)
-            {
-                return EnterTerminal(
-                    ERHISwapChainStatus.SurfaceLost,
-                    CreateSurfaceLostDiagnostic(
-                        "DXGI ResizeBuffers cannot replace the swapchain HWND; " +
-                        "the Renderer must create a new swapchain."));
-            }
-
-            RHISwapChainDescriptor previousDescriptor = m_Descriptor;
-            ReleaseBackBufferTextures();
-
-            Vortice.DXGI.SwapChainDescription desc = m_NativeSwapChain.Description;
-            SharpGen.Runtime.Result nativeResult = m_NativeSwapChain.ResizeBuffers(
-                m_Descriptor.Count,
-                descriptor.Extent.x,
-                descriptor.Extent.y,
-                desc.BufferDescription.Format,
-                desc.Flags);
-            if (nativeResult.Failure)
-            {
-                RHISwapChainOperationResult? typedFailure =
-                    TryMapFailure(
-                        nativeResult.Code,
-                        "IDXGISwapChain::ResizeBuffers");
-                if (typedFailure.HasValue)
-                {
-                    return EnterTerminal(
-                        typedFailure.Value.Status,
-                        typedFailure.Value.Diagnostic);
-                }
-
-                // ResizeBuffers leaves the original swapchain unchanged on
-                // ordinary failure. Restore its public wrappers before
-                // surfacing the native exception.
-                try
-                {
-                    FetchDx12Textures(previousDescriptor);
-                }
-                catch
-                {
-                    _ = EnterTerminal(
-                        ERHISwapChainStatus.OutOfDate,
-                        diagnostic: null);
-                    throw;
-                }
-                Dx12Utility.CHECK_HR(nativeResult);
-            }
-
-            m_Descriptor.Extent = descriptor.Extent;
-            m_Descriptor.SurfaceGeneration =
-                descriptor.SurfaceGeneration;
+            bool semaphoreReserved = false;
+            bool fenceReserved = false;
             try
             {
-                FetchDx12Textures(m_Descriptor);
+                if (descriptor.SignalSemaphore != null)
+                {
+                    descriptor.SignalSemaphore.ReserveSignal();
+                    semaphoreReserved = true;
+                }
+                if (descriptor.CompletionFence != null)
+                {
+                    descriptor.CompletionFence.ReserveSignal();
+                    fenceReserved = true;
+                }
+
+                RHISwapChainAcquireResult result;
+                if (m_TerminalStatus != ERHISwapChainStatus.Undefined)
+                {
+                    result = TerminalAcquireResult();
+                }
+                else if (descriptor.SignalSemaphore != null ||
+                    descriptor.CompletionFence != null)
+                {
+                    throw new NotSupportedException(
+                        "DXGI swapchain acquisition has no native semaphore/fence signal contract.");
+                }
+                else if (m_HasAcquiredImage)
+                {
+                    throw new InvalidOperationException(
+                        "The DX12 back buffer has already been acquired for this frame.");
+                }
+                else
+                {
+                    int imageIndex = BackTextureIndex;
+                    if ((uint)imageIndex >= (uint)m_Textures.Length)
+                    {
+                        throw new InvalidOperationException(
+                            $"DXGI returned back-buffer index {imageIndex}, " +
+                            $"but exposes {m_Textures.Length} images.");
+                    }
+
+                    m_HasAcquiredImage = true;
+                    result = RHISwapChainAcquireResult.Acquired(
+                        m_Textures[imageIndex],
+                        imageIndex);
+                }
+
+                bool signalSubmitted = result.Status is
+                    ERHISwapChainStatus.Success or
+                    ERHISwapChainStatus.Suboptimal;
+
+                if (signalSubmitted)
+                {
+                    descriptor.SignalSemaphore?.CommitSignal();
+                    semaphoreReserved = false;
+                    fenceReserved = false;
+                }
+                else
+                {
+                    if (fenceReserved)
+                    {
+                        descriptor.CompletionFence!.RollbackSignal();
+                        fenceReserved = false;
+                    }
+                    if (semaphoreReserved)
+                    {
+                        descriptor.SignalSemaphore!.RollbackSignal();
+                        semaphoreReserved = false;
+                    }
+                }
+
+                result.Validate(OwnerDevice.BackendType, ImageCount);
+                InvalidateDeviceIfNeeded(in result);
+                return result;
+            }
+            catch (RHIException exception)
+            {
+                if (fenceReserved)
+                {
+                    descriptor.CompletionFence!.RollbackSignal();
+                }
+                if (semaphoreReserved)
+                {
+                    descriptor.SignalSemaphore!.RollbackSignal();
+                }
+                if (exception.ErrorCode == ERHIErrorCode.DeviceLost)
+                {
+                    OwnerDevice.MarkDeviceLost(exception);
+                }
+                throw;
             }
             catch
             {
-                _ = EnterTerminal(
-                    ERHISwapChainStatus.OutOfDate,
-                    diagnostic: null);
+                if (fenceReserved)
+                {
+                    descriptor.CompletionFence!.RollbackSignal();
+                }
+                if (semaphoreReserved)
+                {
+                    descriptor.SignalSemaphore!.RollbackSignal();
+                }
                 throw;
             }
-            return RHISwapChainOperationResult.FromStatus(
-                ERHISwapChainStatus.Success);
         }
 
-        protected override bool PresentCore(
-            in RHISwapChainPresentDescriptor descriptor,
-            out RHISwapChainOperationResult result)
+        public override RHISwapChainOperationResult Resize(
+            in RHISwapChainResizeDescriptor descriptor)
         {
-            if (m_TerminalStatus != ERHISwapChainStatus.Undefined)
+            ThrowIfSwapChainUnavailable();
+            try
             {
-                result = TerminalOperationResult();
-                return false;
-            }
-            if (!m_HasAcquiredImage)
-            {
-                throw new InvalidOperationException(
-                    "Present requires one successfully acquired DX12 back buffer.");
-            }
-            if (!descriptor.WaitSemaphores.IsEmpty ||
-                descriptor.CompletionFence != null)
-            {
-                throw new NotSupportedException(
-                    "DXGI Present does not consume SharpGPU binary semaphores " +
-                    "or expose a native per-present fence.");
-            }
-
-            SharpGen.Runtime.Result nativeResult = m_NativeSwapChain.Present(
-                Dx12Utility.ConvertToDx12SyncInterval(
-                    m_Descriptor.PresentMode),
-                0);
-            m_HasAcquiredImage = false;
-
-            if (nativeResult.Code == DxgiStatusOccluded)
-            {
-                result = RHISwapChainOperationResult.FromStatus(
-                    ERHISwapChainStatus.Occluded);
-                return true;
-            }
-            if (nativeResult.Failure)
-            {
-                RHISwapChainOperationResult? typedFailure =
-                    TryMapFailure(
-                        nativeResult.Code,
-                        "IDXGISwapChain::Present");
-                if (typedFailure.HasValue)
+                RHISwapChainOperationResult result;
+                if (m_TerminalStatus != ERHISwapChainStatus.Undefined)
+                {
+                    result = TerminalOperationResult();
+                }
+                else if (m_HasAcquiredImage)
+                {
+                    throw new InvalidOperationException(
+                        "A DX12 swapchain cannot be resized while an image is acquired.");
+                }
+                else if (descriptor.SurfaceGeneration <
+                    m_Descriptor.SurfaceGeneration)
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(descriptor),
+                        "Surface generation cannot move backwards.");
+                }
+                else if (descriptor.Extent.x == 0 || descriptor.Extent.y == 0)
+                {
+                    result = RHISwapChainOperationResult.FromStatus(
+                        ERHISwapChainStatus.NotReady);
+                }
+                else if (descriptor.SurfaceKind != RHINativeSurfaceKind.Win32Hwnd ||
+                    descriptor.WindowHandle == IntPtr.Zero)
                 {
                     result = EnterTerminal(
-                        typedFailure.Value.Status,
-                        typedFailure.Value.Diagnostic);
-                    return true;
+                        ERHISwapChainStatus.SurfaceLost,
+                        CreateSurfaceLostDiagnostic(
+                            "DX12 resize requires a valid Win32 HWND."));
+                }
+                else if (descriptor.WindowHandle != m_Descriptor.WindowHandle)
+                {
+                    result = EnterTerminal(
+                        ERHISwapChainStatus.SurfaceLost,
+                        CreateSurfaceLostDiagnostic(
+                            "DXGI ResizeBuffers cannot replace the swapchain HWND; " +
+                            "the Renderer must create a new swapchain."));
+                }
+                else
+                {
+                    RHISwapChainDescriptor previousDescriptor = m_Descriptor;
+                    ReleaseBackBufferTextures();
+
+                    Vortice.DXGI.SwapChainDescription desc = m_NativeSwapChain.Description;
+                    SharpGen.Runtime.Result nativeResult = m_NativeSwapChain.ResizeBuffers(
+                        m_Descriptor.Count,
+                        descriptor.Extent.x,
+                        descriptor.Extent.y,
+                        desc.BufferDescription.Format,
+                        desc.Flags);
+                    if (nativeResult.Failure)
+                    {
+                        RHISwapChainOperationResult? typedFailure =
+                            TryMapFailure(
+                                nativeResult.Code,
+                                "IDXGISwapChain::ResizeBuffers");
+                        if (typedFailure.HasValue)
+                        {
+                            result = EnterTerminal(
+                                typedFailure.Value.Status,
+                                typedFailure.Value.Diagnostic);
+                        }
+                        else
+                        {
+                            try
+                            {
+                                FetchDx12Textures(previousDescriptor);
+                            }
+                            catch
+                            {
+                                _ = EnterTerminal(
+                                    ERHISwapChainStatus.OutOfDate,
+                                    diagnostic: null);
+                                throw;
+                            }
+                            Dx12Utility.CHECK_HR(nativeResult);
+                            result = RHISwapChainOperationResult.FromStatus(
+                                ERHISwapChainStatus.Success);
+                        }
+                    }
+                    else
+                    {
+                        m_Descriptor.Extent = descriptor.Extent;
+                        m_Descriptor.SurfaceGeneration =
+                            descriptor.SurfaceGeneration;
+                        try
+                        {
+                            FetchDx12Textures(m_Descriptor);
+                        }
+                        catch
+                        {
+                            _ = EnterTerminal(
+                                ERHISwapChainStatus.OutOfDate,
+                                diagnostic: null);
+                            throw;
+                        }
+                        result = RHISwapChainOperationResult.FromStatus(
+                            ERHISwapChainStatus.Success);
+                    }
                 }
 
-                Dx12Utility.CHECK_HR(nativeResult);
+                result.Validate(OwnerDevice.BackendType);
+                InvalidateDeviceIfNeeded(in result);
+                return result;
             }
+            catch (RHIException exception)
+            {
+                if (exception.ErrorCode == ERHIErrorCode.DeviceLost)
+                {
+                    OwnerDevice.MarkDeviceLost(exception);
+                }
+                throw;
+            }
+        }
 
-            result = RHISwapChainOperationResult.FromStatus(
-                ERHISwapChainStatus.Success);
-            return true;
+        public override RHISwapChainOperationResult Present(
+            in RHISwapChainPresentDescriptor descriptor)
+        {
+            ThrowIfSwapChainUnavailable();
+            ValidatePresent(in descriptor);
+
+            int reservedWaits = 0;
+            bool fenceReserved = false;
+            try
+            {
+                ReadOnlySpan<RHISemaphore> waits =
+                    descriptor.WaitSemaphores.Span;
+                for (; reservedWaits < waits.Length; ++reservedWaits)
+                {
+                    waits[reservedWaits].ReserveWait();
+                }
+                if (descriptor.CompletionFence != null)
+                {
+                    descriptor.CompletionFence.ReserveSignal();
+                    fenceReserved = true;
+                }
+
+                RHISwapChainOperationResult result;
+                bool waitsConsumed;
+                if (m_TerminalStatus != ERHISwapChainStatus.Undefined)
+                {
+                    result = TerminalOperationResult();
+                    waitsConsumed = false;
+                }
+                else if (!m_HasAcquiredImage)
+                {
+                    throw new InvalidOperationException(
+                        "Present requires one successfully acquired DX12 back buffer.");
+                }
+                else if (!descriptor.WaitSemaphores.IsEmpty ||
+                    descriptor.CompletionFence != null)
+                {
+                    throw new NotSupportedException(
+                        "DXGI Present does not consume SharpGPU binary semaphores " +
+                        "or expose a native per-present fence.");
+                }
+                else
+                {
+                    SharpGen.Runtime.Result nativeResult = m_NativeSwapChain.Present(
+                        Dx12Utility.ConvertToDx12SyncInterval(
+                            m_Descriptor.PresentMode),
+                        0);
+                    m_HasAcquiredImage = false;
+
+                    if (nativeResult.Code == DxgiStatusOccluded)
+                    {
+                        result = RHISwapChainOperationResult.FromStatus(
+                            ERHISwapChainStatus.Occluded);
+                    }
+                    else if (nativeResult.Failure)
+                    {
+                        RHISwapChainOperationResult? typedFailure =
+                            TryMapFailure(
+                                nativeResult.Code,
+                                "IDXGISwapChain::Present");
+                        if (typedFailure.HasValue)
+                        {
+                            result = EnterTerminal(
+                                typedFailure.Value.Status,
+                                typedFailure.Value.Diagnostic);
+                        }
+                        else
+                        {
+                            Dx12Utility.CHECK_HR(nativeResult);
+                            result = RHISwapChainOperationResult.FromStatus(
+                                ERHISwapChainStatus.Success);
+                        }
+                    }
+                    else
+                    {
+                        result = RHISwapChainOperationResult.FromStatus(
+                            ERHISwapChainStatus.Success);
+                    }
+
+                    waitsConsumed = true;
+                }
+
+                if (waitsConsumed)
+                {
+                    for (int index = 0; index < waits.Length; ++index)
+                    {
+                        waits[index].CommitWait();
+                    }
+                    fenceReserved = false;
+                }
+                else
+                {
+                    for (int index = waits.Length - 1; index >= 0; --index)
+                    {
+                        waits[index].RollbackWait();
+                    }
+                    if (fenceReserved)
+                    {
+                        descriptor.CompletionFence!.RollbackSignal();
+                        fenceReserved = false;
+                    }
+                }
+                reservedWaits = 0;
+
+                result.Validate(OwnerDevice.BackendType);
+                InvalidateDeviceIfNeeded(in result);
+                return result;
+            }
+            catch (RHIException exception)
+            {
+                RollbackPresentWaits(
+                    descriptor.WaitSemaphores.Span,
+                    reservedWaits);
+                if (fenceReserved)
+                {
+                    descriptor.CompletionFence!.RollbackSignal();
+                }
+                if (exception.ErrorCode == ERHIErrorCode.DeviceLost)
+                {
+                    OwnerDevice.MarkDeviceLost(exception);
+                }
+                throw;
+            }
+            catch
+            {
+                RollbackPresentWaits(
+                    descriptor.WaitSemaphores.Span,
+                    reservedWaits);
+                if (fenceReserved)
+                {
+                    descriptor.CompletionFence!.RollbackSignal();
+                }
+                throw;
+            }
         }
 
         private void CreateDX12SwapChain(in RHISwapChainDescriptor descriptor)

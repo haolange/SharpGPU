@@ -11,7 +11,7 @@ namespace SharpGPU
         public readonly uint Count;
         public readonly ERHIBindType Type;
         public readonly ERHIShaderStageMask Stages;
-        public readonly ERHIArgumentBindingRequirement Requirement;
+        public readonly ERHIBindingRequirement Requirement;
 
         public bool HasDescriptorArray => Count > 1;
 
@@ -21,7 +21,7 @@ namespace SharpGPU
             in uint count,
             in ERHIBindType type,
             in ERHIShaderStageMask stages)
-            : this(slot, index, count, type, stages, ERHIArgumentBindingRequirement.Required)
+            : this(slot, index, count, type, stages, ERHIBindingRequirement.Required)
         {
         }
 
@@ -31,7 +31,7 @@ namespace SharpGPU
             in uint count,
             in ERHIBindType type,
             in ERHIShaderStageMask stages,
-            in ERHIArgumentBindingRequirement requirement)
+            in ERHIBindingRequirement requirement)
         {
             Slot = slot;
             Index = index;
@@ -61,7 +61,7 @@ namespace SharpGPU
         }
 
         public static MetalArgumentBindingSnapshot Capture(
-            in RHIArgumentTableElement element,
+            in RHIBindingTableElement element,
             in MetalBindInfo bindInfo)
         {
             switch (bindInfo.Type)
@@ -133,12 +133,12 @@ namespace SharpGPU
 
                 default:
                     throw new InvalidOperationException(
-                        $"Metal argument table {bindInfo.Index} contains unsupported binding type {bindInfo.Type}.");
+                        $"Metal binding table {bindInfo.Index} contains unsupported binding type {bindInfo.Type}.");
             }
         }
     }
 
-    internal sealed class MetalArgumentTableLayout : RHIArgumentTableLayout
+    internal sealed class MetalBindingTableLayout : RHIBindingTableLayout
     {
         public uint Index => m_Index;
         public ReadOnlySpan<MetalBindInfo> BindInfos => m_BindInfos;
@@ -154,26 +154,26 @@ namespace SharpGPU
         private readonly ulong m_ReferenceBufferElementCount;
         private readonly bool m_RequiresReferenceBuffer;
 
-        public MetalArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor)
+        public MetalBindingTableLayout(in RHIBindingTableLayoutDescriptor descriptor)
             : base(descriptor)
         {
             m_Index = descriptor.Index;
             m_BindInfos = new MetalBindInfo[descriptor.Elements.Length];
             m_ElementOffsets = new int[descriptor.Elements.Length];
 
-            Span<RHIArgumentTableLayoutElement> elements = descriptor.Elements.Span;
+            Span<RHIBindingTableLayoutElement> elements = descriptor.Elements.Span;
             HashSet<(uint Slot, ERHIBindType Type)> keys = new();
             int offset = 0;
             bool requiresReferenceBuffer = false;
             ulong referenceBufferElementCount = 0;
             for (int index = 0; index < elements.Length; ++index)
             {
-                ref RHIArgumentTableLayoutElement element = ref elements[index];
-                MetalArgumentTableValidation.ValidateLayoutElement(element, descriptor.Index, index);
+                ref RHIBindingTableLayoutElement element = ref elements[index];
+                MetalBindingTableValidation.ValidateLayoutElement(element, descriptor.Index, index);
                 if (!keys.Add((element.Slot, element.Type)))
                 {
                     throw new ArgumentException(
-                        $"Metal argument table {descriptor.Index} contains duplicate binding slot={element.Slot}, type={element.Type}.",
+                        $"Metal binding table {descriptor.Index} contains duplicate binding slot={element.Slot}, type={element.Type}.",
                         nameof(descriptor));
                 }
 
@@ -199,9 +199,9 @@ namespace SharpGPU
             m_RequiresReferenceBuffer = requiresReferenceBuffer;
         }
 
-        internal MetalArgumentTableLayout(
+        internal MetalBindingTableLayout(
             MetalDevice device,
-            in RHIArgumentTableLayoutDescriptor descriptor)
+            in RHIBindingTableLayoutDescriptor descriptor)
             : this(descriptor)
         {
             Device = device;
@@ -214,7 +214,7 @@ namespace SharpGPU
                 throw new ArgumentOutOfRangeException(
                     nameof(bindIndex),
                     bindIndex,
-                    $"Metal argument table {m_Index} binding index must be in [0, {m_ElementOffsets.Length}).");
+                    $"Metal binding table {m_Index} binding index must be in [0, {m_ElementOffsets.Length}).");
             }
 
             return m_ElementOffsets[bindIndex];
@@ -227,7 +227,7 @@ namespace SharpGPU
                 throw new ArgumentOutOfRangeException(nameof(slot), slot, "Metal binding slot must not be negative.");
             }
 
-            MetalArgumentTableValidation.ValidateBindType(bindType, nameof(bindType));
+            MetalBindingTableValidation.ValidateBindType(bindType, nameof(bindType));
             for (int index = 0; index < m_BindInfos.Length; ++index)
             {
                 ref readonly MetalBindInfo bindInfo = ref m_BindInfos[index];
@@ -238,7 +238,7 @@ namespace SharpGPU
             }
 
             throw new KeyNotFoundException(
-                $"Metal argument table {m_Index} does not contain binding slot={slot}, type={bindType}.");
+                $"Metal binding table {m_Index} does not contain binding slot={slot}, type={bindType}.");
         }
         public void ValidateReferenceBufferRanges()
         {
@@ -262,7 +262,7 @@ namespace SharpGPU
         }
 
 
-        public bool StructurallyEquals(MetalArgumentTableLayout? other)
+        public bool StructurallyEquals(MetalBindingTableLayout? other)
         {
             if (other is null || m_Index != other.m_Index || m_BindInfos.Length != other.m_BindInfos.Length)
             {
@@ -296,14 +296,14 @@ namespace SharpGPU
             for (int leftIndex = 0; leftIndex < m_BindInfos.Length; ++leftIndex)
             {
                 ref readonly MetalBindInfo left = ref m_BindInfos[leftIndex];
-                MetalArgumentTableValidation.BindingNamespace leftNamespace =
-                    MetalArgumentTableValidation.GetDirectBindingNamespace(left.Type);
+                MetalBindingTableValidation.BindingNamespace leftNamespace =
+                    MetalBindingTableValidation.GetDirectBindingNamespace(left.Type);
                 ulong leftEnd = checked((ulong)left.Slot + left.Count);
 
                 for (int rightIndex = leftIndex + 1; rightIndex < m_BindInfos.Length; ++rightIndex)
                 {
                     ref readonly MetalBindInfo right = ref m_BindInfos[rightIndex];
-                    if (leftNamespace != MetalArgumentTableValidation.GetDirectBindingNamespace(right.Type))
+                    if (leftNamespace != MetalBindingTableValidation.GetDirectBindingNamespace(right.Type))
                     {
                         continue;
                     }
@@ -312,7 +312,7 @@ namespace SharpGPU
                     if ((ulong)left.Slot < rightEnd && (ulong)right.Slot < leftEnd)
                     {
                         throw new ArgumentException(
-                            $"Metal argument table {m_Index} has overlapping {leftNamespace} binding ranges "
+                            $"Metal binding table {m_Index} has overlapping {leftNamespace} binding ranges "
                             + $"[{left.Slot}, {leftEnd}) for {left.Type} and "
                             + $"[{right.Slot}, {rightEnd}) for {right.Type}.");
                     }
@@ -321,60 +321,60 @@ namespace SharpGPU
         }
     }
 
-    internal sealed class MetalArgumentTable : RHIArgumentTable
+    internal sealed class MetalBindingTable : RHIBindingTable
     {
-        public MetalArgumentTableLayout ArgumentTableLayout => m_Layout;
+        public MetalBindingTableLayout BindingTableLayout => m_Layout;
 
         internal MetalDevice? Device { get; }
-        private readonly MetalArgumentTableLayout m_Layout;
+        private readonly MetalBindingTableLayout m_Layout;
         private readonly MetalArgumentBindingSnapshot[] m_Bindings;
 
-        public MetalArgumentTable(in RHIArgumentTableDescriptor descriptor)
+        public MetalBindingTable(in RHIBindingTableDescriptor descriptor)
             : this(null, descriptor, validateDevice: false)
         {
         }
 
-        internal MetalArgumentTable(
+        internal MetalBindingTable(
             MetalDevice device,
-            in RHIArgumentTableDescriptor descriptor)
+            in RHIBindingTableDescriptor descriptor)
             : this(device, descriptor, validateDevice: true)
         {
         }
 
-        private MetalArgumentTable(
+        private MetalBindingTable(
             MetalDevice? device,
-            in RHIArgumentTableDescriptor descriptor,
+            in RHIBindingTableDescriptor descriptor,
             bool validateDevice)
         {
             Device = device;
-            m_Layout = descriptor.Layout as MetalArgumentTableLayout
+            m_Layout = descriptor.Layout as MetalBindingTableLayout
                 ?? throw new ArgumentException(
-                    $"Metal argument tables require a {nameof(MetalArgumentTableLayout)}.",
+                    $"Metal binding tables require a {nameof(MetalBindingTableLayout)}.",
                     nameof(descriptor));
             if (m_Layout.IsDisposed)
             {
-                throw new ObjectDisposedException(nameof(descriptor), $"Metal argument table layout {m_Layout.Index} is disposed.");
+                throw new ObjectDisposedException(nameof(descriptor), $"Metal binding table layout {m_Layout.Index} is disposed.");
             }
             if (validateDevice && !ReferenceEquals(m_Layout.Device, device))
             {
                 throw new ArgumentException(
-                    $"Metal argument table layout {m_Layout.Index} belongs to a different Metal device.",
+                    $"Metal binding table layout {m_Layout.Index} belongs to a different Metal device.",
                     nameof(descriptor));
             }
             if (descriptor.Elements.Length > m_Layout.BindInfos.Length)
             {
                 throw new ArgumentException(
-                    $"Metal argument table {m_Layout.Index} received {descriptor.Elements.Length} initial elements for {m_Layout.BindInfos.Length} bindings.",
+                    $"Metal binding table {m_Layout.Index} received {descriptor.Elements.Length} initial elements for {m_Layout.BindInfos.Length} bindings.",
                     nameof(descriptor));
             }
 
             m_Bindings = new MetalArgumentBindingSnapshot[m_Layout.TotalElementCount];
 
-            Span<RHIArgumentTableElement> sourceElements = descriptor.Elements.Span;
+            Span<RHIBindingTableElement> sourceElements = descriptor.Elements.Span;
             for (int index = 0; index < sourceElements.Length; ++index)
             {
                 ref readonly MetalBindInfo bindInfo = ref m_Layout.BindInfos[index];
-                MetalArgumentTableValidation.ValidateElement(
+                MetalBindingTableValidation.ValidateElement(
                     sourceElements[index],
                     bindInfo,
                     arrayIndex: 0,
@@ -396,7 +396,7 @@ namespace SharpGPU
                 throw new ArgumentOutOfRangeException(
                     nameof(arrayIndex),
                     arrayIndex,
-                    $"Metal argument table {m_Layout.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type} array index must be in [0, {bindInfo.Count}).");
+                    $"Metal binding table {m_Layout.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type} array index must be in [0, {bindInfo.Count}).");
             }
 
             return m_Bindings[checked(elementOffset + arrayIndex)];
@@ -409,14 +409,14 @@ namespace SharpGPU
         }
 
         public override void SetBindElement(
-            in RHIArgumentTableElement element,
+            in RHIBindingTableElement element,
             in ERHIBindType bindType,
             in int slot)
         {
             ThrowIfDisposed();
             int bindIndex = m_Layout.FindBindIndex(slot, bindType);
             ref readonly MetalBindInfo bindInfo = ref m_Layout.BindInfos[bindIndex];
-            MetalArgumentTableValidation.ValidateElement(
+            MetalBindingTableValidation.ValidateElement(
                 element,
                 bindInfo,
                 arrayIndex: 0,
@@ -427,7 +427,7 @@ namespace SharpGPU
         }
 
         public override void SetBindElement(
-            in RHIArgumentTableElement element,
+            in RHIBindingTableElement element,
             in ERHIBindType bindType,
             in int slot,
             in int arrayIndex)
@@ -438,7 +438,7 @@ namespace SharpGPU
             if (bindInfo.Count <= 1)
             {
                 throw new InvalidOperationException(
-                    $"Metal argument table {m_Layout.Index} binding slot={slot}, type={bindType} is not an array binding.");
+                    $"Metal binding table {m_Layout.Index} binding slot={slot}, type={bindType} is not an array binding.");
             }
 
             if (arrayIndex < 0 || (uint)arrayIndex >= bindInfo.Count)
@@ -446,10 +446,10 @@ namespace SharpGPU
                 throw new ArgumentOutOfRangeException(
                     nameof(arrayIndex),
                     arrayIndex,
-                    $"Metal argument table {m_Layout.Index} binding slot={slot}, type={bindType} array index must be in [0, {bindInfo.Count}).");
+                    $"Metal binding table {m_Layout.Index} binding slot={slot}, type={bindType} array index must be in [0, {bindInfo.Count}).");
             }
 
-            MetalArgumentTableValidation.ValidateElement(
+            MetalBindingTableValidation.ValidateElement(
                 element,
                 bindInfo,
                 arrayIndex,
@@ -467,7 +467,7 @@ namespace SharpGPU
             for (int bindIndex = 0; bindIndex < binds.Length; ++bindIndex)
             {
                 ref readonly MetalBindInfo bind = ref binds[bindIndex];
-                if (bind.Requirement != ERHIArgumentBindingRequirement.Required)
+                if (bind.Requirement != ERHIBindingRequirement.Required)
                 {
                     continue;
                 }
@@ -477,7 +477,7 @@ namespace SharpGPU
                     if (!GetBindingSnapshot(bindIndex, arrayIndex).IsBound)
                     {
                         throw new InvalidOperationException(
-                            $"Metal argument table {m_Layout.Index} required binding slot={bind.Slot}, "
+                            $"Metal binding table {m_Layout.Index} required binding slot={bind.Slot}, "
                             + $"type={bind.Type}, arrayIndex={arrayIndex} is not bound.");
                     }
                 }
@@ -490,7 +490,7 @@ namespace SharpGPU
 
             if (m_Layout.IsDisposed)
             {
-                throw new ObjectDisposedException($"MetalArgumentTableLayout[{m_Layout.Index}]");
+                throw new ObjectDisposedException($"MetalBindingTableLayout[{m_Layout.Index}]");
             }
         }
 
@@ -499,7 +499,7 @@ namespace SharpGPU
         }
     }
 
-    internal static class MetalArgumentTableValidation
+    internal static class MetalBindingTableValidation
     {
         internal enum BindingNamespace : byte
         {
@@ -509,7 +509,7 @@ namespace SharpGPU
         }
 
         public static void ValidateLayoutElement(
-            in RHIArgumentTableLayoutElement element,
+            in RHIBindingTableLayoutElement element,
             in uint tableIndex,
             in int elementIndex)
         {
@@ -518,7 +518,7 @@ namespace SharpGPU
                 throw new ArgumentOutOfRangeException(
                     nameof(element),
                     element.Count,
-                    $"Metal argument table {tableIndex} element {elementIndex} count must be in [1, {int.MaxValue}].");
+                    $"Metal binding table {tableIndex} element {elementIndex} count must be in [1, {int.MaxValue}].");
             }
 
             _ = checked(element.Slot + element.Count - 1);
@@ -596,7 +596,7 @@ namespace SharpGPU
         }
 
         public static void ValidateElement(
-            in RHIArgumentTableElement element,
+            in RHIBindingTableElement element,
             in MetalBindInfo bindInfo,
             in int arrayIndex,
             MetalDevice? expectedDevice,
@@ -619,7 +619,7 @@ namespace SharpGPU
             if (populatedFieldCount != 1)
             {
                 throw new ArgumentException(
-                    $"Metal argument table {bindInfo.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type}, arrayIndex={arrayIndex} must contain exactly one resource field.",
+                    $"Metal binding table {bindInfo.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type}, arrayIndex={arrayIndex} must contain exactly one resource field.",
                     parameterName);
             }
 
@@ -655,7 +655,7 @@ namespace SharpGPU
                     if (bufferView.Descriptor.ViewType != expectedBufferViewType)
                     {
                         throw new ArgumentException(
-                            $"Metal argument table {bindInfo.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type}, arrayIndex={arrayIndex} "
+                            $"Metal binding table {bindInfo.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type}, arrayIndex={arrayIndex} "
                             + $"requires a {expectedBufferViewType} buffer view, but received {bufferView.Descriptor.ViewType}.",
                             parameterName);
                     }
@@ -691,7 +691,7 @@ namespace SharpGPU
                     if (actualTextureViewType != expectedTextureViewType || actualDimension != expectedDimension)
                     {
                         throw new ArgumentException(
-                            $"Metal argument table {bindInfo.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type}, arrayIndex={arrayIndex} "
+                            $"Metal binding table {bindInfo.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type}, arrayIndex={arrayIndex} "
                             + $"requires a {expectedTextureViewType} {expectedDimension} texture view, but received "
                             + $"{actualTextureViewType} {actualDimension}.",
                             parameterName);
@@ -726,7 +726,7 @@ namespace SharpGPU
                 throw new ArgumentOutOfRangeException(
                     nameof(stages),
                     stages,
-                    $"Metal argument table {tableIndex} element {elementIndex} shader-stage visibility must be a non-empty known mask.");
+                    $"Metal binding table {tableIndex} element {elementIndex} shader-stage visibility must be a non-empty known mask.");
             }
         }
 
@@ -737,7 +737,7 @@ namespace SharpGPU
             string parameterName)
         {
             return new ArgumentException(
-                $"Metal argument table {bindInfo.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type}, arrayIndex={arrayIndex} requires a {expectedType} from the Metal backend.",
+                $"Metal binding table {bindInfo.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type}, arrayIndex={arrayIndex} requires a {expectedType} from the Metal backend.",
                 parameterName);
         }
 
@@ -781,7 +781,7 @@ namespace SharpGPU
             {
                 throw new ObjectDisposedException(
                     parameterName,
-                    $"Metal argument table {bindInfo.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type}, arrayIndex={arrayIndex} references a disposed resource.");
+                    $"Metal binding table {bindInfo.Index} binding slot={bindInfo.Slot}, type={bindInfo.Type}, arrayIndex={arrayIndex} references a disposed resource.");
             }
         }
 
@@ -798,7 +798,7 @@ namespace SharpGPU
             }
 
             throw new ArgumentException(
-                $"Metal argument table {bindInfo.Index} binding slot={bindInfo.Slot}, "
+                $"Metal binding table {bindInfo.Index} binding slot={bindInfo.Slot}, "
                 + $"type={bindInfo.Type}, arrayIndex={arrayIndex} references a resource "
                 + "from a different Metal device.",
                 parameterName);

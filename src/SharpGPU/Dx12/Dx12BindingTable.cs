@@ -55,25 +55,25 @@ namespace SharpGPU
         }
     }
 
-    internal readonly struct Dx12ArgumentTableGroupKey : IEquatable<Dx12ArgumentTableGroupKey>
+    internal readonly struct Dx12BindingTableGroupKey : IEquatable<Dx12BindingTableGroupKey>
     {
         public Dx12DescriptorHeapClass HeapClass { get; }
         public Vortice.Direct3D12.ShaderVisibility Visibility { get; }
 
-        public Dx12ArgumentTableGroupKey(in Dx12DescriptorHeapClass heapClass, in Vortice.Direct3D12.ShaderVisibility visibility)
+        public Dx12BindingTableGroupKey(in Dx12DescriptorHeapClass heapClass, in Vortice.Direct3D12.ShaderVisibility visibility)
         {
             HeapClass = heapClass;
             Visibility = visibility;
         }
 
-        public bool Equals(Dx12ArgumentTableGroupKey other)
+        public bool Equals(Dx12BindingTableGroupKey other)
         {
             return HeapClass == other.HeapClass && Visibility == other.Visibility;
         }
 
         public override bool Equals(object? obj)
         {
-            return obj is Dx12ArgumentTableGroupKey other && Equals(other);
+            return obj is Dx12BindingTableGroupKey other && Equals(other);
         }
 
         public override int GetHashCode()
@@ -89,7 +89,7 @@ namespace SharpGPU
         public uint Count { get; }
         public ERHIBindType Type { get; }
         public ERHIShaderStageMask Stages { get; }
-        public ERHIArgumentBindingRequirement Requirement { get; }
+        public ERHIBindingRequirement Requirement { get; }
         public int GroupIndex { get; }
         public int DescriptorOffset { get; }
         public int StateOffset { get; }
@@ -102,7 +102,7 @@ namespace SharpGPU
             in uint count,
             in ERHIBindType type,
             in ERHIShaderStageMask stages,
-            in ERHIArgumentBindingRequirement requirement,
+            in ERHIBindingRequirement requirement,
             in int groupIndex,
             in int descriptorOffset,
             in int stateOffset,
@@ -123,7 +123,7 @@ namespace SharpGPU
         }
     }
 
-    internal sealed class Dx12ArgumentTableGroupPlan
+    internal sealed class Dx12BindingTableGroupPlan
     {
         public Dx12DescriptorHeapClass HeapClass { get; }
         public Vortice.Direct3D12.ShaderVisibility Visibility { get; }
@@ -131,7 +131,7 @@ namespace SharpGPU
         public int[] BindingIndices { get; }
         public bool RequiresOwnedRange => DescriptorCount > 1 || BindingIndices.Length > 1;
 
-        public Dx12ArgumentTableGroupPlan(
+        public Dx12BindingTableGroupPlan(
             in Dx12DescriptorHeapClass heapClass,
             in Vortice.Direct3D12.ShaderVisibility visibility,
             in int descriptorCount,
@@ -144,14 +144,14 @@ namespace SharpGPU
         }
     }
 
-    internal sealed class Dx12ArgumentTableGroupBuilder
+    internal sealed class Dx12BindingTableGroupBuilder
     {
         public Dx12DescriptorHeapClass HeapClass { get; }
         public Vortice.Direct3D12.ShaderVisibility Visibility { get; }
         public int DescriptorCount { get; set; }
         public List<int> BindingIndices { get; } = new List<int>();
 
-        public Dx12ArgumentTableGroupBuilder(
+        public Dx12BindingTableGroupBuilder(
             in Dx12DescriptorHeapClass heapClass,
             in Vortice.Direct3D12.ShaderVisibility visibility)
         {
@@ -160,38 +160,38 @@ namespace SharpGPU
         }
     }
 
-    internal sealed class Dx12ArgumentTableLayout : RHIArgumentTableLayout
+    internal sealed class Dx12BindingTableLayout : RHIBindingTableLayout
     {
         public uint Index { get; }
         public int DescriptorCount { get; }
         public Dx12BindInfo[] BindInfos { get; }
-        public Dx12ArgumentTableGroupPlan[] Groups { get; }
+        public Dx12BindingTableGroupPlan[] Groups { get; }
         internal Dx12Device? Device { get; }
 
         private readonly Dictionary<Dx12BindingKey, int> m_BindingMap;
 
-        public Dx12ArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor)
+        public Dx12BindingTableLayout(in RHIBindingTableLayoutDescriptor descriptor)
             : base(descriptor)
         {
             Index = descriptor.Index;
             BindInfos = new Dx12BindInfo[descriptor.Elements.Length];
             m_BindingMap = new Dictionary<Dx12BindingKey, int>(descriptor.Elements.Length);
 
-            List<Dx12ArgumentTableGroupBuilder> groupBuilders = new List<Dx12ArgumentTableGroupBuilder>();
-            Dictionary<Dx12ArgumentTableGroupKey, int> groupMap = new Dictionary<Dx12ArgumentTableGroupKey, int>();
-            Span<RHIArgumentTableLayoutElement> elements = descriptor.Elements.Span;
+            List<Dx12BindingTableGroupBuilder> groupBuilders = new List<Dx12BindingTableGroupBuilder>();
+            Dictionary<Dx12BindingTableGroupKey, int> groupMap = new Dictionary<Dx12BindingTableGroupKey, int>();
+            Span<RHIBindingTableLayoutElement> elements = descriptor.Elements.Span;
             int stateOffset = 0;
 
             for (int i = 0; i < elements.Length; ++i)
             {
-                ref RHIArgumentTableLayoutElement element = ref elements[i];
+                ref RHIBindingTableLayoutElement element = ref elements[i];
                 ValidateElement(element, i);
 
                 Dx12BindingKey bindingKey = new Dx12BindingKey(element.Slot, element.Type);
                 if (!m_BindingMap.TryAdd(bindingKey, i))
                 {
                     throw new ArgumentException(
-                        $"DX12 argument table space {Index} contains duplicate binding ({element.Type}, slot {element.Slot}); SetBindElement cannot address it unambiguously.",
+                        $"DX12 binding table space {Index} contains duplicate binding ({element.Type}, slot {element.Slot}); SetBindElement cannot address it unambiguously.",
                         nameof(descriptor));
                 }
 
@@ -202,15 +202,15 @@ namespace SharpGPU
                 Dx12DescriptorHeapClass heapClass = element.Type == ERHIBindType.Sampler
                     ? Dx12DescriptorHeapClass.Sampler
                     : Dx12DescriptorHeapClass.CbvSrvUav;
-                Dx12ArgumentTableGroupKey groupKey = new Dx12ArgumentTableGroupKey(heapClass, visibility);
+                Dx12BindingTableGroupKey groupKey = new Dx12BindingTableGroupKey(heapClass, visibility);
                 if (!groupMap.TryGetValue(groupKey, out int groupIndex))
                 {
                     groupIndex = groupBuilders.Count;
                     groupMap.Add(groupKey, groupIndex);
-                    groupBuilders.Add(new Dx12ArgumentTableGroupBuilder(heapClass, visibility));
+                    groupBuilders.Add(new Dx12BindingTableGroupBuilder(heapClass, visibility));
                 }
 
-                Dx12ArgumentTableGroupBuilder groupBuilder = groupBuilders[groupIndex];
+                Dx12BindingTableGroupBuilder groupBuilder = groupBuilders[groupIndex];
                 int descriptorOffset = groupBuilder.DescriptorCount;
                 groupBuilder.DescriptorCount = checked(groupBuilder.DescriptorCount + (int)element.Count);
                 groupBuilder.BindingIndices.Add(i);
@@ -231,11 +231,11 @@ namespace SharpGPU
             }
 
             DescriptorCount = stateOffset;
-            Groups = new Dx12ArgumentTableGroupPlan[groupBuilders.Count];
+            Groups = new Dx12BindingTableGroupPlan[groupBuilders.Count];
             for (int i = 0; i < groupBuilders.Count; ++i)
             {
-                Dx12ArgumentTableGroupBuilder builder = groupBuilders[i];
-                Groups[i] = new Dx12ArgumentTableGroupPlan(
+                Dx12BindingTableGroupBuilder builder = groupBuilders[i];
+                Groups[i] = new Dx12BindingTableGroupPlan(
                     builder.HeapClass,
                     builder.Visibility,
                     builder.DescriptorCount,
@@ -243,9 +243,9 @@ namespace SharpGPU
             }
         }
 
-        internal Dx12ArgumentTableLayout(
+        internal Dx12BindingTableLayout(
             Dx12Device device,
-            in RHIArgumentTableLayoutDescriptor descriptor)
+            in RHIBindingTableLayoutDescriptor descriptor)
             : this(descriptor)
         {
             Device = device;
@@ -262,7 +262,7 @@ namespace SharpGPU
             return m_BindingMap.TryGetValue(new Dx12BindingKey((uint)slot, type), out bindingIndex);
         }
 
-        public bool IsStructurallyCompatibleWith(Dx12ArgumentTableLayout other)
+        public bool IsStructurallyCompatibleWith(Dx12BindingTableLayout other)
         {
             if (ReferenceEquals(this, other))
             {
@@ -290,19 +290,19 @@ namespace SharpGPU
             return true;
         }
 
-        private static void ValidateElement(in RHIArgumentTableLayoutElement element, in int elementIndex)
+        private static void ValidateElement(in RHIBindingTableLayoutElement element, in int elementIndex)
         {
             if (element.Count == 0)
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(element.Count),
-                    $"DX12 argument table binding {elementIndex} ({element.Type}, slot {element.Slot}) must declare Count greater than zero.");
+                    $"DX12 binding table binding {elementIndex} ({element.Type}, slot {element.Slot}) must declare Count greater than zero.");
             }
             if (element.Count > int.MaxValue)
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(element.Count),
-                    $"DX12 argument table binding {elementIndex} Count {element.Count} exceeds the supported descriptor range.");
+                    $"DX12 binding table binding {elementIndex} Count {element.Count} exceeds the supported descriptor range.");
             }
 
             ulong rangeEnd = (ulong)element.Slot + element.Count;
@@ -310,7 +310,7 @@ namespace SharpGPU
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(element.Slot),
-                    $"DX12 argument table binding {elementIndex} register range [{element.Slot}, {rangeEnd}) overflows the native register space.");
+                    $"DX12 binding table binding {elementIndex} register range [{element.Slot}, {rangeEnd}) overflows the native register space.");
             }
 
             _ = Dx12Utility.ConvertToDx12BindType(element.Type);
@@ -322,16 +322,16 @@ namespace SharpGPU
                     element.Requirement,
                     "DX12 argument-table binding requirement is undefined.");
             }
-            if (element.Requirement == ERHIArgumentBindingRequirement.Optional
+            if (element.Requirement == ERHIBindingRequirement.Optional
                 && element.Type == ERHIBindType.Sampler)
             {
                 throw new NotSupportedException(
-                    $"DX12 argument table binding {elementIndex} cannot make sampler slot {element.Slot} optional because D3D12 has no native null sampler descriptor.");
+                    $"DX12 binding table binding {elementIndex} cannot make sampler slot {element.Slot} optional because D3D12 has no native null sampler descriptor.");
             }
         }
 
         private void ValidateNativeRangeCollision(
-            in RHIArgumentTableLayoutElement element,
+            in RHIBindingTableLayoutElement element,
             in Vortice.Direct3D12.DescriptorRangeType rangeType,
             in Vortice.Direct3D12.ShaderVisibility visibility,
             in int elementIndex)
@@ -353,7 +353,7 @@ namespace SharpGPU
                 if (rangeStart < existingEnd && existingStart < rangeEnd)
                 {
                     throw new ArgumentException(
-                        $"DX12 argument table space {Index} has overlapping {rangeType} register ranges "
+                        $"DX12 binding table space {Index} has overlapping {rangeType} register ranges "
                         + $"[{existingStart}, {existingEnd}) and [{rangeStart}, {rangeEnd}) with overlapping shader visibility.",
                         nameof(element));
                 }
@@ -558,7 +558,7 @@ namespace SharpGPU
         }
     }
 
-    internal struct Dx12ArgumentTableGroupStorage
+    internal struct Dx12BindingTableGroupStorage
     {
         public int HeapIndex;
         public int DescriptorCount;
@@ -581,52 +581,52 @@ namespace SharpGPU
         }
     }
 
-    internal sealed class Dx12ArgumentTable : RHIArgumentTable
+    internal sealed class Dx12BindingTable : RHIBindingTable
     {
-        public Dx12ArgumentTableLayout ArgumentTableLayout { get; }
+        public Dx12BindingTableLayout BindingTableLayout { get; }
         public int GroupCount => m_GroupStorages.Length;
         internal Dx12Device Device => m_Device;
 
         private readonly bool[] m_BoundStates;
         private readonly Dx12Device m_Device;
-        private readonly Dx12ArgumentTableGroupStorage[] m_GroupStorages;
+        private readonly Dx12BindingTableGroupStorage[] m_GroupStorages;
         private int m_MissingRequiredDescriptorCount;
 
-        public Dx12ArgumentTable(Dx12Device device, in RHIArgumentTableDescriptor descriptor)
+        public Dx12BindingTable(Dx12Device device, in RHIBindingTableDescriptor descriptor)
         {
             m_Device = device;
-            ArgumentTableLayout = descriptor.Layout as Dx12ArgumentTableLayout
-                ?? throw new ArgumentException("DX12 argument table requires a Dx12ArgumentTableLayout from the same backend.", nameof(descriptor));
-            if (ArgumentTableLayout.IsDisposed)
+            BindingTableLayout = descriptor.Layout as Dx12BindingTableLayout
+                ?? throw new ArgumentException("DX12 binding table requires a Dx12BindingTableLayout from the same backend.", nameof(descriptor));
+            if (BindingTableLayout.IsDisposed)
             {
                 throw new ObjectDisposedException(
                     nameof(descriptor),
-                    $"DX12 argument table layout {ArgumentTableLayout.Index} is disposed.");
+                    $"DX12 binding table layout {BindingTableLayout.Index} is disposed.");
             }
-            if (!ReferenceEquals(ArgumentTableLayout.Device, device))
+            if (!ReferenceEquals(BindingTableLayout.Device, device))
             {
                 throw new ArgumentException(
-                    "DX12 argument table layout belongs to a different DX12 device.", nameof(descriptor));
+                    "DX12 binding table layout belongs to a different DX12 device.", nameof(descriptor));
             }
-            if (descriptor.Elements.Length > ArgumentTableLayout.BindInfos.Length)
+            if (descriptor.Elements.Length > BindingTableLayout.BindInfos.Length)
             {
                 throw new ArgumentException(
-                    $"DX12 argument table space {ArgumentTableLayout.Index} received {descriptor.Elements.Length} initial elements for {ArgumentTableLayout.BindInfos.Length} bindings.",
+                    $"DX12 binding table space {BindingTableLayout.Index} received {descriptor.Elements.Length} initial elements for {BindingTableLayout.BindInfos.Length} bindings.",
                     nameof(descriptor));
             }
 
-            m_BoundStates = new bool[ArgumentTableLayout.DescriptorCount];
-            m_GroupStorages = new Dx12ArgumentTableGroupStorage[ArgumentTableLayout.Groups.Length];
+            m_BoundStates = new bool[BindingTableLayout.DescriptorCount];
+            m_GroupStorages = new Dx12BindingTableGroupStorage[BindingTableLayout.Groups.Length];
 
             try
             {
                 InitializeGroups();
                 InitializeRequiredDescriptorCount();
 
-                Span<RHIArgumentTableElement> initialElements = descriptor.Elements.Span;
+                Span<RHIBindingTableElement> initialElements = descriptor.Elements.Span;
                 for (int i = 0; i < initialElements.Length; ++i)
                 {
-                    ref readonly Dx12BindInfo bindInfo = ref ArgumentTableLayout.BindInfos[i];
+                    ref readonly Dx12BindInfo bindInfo = ref BindingTableLayout.BindInfos[i];
                     SetBinding(i, 0, initialElements[i], bindInfo.Type);
                 }
             }
@@ -655,9 +655,9 @@ namespace SharpGPU
                 return;
             }
 
-            for (int bindingIndex = 0; bindingIndex < ArgumentTableLayout.BindInfos.Length; ++bindingIndex)
+            for (int bindingIndex = 0; bindingIndex < BindingTableLayout.BindInfos.Length; ++bindingIndex)
             {
-                ref readonly Dx12BindInfo bindInfo = ref ArgumentTableLayout.BindInfos[bindingIndex];
+                ref readonly Dx12BindInfo bindInfo = ref BindingTableLayout.BindInfos[bindingIndex];
                 if (!IsRequired(bindInfo.Requirement))
                 {
                     continue;
@@ -668,16 +668,16 @@ namespace SharpGPU
                     if (!m_BoundStates[bindInfo.StateOffset + arrayIndex])
                     {
                         throw new InvalidOperationException(
-                            $"DX12 argument table space {ArgumentTableLayout.Index} cannot be bound: required {bindInfo.Type} slot {bindInfo.Slot}[{arrayIndex}] is unset.");
+                            $"DX12 binding table space {BindingTableLayout.Index} cannot be bound: required {bindInfo.Type} slot {bindInfo.Slot}[{arrayIndex}] is unset.");
                     }
                 }
             }
 
             throw new InvalidOperationException(
-                $"DX12 argument table space {ArgumentTableLayout.Index} has {m_MissingRequiredDescriptorCount} unset required descriptors.");
+                $"DX12 binding table space {BindingTableLayout.Index} has {m_MissingRequiredDescriptorCount} unset required descriptors.");
         }
 
-        public override void SetBindElement(in RHIArgumentTableElement element, in ERHIBindType bindType, in int slot)
+        public override void SetBindElement(in RHIBindingTableElement element, in ERHIBindType bindType, in int slot)
         {
             ThrowIfDisposed();
             int bindingIndex = GetBindingIndex(slot, bindType);
@@ -685,18 +685,18 @@ namespace SharpGPU
         }
 
         public override void SetBindElement(
-            in RHIArgumentTableElement element,
+            in RHIBindingTableElement element,
             in ERHIBindType bindType,
             in int slot,
             in int arrayIndex)
         {
             ThrowIfDisposed();
             int bindingIndex = GetBindingIndex(slot, bindType);
-            ref readonly Dx12BindInfo bindInfo = ref ArgumentTableLayout.BindInfos[bindingIndex];
+            ref readonly Dx12BindInfo bindInfo = ref BindingTableLayout.BindInfos[bindingIndex];
             if (bindInfo.Count <= 1)
             {
                 throw new ArgumentException(
-                    $"DX12 argument table space {ArgumentTableLayout.Index} binding ({bindType}, slot {slot}) is not an array.",
+                    $"DX12 binding table space {BindingTableLayout.Index} binding ({bindType}, slot {slot}) is not an array.",
                     nameof(arrayIndex));
             }
             SetBinding(bindingIndex, arrayIndex, element, bindType);
@@ -709,10 +709,10 @@ namespace SharpGPU
 
         private void InitializeGroups()
         {
-            for (int groupIndex = 0; groupIndex < ArgumentTableLayout.Groups.Length; ++groupIndex)
+            for (int groupIndex = 0; groupIndex < BindingTableLayout.Groups.Length; ++groupIndex)
             {
-                Dx12ArgumentTableGroupPlan groupPlan = ArgumentTableLayout.Groups[groupIndex];
-                ref Dx12ArgumentTableGroupStorage storage = ref m_GroupStorages[groupIndex];
+                Dx12BindingTableGroupPlan groupPlan = BindingTableLayout.Groups[groupIndex];
+                ref Dx12BindingTableGroupStorage storage = ref m_GroupStorages[groupIndex];
                 storage.HeapIndex = -1;
                 storage.DescriptorCount = groupPlan.DescriptorCount;
                 storage.IsSampler = groupPlan.HeapClass == Dx12DescriptorHeapClass.Sampler;
@@ -730,21 +730,21 @@ namespace SharpGPU
                 }
 
                 int bindingIndex = groupPlan.BindingIndices[0];
-                ref readonly Dx12BindInfo bindInfo = ref ArgumentTableLayout.BindInfos[bindingIndex];
-                storage.GpuHandle = bindInfo.Requirement == ERHIArgumentBindingRequirement.Optional
+                ref readonly Dx12BindInfo bindInfo = ref BindingTableLayout.BindInfos[bindingIndex];
+                storage.GpuHandle = bindInfo.Requirement == ERHIBindingRequirement.Optional
                     ? m_Device.NullDescriptors.Get(bindInfo.Type).ShaderVisible.GpuHandle
                     : default;
             }
         }
 
         private void InitializeOptionalRange(
-            Dx12ArgumentTableGroupPlan groupPlan,
-            in Dx12ArgumentTableGroupStorage storage)
+            Dx12BindingTableGroupPlan groupPlan,
+            in Dx12BindingTableGroupStorage storage)
         {
             for (int i = 0; i < groupPlan.BindingIndices.Length; ++i)
             {
-                ref readonly Dx12BindInfo bindInfo = ref ArgumentTableLayout.BindInfos[groupPlan.BindingIndices[i]];
-                if (bindInfo.Requirement != ERHIArgumentBindingRequirement.Optional)
+                ref readonly Dx12BindInfo bindInfo = ref BindingTableLayout.BindInfos[groupPlan.BindingIndices[i]];
+                if (bindInfo.Requirement != ERHIBindingRequirement.Optional)
                 {
                     continue;
                 }
@@ -760,9 +760,9 @@ namespace SharpGPU
         private void InitializeRequiredDescriptorCount()
         {
             int missingCount = 0;
-            for (int i = 0; i < ArgumentTableLayout.BindInfos.Length; ++i)
+            for (int i = 0; i < BindingTableLayout.BindInfos.Length; ++i)
             {
-                ref readonly Dx12BindInfo bindInfo = ref ArgumentTableLayout.BindInfos[i];
+                ref readonly Dx12BindInfo bindInfo = ref BindingTableLayout.BindInfos[i];
                 if (IsRequired(bindInfo.Requirement))
                 {
                     missingCount = checked(missingCount + (int)bindInfo.Count);
@@ -773,10 +773,10 @@ namespace SharpGPU
 
         private int GetBindingIndex(in int slot, in ERHIBindType bindType)
         {
-            if (!ArgumentTableLayout.TryGetBindingIndex(slot, bindType, out int bindingIndex))
+            if (!BindingTableLayout.TryGetBindingIndex(slot, bindType, out int bindingIndex))
             {
                 throw new ArgumentException(
-                    $"DX12 argument table space {ArgumentTableLayout.Index} does not declare binding ({bindType}, slot {slot}).",
+                    $"DX12 binding table space {BindingTableLayout.Index} does not declare binding ({bindType}, slot {slot}).",
                     nameof(slot));
             }
             return bindingIndex;
@@ -785,14 +785,14 @@ namespace SharpGPU
         private void SetBinding(
             in int bindingIndex,
             in int arrayIndex,
-            in RHIArgumentTableElement element,
+            in RHIBindingTableElement element,
             in ERHIBindType bindType)
         {
-            ref readonly Dx12BindInfo bindInfo = ref ArgumentTableLayout.BindInfos[bindingIndex];
+            ref readonly Dx12BindInfo bindInfo = ref BindingTableLayout.BindInfos[bindingIndex];
             if (bindInfo.Type != bindType)
             {
                 throw new ArgumentException(
-                    $"DX12 argument table space {ArgumentTableLayout.Index} binding slot {bindInfo.Slot} expects {bindInfo.Type}, not {bindType}.",
+                    $"DX12 binding table space {BindingTableLayout.Index} binding slot {bindInfo.Slot} expects {bindInfo.Type}, not {bindType}.",
                     nameof(bindType));
             }
             if (arrayIndex < 0 || arrayIndex >= (int)bindInfo.Count)
@@ -800,13 +800,13 @@ namespace SharpGPU
                 throw new ArgumentOutOfRangeException(
                     nameof(arrayIndex),
                     arrayIndex,
-                    $"DX12 argument table space {ArgumentTableLayout.Index} binding ({bindType}, slot {bindInfo.Slot}) accepts array indices [0, {bindInfo.Count}).");
+                    $"DX12 binding table space {BindingTableLayout.Index} binding ({bindType}, slot {bindInfo.Slot}) accepts array indices [0, {bindInfo.Count}).");
             }
 
             bool hasSource = TryGetDescriptorSource(element, bindInfo, out Dx12DescriptorSource source);
-            ref Dx12ArgumentTableGroupStorage storage = ref m_GroupStorages[bindInfo.GroupIndex];
+            ref Dx12BindingTableGroupStorage storage = ref m_GroupStorages[bindInfo.GroupIndex];
             Dx12DescriptorPair nullDescriptor = default;
-            if (!hasSource && bindInfo.Requirement == ERHIArgumentBindingRequirement.Optional)
+            if (!hasSource && bindInfo.Requirement == ERHIBindingRequirement.Optional)
             {
                 nullDescriptor = m_Device.NullDescriptors.Get(bindInfo.Type);
             }
@@ -820,7 +820,7 @@ namespace SharpGPU
                         bindInfo.DescriptorOffset + arrayIndex,
                         source.CpuHandle);
                 }
-                else if (bindInfo.Requirement == ERHIArgumentBindingRequirement.Optional)
+                else if (bindInfo.Requirement == ERHIBindingRequirement.Optional)
                 {
                     CopyDescriptor(
                         storage,
@@ -832,7 +832,7 @@ namespace SharpGPU
             {
                 storage.GpuHandle = hasSource
                     ? source.GpuHandle
-                    : bindInfo.Requirement == ERHIArgumentBindingRequirement.Optional
+                    : bindInfo.Requirement == ERHIBindingRequirement.Optional
                         ? nullDescriptor.ShaderVisible.GpuHandle
                         : default;
             }
@@ -847,7 +847,7 @@ namespace SharpGPU
         }
 
         private bool TryGetDescriptorSource(
-            in RHIArgumentTableElement element,
+            in RHIBindingTableElement element,
             in Dx12BindInfo bindInfo,
             out Dx12DescriptorSource source)
         {
@@ -865,7 +865,7 @@ namespace SharpGPU
             if (fieldCount != 1)
             {
                 throw new ArgumentException(
-                    $"DX12 argument table space {ArgumentTableLayout.Index} binding ({bindInfo.Type}, slot {bindInfo.Slot}) requires exactly one resource field.");
+                    $"DX12 binding table space {BindingTableLayout.Index} binding ({bindInfo.Type}, slot {bindInfo.Slot}) requires exactly one resource field.");
             }
 
             switch (bindInfo.Type)
@@ -873,14 +873,14 @@ namespace SharpGPU
                 case ERHIBindType.Sampler:
                 {
                     Dx12Sampler sampler = element.Sampler as Dx12Sampler
-                        ?? throw CreateResourceTypeException(bindInfo, nameof(RHIArgumentTableElement.Sampler));
+                        ?? throw CreateResourceTypeException(bindInfo, nameof(RHIBindingTableElement.Sampler));
                     source = ValidateDescriptorSource(sampler, Dx12DescriptorClass.Sampler, bindInfo);
                     return true;
                 }
                 case ERHIBindType.AccelStruct:
                 {
                     Dx12TopLevelAccelStruct accelStruct = element.AccelStruct as Dx12TopLevelAccelStruct
-                        ?? throw CreateResourceTypeException(bindInfo, nameof(RHIArgumentTableElement.AccelStruct));
+                        ?? throw CreateResourceTypeException(bindInfo, nameof(RHIBindingTableElement.AccelStruct));
                     source = ValidateDescriptorSource(accelStruct, Dx12DescriptorClass.AccelerationStructure, bindInfo);
                     return true;
                 }
@@ -889,7 +889,7 @@ namespace SharpGPU
                 case ERHIBindType.UniformBuffer:
                 {
                     Dx12BufferView bufferView = element.BufferView as Dx12BufferView
-                        ?? throw CreateResourceTypeException(bindInfo, nameof(RHIArgumentTableElement.BufferView));
+                        ?? throw CreateResourceTypeException(bindInfo, nameof(RHIBindingTableElement.BufferView));
                     ERHIBufferViewType expectedViewType = bindInfo.Type switch
                     {
                         ERHIBindType.Buffer => ERHIBufferViewType.ShaderResource,
@@ -900,7 +900,7 @@ namespace SharpGPU
                     if (bufferView.ViewType != expectedViewType)
                     {
                         throw new ArgumentException(
-                            $"DX12 argument table space {ArgumentTableLayout.Index} binding ({bindInfo.Type}, slot {bindInfo.Slot}) "
+                            $"DX12 binding table space {BindingTableLayout.Index} binding ({bindInfo.Type}, slot {bindInfo.Slot}) "
                             + $"requires a {expectedViewType} buffer view, but received {bufferView.ViewType}.");
                     }
                     Dx12DescriptorClass expectedDescriptorClass = expectedViewType switch
@@ -916,7 +916,7 @@ namespace SharpGPU
                 default:
                 {
                     Dx12TextureView textureView = element.TextureView as Dx12TextureView
-                        ?? throw CreateResourceTypeException(bindInfo, nameof(RHIArgumentTableElement.TextureView));
+                        ?? throw CreateResourceTypeException(bindInfo, nameof(RHIBindingTableElement.TextureView));
                     ERHITextureViewType expectedViewType = bindInfo.NativeRangeType == Vortice.Direct3D12.DescriptorRangeType.UnorderedAccessView
                         ? ERHITextureViewType.UnorderedAccess
                         : ERHITextureViewType.ShaderResource;
@@ -924,7 +924,7 @@ namespace SharpGPU
                     if (textureView.ViewType != expectedViewType || textureView.Dimension != expectedDimension)
                     {
                         throw new ArgumentException(
-                            $"DX12 argument table space {ArgumentTableLayout.Index} binding ({bindInfo.Type}, slot {bindInfo.Slot}) "
+                            $"DX12 binding table space {BindingTableLayout.Index} binding ({bindInfo.Type}, slot {bindInfo.Slot}) "
                             + $"requires a {expectedViewType} {expectedDimension} texture view, but received {textureView.ViewType} {textureView.Dimension}.");
                     }
                     Dx12DescriptorClass expectedDescriptorClass = expectedViewType == ERHITextureViewType.UnorderedAccess
@@ -944,12 +944,12 @@ namespace SharpGPU
             if (!ReferenceEquals(descriptor.Device, m_Device))
             {
                 throw new ArgumentException(
-                    $"DX12 argument table space {ArgumentTableLayout.Index} binding ({bindInfo.Type}, slot {bindInfo.Slot}) received a descriptor from a different DX12 device.");
+                    $"DX12 binding table space {BindingTableLayout.Index} binding ({bindInfo.Type}, slot {bindInfo.Slot}) received a descriptor from a different DX12 device.");
             }
             if (descriptor.DescriptorClass != expectedClass)
             {
                 throw new ArgumentException(
-                    $"DX12 argument table space {ArgumentTableLayout.Index} binding ({bindInfo.Type}, slot {bindInfo.Slot}) requires descriptor class {expectedClass}, but received {descriptor.DescriptorClass}.");
+                    $"DX12 binding table space {BindingTableLayout.Index} binding ({bindInfo.Type}, slot {bindInfo.Slot}) requires descriptor class {expectedClass}, but received {descriptor.DescriptorClass}.");
             }
 
             return new Dx12DescriptorSource(
@@ -959,12 +959,12 @@ namespace SharpGPU
         private ArgumentException CreateResourceTypeException(in Dx12BindInfo bindInfo, string expectedField)
         {
             return new ArgumentException(
-                $"DX12 argument table space {ArgumentTableLayout.Index} binding ({bindInfo.Type}, slot {bindInfo.Slot}) "
+                $"DX12 binding table space {BindingTableLayout.Index} binding ({bindInfo.Type}, slot {bindInfo.Slot}) "
                 + $"requires a DX12 {expectedField} from the same device/backend.");
         }
 
         private void CopyDescriptor(
-            in Dx12ArgumentTableGroupStorage storage,
+            in Dx12BindingTableGroupStorage storage,
             in int descriptorOffset,
             in Vortice.Direct3D12.CpuDescriptorHandle sourceHandle)
         {
@@ -981,7 +981,7 @@ namespace SharpGPU
         {
             for (int i = 0; i < m_GroupStorages.Length; ++i)
             {
-                ref Dx12ArgumentTableGroupStorage storage = ref m_GroupStorages[i];
+                ref Dx12BindingTableGroupStorage storage = ref m_GroupStorages[i];
                 if (!storage.OwnsRange || storage.HeapIndex < 0)
                 {
                     continue;
@@ -1003,9 +1003,9 @@ namespace SharpGPU
         }
 
 
-        private static bool IsRequired(in ERHIArgumentBindingRequirement requirement)
+        private static bool IsRequired(in ERHIBindingRequirement requirement)
         {
-            return requirement == ERHIArgumentBindingRequirement.Required;
+            return requirement == ERHIBindingRequirement.Required;
         }
     }
 #pragma warning restore CA1416

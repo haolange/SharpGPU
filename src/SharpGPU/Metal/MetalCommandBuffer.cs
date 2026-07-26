@@ -10,7 +10,7 @@ namespace SharpGPU
         internal MTL4CommandBuffer NativeCommandBuffer4 => m_NativeCommandBuffer4;
         internal CAMetalDrawable PresentDrawable => m_PresentDrawable;
         internal bool UsesMachineLearning => m_UsesMachineLearning;
-        internal bool UsesArgumentTables => m_UsesArgumentTables;
+        internal bool UsesNativeArgumentTables => m_UsesNativeArgumentTables;
         internal MetalTransientNativeBatch NativeTransientBatch =>
             m_NativeTransientBatch;
 
@@ -26,7 +26,7 @@ namespace SharpGPU
         private CAMetalDrawable m_PresentDrawable;
         private bool m_Mtl4CommandBufferEnded;
         private bool m_UsesMachineLearning;
-        private bool m_UsesArgumentTables;
+        private bool m_UsesNativeArgumentTables;
         private string m_CommandBufferName = string.Empty;
 
         // Barrier tracking: seenStagesMask tracks which Metal 4 stage bits have had
@@ -264,9 +264,9 @@ namespace SharpGPU
             m_CurrentEncoderSeenStages |= stages;
         }
 
-        internal void MarkArgumentTablesUsed()
+        internal void MarkNativeArgumentTablesUsed()
         {
-            m_UsesArgumentTables = true;
+            m_UsesNativeArgumentTables = true;
         }
 
         /// <summary>
@@ -297,7 +297,7 @@ namespace SharpGPU
             m_Mtl4CommandBufferEnded = false;
             m_CurrentEncoderSeenStages = 0;
             m_UsesMachineLearning = false;
-            m_UsesArgumentTables = false;
+            m_UsesNativeArgumentTables = false;
         }
 
         private void ResetEncodersForRecording()

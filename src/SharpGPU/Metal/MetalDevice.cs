@@ -16,7 +16,7 @@ namespace SharpGPU
         public override ERHIBackend BackendType => ERHIBackend.Metal;
         internal bool SupportsMetal4Barriers => m_SupportsMetal4Barriers;
         internal bool SupportsMetal4 => m_SupportsMetal4;
-        internal bool SupportsArgumentTable => m_SupportsArgumentTable;
+        internal bool SupportsNativeArgumentTable => m_SupportsNativeArgumentTable;
         internal bool SupportsPlacementSparse => m_SupportsPlacementSparse;
         internal bool SupportsMetalML => Capabilities.MachineLearning.Execution.Tier != ERHICapabilityTier.Unavailable;
         internal MetalRasterCapabilities RasterCapabilities => m_RasterCapabilities;
@@ -29,17 +29,17 @@ namespace SharpGPU
         private readonly bool m_SupportsMetal4Barriers;
         private readonly bool m_SupportsMetal3;
         private readonly bool m_SupportsMetal4;
-        private readonly bool m_SupportsArgumentTable;
+        private readonly bool m_SupportsNativeArgumentTable;
         private readonly bool m_SupportsPlacementSparse;
         private readonly MetalRasterCapabilities m_RasterCapabilities;
         private string? m_TimestampQueriesUnavailableReason;
         private string? m_MetalMLUnavailableReason;
         private MTLTextureViewPool m_TextureViewPool;
         private readonly MetalTextureViewIndexAllocator m_TextureViewIndices = new();
-        // Metal 4 ML runtime objects (pipeline / argument table / intermediates heap) are retained
+        // Metal 4 ML runtime objects (pipeline / binding table / intermediates heap) are retained
         // for the device lifetime so a future Metal4-native artifact route can reuse the encoder path.
         private readonly List<MTL4MachineLearningPipelineState> m_MetalMLPipelineStates = new List<MTL4MachineLearningPipelineState>();
-        private readonly List<MTL4ArgumentTable> m_MetalMLArgumentTables = new List<MTL4ArgumentTable>();
+        private readonly List<MTL4ArgumentTable> m_MetalMLNativeArgumentTables = new List<MTL4ArgumentTable>();
         private readonly List<MTLHeap> m_MetalMLIntermediatesHeaps = new List<MTLHeap>();
         // Managed owners keep MetalHeap finalizers from releasing native heaps mid-session.
         private readonly List<MetalHeap> m_MetalMLIntermediatesHeapOwners = new List<MetalHeap>();
@@ -69,7 +69,7 @@ namespace SharpGPU
             m_DriverVersion = "Metal-" + Environment.OSVersion.Version.ToString();
             m_SupportsMetal3 = SafeSupportsFamily(MTLGPUFamily.Metal3);
             m_SupportsMetal4 = SafeSupportsFamily(MTLGPUFamily.Metal4);
-            m_SupportsArgumentTable = m_SupportsMetal4 && SafeSupportsSelector(s_NewArgumentTableWithDescriptorError);
+            m_SupportsNativeArgumentTable = m_SupportsMetal4 && SafeSupportsSelector(s_NewArgumentTableWithDescriptorError);
             m_SupportsMetal4Barriers = m_SupportsMetal4;
             m_SupportsPlacementSparse =
                 m_SupportsMetal4 &&
@@ -80,9 +80,9 @@ namespace SharpGPU
                 throw new NotSupportedException("Metal backend requires Metal 4 support.");
             }
 
-            if (!m_SupportsArgumentTable)
+            if (!m_SupportsNativeArgumentTable)
             {
-                throw new NotSupportedException("Metal backend requires MTL4 argument table support.");
+                throw new NotSupportedException("Metal backend requires MTL4 binding table support.");
             }
 
             m_RasterCapabilities = ProbeRasterCapabilities();
@@ -481,14 +481,14 @@ namespace SharpGPU
             return new MetalBottomLevelAccelStruct(this, descriptor);
         }
 
-        public override RHIArgumentTableLayout CreateArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor)
+        public override RHIBindingTableLayout CreateBindingTableLayout(in RHIBindingTableLayoutDescriptor descriptor)
         {
-            return new MetalArgumentTableLayout(this, descriptor);
+            return new MetalBindingTableLayout(this, descriptor);
         }
 
-        public override RHIArgumentTable CreateArgumentTable(in RHIArgumentTableDescriptor descriptor)
+        public override RHIBindingTable CreateBindingTable(in RHIBindingTableDescriptor descriptor)
         {
-            return new MetalArgumentTable(this, descriptor);
+            return new MetalBindingTable(this, descriptor);
         }
 
         public override RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor)
@@ -544,12 +544,12 @@ namespace SharpGPU
             return new MetalMLPipeline(this, descriptor);
         }
 
-        public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
+        public override RHIMLBindingTable CreateMLBindingTable(in RHIMLBindingTableDescriptor descriptor)
         {
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
                 "Metal machine-learning binding sets");
-            return new MetalMLBindingSet(this, descriptor);
+            return new MetalMLBindingTable(this, descriptor);
         }
 
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)
@@ -814,14 +814,14 @@ namespace SharpGPU
                         "Metal 3 64-bit atomic contract",
                         "64-bit shader atomics require Metal 3."),
                     descriptorIndexing: Probe(
-                        m_SupportsArgumentTable,
+                        m_SupportsNativeArgumentTable,
                         "MTL4ArgumentTable runtime object probe",
-                        "Metal argument tables are unavailable.",
+                        "Metal binding tables are unavailable.",
                         strategy: ERHICapabilityStrategy.NativeSpecialized,
                         probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe,
                         limits: bindingLimits),
                     partiallyBoundDescriptors: Probe(
-                        m_SupportsArgumentTable,
+                        m_SupportsNativeArgumentTable,
                         "MTL4ArgumentTable nil-entry contract",
                         "Metal argument-table nil entries are unavailable.",
                         strategy: ERHICapabilityStrategy.NativeSpecialized,
@@ -831,7 +831,7 @@ namespace SharpGPU
                         "SharpGPU external argument-table synchronization contract",
                         "Argument-table mutation while GPU work is pending is intentionally not exposed."),
                     nullDescriptors: Probe(
-                        m_SupportsArgumentTable,
+                        m_SupportsNativeArgumentTable,
                         "MTL4ArgumentTable nil resource/sampler entries",
                         "Metal argument-table nil entries are unavailable.",
                         strategy: ERHICapabilityStrategy.NativeSpecialized,
@@ -1061,14 +1061,14 @@ namespace SharpGPU
             m_MetalMLPipelineStates.Add(pipelineState);
         }
 
-        internal void RegisterMetalMLArgumentTable(in MTL4ArgumentTable argumentTable)
+        internal void RegisterMetalMLNativeArgumentTable(in MTL4ArgumentTable bindingTable)
         {
-            if (argumentTable.NativePtr == IntPtr.Zero)
+            if (bindingTable.NativePtr == IntPtr.Zero)
             {
                 return;
             }
 
-            m_MetalMLArgumentTables.Add(argumentTable);
+            m_MetalMLNativeArgumentTables.Add(bindingTable);
         }
 
         internal void RegisterMetalMLIntermediatesHeap(MetalHeap heap)
@@ -1093,16 +1093,16 @@ namespace SharpGPU
             m_MetalMLIntermediatesHeapOwners.Clear();
             m_MetalMLIntermediatesHeaps.Clear();
 
-            for (int i = 0; i < m_MetalMLArgumentTables.Count; ++i)
+            for (int i = 0; i < m_MetalMLNativeArgumentTables.Count; ++i)
             {
-                MTL4ArgumentTable argumentTable = m_MetalMLArgumentTables[i];
-                if (argumentTable.NativePtr != IntPtr.Zero)
+                MTL4ArgumentTable bindingTable = m_MetalMLNativeArgumentTables[i];
+                if (bindingTable.NativePtr != IntPtr.Zero)
                 {
-                    ObjectiveCRuntime.Release(argumentTable);
+                    ObjectiveCRuntime.Release(bindingTable);
                 }
             }
 
-            m_MetalMLArgumentTables.Clear();
+            m_MetalMLNativeArgumentTables.Clear();
 
             for (int i = 0; i < m_MetalMLPipelineStates.Count; ++i)
             {

@@ -99,13 +99,14 @@ namespace SharpGPU
         /// Explicit caller-owned lifecycle drain. Submit, swapchain Dispose,
         /// and backend recovery never invoke this method implicitly.
         /// </summary>
-        public void WaitIdle()
+        public virtual void WaitIdle()
         {
             ThrowIfDisposed();
             ThrowIfOwnerDeviceUnavailable();
             try
             {
-                WaitIdleCore();
+                throw new NotSupportedException(
+                    $"{GetType().Name} does not expose exact native queue idle completion.");
             }
             catch (RHIException exception)
             {
@@ -117,10 +118,6 @@ namespace SharpGPU
                 throw;
             }
         }
-
-        protected virtual void WaitIdleCore() =>
-            throw new NotSupportedException(
-                $"{GetType().Name} does not expose exact native queue idle completion.");
 
         public virtual void BindSparse(in RHISparseBindDescriptor descriptor)
         {

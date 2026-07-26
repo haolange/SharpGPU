@@ -251,7 +251,7 @@ namespace SharpGPU
         /// (ADR-0028). Each op's output that is not a program output becomes an intermediate
         /// tensor; program outputs are surfaced as the binding set's output slots. Binding infos
         /// advertise the program's input and output slots so that <see cref="Dx12MLPipeline"/> and
-        /// <see cref="Dx12MLBindingSet"/> can wire every stage from the same descriptor contract.
+        /// <see cref="Dx12MLBindingTable"/> can wire every stage from the same descriptor contract.
         /// </summary>
         internal static Dx12MLProgram Create(in RHIMLProgramIR descriptor)
         {
@@ -572,7 +572,7 @@ namespace SharpGPU
         }
     }
 
-    internal sealed class Dx12MLBindingSet : RHIMLBindingSet
+    internal sealed class Dx12MLBindingTable : RHIMLBindingTable
     {
         internal Dx12MLPipeline PipelineTyped => (Dx12MLPipeline)(m_Pipeline ?? throw new InvalidOperationException("DX12 ML binding set pipeline is unavailable."));
         internal Dx12Tensor[] Inputs { get; }
@@ -606,7 +606,7 @@ namespace SharpGPU
         private bool m_IsInitialized;
         private bool m_InternalResourcesPrepared;
 
-        internal Dx12MLBindingSet(Dx12Device device, in RHIMLBindingSetDescriptor descriptor)
+        internal Dx12MLBindingTable(Dx12Device device, in RHIMLBindingTableDescriptor descriptor)
         {
             m_Device = device;
 

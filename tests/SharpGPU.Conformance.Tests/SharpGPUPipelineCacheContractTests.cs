@@ -97,35 +97,35 @@ public sealed class SharpGPUPipelineCacheContractTests
     }
 
     [Fact]
-    public void PipelineLayoutIdentity_UsesImmutableLogicalArgumentTableSnapshot()
+    public void PipelineLayoutIdentity_UsesImmutableLogicalBindingTableSnapshot()
     {
-        RHIArgumentTableLayoutElement canonicalElement = new()
+        RHIBindingTableLayoutElement canonicalElement = new()
         {
             Slot = 3,
             Count = 2,
             Type = ERHIBindType.StorageBuffer,
             Stages = ERHIShaderStageMask.Compute,
-            Requirement = ERHIArgumentBindingRequirement.Required,
+            Requirement = ERHIBindingRequirement.Required,
         };
-        RHIArgumentTableLayoutElement[] sourceElements = { canonicalElement };
-        RHIArgumentTableLayoutDescriptor sourceDescriptor = new()
+        RHIBindingTableLayoutElement[] sourceElements = { canonicalElement };
+        RHIBindingTableLayoutDescriptor sourceDescriptor = new()
         {
             Index = 4,
             Elements = sourceElements,
         };
 
-        using TestArgumentTableLayout snapshottedLayout = new(sourceDescriptor);
+        using TestBindingTableLayout snapshottedLayout = new(sourceDescriptor);
         sourceElements[0].Slot = 99;
         sourceElements[0].Count = 7;
 
-        using AlternateTestArgumentTableLayout equivalentLayout = new(
-            new RHIArgumentTableLayoutDescriptor
+        using AlternateTestBindingTableLayout equivalentLayout = new(
+            new RHIBindingTableLayoutDescriptor
             {
                 Index = 4,
                 Elements = new[] { canonicalElement },
             });
-        using TestArgumentTableLayout changedLayout = new(
-            new RHIArgumentTableLayoutDescriptor
+        using TestBindingTableLayout changedLayout = new(
+            new RHIBindingTableLayoutDescriptor
             {
                 Index = 4,
                 Elements = sourceElements,
@@ -146,18 +146,18 @@ public sealed class SharpGPUPipelineCacheContractTests
     }
 
     [Fact]
-    public void PipelineLayoutIdentity_RejectsDisposedArgumentTableLayout()
+    public void PipelineLayoutIdentity_RejectsDisposedBindingTableLayout()
     {
-        TestArgumentTableLayout argumentTableLayout = new(
-            new RHIArgumentTableLayoutDescriptor
+        TestBindingTableLayout bindingTableLayout = new(
+            new RHIBindingTableLayoutDescriptor
             {
                 Index = 1,
-                Elements = Array.Empty<RHIArgumentTableLayoutElement>(),
+                Elements = Array.Empty<RHIBindingTableLayoutElement>(),
             });
-        argumentTableLayout.Dispose();
+        bindingTableLayout.Dispose();
 
         Assert.Throws<ObjectDisposedException>(
-            () => new TestPipelineLayout(0, argumentTableLayout));
+            () => new TestPipelineLayout(0, bindingTableLayout));
     }
 
     [Fact]
@@ -449,19 +449,19 @@ public sealed class SharpGPUPipelineCacheContractTests
         };
     }
 
-    private sealed class TestArgumentTableLayout : RHIArgumentTableLayout
+    private sealed class TestBindingTableLayout : RHIBindingTableLayout
     {
-        public TestArgumentTableLayout(
-            in RHIArgumentTableLayoutDescriptor descriptor)
+        public TestBindingTableLayout(
+            in RHIBindingTableLayoutDescriptor descriptor)
             : base(descriptor)
         {
         }
     }
 
-    private sealed class AlternateTestArgumentTableLayout : RHIArgumentTableLayout
+    private sealed class AlternateTestBindingTableLayout : RHIBindingTableLayout
     {
-        public AlternateTestArgumentTableLayout(
-            in RHIArgumentTableLayoutDescriptor descriptor)
+        public AlternateTestBindingTableLayout(
+            in RHIBindingTableLayoutDescriptor descriptor)
             : base(descriptor)
         {
         }
@@ -471,12 +471,12 @@ public sealed class SharpGPUPipelineCacheContractTests
     {
         public TestPipelineLayout(
             in uint pushConstantSize,
-            params RHIArgumentTableLayout[] argumentTableLayouts)
+            params RHIBindingTableLayout[] bindingTableLayouts)
         {
             InitializePipelineCacheIdentity(new RHIPipelineLayoutDescriptor
             {
                 PushConstantSize = pushConstantSize,
-                ArgumentTableLayouts = argumentTableLayouts,
+                BindingTableLayouts = bindingTableLayouts,
             });
         }
     }

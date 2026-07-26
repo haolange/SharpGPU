@@ -504,14 +504,14 @@ namespace SharpGPU
             return new Dx12BottomLevelAccelStruct(this, descriptor);
         }
 
-        public override RHIArgumentTableLayout CreateArgumentTableLayout(in RHIArgumentTableLayoutDescriptor descriptor)
+        public override RHIBindingTableLayout CreateBindingTableLayout(in RHIBindingTableLayoutDescriptor descriptor)
         {
-            return new Dx12ArgumentTableLayout(this, descriptor);
+            return new Dx12BindingTableLayout(this, descriptor);
         }
 
-        public override RHIArgumentTable CreateArgumentTable(in RHIArgumentTableDescriptor descriptor)
+        public override RHIBindingTable CreateBindingTable(in RHIBindingTableDescriptor descriptor)
         {
-            return new Dx12ArgumentTable(this, descriptor);
+            return new Dx12BindingTable(this, descriptor);
         }
 
         public override RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor)
@@ -589,11 +589,11 @@ namespace SharpGPU
             return Dx12MLPipeline.CreateFromProgramIR(this, name, programIr);
         }
 
-        public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
+        public override RHIMLBindingTable CreateMLBindingTable(in RHIMLBindingTableDescriptor descriptor)
         {
             Capabilities.MachineLearning.Execution.Require("DX12 machine learning");
 
-            return new Dx12MLBindingSet(this, descriptor);
+            return new Dx12MLBindingTable(this, descriptor);
         }
 
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)

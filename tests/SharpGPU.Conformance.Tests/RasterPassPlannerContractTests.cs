@@ -1264,8 +1264,19 @@ public sealed class RasterPassPlannerContractTests
         internal int NextCoreCallCount { get; private set; }
         internal int DrawCallCount { get; private set; }
 
-        internal override void BeginPassCore(RasterPassPlan plan)
+        internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
         {
+            ThrowIfDisposed();
+            if (m_RasterPassPlan != null)
+            {
+                throw new InvalidOperationException("A raster pass is already active on this encoder.");
+            }
+
+            RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+            m_RasterPassPlan = plan;
+            m_CurrentSubPassIndex = 0;
+            m_PipelineSubPassIndex = -1;
+            m_CachedPipeline = null;
         }
 
         public override void Barrier(in RHIBarrier barrier)
@@ -1304,16 +1315,25 @@ public sealed class RasterPassPlannerContractTests
         {
         }
 
-        internal override void NextSubPassCore(
-            RasterPassPlan plan,
-            int sourceSubPassIndex,
-            int destinationSubPassIndex)
+        public override void NextSubPass()
         {
+            ThrowIfDisposed();
+            RasterPassPlan plan = RequireActiveRasterPass();
+            int nextSubPassIndex = m_CurrentSubPassIndex + 1;
+            if (nextSubPassIndex >= plan.SubPassCount)
+            {
+                throw new InvalidOperationException(
+                    $"Raster pass '{plan.Name}' has no subpass after index {m_CurrentSubPassIndex}.");
+            }
+
             if (ThrowOnNext)
             {
                 throw new NotSupportedException("test backend rejection");
             }
+
             NextCoreCallCount++;
+            m_CurrentSubPassIndex = nextSubPassIndex;
+            m_PipelineSubPassIndex = -1;
         }
 
         public override void SetScissor(in Rect rect)
@@ -1340,12 +1360,17 @@ public sealed class RasterPassPlannerContractTests
         {
         }
 
-        internal override void SetPipelineCore(RHIRasterPipeline pipeline)
+        public override void SetPipeline(RHIRasterPipeline pipeline)
         {
+            ThrowIfDisposed();
+            RasterPassPlan plan = RequireActiveRasterPass();
+            ValidatePipelineCompatibility(plan, m_CurrentSubPassIndex, pipeline);
+            m_CachedPipeline = pipeline;
+            m_PipelineSubPassIndex = m_CurrentSubPassIndex;
         }
 
-        public override void SetArgumentTable(
-            RHIArgumentTable resourceTable,
+        public override void SetBindingTable(
+            RHIBindingTable resourceTable,
             in uint tableIndex)
         {
         }
@@ -1374,58 +1399,66 @@ public sealed class RasterPassPlannerContractTests
         {
         }
 
-        internal override void DrawCore(
+        public override void Draw(
             in uint vertexCount,
             in uint instanceCount,
             in uint firstVertex,
             in uint firstInstance)
         {
+            ValidateDrawState();
             DrawCallCount++;
         }
 
-        internal override void DrawIndexedCore(
+        public override void DrawIndexed(
             in uint indexCount,
             in uint instanceCount,
             in uint firstIndex,
             in uint baseVertex,
             in uint firstInstance)
         {
+            ValidateDrawState();
         }
 
-        internal override void DrawIndirectCore(
+        public override void DrawIndirect(
             RHIBuffer argsBuffer,
             in uint offset,
             in uint drawCount)
         {
+            ValidateDrawState();
         }
 
-        internal override void DrawIndexedIndirectCore(
+        public override void DrawIndexedIndirect(
             RHIBuffer argsBuffer,
             in uint offset,
             in uint drawCount)
         {
+            ValidateDrawState();
         }
 
-        internal override void DispatchMeshCore(
+        public override void DispatchMesh(
             in uint groupCountX,
             in uint groupCountY,
             in uint groupCountZ)
         {
+            ValidateDrawState();
         }
 
-        internal override void DispatchMeshIndirectCore(
+        public override void DispatchMeshIndirect(
             RHIBuffer argsBuffer,
             in uint argsOffset)
         {
+            ValidateDrawState();
         }
 
-        internal override void ExecuteIndirectCommandBufferCore(
+        public override void ExecuteIndirectCommandBuffer(
             RHIRasterIndirectCommandBuffer indirectCmdBuffer)
         {
+            ValidateDrawState();
         }
 
-        internal override void EndPassCore()
+        public override void EndPass()
         {
+            ClearRasterPassState();
         }
 
         protected override void Release()

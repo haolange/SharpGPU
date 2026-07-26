@@ -70,8 +70,8 @@ namespace SharpGPU.Benchmarks
                 new("dx12_scoped_transfer_pass_real", "backend", "dx12", "none", CreateDx12ScopedTransferPass),
                 new("dx12_barrier_encode_real", "backend", "dx12", "none", CreateDx12BarrierEncode),
                 new("dx12_transfer_copy_encode_real", "backend", "dx12", "none", CreateDx12TransferCopyEncode),
-                new("dx12_argument_table_update_real", "backend", "dx12", "none", CreateDx12ArgumentTableUpdate),
-                new("dx12_argument_table_bind_real", "backend", "dx12", "none", CreateDx12ArgumentTableBind),
+                new("dx12_argument_table_update_real", "backend", "dx12", "none", CreateDx12BindingTableUpdate),
+                new("dx12_argument_table_bind_real", "backend", "dx12", "none", CreateDx12BindingTableBind),
                 new("dx12_timestamp_write_resolve_encode_real", "backend", "dx12", "none", CreateDx12TimestampEncode),
                 new("dx12_workgraph_set_dispatch_encode_real", "backend", "dx12", "none", CreateDx12WorkGraphEncode),
                 new("dx12_workload_bindless_heavy_record_real", "workload", "dx12", "none", CreateDx12WorkloadBindlessHeavyRecord),
@@ -207,8 +207,8 @@ namespace SharpGPU.Benchmarks
                         key.Slot,
                         key.Type),
                 }));
-            SharpGpuArgumentTableLayoutPlan plan =
-                SharpGpuShaderInterfaceAdapter.CreateArgumentTableLayoutPlan(
+            SharpGpuBindingTableLayoutPlan plan =
+                SharpGpuShaderInterfaceAdapter.CreateBindingTableLayoutPlan(
                     logicalLayout,
                     backendLayouts,
                     ERHIBackend.DirectX12);
@@ -374,19 +374,19 @@ namespace SharpGPU.Benchmarks
             };
         }
 
-        private static PreparedBenchmark CreateDx12ArgumentTableUpdate(Options options)
+        private static PreparedBenchmark CreateDx12BindingTableUpdate(Options options)
         {
             if (!Dx12BenchmarkContext.TryCreate(options, out Dx12BenchmarkContext? context, out string skipReason))
             {
                 return PreparedBenchmark.Skipped(skipReason);
             }
 
-            RHIArgumentTableLayout layout = context.Device.CreateArgumentTableLayout(new RHIArgumentTableLayoutDescriptor
+            RHIBindingTableLayout layout = context.Device.CreateBindingTableLayout(new RHIBindingTableLayoutDescriptor
             {
                 Index = 0,
                 Elements = new[]
                 {
-                    new RHIArgumentTableLayoutElement
+                    new RHIBindingTableLayoutElement
                     {
                         Slot = 0,
                         Count = 1,
@@ -403,8 +403,8 @@ namespace SharpGPU.Benchmarks
                 Stride = sizeof(uint),
                 ViewType = ERHIBufferViewType.UnorderedAccess,
             });
-            RHIArgumentTableElement element = new() { BufferView = view };
-            RHIArgumentTable table = context.Device.CreateArgumentTable(new RHIArgumentTableDescriptor
+            RHIBindingTableElement element = new() { BufferView = view };
+            RHIBindingTable table = context.Device.CreateBindingTable(new RHIBindingTableDescriptor
             {
                 Layout = layout,
                 Elements = new[] { element },
@@ -425,26 +425,26 @@ namespace SharpGPU.Benchmarks
             };
         }
 
-        private static PreparedBenchmark CreateDx12ArgumentTableBind(Options options)
+        private static PreparedBenchmark CreateDx12BindingTableBind(Options options)
         {
             if (!Dx12BenchmarkContext.TryCreate(options, out Dx12BenchmarkContext? context, out string skipReason))
             {
                 return PreparedBenchmark.Skipped(skipReason);
             }
 
-            RHIArgumentTableLayout layout = context.Device.CreateArgumentTableLayout(new RHIArgumentTableLayoutDescriptor
+            RHIBindingTableLayout layout = context.Device.CreateBindingTableLayout(new RHIBindingTableLayoutDescriptor
             {
                 Index = 0,
                 Elements = new[]
                 {
-                    new RHIArgumentTableLayoutElement
+                    new RHIBindingTableLayoutElement
                     {
                         Slot = 0,
                         Count = 1,
                         Type = ERHIBindType.StorageBuffer,
                         Stages = ERHIShaderStageMask.Compute,
                     },
-                    new RHIArgumentTableLayoutElement
+                    new RHIBindingTableLayoutElement
                     {
                         Slot = 0,
                         Count = 1,
@@ -474,20 +474,20 @@ namespace SharpGPU.Benchmarks
                 AddressModeW = ERHIAddressMode.ClampToEdge,
                 ComparisonMode = ERHIComparisonMode.Never,
             });
-            RHIArgumentTable table = context.Device.CreateArgumentTable(new RHIArgumentTableDescriptor
+            RHIBindingTable table = context.Device.CreateBindingTable(new RHIBindingTableDescriptor
             {
                 Layout = layout,
                 Elements = new[]
                 {
-                    new RHIArgumentTableElement { BufferView = view },
-                    new RHIArgumentTableElement { Sampler = sampler },
+                    new RHIBindingTableElement { BufferView = view },
+                    new RHIBindingTableElement { Sampler = sampler },
                 },
             });
             RHIPipelineLayout pipelineLayout = context.Device.CreatePipelineLayout(new RHIPipelineLayoutDescriptor
             {
-                ArgumentTableLayouts = new[] { layout },
+                BindingTableLayouts = new[] { layout },
             });
-            RHIFunction function = CompileArgumentTableBenchmarkFunction(context.Device);
+            RHIFunction function = CompileBindingTableBenchmarkFunction(context.Device);
             RHIComputePipeline pipeline = context.Device.CreateComputePipeline(new RHIComputePipelineDescriptor
             {
                 ThreadSize = new SharpGPU.Mathematics.uint3(1, 1, 1),
@@ -495,32 +495,32 @@ namespace SharpGPU.Benchmarks
                 PipelineLayout = pipelineLayout,
             });
             RHICommandBuffer commandBuffer = context.CommandQueue.CreateCommandBuffer();
-            commandBuffer.Begin("SharpGPU.Benchmark.ArgumentTableBind");
+            commandBuffer.Begin("SharpGPU.Benchmark.BindingTableBind");
             RHIComputeEncoder encoder = commandBuffer.BeginComputePass(new RHIComputePassDescriptor
             {
                 Name = "bench.argument-table-bind",
             });
             encoder.SetPipeline(pipeline);
 
-            Dx12ArgumentTable nativeTable = (Dx12ArgumentTable)table;
+            Dx12BindingTable nativeTable = (Dx12BindingTable)table;
             Dx12PipelineLayout nativePipelineLayout = (Dx12PipelineLayout)pipelineLayout;
             Dx12CommandBuffer nativeCommandBuffer = (Dx12CommandBuffer)commandBuffer;
-            int rootTableCallCount = Dx12ArgumentTableBinder.BindCompute(
+            int rootTableCallCount = Dx12BindingTableBinder.BindCompute(
                 nativeCommandBuffer.NativeCommandList,
                 nativePipelineLayout,
                 table,
-                nativeTable.ArgumentTableLayout.Index);
+                nativeTable.BindingTableLayout.Index);
             if (rootTableCallCount != nativeTable.GroupCount)
             {
                 throw new InvalidOperationException(
-                    $"DX12 ArgumentTable binder emitted {rootTableCallCount} root-table calls for {nativeTable.GroupCount} compiled groups.");
+                    $"DX12 BindingTable binder emitted {rootTableCallCount} root-table calls for {nativeTable.GroupCount} compiled groups.");
             }
 
             return new PreparedBenchmark
             {
                 AdapterName = context.Device.Name,
                 RequireZeroAllocation = true,
-                Body = () => encoder.SetArgumentTable(table, nativeTable.ArgumentTableLayout.Index),
+                Body = () => encoder.SetBindingTable(table, nativeTable.BindingTableLayout.Index),
                 Cleanup = () =>
                 {
                     commandBuffer.EndComputePass();
@@ -633,12 +633,12 @@ namespace SharpGPU.Benchmarks
             }
 
             const int BindlessCount = 1024;
-            RHIArgumentTableLayout layout = context.Device.CreateArgumentTableLayout(new RHIArgumentTableLayoutDescriptor
+            RHIBindingTableLayout layout = context.Device.CreateBindingTableLayout(new RHIBindingTableLayoutDescriptor
             {
                 Index = 0,
                 Elements = new[]
                 {
-                    new RHIArgumentTableLayoutElement
+                    new RHIBindingTableLayoutElement
                     {
                         Slot = 0,
                         Count = BindlessCount,
@@ -655,8 +655,8 @@ namespace SharpGPU.Benchmarks
                 Stride = sizeof(uint),
                 ViewType = ERHIBufferViewType.UnorderedAccess,
             });
-            RHIArgumentTableElement element = new() { BufferView = view };
-            RHIArgumentTable table = context.Device.CreateArgumentTable(new RHIArgumentTableDescriptor
+            RHIBindingTableElement element = new() { BufferView = view };
+            RHIBindingTable table = context.Device.CreateBindingTable(new RHIBindingTableDescriptor
             {
                 Layout = layout,
                 Elements = new[] { element },
@@ -845,7 +845,7 @@ namespace SharpGPU.Benchmarks
             });
         }
 
-        private static RHIFunction CompileArgumentTableBenchmarkFunction(RHIDevice device)
+        private static RHIFunction CompileBindingTableBenchmarkFunction(RHIDevice device)
         {
             ShaderCompileResult result = HLSLCrossCompiler.Compile(new ShaderCompileRequest
             {
@@ -858,7 +858,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     Output[0] = dispatchThreadId.x;
 }
 """,
-                SourceName = "SharpGPU.ArgumentTableBenchmark.hlsl",
+                SourceName = "SharpGPU.BindingTableBenchmark.hlsl",
                 EntryPoint = "main",
                 Stage = ShaderStageKind.Compute,
                 ShaderModel = new ShaderModelVersion(6, 6),
@@ -866,7 +866,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             });
             if (result.Bytecode.Length == 0)
             {
-                throw new InvalidOperationException("DX12 ArgumentTable benchmark shader compilation produced no bytecode.");
+                throw new InvalidOperationException("DX12 BindingTable benchmark shader compilation produced no bytecode.");
             }
 
             IntPtr pointer = Marshal.AllocHGlobal(result.Bytecode.Length);
@@ -1353,7 +1353,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
                     bLocalSignature = false,
                     bUseVertexLayout = false,
                     PushConstantSize = 0,
-                    ArgumentTableLayouts = Array.Empty<RHIArgumentTableLayout>(),
+                    BindingTableLayouts = Array.Empty<RHIBindingTableLayout>(),
                 });
                 RHIFunctionLibrary functionLibrary = CreateFunctionLibrary(context.Device, dxil);
                 RHIWorkGraphPipeline pipeline = context.Device.CreateWorkGraphPipeline(new RHIWorkGraphPipelineDescriptor

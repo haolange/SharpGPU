@@ -1008,8 +1008,12 @@ namespace SharpGPU
             VulkanNative.vkCmdCopyImage(vkCmdBuf.NativeCommandBuffer, vkSrc.NativeImage, VkImageLayout.TransferSrcOptimal, vkDst.NativeImage, VkImageLayout.TransferDstOptimal, 1, &region);
         }
 
-        internal override void EndPassCore()
+        public override void EndPass()
         {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The transfer encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Transfer);
+
             if (m_PassDescriptor.Timestamp.HasValue)
             {
                 WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
@@ -1017,6 +1021,7 @@ namespace SharpGPU
 #if DEBUG
             PopDebugGroup();
 #endif
+            commandBuffer.MarkEncoderEndFromEncoder();
         }
 
         protected override void Release()
@@ -1110,18 +1115,18 @@ namespace SharpGPU
             VulkanNative.vkCmdBindPipeline(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.Compute, vkPipeline.NativePipeline);
         }
 
-        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
+        public override void SetBindingTable(RHIBindingTable resourceTable, in uint tableIndex)
         {
             VulkanComputePipeline pipeline =
                 VulkanEncoderGuards.RequireCachedComputePipeline(m_CachedPipeline)
                 ?? throw new InvalidOperationException(
                     "A live Vulkan compute pipeline must be set before "
-                    + "binding an argument table.");
+                    + "binding an binding table.");
             if (pipeline.IsDisposed)
             {
                 throw new ObjectDisposedException(nameof(VulkanComputePipeline));
             }
-            VulkanArgumentTable table =
+            VulkanBindingTable table =
                 pipeline.VulkanPipelineLayout.ResolveReadyTable(
                     resourceTable,
                     tableIndex);
@@ -1175,8 +1180,12 @@ namespace SharpGPU
                 "Vulkan compute ExecuteIndirectCommandBuffer is unavailable.");
         }
 
-        internal override void EndPassCore()
+        public override void EndPass()
         {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The compute encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Compute);
+
             if (m_PassDescriptor.Timestamp.HasValue)
             {
                 WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
@@ -1184,6 +1193,8 @@ namespace SharpGPU
 #if DEBUG
             PopDebugGroup();
 #endif
+            m_CachedPipeline = null;
+            commandBuffer.MarkEncoderEndFromEncoder();
         }
 
         protected override void Release() { }
@@ -1206,25 +1217,45 @@ namespace SharpGPU
             m_CommandBuffer = cmdBuffer;
         }
 
-        internal override void BeginPassCore(RasterPassPlan plan)
+        internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
         {
+            ThrowIfDisposed();
+            if (m_RasterPassPlan != null)
+            {
+                throw new InvalidOperationException("A raster pass is already active on this encoder.");
+            }
+
+            RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+            m_RasterPassPlan = plan;
+            m_CurrentSubPassIndex = 0;
+            m_PipelineSubPassIndex = -1;
+            m_CachedPipeline = null;
+
             if (plan.SubPassCount > 1)
             {
+                ClearRasterPassState();
                 throw new NotSupportedException(
                     "The selected Vulkan dynamic-rendering strategy cannot lower multiple ordered subpasses.");
             }
 
-            RHIRasterPassDescriptor descriptor = plan.DescriptorSnapshot;
-            m_PassDescriptor = descriptor;
+            m_PassDescriptor = plan.DescriptorSnapshot;
             m_HasIssuedDraw = false;
-#if DEBUG
-            PushDebugGroup(descriptor.Name);
-#endif
-            if (descriptor.Timestamp.HasValue)
+            try
             {
-                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
+#if DEBUG
+                PushDebugGroup(descriptor.Name);
+#endif
+                if (descriptor.Timestamp.HasValue)
+                {
+                    WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
+                }
+                BeginRenderingIfNeeded();
             }
-            BeginRenderingIfNeeded();
+            catch
+            {
+                ClearRasterPassState();
+                throw;
+            }
         }
 
         private void BeginRenderingIfNeeded()
@@ -1497,10 +1528,7 @@ namespace SharpGPU
             }
         }
 
-        internal override void NextSubPassCore(
-            RasterPassPlan plan,
-            int sourceSubPassIndex,
-            int destinationSubPassIndex)
+        public override void NextSubPass()
         {
             throw new NotSupportedException(
                 "The selected Vulkan dynamic-rendering strategy cannot express ordered subpass advancement.");
@@ -1585,7 +1613,7 @@ namespace SharpGPU
             VulkanNative.vkCmdSetBlendConstants(vkCmdBuf.NativeCommandBuffer, blendConstants);
         }
 
-        internal override void SetPipelineCore(RHIRasterPipeline pipeline)
+        public override void SetPipeline(RHIRasterPipeline pipeline)
         {
             m_CachedPipeline = pipeline;
             VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
@@ -1593,18 +1621,18 @@ namespace SharpGPU
             VulkanNative.vkCmdBindPipeline(vkCmdBuf.NativeCommandBuffer, VkPipelineBindPoint.Graphics, vkPipeline.NativePipeline);
         }
 
-        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
+        public override void SetBindingTable(RHIBindingTable resourceTable, in uint tableIndex)
         {
             VulkanRasterPipeline pipeline =
                 VulkanEncoderGuards.RequireCachedRasterPipeline(m_CachedPipeline)
                 ?? throw new InvalidOperationException(
                     "A live Vulkan raster pipeline must be set before "
-                    + "binding an argument table.");
+                    + "binding an binding table.");
             if (pipeline.IsDisposed)
             {
                 throw new ObjectDisposedException(nameof(VulkanRasterPipeline));
             }
-            VulkanArgumentTable table =
+            VulkanBindingTable table =
                 pipeline.VulkanPipelineLayout.ResolveReadyTable(
                     resourceTable,
                     tableIndex);
@@ -1666,7 +1694,7 @@ namespace SharpGPU
             _ = shadingRateCombiner;
         }
 
-        internal override void DrawCore(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
+        public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
         {
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
@@ -1674,7 +1702,7 @@ namespace SharpGPU
             VulkanNative.vkCmdDraw(vkCmdBuf.NativeCommandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
         }
 
-        internal override void DrawIndexedCore(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
+        public override void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
         {
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
@@ -1682,7 +1710,7 @@ namespace SharpGPU
             VulkanNative.vkCmdDrawIndexed(vkCmdBuf.NativeCommandBuffer, indexCount, instanceCount, firstIndex, (int)baseVertex, firstInstance);
         }
 
-        internal override void DrawIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        public override void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
@@ -1691,7 +1719,7 @@ namespace SharpGPU
             VulkanNative.vkCmdDrawIndirect(vkCmdBuf.NativeCommandBuffer, vkArgs.NativeBuffer, offset, drawCount, 20);
         }
 
-        internal override void DrawIndexedIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        public override void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
@@ -1700,7 +1728,7 @@ namespace SharpGPU
             VulkanNative.vkCmdDrawIndexedIndirect(vkCmdBuf.NativeCommandBuffer, vkArgs.NativeBuffer, offset, drawCount, 20);
         }
 
-        internal override void DispatchMeshCore(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
+        public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
@@ -1708,7 +1736,7 @@ namespace SharpGPU
             VulkanNative.vkCmdDrawMeshTasksEXT(vkCmdBuf.NativeCommandBuffer, groupCountX, groupCountY, groupCountZ);
         }
 
-        internal override void DispatchMeshIndirectCore(RHIBuffer argsBuffer, in uint argsOffset)
+        public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
@@ -1717,7 +1745,7 @@ namespace SharpGPU
             VulkanNative.vkCmdDrawMeshTasksIndirectEXT(vkCmdBuf.NativeCommandBuffer, vkArgs.NativeBuffer, argsOffset, 1, 0);
         }
 
-        internal override void ExecuteIndirectCommandBufferCore(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
+        public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
         {
             VulkanEncoderGuards.RequireDevice(m_CommandBuffer).Capabilities.IndirectCommandBuffer.Execution.Require(
                 "Vulkan raster ExecuteIndirectCommandBuffer");
@@ -1725,8 +1753,19 @@ namespace SharpGPU
                 "Vulkan raster ExecuteIndirectCommandBuffer is unavailable.");
         }
 
-        internal override void EndPassCore()
+        public override void EndPass()
         {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The raster encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Raster);
+            RasterPassPlan plan = RequireActiveRasterPass();
+            if (m_CurrentSubPassIndex != plan.SubPassCount - 1)
+            {
+                throw new InvalidOperationException(
+                    $"Raster pass '{plan.Name}' ended at subpass {m_CurrentSubPassIndex}, " +
+                    $"but {plan.SubPassCount} subpasses were declared.");
+            }
+
             EndRenderingIfNeeded();
 
             if (m_PassDescriptor.Timestamp.HasValue)
@@ -1739,6 +1778,8 @@ namespace SharpGPU
             m_CachedPipeline = null;
             m_PassDescriptor = default;
             m_HasIssuedDraw = false;
+            commandBuffer.MarkEncoderEndFromEncoder();
+            ClearRasterPassState();
         }
 
         protected override void Release() { }
@@ -1833,19 +1874,19 @@ namespace SharpGPU
             }
         }
 
-        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
+        public override void SetBindingTable(RHIBindingTable resourceTable, in uint tableIndex)
         {
             VulkanRaytracingPipeline pipeline =
                 VulkanEncoderGuards.RequireCachedRaytracingPipeline(m_CachedPipeline)
                 ?? throw new InvalidOperationException(
                     "A live Vulkan ray-tracing pipeline must be set before "
-                    + "binding an argument table.");
+                    + "binding an binding table.");
             if (pipeline.IsDisposed)
             {
                 throw new ObjectDisposedException(
                     nameof(VulkanRaytracingPipeline));
             }
-            VulkanArgumentTable table =
+            VulkanBindingTable table =
                 pipeline.VulkanPipelineLayout.ResolveReadyTable(
                     resourceTable,
                     tableIndex);
@@ -2183,8 +2224,12 @@ namespace SharpGPU
                 "Vulkan ray-tracing ExecuteIndirectCommandBuffer is unavailable.");
         }
 
-        internal override void EndPassCore()
+        public override void EndPass()
         {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The ray-tracing encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.RayTracing);
+
             if (m_PassDescriptor.Timestamp.HasValue)
             {
                 WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
@@ -2192,6 +2237,8 @@ namespace SharpGPU
 #if DEBUG
             PopDebugGroup();
 #endif
+            m_CachedPipeline = null;
+            commandBuffer.MarkEncoderEndFromEncoder();
         }
 
         protected override void Release() { }

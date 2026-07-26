@@ -53,7 +53,7 @@ namespace SharpGPU
             }
         }
 
-        private VulkanSwapchainBuild BuildSwapchainCore(
+        private VulkanSwapchainBuild BuildSwapchain(
             in RHISwapChainDescriptor descriptor,
             VkSurfaceKHR surface,
             VkSwapchainKHR oldSwapchain)
@@ -159,7 +159,7 @@ namespace SharpGPU
             try
             {
                 VulkanTexture[] textures =
-                    CreateTextureWrappersCore(
+                    CreateTextureWrappers(
                         swapchain,
                         selectedFormat.format,
                         in actualExtent);
@@ -183,7 +183,7 @@ namespace SharpGPU
             }
         }
 
-        private VulkanTexture[] CreateTextureWrappersCore(
+        private VulkanTexture[] CreateTextureWrappers(
             VkSwapchainKHR swapchain,
             VkFormat format,
             in uint2 extent)

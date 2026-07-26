@@ -5,24 +5,24 @@ using System.Collections.Generic;
 
 namespace SharpGPU
 {
-    internal unsafe sealed class VulkanArgumentTableLayout :
-        RHIArgumentTableLayout
+    internal unsafe sealed class VulkanBindingTableLayout :
+        RHIBindingTableLayout
     {
         public VkDescriptorSetLayout NativeDescriptorSetLayout =>
             m_NativeDescriptorSetLayout;
         internal VulkanDevice Device => m_VulkanDevice;
-        internal VulkanArgumentTablePlan Plan { get; }
+        internal VulkanBindingTablePlan Plan { get; }
 
         private readonly VulkanDevice m_VulkanDevice;
         private VkDescriptorSetLayout m_NativeDescriptorSetLayout;
 
-        public VulkanArgumentTableLayout(
+        public VulkanBindingTableLayout(
             VulkanDevice device,
-            in RHIArgumentTableLayoutDescriptor descriptor)
+            in RHIBindingTableLayoutDescriptor descriptor)
             : base(descriptor)
         {
             m_VulkanDevice = device;
-            Plan = new VulkanArgumentTablePlan(
+            Plan = new VulkanBindingTablePlan(
                 descriptor,
                 device.DescriptorFeatures,
                 device.DescriptorLimits);
@@ -63,7 +63,7 @@ namespace SharpGPU
             }
         }
 
-        internal bool StructurallyEquals(VulkanArgumentTableLayout? other)
+        internal bool StructurallyEquals(VulkanBindingTableLayout? other)
         {
             return other is not null && Plan.StructurallyEquals(other.Plan);
         }
@@ -81,7 +81,7 @@ namespace SharpGPU
         }
     }
 
-    internal unsafe sealed class VulkanArgumentTable : RHIArgumentTable
+    internal unsafe sealed class VulkanBindingTable : RHIBindingTable
     {
         public VkDescriptorSet NativeDescriptorSet
         {
@@ -93,13 +93,13 @@ namespace SharpGPU
         }
 
         internal VulkanDevice Device => m_VulkanDevice;
-        internal VulkanArgumentTableLayout Layout => m_Layout;
+        internal VulkanBindingTableLayout Layout => m_Layout;
         internal ulong DescriptorRevision =>
             checked((ulong)Volatile.Read(
                 ref m_DescriptorRevision));
 
         private readonly VulkanDevice m_VulkanDevice;
-        private readonly VulkanArgumentTableLayout m_Layout;
+        private readonly VulkanBindingTableLayout m_Layout;
         private readonly bool[] m_BoundStates;
         private readonly VulkanSampledImageDescriptorFact[]
             m_SampledImageFacts;
@@ -107,14 +107,14 @@ namespace SharpGPU
         private int m_MissingRequiredDescriptorCount;
         private long m_DescriptorRevision;
 
-        public VulkanArgumentTable(
+        public VulkanBindingTable(
             VulkanDevice device,
-            in RHIArgumentTableDescriptor descriptor)
+            in RHIBindingTableDescriptor descriptor)
         {
             m_VulkanDevice = device;
-            m_Layout = descriptor.Layout as VulkanArgumentTableLayout
+            m_Layout = descriptor.Layout as VulkanBindingTableLayout
                 ?? throw new ArgumentException(
-                    "Vulkan argument table requires a Vulkan layout.",
+                    "Vulkan binding table requires a Vulkan layout.",
                     nameof(descriptor));
             if (m_Layout.IsDisposed)
             {
@@ -131,7 +131,7 @@ namespace SharpGPU
             if (descriptor.Elements.Length > m_Layout.Plan.BindInfos.Length)
             {
                 throw new ArgumentException(
-                    $"Vulkan argument table {m_Layout.Plan.Index} received "
+                    $"Vulkan binding table {m_Layout.Plan.Index} received "
                     + $"{descriptor.Elements.Length} initial elements for "
                     + $"{m_Layout.Plan.BindInfos.Length} bindings.",
                     nameof(descriptor));
@@ -148,7 +148,7 @@ namespace SharpGPU
                 ref readonly VulkanBindInfo binding =
                     ref m_Layout.Plan.BindInfos[bindingIndex];
                 if (binding.Requirement
-                    == ERHIArgumentBindingRequirement.Required)
+                    == ERHIBindingRequirement.Required)
                 {
                     m_MissingRequiredDescriptorCount = checked(
                         m_MissingRequiredDescriptorCount
@@ -160,7 +160,7 @@ namespace SharpGPU
             try
             {
                 InitializeOptionalDescriptors();
-                Span<RHIArgumentTableElement> initialElements =
+                Span<RHIBindingTableElement> initialElements =
                     descriptor.Elements.Span;
                 for (int bindingIndex = 0;
                     bindingIndex < initialElements.Length;
@@ -181,7 +181,7 @@ namespace SharpGPU
         }
 
         public override void SetBindElement(
-            in RHIArgumentTableElement element,
+            in RHIBindingTableElement element,
             in ERHIBindType bindType,
             in int slot)
         {
@@ -191,7 +191,7 @@ namespace SharpGPU
         }
 
         public override void SetBindElement(
-            in RHIArgumentTableElement element,
+            in RHIBindingTableElement element,
             in ERHIBindType bindType,
             in int slot,
             in int arrayIndex)
@@ -225,7 +225,7 @@ namespace SharpGPU
                 ref readonly VulkanBindInfo binding =
                     ref m_Layout.Plan.BindInfos[bindingIndex];
                 if (binding.Requirement
-                    != ERHIArgumentBindingRequirement.Required)
+                    != ERHIBindingRequirement.Required)
                 {
                     continue;
                 }
@@ -236,7 +236,7 @@ namespace SharpGPU
                     if (!m_BoundStates[binding.StateOffset + arrayIndex])
                     {
                         throw new InvalidOperationException(
-                            $"Vulkan argument table {binding.TableIndex} cannot "
+                            $"Vulkan binding table {binding.TableIndex} cannot "
                             + $"be bound: required {binding.Type} slot "
                             + $"{binding.Slot}[{arrayIndex}] is unset.");
                     }
@@ -265,7 +265,7 @@ namespace SharpGPU
                 ref readonly VulkanBindInfo binding =
                     ref m_Layout.Plan.BindInfos[bindingIndex];
                 if (binding.Requirement
-                    != ERHIArgumentBindingRequirement.Optional)
+                    != ERHIBindingRequirement.Optional)
                 {
                     continue;
                 }
@@ -281,7 +281,7 @@ namespace SharpGPU
         private void SetBinding(
             in int bindingIndex,
             in int arrayIndex,
-            in RHIArgumentTableElement element)
+            in RHIBindingTableElement element)
         {
             ref readonly VulkanBindInfo binding =
                 ref m_Layout.Plan.BindInfos[bindingIndex];
@@ -297,7 +297,7 @@ namespace SharpGPU
             bool isBound = ValidateElement(element, binding, arrayIndex);
             if (isBound
                 || binding.Requirement
-                    == ERHIArgumentBindingRequirement.Optional)
+                    == ERHIBindingRequirement.Optional)
             {
                 WriteDescriptor(binding, arrayIndex, element, isBound);
             }
@@ -306,7 +306,7 @@ namespace SharpGPU
             bool wasBound = m_BoundStates[stateIndex];
             m_BoundStates[stateIndex] = isBound;
             if (binding.Requirement
-                    == ERHIArgumentBindingRequirement.Required
+                    == ERHIBindingRequirement.Required
                 && wasBound != isBound)
             {
                 m_MissingRequiredDescriptorCount += isBound ? -1 : 1;
@@ -324,7 +324,7 @@ namespace SharpGPU
         }
 
         private bool ValidateElement(
-            in RHIArgumentTableElement element,
+            in RHIBindingTableElement element,
             in VulkanBindInfo binding,
             in int arrayIndex)
         {
@@ -340,7 +340,7 @@ namespace SharpGPU
             if (populatedCount != 1)
             {
                 throw new ArgumentException(
-                    $"Vulkan argument table {binding.TableIndex} binding "
+                    $"Vulkan binding table {binding.TableIndex} binding "
                     + $"({binding.Type}, slot {binding.Slot})[{arrayIndex}] "
                     + "must contain exactly one resource field.",
                     nameof(element));
@@ -502,7 +502,7 @@ namespace SharpGPU
         private void WriteDescriptor(
             in VulkanBindInfo binding,
             in int arrayIndex,
-            in RHIArgumentTableElement element,
+            in RHIBindingTableElement element,
             bool isBound)
         {
             VkWriteDescriptorSet write = new VkWriteDescriptorSet
@@ -594,7 +594,7 @@ namespace SharpGPU
                 default:
                     throw new NotSupportedException(
                         $"Vulkan descriptor type {binding.NativeDescriptorType} "
-                        + "is not supported by argument tables.");
+                        + "is not supported by binding tables.");
             }
         }
 
@@ -705,7 +705,7 @@ namespace SharpGPU
                 if (DescriptorRevision != descriptorRevision)
                 {
                     throw new InvalidOperationException(
-                        "The Vulkan argument table changed while its " +
+                        "The Vulkan binding table changed while its " +
                         "sampled-feedback descriptor clone was being " +
                         "created. Rebind after external synchronization.");
                 }
@@ -796,7 +796,7 @@ namespace SharpGPU
         private void UpdateSampledImageFact(
             in VulkanBindInfo binding,
             int arrayIndex,
-            in RHIArgumentTableElement element,
+            in RHIBindingTableElement element,
             bool isBound)
         {
             if (binding.NativeDescriptorType !=
@@ -850,7 +850,7 @@ namespace SharpGPU
             if (m_Layout.IsDisposed)
             {
                 throw new ObjectDisposedException(
-                    $"VulkanArgumentTableLayout[{m_Layout.Plan.Index}]");
+                    $"VulkanBindingTableLayout[{m_Layout.Plan.Index}]");
             }
         }
 
@@ -1047,7 +1047,7 @@ namespace SharpGPU
         public int StateOffset { get; }
         public ERHIBindType Type { get; }
         public ERHIShaderStageMask Stages { get; }
-        public ERHIArgumentBindingRequirement Requirement { get; }
+        public ERHIBindingRequirement Requirement { get; }
         public VkDescriptorType NativeDescriptorType { get; }
         public VkShaderStageFlags NativeStages { get; }
 
@@ -1059,7 +1059,7 @@ namespace SharpGPU
             in int stateOffset,
             in ERHIBindType type,
             in ERHIShaderStageMask stages,
-            in ERHIArgumentBindingRequirement requirement,
+            in ERHIBindingRequirement requirement,
             in VkDescriptorType nativeDescriptorType,
             in VkShaderStageFlags nativeStages)
         {
@@ -1134,7 +1134,7 @@ namespace SharpGPU
         }
     }
 
-    internal sealed class VulkanArgumentTablePlan
+    internal sealed class VulkanBindingTablePlan
     {
         private static readonly ERHIShaderStageMask[] s_Stages =
         {
@@ -1154,8 +1154,8 @@ namespace SharpGPU
 
         private readonly Dictionary<VulkanBindingKey, int> m_BindingMap;
 
-        public VulkanArgumentTablePlan(
-            in RHIArgumentTableLayoutDescriptor descriptor,
+        public VulkanBindingTablePlan(
+            in RHIBindingTableLayoutDescriptor descriptor,
             in VulkanDescriptorFeatures features,
             in VulkanDescriptorLimits limits)
         {
@@ -1179,10 +1179,10 @@ namespace SharpGPU
             uint accelerationStructures = 0;
             int stateOffset = 0;
 
-            Span<RHIArgumentTableLayoutElement> elements = descriptor.Elements.Span;
+            Span<RHIBindingTableLayoutElement> elements = descriptor.Elements.Span;
             for (int elementIndex = 0; elementIndex < elements.Length; ++elementIndex)
             {
-                ref readonly RHIArgumentTableLayoutElement element = ref elements[elementIndex];
+                ref readonly RHIBindingTableLayoutElement element = ref elements[elementIndex];
                 if (element.Count == 0 || element.Count > int.MaxValue)
                 {
                     throw new ArgumentOutOfRangeException(
@@ -1214,7 +1214,7 @@ namespace SharpGPU
                     throw new NotSupportedException(
                         $"Vulkan argument-table element {elementIndex} ({element.Type}, count {element.Count}) requires native descriptor indexing for that descriptor class.");
                 }
-                if (element.Requirement == ERHIArgumentBindingRequirement.Optional
+                if (element.Requirement == ERHIBindingRequirement.Optional
                     && !features.NullDescriptor)
                 {
                     throw new NotSupportedException(
@@ -1225,7 +1225,7 @@ namespace SharpGPU
                 if (!m_BindingMap.TryAdd(key, elementIndex))
                 {
                     throw new ArgumentException(
-                        $"Vulkan argument table {Index} contains duplicate logical binding ({element.Type}, slot {element.Slot}).",
+                        $"Vulkan binding table {Index} contains duplicate logical binding ({element.Type}, slot {element.Slot}).",
                         nameof(descriptor));
                 }
 
@@ -1296,13 +1296,13 @@ namespace SharpGPU
                     out int bindingIndex))
             {
                 throw new ArgumentException(
-                    $"Vulkan argument table {Index} does not declare logical binding ({type}, slot {slot}).",
+                    $"Vulkan binding table {Index} does not declare logical binding ({type}, slot {slot}).",
                     nameof(slot));
             }
             return bindingIndex;
         }
 
-        public bool StructurallyEquals(VulkanArgumentTablePlan? other)
+        public bool StructurallyEquals(VulkanBindingTablePlan? other)
         {
             if (other is null || Index != other.Index || BindInfos.Length != other.BindInfos.Length)
             {
@@ -1379,7 +1379,7 @@ namespace SharpGPU
                 throw new ArgumentOutOfRangeException(
                     nameof(count),
                     count,
-                    $"Vulkan argument table {Index} requires {count} {kind} descriptors, exceeding native limit {limit}.");
+                    $"Vulkan binding table {Index} requires {count} {kind} descriptors, exceeding native limit {limit}.");
             }
         }
     }

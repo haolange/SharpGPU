@@ -1651,11 +1651,15 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.CopyTextureRegion(&dstLocation, 0, 0, 0, &srcLocation, &srcBox);
         }
 
-        internal override void EndPassCore()
+        public override void EndPass()
         {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The transfer encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Transfer);
 #if DEBUG
             PopDebugGroup();
 #endif
+            commandBuffer.MarkEncoderEndFromEncoder();
         }
 
         protected override void Release()
@@ -1741,18 +1745,18 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
 
-        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
+        public override void SetBindingTable(RHIBindingTable resourceTable, in uint tableIndex)
         {
             Dx12PipelineLayout pipelineLayout = Dx12EncoderGuards.RequireCachedComputePipelineLayout(m_CachedPipeline);
             Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            Dx12ArgumentTableBinder.BindCompute(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
+            Dx12BindingTableBinder.BindCompute(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
             Dx12PipelineLayout pipelineLayout = Dx12EncoderGuards.RequireCachedComputePipelineLayout(m_CachedPipeline);
             Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            if (!Dx12ArgumentTableBinder.ValidatePushConstantWrite(pipelineLayout, data, size, offset))
+            if (!Dx12BindingTableBinder.ValidatePushConstantWrite(pipelineLayout, data, size, offset))
             {
                 return;
             }
@@ -1780,12 +1784,16 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
         }
 
-        internal override void EndPassCore()
+        public override void EndPass()
         {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The compute encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Compute);
 #if DEBUG
             PopDebugGroup();
 #endif
             m_CachedPipeline = null;
+            commandBuffer.MarkEncoderEndFromEncoder();
         }
 
         protected override void Release()
@@ -1871,11 +1879,11 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.SetComputeRootSignature(dx12PipelineLayout.NativeRootSignature);
         }
 
-        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
+        public override void SetBindingTable(RHIBindingTable resourceTable, in uint tableIndex)
         {
             Dx12PipelineLayout pipelineLayout = Dx12EncoderGuards.RequireCachedRaytracingPipelineLayout(m_CachedPipeline);
             Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            Dx12ArgumentTableBinder.BindCompute(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
+            Dx12BindingTableBinder.BindCompute(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
         }
 
         public override void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct)
@@ -1955,12 +1963,16 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
         }
 
-        internal override void EndPassCore()
+        public override void EndPass()
         {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The ray-tracing encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.RayTracing);
 #if DEBUG
             PopDebugGroup();
 #endif
             m_CachedPipeline = null;
+            commandBuffer.MarkEncoderEndFromEncoder();
         }
 
         protected override void Release()
@@ -2005,10 +2017,22 @@ namespace SharpGPU
             m_NativeRenderPassDepthStencilDescription = null;
         }
 
-        internal override void BeginPassCore(RasterPassPlan plan)
+        internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
         {
-            RHIRasterPassDescriptor descriptor = plan.DescriptorSnapshot;
-            m_PassDescriptor = descriptor;
+            ThrowIfDisposed();
+            if (m_RasterPassPlan != null)
+            {
+                throw new InvalidOperationException("A raster pass is already active on this encoder.");
+            }
+
+            RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+            m_RasterPassPlan = plan;
+            m_CurrentSubPassIndex = 0;
+            m_PipelineSubPassIndex = -1;
+            m_CachedPipeline = null;
+            try
+            {
+            m_PassDescriptor = plan.DescriptorSnapshot;
 #if DEBUG
             PushDebugGroup(descriptor.Name);
 #endif
@@ -2092,6 +2116,12 @@ namespace SharpGPU
             {
                 ReleaseAttachmentDescriptors(dx12Device);
                 ResetRasterDescriptorState();
+                throw;
+            }
+            }
+            catch
+            {
+                ClearRasterPassState();
                 throw;
             }
         }
@@ -3319,11 +3349,19 @@ namespace SharpGPU
             Dx12BarrierEmitter.EmitBarriers(dx12CommandBuffer, barriers);
         }
 
-        internal override void NextSubPassCore(
-            RasterPassPlan plan,
-            int sourceSubPassIndex,
-            int destinationSubPassIndex)
+        public override void NextSubPass()
         {
+            ThrowIfDisposed();
+            RasterPassPlan plan = RequireActiveRasterPass();
+            int nextSubPassIndex = m_CurrentSubPassIndex + 1;
+            if (nextSubPassIndex >= plan.SubPassCount)
+            {
+                throw new InvalidOperationException(
+                    $"Raster pass '{plan.Name}' has no subpass after index {m_CurrentSubPassIndex}.");
+            }
+
+            int sourceSubPassIndex = m_CurrentSubPassIndex;
+            int destinationSubPassIndex = nextSubPassIndex;
             if (Lowering.Strategy !=
                 EDx12RasterPassStrategy.OmMultipass ||
                 destinationSubPassIndex != sourceSubPassIndex + 1)
@@ -3344,6 +3382,9 @@ namespace SharpGPU
                 in source,
                 in destination);
             BindOmSubPass(commandBuffer, plan, destinationSubPassIndex);
+            m_CurrentSubPassIndex = nextSubPassIndex;
+            m_PipelineSubPassIndex = -1;
+            m_CachedPipeline = null;
         }
 
         private static void EmitRasterOrderPhaseBarriers(
@@ -3435,8 +3476,11 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.OMSetBlendFactor(nativeBlendFactor);
         }
 
-        internal override void SetPipelineCore(RHIRasterPipeline pipeline)
+        public override void SetPipeline(RHIRasterPipeline pipeline)
         {
+            ThrowIfDisposed();
+            RasterPassPlan plan = RequireActiveRasterPass();
+            ValidatePipelineCompatibility(plan, m_CurrentSubPassIndex, pipeline);
             m_CachedPipeline = pipeline;
 
             Dx12RasterPipeline dx12Pipeline = Dx12EncoderGuards.RequireRasterPipeline(pipeline);
@@ -3483,20 +3527,22 @@ namespace SharpGPU
                             device.DescriptorHeapCbvSrvUav
                                 .DescriptorSize));
             }
+
+            m_PipelineSubPassIndex = m_CurrentSubPassIndex;
         }
 
-        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
+        public override void SetBindingTable(RHIBindingTable resourceTable, in uint tableIndex)
         {
             Dx12PipelineLayout pipelineLayout = Dx12EncoderGuards.RequireCachedRasterPipelineLayout(m_CachedPipeline);
             Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            Dx12ArgumentTableBinder.BindGraphics(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
+            Dx12BindingTableBinder.BindGraphics(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
         {
             Dx12PipelineLayout pipelineLayout = Dx12EncoderGuards.RequireCachedRasterPipelineLayout(m_CachedPipeline);
             Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            if (!Dx12ArgumentTableBinder.ValidatePushConstantWrite(pipelineLayout, data, size, offset))
+            if (!Dx12BindingTableBinder.ValidatePushConstantWrite(pipelineLayout, data, size, offset))
             {
                 return;
             }
@@ -3539,22 +3585,25 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(shadingRate), shadingRateCombiners);
         }
 
-        internal override void DrawCore(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
+        public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
         {
+            ValidateDrawState();
             EnsureNativeRenderPassActive();
             Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.DrawInstanced(vertexCount, instanceCount, firstVertex, firstInstance);
         }
 
-        internal override void DrawIndexedCore(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
+        public override void DrawIndexed(in uint indexCount, in uint instanceCount, in uint firstIndex, in uint baseVertex, in uint firstInstance)
         {
+            ValidateDrawState();
             EnsureNativeRenderPassActive();
             Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.DrawIndexedInstanced(indexCount, instanceCount, firstIndex, (int)baseVertex, firstInstance);
         }
 
-        internal override void DrawIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        public override void DrawIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
+            ValidateDrawState();
             EnsureNativeRenderPassActive();
             Dx12Buffer dx12Buffer = Dx12EncoderGuards.RequireBuffer(argsBuffer);
             Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
@@ -3562,8 +3611,9 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DrawIndirectSignature, drawCount, dx12Buffer.NativeResource, offset, null, 0);
         }
 
-        internal override void DrawIndexedIndirectCore(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
+        public override void DrawIndexedIndirect(RHIBuffer argsBuffer, in uint offset, in uint drawCount)
         {
+            ValidateDrawState();
             EnsureNativeRenderPassActive();
             Dx12Buffer dx12Buffer = Dx12EncoderGuards.RequireBuffer(argsBuffer);
             Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
@@ -3571,8 +3621,9 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DrawIndexedIndirectSignature, drawCount, dx12Buffer.NativeResource, offset, null, 0);
         }
 
-        internal override void DispatchMeshCore(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
+        public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
+            ValidateDrawState();
             EnsureNativeRenderPassActive();
             Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
             dx12Device.Capabilities.Mesh.Shader.Require("DX12 mesh shaders");
@@ -3580,8 +3631,9 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.DispatchMesh(groupCountX, groupCountY, groupCountZ);
         }
 
-        internal override void DispatchMeshIndirectCore(RHIBuffer argsBuffer, in uint argsOffset)
+        public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
+            ValidateDrawState();
             EnsureNativeRenderPassActive();
             Dx12Buffer dx12Buffer = Dx12EncoderGuards.RequireBuffer(argsBuffer);
             Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
@@ -3590,20 +3642,32 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DispatchMeshIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
         }
 
-        internal override void ExecuteIndirectCommandBufferCore(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
+        public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
         {
+            ValidateDrawState();
             EnsureNativeRenderPassActive();
             Dx12RasterIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RasterIndirectCommandBuffer ?? throw new InvalidOperationException("DX12 raster indirect draw requires a Dx12RasterIndirectCommandBuffer.");
             Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
         }
 
-        internal override void EndPassCore()
+        public override void EndPass()
         {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The raster encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Raster);
+            RasterPassPlan plan = RequireActiveRasterPass();
+            if (m_CurrentSubPassIndex != plan.SubPassCount - 1)
+            {
+                throw new InvalidOperationException(
+                    $"Raster pass '{plan.Name}' ended at subpass {m_CurrentSubPassIndex}, " +
+                    $"but {plan.SubPassCount} subpasses were declared.");
+            }
+
             if (m_PassDescriptor.Timestamp.HasValue)
             {
                 WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
-                Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+                _ = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             }
 #if DEBUG
             PopDebugGroup();
@@ -3633,6 +3697,8 @@ namespace SharpGPU
                 Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
             ReleaseAttachmentDescriptors(device);
             ResetRasterDescriptorState();
+            commandBuffer.MarkEncoderEndFromEncoder();
+            ClearRasterPassState();
         }
 
         private void ReleaseAttachmentDescriptors(Dx12Device device)
@@ -3747,11 +3813,11 @@ namespace SharpGPU
                 ?? throw new InvalidOperationException($"Dx12MLEncoder expects {nameof(Dx12MLPipeline)} but got {pipeline?.GetType().Name ?? "<null>"}.");
         }
 
-        public override void SetBindingSet(RHIMLBindingSet bindingSet)
+        public override void SetBindingTable(RHIMLBindingTable bindingSet)
         {
-            if (bindingSet is not Dx12MLBindingSet dx12BindingSet)
+            if (bindingSet is not Dx12MLBindingTable dx12BindingSet)
             {
-                throw new InvalidOperationException($"Dx12MLEncoder expects {nameof(Dx12MLBindingSet)} but got {bindingSet?.GetType().Name ?? "<null>"}.");
+                throw new InvalidOperationException($"Dx12MLEncoder expects {nameof(Dx12MLBindingTable)} but got {bindingSet?.GetType().Name ?? "<null>"}.");
             }
 
             m_CachedBindingSet = dx12BindingSet;
@@ -3764,7 +3830,7 @@ namespace SharpGPU
                 throw new InvalidOperationException("Dx12MLEncoder: SetPipeline must be called before Dispatch.");
             }
 
-            if (m_CachedBindingSet is not Dx12MLBindingSet dx12BindingSet)
+            if (m_CachedBindingSet is not Dx12MLBindingTable dx12BindingSet)
             {
                 throw new InvalidOperationException("Dx12MLEncoder: SetBindingSet must be called before Dispatch.");
             }
@@ -3805,13 +3871,17 @@ namespace SharpGPU
             }
         }
 
-        internal override void EndPassCore()
+        public override void EndPass()
         {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The machine-learning encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.MachineLearning);
 #if DEBUG
             PopDebugGroup();
 #endif
             m_CachedPipeline = null;
             m_CachedBindingSet = null;
+            commandBuffer.MarkEncoderEndFromEncoder();
         }
 
         protected override void Release()
@@ -3819,7 +3889,7 @@ namespace SharpGPU
 
         }
 
-        private static void TransitionBoundResourcesToMachineLearning(Dx12CommandBuffer commandBuffer, Dx12MLBindingSet bindingSet)
+        private static void TransitionBoundResourcesToMachineLearning(Dx12CommandBuffer commandBuffer, Dx12MLBindingTable bindingSet)
         {
             Dx12Buffer[] intermediates = bindingSet.IntermediateBuffers;
             int barrierCount = (bindingSet.TemporaryBuffer != null ? 1 : 0)
@@ -3851,7 +3921,7 @@ namespace SharpGPU
             Dx12BarrierEmitter.EmitBarriers(commandBuffer, barriers);
         }
 
-        private static Dx12Buffer?[] CollectIntermediateAndPersistentTemporaryBuffers(Dx12MLBindingSet bindingSet)
+        private static Dx12Buffer?[] CollectIntermediateAndPersistentTemporaryBuffers(Dx12MLBindingTable bindingSet)
         {
             Dx12Buffer[] intermediates = bindingSet.IntermediateBuffers;
             int count = intermediates.Length + (bindingSet.PersistentBuffer != null ? 1 : 0) + (bindingSet.TemporaryBuffer != null ? 1 : 0);
@@ -4007,13 +4077,13 @@ namespace SharpGPU
             m_WorkGraphProgramSet = false;
         }
 
-        public override void SetArgumentTable(RHIArgumentTable resourceTable, in uint tableIndex)
+        public override void SetBindingTable(RHIBindingTable resourceTable, in uint tableIndex)
         {
             Dx12PipelineLayout pipelineLayout = Dx12EncoderGuards.RequirePipelineLayout(RequirePipeline().Descriptor.PipelineLayout)
                 ?? throw new InvalidOperationException("DX12 WorkGraph pipeline requires a Dx12PipelineLayout.");
             Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer)
                 ?? throw new InvalidOperationException("DX12 WorkGraph encoder requires a Dx12CommandBuffer.");
-            Dx12ArgumentTableBinder.BindCompute(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
+            Dx12BindingTableBinder.BindCompute(commandBuffer.NativeCommandList, pipelineLayout, resourceTable, tableIndex);
         }
 
         public override void SetPushConstants(IntPtr data, in uint size, in uint offset = 0)
@@ -4022,7 +4092,7 @@ namespace SharpGPU
                 ?? throw new InvalidOperationException("DX12 WorkGraph pipeline requires a Dx12PipelineLayout.");
             Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer)
                 ?? throw new InvalidOperationException("DX12 WorkGraph encoder requires a Dx12CommandBuffer.");
-            if (!Dx12ArgumentTableBinder.ValidatePushConstantWrite(pipelineLayout, data, size, offset))
+            if (!Dx12BindingTableBinder.ValidatePushConstantWrite(pipelineLayout, data, size, offset))
             {
                 return;
             }
@@ -4136,8 +4206,11 @@ namespace SharpGPU
             commandList10.DispatchGraph(ref dispatchDescription);
         }
 
-        internal override void EndPassCore()
+        public override void EndPass()
         {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The work-graph encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.WorkGraph);
             if (m_PassDescriptor.Timestamp.HasValue)
             {
                 WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
@@ -4153,6 +4226,7 @@ namespace SharpGPU
             m_BackingMemoryGpuAddress = 0;
             m_BackingMemorySize = 0;
             m_WorkGraphProgramSet = false;
+            commandBuffer.MarkEncoderEndFromEncoder();
         }
 
         internal void ReleaseCommandListInterface()

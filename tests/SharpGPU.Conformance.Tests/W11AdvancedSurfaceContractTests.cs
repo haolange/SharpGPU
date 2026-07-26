@@ -67,7 +67,7 @@ public sealed class W11AdvancedSurfaceContractTests
             .ToArray();
 
         Assert.Contains(nameof(RHIDevice.CreateMLPipeline), factoryNames);
-        Assert.Contains(nameof(RHIDevice.CreateMLBindingSet), factoryNames);
+        Assert.Contains(nameof(RHIDevice.CreateMLBindingTable), factoryNames);
         Assert.Contains(nameof(RHIDevice.CreateTensor), factoryNames);
         Assert.DoesNotContain("CreateMLProgram", factoryNames);
         Assert.Contains(nameof(RHIDevice.CreateWorkGraphPipeline), factoryNames);
@@ -252,7 +252,7 @@ public sealed class W11AdvancedSurfaceContractTests
         string[] advancedFactoryNames =
         [
             nameof(RHIDevice.CreateMLPipeline),
-            nameof(RHIDevice.CreateMLBindingSet),
+            nameof(RHIDevice.CreateMLBindingTable),
             nameof(RHIDevice.CreateTensor),
             nameof(RHIDevice.CreateWorkGraphPipeline),
             nameof(RHIDevice.CreateComputeIndirectCommandBuffer),
