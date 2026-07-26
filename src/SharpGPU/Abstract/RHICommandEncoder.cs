@@ -198,7 +198,7 @@ namespace SharpGPU
     {
         protected RHICommandBuffer? m_CommandBuffer;
         protected RHIMLPipeline? m_CachedPipeline;
-        protected RHIMLBindingTable? m_CachedBindingSet;
+        protected RHIMLBindingTable? m_CachedBindingTable;
 
         internal abstract void BeginPass(in RHIMLPassDescriptor descriptor);
         public abstract void Barrier(in RHIBarrier barrier);
@@ -207,7 +207,7 @@ namespace SharpGPU
         public abstract void PopDebugGroup();
         public abstract void WriteTimestamp(in uint index);
         public abstract void SetPipeline(RHIMLPipeline pipeline);
-        public abstract void SetBindingTable(RHIMLBindingTable bindingSet);
+        public abstract void SetBindingTable(RHIMLBindingTable bindingTable);
         public abstract void Dispatch();
         public virtual void EndPass()
         {

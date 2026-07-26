@@ -826,7 +826,7 @@ internal sealed class MetalMLProgram : RHIMLProgram
 
     internal sealed class MetalMLBindingTable : RHIMLBindingTable
     {
-        internal MetalMLPipeline PipelineTyped => (MetalMLPipeline)(m_Pipeline ?? throw new InvalidOperationException("Metal ML binding set pipeline is unavailable."));
+        internal MetalMLPipeline PipelineTyped => (MetalMLPipeline)(m_Pipeline ?? throw new InvalidOperationException("Metal ML binding table pipeline is unavailable."));
         internal MetalTensor[] Inputs { get; }
         internal MetalTensor[] Outputs { get; }
         internal MetalTensorView[]? InputViews { get; }
@@ -841,7 +841,7 @@ internal sealed class MetalMLProgram : RHIMLProgram
         {
             if (descriptor.Pipeline is not MetalMLPipeline metalPipeline)
             {
-                throw new InvalidOperationException($"Metal ML binding set requires a {nameof(MetalMLPipeline)}.");
+                throw new InvalidOperationException($"Metal ML binding table requires a {nameof(MetalMLPipeline)}.");
             }
 
             m_Pipeline = metalPipeline;
@@ -866,7 +866,7 @@ internal sealed class MetalMLProgram : RHIMLProgram
             if (m_NativeArgumentTable.NativePtr == IntPtr.Zero)
             {
                 string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
-                throw new InvalidOperationException($"Failed to create MTL4ArgumentTable for ML binding set: {errorText}");
+                throw new InvalidOperationException($"Failed to create MTL4ArgumentTable for ML binding table: {errorText}");
             }
 
             device.RegisterMetalMLNativeArgumentTable(m_NativeArgumentTable);
@@ -1079,7 +1079,7 @@ internal sealed class MetalMLProgram : RHIMLProgram
 
             device.RegisterMetalMLPipelineState(m_NativePipelineState);
             m_NativeBindingSlots = ResolveNativeBindingSlots();
-            m_NativeArgumentTableBufferBindCount = CalculateNativeNativeArgumentTableBufferBindCount(m_NativeBindingSlots);
+            m_NativeArgumentTableBufferBindCount = CalculateNativeArgumentTableBufferBindCount(m_NativeBindingSlots);
 
             for (int i = 0; i < m_BindingInfos.Length; ++i)
             {
@@ -1260,7 +1260,7 @@ internal sealed class MetalMLProgram : RHIMLProgram
             return name.NativePtr == IntPtr.Zero ? string.Empty : name.ToString();
         }
 
-        private static ulong CalculateNativeNativeArgumentTableBufferBindCount(ReadOnlySpan<ulong> bindingSlots)
+        private static ulong CalculateNativeArgumentTableBufferBindCount(ReadOnlySpan<ulong> bindingSlots)
         {
             ulong maxSlot = 0;
             for (int i = 0; i < bindingSlots.Length; ++i)
@@ -1294,7 +1294,7 @@ internal sealed class MetalMLProgram : RHIMLProgram
             m_PassDescriptor = descriptor;
             m_NativeEncoder = default;
             m_CachedPipeline = null;
-            m_CachedBindingSet = null;
+            m_CachedBindingTable = null;
 
             MTL4CommandBuffer mtl4CmdBuffer = ((MetalCommandBuffer)m_CommandBuffer!).EnsureMtl4CommandBuffer();
             m_NativeEncoder = mtl4CmdBuffer.MachineLearningCommandEncoder();
@@ -1377,11 +1377,11 @@ internal sealed class MetalMLProgram : RHIMLProgram
             }
         }
 
-        public override void SetBindingTable(RHIMLBindingTable bindingSet)
+        public override void SetBindingTable(RHIMLBindingTable bindingTable)
         {
-            MetalMLBindingTable metalBindingTable = bindingSet as MetalMLBindingTable
-                ?? throw new InvalidOperationException($"Metal ML encoder expects {nameof(MetalMLBindingTable)} but got {bindingSet?.GetType().Name ?? "<null>"}.");
-            m_CachedBindingSet = metalBindingTable;
+            MetalMLBindingTable metalBindingTable = bindingTable as MetalMLBindingTable
+                ?? throw new InvalidOperationException($"Metal ML encoder expects {nameof(MetalMLBindingTable)} but got {bindingTable?.GetType().Name ?? "<null>"}.");
+            m_CachedBindingTable = metalBindingTable;
             if (metalBindingTable.NativeArgumentTable.NativePtr != IntPtr.Zero)
             {
                 TrackBindingResidency(metalBindingTable);
@@ -1397,9 +1397,9 @@ internal sealed class MetalMLProgram : RHIMLProgram
                 throw new InvalidOperationException("Metal ML encoder requires SetPipeline before Dispatch.");
             }
 
-            if (m_CachedBindingSet is not MetalMLBindingTable metalBindingTable)
+            if (m_CachedBindingTable is not MetalMLBindingTable metalBindingTable)
             {
-                throw new InvalidOperationException("Metal ML encoder requires SetBindingSet before Dispatch.");
+                throw new InvalidOperationException("Metal ML encoder requires SetBindingTable before Dispatch.");
             }
 
             m_NativeEncoder.DispatchNetworkWithIntermediatesHeap(metalBindingTable.NativeIntermediatesHeap);
@@ -1424,7 +1424,7 @@ internal sealed class MetalMLProgram : RHIMLProgram
                 m_NativeEncoder = default;
             }
             m_CachedPipeline = null;
-            m_CachedBindingSet = null;
+            m_CachedBindingTable = null;
             m_PassDescriptor = default;
             commandBuffer.MarkEncoderEndFromEncoder();
         }
@@ -1433,26 +1433,26 @@ internal sealed class MetalMLProgram : RHIMLProgram
         {
         }
 
-        private void TrackBindingResidency(MetalMLBindingTable bindingSet)
+        private void TrackBindingResidency(MetalMLBindingTable bindingTable)
         {
             if (m_CommandBuffer?.CommandQueue is not MetalCommandQueue queue)
             {
                 return;
             }
 
-            for (int i = 0; i < bindingSet.Inputs.Length; ++i)
+            for (int i = 0; i < bindingTable.Inputs.Length; ++i)
             {
-                TrackTensorResidency(queue, bindingSet.Inputs[i]);
+                TrackTensorResidency(queue, bindingTable.Inputs[i]);
             }
 
-            for (int i = 0; i < bindingSet.Outputs.Length; ++i)
+            for (int i = 0; i < bindingTable.Outputs.Length; ++i)
             {
-                TrackTensorResidency(queue, bindingSet.Outputs[i]);
+                TrackTensorResidency(queue, bindingTable.Outputs[i]);
             }
 
-            if (bindingSet.NativeIntermediatesHeap.NativePtr != IntPtr.Zero)
+            if (bindingTable.NativeIntermediatesHeap.NativePtr != IntPtr.Zero)
             {
-                queue.AddResidencyAllocation(bindingSet.NativeIntermediatesHeap);
+                queue.AddResidencyAllocation(bindingTable.NativeIntermediatesHeap);
             }
         }
 

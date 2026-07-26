@@ -549,7 +549,7 @@ namespace SharpGPU
         {
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
-                "Metal machine-learning binding sets");
+                "Metal machine-learning binding tables");
             return new MetalMLBindingTable(this, descriptor);
         }
 

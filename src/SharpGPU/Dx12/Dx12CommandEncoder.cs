@@ -3813,14 +3813,14 @@ namespace SharpGPU
                 ?? throw new InvalidOperationException($"Dx12MLEncoder expects {nameof(Dx12MLPipeline)} but got {pipeline?.GetType().Name ?? "<null>"}.");
         }
 
-        public override void SetBindingTable(RHIMLBindingTable bindingSet)
+        public override void SetBindingTable(RHIMLBindingTable bindingTable)
         {
-            if (bindingSet is not Dx12MLBindingTable dx12BindingSet)
+            if (bindingTable is not Dx12MLBindingTable dx12BindingTable)
             {
-                throw new InvalidOperationException($"Dx12MLEncoder expects {nameof(Dx12MLBindingTable)} but got {bindingSet?.GetType().Name ?? "<null>"}.");
+                throw new InvalidOperationException($"Dx12MLEncoder expects {nameof(Dx12MLBindingTable)} but got {bindingTable?.GetType().Name ?? "<null>"}.");
             }
 
-            m_CachedBindingSet = dx12BindingSet;
+            m_CachedBindingTable = dx12BindingTable;
         }
 
         public override void Dispatch()
@@ -3830,43 +3830,43 @@ namespace SharpGPU
                 throw new InvalidOperationException("Dx12MLEncoder: SetPipeline must be called before Dispatch.");
             }
 
-            if (m_CachedBindingSet is not Dx12MLBindingTable dx12BindingSet)
+            if (m_CachedBindingTable is not Dx12MLBindingTable dx12BindingTable)
             {
-                throw new InvalidOperationException("Dx12MLEncoder: SetBindingSet must be called before Dispatch.");
+                throw new InvalidOperationException("Dx12MLEncoder: SetBindingTable must be called before Dispatch.");
             }
 
             Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(dx12CommandBuffer);
 
-            if (!dx12BindingSet.InternalResourcesPrepared)
+            if (!dx12BindingTable.InternalResourcesPrepared)
             {
-                TransitionBoundResourcesToMachineLearning(dx12CommandBuffer, dx12BindingSet);
-                dx12BindingSet.MarkInternalResourcesPrepared();
+                TransitionBoundResourcesToMachineLearning(dx12CommandBuffer, dx12BindingTable);
+                dx12BindingTable.MarkInternalResourcesPrepared();
             }
             else
             {
                 EmitMachineLearningUavBarriers(
                     dx12CommandBuffer,
-                    CollectIntermediateAndPersistentTemporaryBuffers(dx12BindingSet));
+                    CollectIntermediateAndPersistentTemporaryBuffers(dx12BindingTable));
             }
 
-            if (!dx12BindingSet.IsInitialized)
+            if (!dx12BindingTable.IsInitialized)
             {
-                dx12BindingSet.PrepareForInitialization();
-                dx12Device.DirectMLCommandRecorder.RecordDispatch(dx12CommandBuffer.NativeCommandList, dx12Pipeline.OperatorInitializer, dx12BindingSet.InitializerBindingTable);
-                EmitMachineLearningUavBarriers(dx12CommandBuffer, dx12BindingSet.PersistentBuffer, dx12BindingSet.TemporaryBuffer);
-                dx12BindingSet.MarkInitialized();
+                dx12BindingTable.PrepareForInitialization();
+                dx12Device.DirectMLCommandRecorder.RecordDispatch(dx12CommandBuffer.NativeCommandList, dx12Pipeline.OperatorInitializer, dx12BindingTable.InitializerBindingTable);
+                EmitMachineLearningUavBarriers(dx12CommandBuffer, dx12BindingTable.PersistentBuffer, dx12BindingTable.TemporaryBuffer);
+                dx12BindingTable.MarkInitialized();
             }
 
             for (int stageIndex = 0; stageIndex < dx12Pipeline.StageCount; ++stageIndex)
             {
-                dx12BindingSet.PrepareForExecution(stageIndex);
-                dx12Device.DirectMLCommandRecorder.RecordDispatch(dx12CommandBuffer.NativeCommandList, dx12Pipeline.GetCompiledOperator(stageIndex), dx12BindingSet.GetExecutionBindingTable(stageIndex));
+                dx12BindingTable.PrepareForExecution(stageIndex);
+                dx12Device.DirectMLCommandRecorder.RecordDispatch(dx12CommandBuffer.NativeCommandList, dx12Pipeline.GetCompiledOperator(stageIndex), dx12BindingTable.GetExecutionBindingTable(stageIndex));
                 if (stageIndex + 1 < dx12Pipeline.StageCount)
                 {
                     EmitMachineLearningUavBarriers(
                         dx12CommandBuffer,
-                        CollectIntermediateAndPersistentTemporaryBuffers(dx12BindingSet));
+                        CollectIntermediateAndPersistentTemporaryBuffers(dx12BindingTable));
                 }
             }
         }
@@ -3880,7 +3880,7 @@ namespace SharpGPU
             PopDebugGroup();
 #endif
             m_CachedPipeline = null;
-            m_CachedBindingSet = null;
+            m_CachedBindingTable = null;
             commandBuffer.MarkEncoderEndFromEncoder();
         }
 
@@ -3889,11 +3889,11 @@ namespace SharpGPU
 
         }
 
-        private static void TransitionBoundResourcesToMachineLearning(Dx12CommandBuffer commandBuffer, Dx12MLBindingTable bindingSet)
+        private static void TransitionBoundResourcesToMachineLearning(Dx12CommandBuffer commandBuffer, Dx12MLBindingTable bindingTable)
         {
-            Dx12Buffer[] intermediates = bindingSet.IntermediateBuffers;
-            int barrierCount = (bindingSet.TemporaryBuffer != null ? 1 : 0)
-                + (bindingSet.PersistentBuffer != null ? 1 : 0)
+            Dx12Buffer[] intermediates = bindingTable.IntermediateBuffers;
+            int barrierCount = (bindingTable.TemporaryBuffer != null ? 1 : 0)
+                + (bindingTable.PersistentBuffer != null ? 1 : 0)
                 + intermediates.Length;
             if (barrierCount == 0)
             {
@@ -3903,14 +3903,14 @@ namespace SharpGPU
             RHIBarrier[] barriers = new RHIBarrier[barrierCount];
             int index = 0;
 
-            if (bindingSet.TemporaryBuffer != null)
+            if (bindingTable.TemporaryBuffer != null)
             {
-                barriers[index++] = CreateMachineLearningBufferBarrier(bindingSet.TemporaryBuffer);
+                barriers[index++] = CreateMachineLearningBufferBarrier(bindingTable.TemporaryBuffer);
             }
 
-            if (bindingSet.PersistentBuffer != null)
+            if (bindingTable.PersistentBuffer != null)
             {
-                barriers[index++] = CreateMachineLearningBufferBarrier(bindingSet.PersistentBuffer);
+                barriers[index++] = CreateMachineLearningBufferBarrier(bindingTable.PersistentBuffer);
             }
 
             for (int i = 0; i < intermediates.Length; ++i)
@@ -3921,10 +3921,10 @@ namespace SharpGPU
             Dx12BarrierEmitter.EmitBarriers(commandBuffer, barriers);
         }
 
-        private static Dx12Buffer?[] CollectIntermediateAndPersistentTemporaryBuffers(Dx12MLBindingTable bindingSet)
+        private static Dx12Buffer?[] CollectIntermediateAndPersistentTemporaryBuffers(Dx12MLBindingTable bindingTable)
         {
-            Dx12Buffer[] intermediates = bindingSet.IntermediateBuffers;
-            int count = intermediates.Length + (bindingSet.PersistentBuffer != null ? 1 : 0) + (bindingSet.TemporaryBuffer != null ? 1 : 0);
+            Dx12Buffer[] intermediates = bindingTable.IntermediateBuffers;
+            int count = intermediates.Length + (bindingTable.PersistentBuffer != null ? 1 : 0) + (bindingTable.TemporaryBuffer != null ? 1 : 0);
             if (count == 0)
             {
                 return Array.Empty<Dx12Buffer?>();
@@ -3937,14 +3937,14 @@ namespace SharpGPU
                 buffers[index++] = intermediates[i];
             }
 
-            if (bindingSet.PersistentBuffer != null)
+            if (bindingTable.PersistentBuffer != null)
             {
-                buffers[index++] = bindingSet.PersistentBuffer;
+                buffers[index++] = bindingTable.PersistentBuffer;
             }
 
-            if (bindingSet.TemporaryBuffer != null)
+            if (bindingTable.TemporaryBuffer != null)
             {
-                buffers[index++] = bindingSet.TemporaryBuffer;
+                buffers[index++] = bindingTable.TemporaryBuffer;
             }
 
             return buffers;

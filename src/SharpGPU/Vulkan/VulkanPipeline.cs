@@ -1481,7 +1481,7 @@ internal sealed unsafe class VulkanPipelineCache : RHIPipelineCache
         {
             _ = device;
             m_Pipeline = descriptor.Pipeline;
-            throw VulkanMachineLearning.CreateNotSupported("Vulkan machine-learning binding sets");
+            throw VulkanMachineLearning.CreateNotSupported("Vulkan machine-learning binding tables");
         }
 
         protected override void Release()

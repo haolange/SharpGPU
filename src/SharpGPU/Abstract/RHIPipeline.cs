@@ -1186,7 +1186,7 @@ namespace SharpGPU
 
     /// <summary>
     /// Opaque ML binary artifact consumed by <see cref="RHIDevice.CreateMLPipeline"/>.
-    /// Public RHI ML surface is Binary ??Pipeline ??BindingSet ??Encoder only (ADR-0052).
+    /// Public RHI ML surface is Binary ? Pipeline ? BindingTable ? Encoder only (ADR-0052).
     /// </summary>
     public sealed class RHIMLBinary
     {

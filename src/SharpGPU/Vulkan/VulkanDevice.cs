@@ -1966,7 +1966,7 @@ namespace SharpGPU
         {
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
-                "Vulkan machine-learning binding sets");
+                "Vulkan machine-learning binding tables");
             return new VulkanMLBindingTable(this, descriptor);
         }
 

@@ -214,7 +214,7 @@ namespace SharpGPU
             if (!ReferenceEquals(pipelineLayout.Device, dx12BindingTable.Device))
             {
                 throw new ArgumentException(
-                    "DX12 encoder cannot bind an binding table allocated from a different DX12 device.",
+                    "DX12 encoder cannot bind a binding table allocated from a different DX12 device.",
                     nameof(bindingTable));
             }
             if (dx12BindingTable.BindingTableLayout.Index != tableIndex)
@@ -1884,7 +1884,7 @@ internal static class Dx12MLUtilities
         /// <summary>
         /// Descriptor-driven constructor: the canonical entry point for general subgraph lowering
         /// (ADR-0028). Each op's output that is not a program output becomes an intermediate
-        /// tensor; program outputs are surfaced as the binding set's output slots. Binding infos
+        /// tensor; program outputs are surfaced as the binding table's output slots. Binding infos
         /// advertise the program's input and output slots so that <see cref="Dx12MLPipeline"/> and
         /// <see cref="Dx12MLBindingTable"/> can wire every stage from the same descriptor contract.
         /// </summary>
@@ -1968,7 +1968,7 @@ internal static class Dx12MLUtilities
             }
 
             // Binding infos: program inputs first (Input kind), then program outputs (Output kind).
-            // Intermediate tensors are owned by the binding set, not advertised as program bindings.
+            // Intermediate tensors are owned by the binding table, not advertised as program bindings.
             List<RHIMLTensorBindingInfo> bindingInfos = new List<RHIMLTensorBindingInfo>();
             for (int i = 0; i < programInputs.Length; ++i)
             {
@@ -2209,7 +2209,7 @@ internal static class Dx12MLUtilities
 
     internal sealed class Dx12MLBindingTable : RHIMLBindingTable
     {
-        internal Dx12MLPipeline PipelineTyped => (Dx12MLPipeline)(m_Pipeline ?? throw new InvalidOperationException("DX12 ML binding set pipeline is unavailable."));
+        internal Dx12MLPipeline PipelineTyped => (Dx12MLPipeline)(m_Pipeline ?? throw new InvalidOperationException("DX12 ML binding table pipeline is unavailable."));
         internal Dx12Tensor[] Inputs { get; }
         internal Dx12Tensor[] Outputs { get; }
         internal Dx12Buffer? TemporaryBuffer => m_TemporaryBuffer;
@@ -2249,7 +2249,7 @@ internal static class Dx12MLUtilities
 
             if (descriptor.Pipeline is not Dx12MLPipeline dx12Pipeline)
             {
-                throw new ArgumentException($"DX12 ML binding set requires a {nameof(Dx12MLPipeline)}.", nameof(descriptor));
+                throw new ArgumentException($"DX12 ML binding table requires a {nameof(Dx12MLPipeline)}.", nameof(descriptor));
             }
             if (dx12Pipeline.IsDisposed)
             {
@@ -2258,7 +2258,7 @@ internal static class Dx12MLUtilities
             if (!ReferenceEquals(dx12Pipeline.Device, device))
             {
                 throw new ArgumentException(
-                    "DX12 ML binding-set pipeline belongs to a different device.",
+                    "DX12 ML binding-table pipeline belongs to a different device.",
                     nameof(descriptor));
             }
 
@@ -2600,7 +2600,7 @@ internal static class Dx12MLUtilities
             {
                 if (result[i] is null)
                 {
-                    throw new InvalidOperationException($"DX12 ML binding set is missing a {kind} tensor view at index {i}.");
+                    throw new InvalidOperationException($"DX12 ML binding table is missing a {kind} tensor view at index {i}.");
                 }
             }
 
@@ -2667,7 +2667,7 @@ internal static class Dx12MLUtilities
             {
                 if (result[i] is null)
                 {
-                    throw new InvalidOperationException($"DX12 ML binding set is missing a {kind} tensor at index {i}.");
+                    throw new InvalidOperationException($"DX12 ML binding table is missing a {kind} tensor at index {i}.");
                 }
             }
 
