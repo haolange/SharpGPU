@@ -1959,9 +1959,7 @@ namespace SharpGPU
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
                 "Vulkan machine-learning pipelines");
-            throw new NotSupportedException(
-                "Vulkan machine-learning pipelines are unavailable: "
-                + Capabilities.MachineLearning.Execution.UnavailableReason);
+            return new VulkanMLPipeline(this, descriptor);
         }
 
         public override RHIMLBindingTable CreateMLBindingTable(in RHIMLBindingTableDescriptor descriptor)
@@ -1969,9 +1967,7 @@ namespace SharpGPU
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
                 "Vulkan machine-learning binding sets");
-            throw new NotSupportedException(
-                "Vulkan machine-learning binding sets are unavailable: "
-                + Capabilities.MachineLearning.Execution.UnavailableReason);
+            return new VulkanMLBindingTable(this, descriptor);
         }
 
         public override RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor)

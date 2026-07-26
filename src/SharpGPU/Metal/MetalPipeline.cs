@@ -829,6 +829,8 @@ internal sealed class MetalMLProgram : RHIMLProgram
         internal MetalMLPipeline PipelineTyped => (MetalMLPipeline)(m_Pipeline ?? throw new InvalidOperationException("Metal ML binding set pipeline is unavailable."));
         internal MetalTensor[] Inputs { get; }
         internal MetalTensor[] Outputs { get; }
+        internal MetalTensorView[]? InputViews { get; }
+        internal MetalTensorView[]? OutputViews { get; }
         internal MTL4ArgumentTable NativeArgumentTable => m_NativeArgumentTable;
         internal MTLHeap NativeIntermediatesHeap => m_IntermediatesHeap?.NativeHeap ?? default;
 
@@ -843,8 +845,16 @@ internal sealed class MetalMLProgram : RHIMLProgram
             }
 
             m_Pipeline = metalPipeline;
-            Inputs = ConvertTensors(descriptor.Inputs.Span, ERHIMLTensorBindingKind.Input, metalPipeline.InputCount);
-            Outputs = ConvertTensors(descriptor.Outputs.Span, ERHIMLTensorBindingKind.Output, metalPipeline.OutputCount);
+            (Inputs, InputViews) = ResolveBindings(
+                descriptor.Inputs.Span,
+                descriptor.InputViews.Span,
+                ERHIMLTensorBindingKind.Input,
+                metalPipeline.InputCount);
+            (Outputs, OutputViews) = ResolveBindings(
+                descriptor.Outputs.Span,
+                descriptor.OutputViews.Span,
+                ERHIMLTensorBindingKind.Output,
+                metalPipeline.OutputCount);
 
             MTL4ArgumentTableDescriptor bindingTableDescriptor = MTL4ArgumentTableDescriptor.New();
             bindingTableDescriptor.MaxBufferBindCount = Math.Max(1UL, metalPipeline.NativeArgumentTableBufferBindCount);
@@ -862,13 +872,46 @@ internal sealed class MetalMLProgram : RHIMLProgram
             device.RegisterMetalMLNativeArgumentTable(m_NativeArgumentTable);
 
             // WWDC25 / Apple docs: MTLHeapTypePlacement with size >= pipeline.intermediatesHeapSize.
-            // Do not force ResourceOptions on this heap �?MetalHeap.CreateMachineLearningIntermediates
+            // Do not force ResourceOptions on this heap ? MetalHeap.CreateMachineLearningIntermediates
             // mirrors Apple's minimal descriptor (type + size only).
             ulong intermediatesHeapSize = Math.Max(metalPipeline.TemporaryResourceSize, 1UL);
             m_IntermediatesHeap = MetalHeap.CreateMachineLearningIntermediates(device, intermediatesHeapSize);
             device.RegisterMetalMLIntermediatesHeap(m_IntermediatesHeap);
 
             PopulateNativeArgumentTable(device, metalPipeline);
+        }
+
+        private static (MetalTensor[] Tensors, MetalTensorView[]? Views) ResolveBindings(
+            ReadOnlySpan<RHITensor> tensors,
+            ReadOnlySpan<RHITensorView> views,
+            ERHIMLTensorBindingKind kind,
+            uint expectedCount)
+        {
+            if (views.Length > 0)
+            {
+                if (tensors.Length > 0)
+                {
+                    throw new ArgumentException(
+                        $"Metal ML {kind} bindings must provide either tensors or tensor views, not both.");
+                }
+
+                if (views.Length != expectedCount)
+                {
+                    throw new InvalidOperationException(
+                        $"Metal ML binding count mismatch for {kind}. expected={expectedCount}, actual={views.Length}.");
+                }
+
+                MetalTensorView[] resolvedViews = new MetalTensorView[views.Length];
+                for (int i = 0; i < views.Length; ++i)
+                {
+                    resolvedViews[i] = views[i] as MetalTensorView
+                        ?? throw new InvalidOperationException($"Metal ML binding tensor view[{i}] must be a {nameof(MetalTensorView)}.");
+                }
+
+                return (Array.Empty<MetalTensor>(), resolvedViews);
+            }
+
+            return (ConvertTensors(tensors, kind, expectedCount), null);
         }
 
         private static MetalTensor[] ConvertTensors(ReadOnlySpan<RHITensor> tensors, ERHIMLTensorBindingKind kind, uint expectedCount)
@@ -908,21 +951,40 @@ internal sealed class MetalMLProgram : RHIMLProgram
             for (int i = 0; i < bindingInfos.Length; ++i)
             {
                 ref readonly RHIMLTensorBindingInfo bindingInfo = ref bindingInfos[i];
-                MetalTensor tensor = bindingInfo.Kind switch
+                RHIMLTensorDescriptor actualDescriptor;
+                MTLTensor nativeTensor;
+                if (bindingInfo.Kind == ERHIMLTensorBindingKind.Input && InputViews != null)
                 {
-                    ERHIMLTensorBindingKind.Input => Inputs[(int)bindingInfo.Index],
-                    ERHIMLTensorBindingKind.Output => Outputs[(int)bindingInfo.Index],
-                    _ => throw new InvalidOperationException($"Unsupported Metal ML tensor binding kind '{bindingInfo.Kind}'."),
-                };
+                    MetalTensorView view = InputViews[(int)bindingInfo.Index];
+                    actualDescriptor = view.Descriptor;
+                    nativeTensor = view.NativeTensor;
+                }
+                else if (bindingInfo.Kind == ERHIMLTensorBindingKind.Output && OutputViews != null)
+                {
+                    MetalTensorView view = OutputViews[(int)bindingInfo.Index];
+                    actualDescriptor = view.Descriptor;
+                    nativeTensor = view.NativeTensor;
+                }
+                else
+                {
+                    MetalTensor tensor = bindingInfo.Kind switch
+                    {
+                        ERHIMLTensorBindingKind.Input => Inputs[(int)bindingInfo.Index],
+                        ERHIMLTensorBindingKind.Output => Outputs[(int)bindingInfo.Index],
+                        _ => throw new InvalidOperationException($"Unsupported Metal ML tensor binding kind '{bindingInfo.Kind}'."),
+                    };
+                    actualDescriptor = tensor.Descriptor;
+                    nativeTensor = tensor.NativeTensor;
+                }
 
-                if (!RHIMLHelpers.HasCompatibleLayout(bindingInfo.Descriptor, tensor.Descriptor))
+                if (!RHIMLHelpers.HasCompatibleLayout(bindingInfo.Descriptor, actualDescriptor))
                 {
                     throw new InvalidOperationException(
-                        $"Metal ML tensor layout mismatch for '{bindingInfo.Name}'. expected={RHIMLHelpers.DescribeLayout(bindingInfo.Descriptor)}, actual={RHIMLHelpers.DescribeLayout(tensor.Descriptor)}.");
+                        $"Metal ML tensor layout mismatch for '{bindingInfo.Name}'. expected={RHIMLHelpers.DescribeLayout(bindingInfo.Descriptor)}, actual={RHIMLHelpers.DescribeLayout(actualDescriptor)}.");
                 }
 
                 ulong bindingSlot = bindingSlots[i];
-                m_NativeArgumentTable.SetResource(tensor.NativeTensor.GpuResourceID, bindingSlot);
+                m_NativeArgumentTable.SetResource(nativeTensor.GpuResourceID, bindingSlot);
             }
         }
 
@@ -963,7 +1025,7 @@ internal sealed class MetalMLProgram : RHIMLProgram
                     "The current device does not support Metal 4.");
             }
 
-            // ── Create MTL4Compiler ──
+            // ?? Create MTL4Compiler ??
             NSError compilerError = default;
             MTL4CompilerDescriptor compilerDesc = MTL4CompilerDescriptor.New();
             MTL4Compiler compiler = device.NativeDevice.NewCompiler(compilerDesc, ref compilerError);
@@ -978,12 +1040,12 @@ internal sealed class MetalMLProgram : RHIMLProgram
                     $"MetalMLPipeline: failed to create MTL4Compiler - {errorText}");
             }
 
-            // ── Build MTL4LibraryFunctionDescriptor from RHIFunction ──
+            // ?? Build MTL4LibraryFunctionDescriptor from RHIFunction ??
             MTL4LibraryFunctionDescriptor funcDesc = MTL4LibraryFunctionDescriptor.New();
             funcDesc.Library = m_Program.NativeLibrary;
             funcDesc.Name = new NSString(m_Program.EntryName);
 
-            // ── Build ML pipeline descriptor ──
+            // ?? Build ML pipeline descriptor ??
             MTL4MachineLearningPipelineDescriptor mlDesc = MTL4MachineLearningPipelineDescriptor.New();
             mlDesc.MachineLearningFunctionDescriptor = funcDesc;
             MTL4PipelineOptions pipelineOptions = MTL4PipelineOptions.New();
@@ -1000,7 +1062,7 @@ internal sealed class MetalMLProgram : RHIMLProgram
             // dynamic inputs. Skip here so logical binding indices cannot disagree with native slots.
             ObjectiveCRuntime.Release(funcDesc);
 
-            // ── Create pipeline state ──
+            // ?? Create pipeline state ??
             NSError pipelineError = default;
             m_NativePipelineState = compiler.NewMachineLearningPipelineState(mlDesc, ref pipelineError);
             ObjectiveCRuntime.Release(mlDesc);
