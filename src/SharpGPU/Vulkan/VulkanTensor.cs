@@ -13,6 +13,12 @@ namespace SharpGPU
             throw CreateNotSupported("Vulkan machine-learning tensors");
         }
 
+        public override RHITensorView CreateView(in RHITensorViewDescriptor descriptor)
+        {
+            _ = descriptor;
+            throw CreateNotSupported("Vulkan machine-learning tensor views");
+        }
+
         protected override void Release()
         {
         }

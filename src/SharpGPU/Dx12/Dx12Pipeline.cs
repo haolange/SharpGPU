@@ -2240,6 +2240,8 @@ internal static class Dx12MLUtilities
         private Dx12Buffer[] m_IntermediateBuffers;
         private bool m_IsInitialized;
         private bool m_InternalResourcesPrepared;
+        private readonly bool m_OwnsInputTensors;
+        private readonly bool m_OwnsOutputTensors;
 
         internal Dx12MLBindingTable(Dx12Device device, in RHIMLBindingTableDescriptor descriptor)
         {
@@ -2261,8 +2263,22 @@ internal static class Dx12MLUtilities
             }
 
             m_Pipeline = dx12Pipeline;
-            Inputs = ConvertTensors(device, dx12Pipeline, descriptor.Inputs.Span, ERHIMLTensorBindingKind.Input, dx12Pipeline.InputCount);
-            Outputs = ConvertTensors(device, dx12Pipeline, descriptor.Outputs.Span, ERHIMLTensorBindingKind.Output, dx12Pipeline.OutputCount);
+            m_OwnsInputTensors = descriptor.InputViews.Length > 0;
+            m_OwnsOutputTensors = descriptor.OutputViews.Length > 0;
+            Inputs = ResolveTensors(
+                device,
+                dx12Pipeline,
+                descriptor.Inputs.Span,
+                descriptor.InputViews.Span,
+                ERHIMLTensorBindingKind.Input,
+                dx12Pipeline.InputCount);
+            Outputs = ResolveTensors(
+                device,
+                dx12Pipeline,
+                descriptor.Outputs.Span,
+                descriptor.OutputViews.Span,
+                ERHIMLTensorBindingKind.Output,
+                dx12Pipeline.OutputCount);
 
             m_ProgramInputBindings = CreateTensorBindings(Inputs);
             m_ProgramOutputBindings = CreateTensorBindings(Outputs);
@@ -2494,6 +2510,103 @@ internal static class Dx12MLUtilities
             return new[] { m_IntermediateBindings[intermediateIndex] };
         }
 
+        private static Dx12Tensor[] ResolveTensors(
+            Dx12Device device,
+            Dx12MLPipeline pipeline,
+            ReadOnlySpan<RHITensor> tensors,
+            ReadOnlySpan<RHITensorView> views,
+            ERHIMLTensorBindingKind kind,
+            uint expectedCount)
+        {
+            if (views.Length > 0)
+            {
+                if (tensors.Length > 0)
+                {
+                    throw new ArgumentException(
+                        $"DX12 ML {kind} bindings must provide either tensors or tensor views, not both.");
+                }
+
+                return ConvertViews(device, pipeline, views, kind, expectedCount);
+            }
+
+            return ConvertTensors(device, pipeline, tensors, kind, expectedCount);
+        }
+
+        private static Dx12Tensor[] ConvertViews(
+            Dx12Device device,
+            Dx12MLPipeline pipeline,
+            ReadOnlySpan<RHITensorView> views,
+            ERHIMLTensorBindingKind kind,
+            uint expectedCount)
+        {
+            if (views.Length != expectedCount)
+            {
+                throw new InvalidOperationException($"DX12 ML binding count mismatch for {kind}. expected={expectedCount}, actual={views.Length}.");
+            }
+
+            Dx12Tensor[] result = new Dx12Tensor[views.Length];
+            ReadOnlySpan<RHIMLTensorBindingInfo> bindingInfos = pipeline.BindingInfos.Span;
+            for (int i = 0; i < bindingInfos.Length; ++i)
+            {
+                ref readonly RHIMLTensorBindingInfo bindingInfo = ref bindingInfos[i];
+                if (bindingInfo.Kind != kind)
+                {
+                    continue;
+                }
+
+                if (bindingInfo.Index >= views.Length)
+                {
+                    throw new InvalidOperationException($"DX12 ML binding index out of range for {kind}. index={bindingInfo.Index}, count={views.Length}.");
+                }
+
+                RHITensorView candidate = views[(int)bindingInfo.Index]
+                    ?? throw new ArgumentException($"DX12 ML binding tensor view[{bindingInfo.Index}] cannot be null.", nameof(views));
+                if (candidate.IsDisposed)
+                {
+                    throw new ObjectDisposedException(candidate.GetType().FullName);
+                }
+                Dx12TensorView view = candidate as Dx12TensorView
+                    ?? throw new ArgumentException($"DX12 ML binding tensor view[{bindingInfo.Index}] must be a {nameof(Dx12TensorView)}.", nameof(views));
+                if (!ReferenceEquals(view.Device, device))
+                {
+                    throw new ArgumentException(
+                        $"DX12 ML {kind} view[{bindingInfo.Index}] belongs to a different device.",
+                        nameof(views));
+                }
+
+                Dx12MLUtilities.ValidateTensorLayout(
+                    $"{kind}[{bindingInfo.Index}] '{bindingInfo.Name}'",
+                    bindingInfo.Descriptor,
+                    view.Descriptor);
+                Dx12Tensor tensor = new Dx12Tensor(device, view.ToBackingTensorDescriptor());
+                if (tensor.BackingBuffer.Descriptor.StorageMode != ERHIStorageMode.GPULocal)
+                {
+                    tensor.Dispose();
+                    throw new InvalidOperationException(
+                        $"DX12 ML {kind}[{bindingInfo.Index}] '{bindingInfo.Name}' must be backed by a GPULocal buffer. " +
+                        $"DirectML dispatch requires resources in COMMON/UAV-capable memory, but got {view.BackingBuffer.Descriptor.StorageMode}.");
+                }
+                if ((tensor.BackingBuffer.Descriptor.UsageFlag & ERHIBufferUsage.UnorderedAccess) == 0)
+                {
+                    tensor.Dispose();
+                    throw new InvalidOperationException(
+                        $"DX12 ML {kind}[{bindingInfo.Index}] '{bindingInfo.Name}' requires UnorderedAccess backing-buffer usage.");
+                }
+
+                result[bindingInfo.Index] = tensor;
+            }
+
+            for (int i = 0; i < result.Length; ++i)
+            {
+                if (result[i] is null)
+                {
+                    throw new InvalidOperationException($"DX12 ML binding set is missing a {kind} tensor view at index {i}.");
+                }
+            }
+
+            return result;
+        }
+
         private static Dx12Tensor[] ConvertTensors(
             Dx12Device device,
             Dx12MLPipeline pipeline,
@@ -2607,6 +2720,22 @@ internal static class Dx12MLUtilities
                     m_IntermediateBuffers[i]?.Dispose();
                 }
                 m_IntermediateBuffers = Array.Empty<Dx12Buffer>();
+            }
+
+            if (m_OwnsInputTensors)
+            {
+                for (int i = 0; i < Inputs.Length; ++i)
+                {
+                    Inputs[i]?.Dispose();
+                }
+            }
+
+            if (m_OwnsOutputTensors)
+            {
+                for (int i = 0; i < Outputs.Length; ++i)
+                {
+                    Outputs[i]?.Dispose();
+                }
             }
 
             if (m_InitializerDescriptorCount > 0)

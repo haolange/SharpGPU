@@ -1002,6 +1002,14 @@ namespace SharpGPU
         public RHIMLPipeline Pipeline;
         public Memory<RHITensor> Inputs;
         public Memory<RHITensor> Outputs;
+        /// <summary>
+        /// Additive view bindings. When non-empty, used instead of <see cref="Inputs"/> for that side.
+        /// </summary>
+        public Memory<RHITensorView> InputViews;
+        /// <summary>
+        /// Additive view bindings. When non-empty, used instead of <see cref="Outputs"/> for that side.
+        /// </summary>
+        public Memory<RHITensorView> OutputViews;
     }
 
     public abstract class RHIMLBindingTable : Disposal

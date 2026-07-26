@@ -83,13 +83,25 @@ public sealed class W11AdvancedSurfaceContractTests
         Assert.Contains(
             implementationTypes,
             type => type.Name == "MetalMLPipeline");
+        // ADR-0054: Vulkan mirrors ML/Tensor/StorageQueue domain types with
+        // NotSupported internals; WorkGraph remains Dx12-only.
+        Assert.Contains(
+            implementationTypes,
+            type => type.Name == "VulkanMLPipeline");
+        Assert.Contains(
+            implementationTypes,
+            type => type.Name == "VulkanMLBindingTable");
+        Assert.Contains(
+            implementationTypes,
+            type => type.Name == "VulkanTensor");
+        Assert.Contains(
+            implementationTypes,
+            type => type.Name == "VulkanStorageQueue");
         Assert.DoesNotContain(
             implementationTypes,
             type =>
                 type.Name.StartsWith("Vulkan", StringComparison.Ordinal) &&
-                (type.Name.Contains("MLPipeline", StringComparison.Ordinal) ||
-                 type.Name.Contains("MLBinding", StringComparison.Ordinal) ||
-                 type.Name.Contains("WorkGraph", StringComparison.Ordinal)));
+                type.Name.Contains("WorkGraph", StringComparison.Ordinal));
         Assert.DoesNotContain(
             implementationTypes,
             type =>

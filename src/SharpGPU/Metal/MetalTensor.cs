@@ -150,7 +150,7 @@ namespace SharpGPU
             CopyBetweenContiguousAndNative(source, destination, descriptor, contiguousToNative: false);
         }
 
-        private static MTLTensorExtents CreateNativeTensorExtentsFromNativeOrder(ReadOnlySpan<uint> values)
+        internal static MTLTensorExtents CreateNativeTensorExtentsFromNativeOrder(ReadOnlySpan<uint> values)
         {
             return CreateTensorExtents(values, reverseOrder: false);
         }
@@ -270,7 +270,7 @@ namespace SharpGPU
             }
         }
 
-        private static void ReleaseNativeObject(IntPtr nativePtr)
+        internal static void ReleaseNativeObject(IntPtr nativePtr)
         {
             if (nativePtr == IntPtr.Zero)
             {
@@ -280,7 +280,7 @@ namespace SharpGPU
             ObjectiveCRuntime.Release(nativePtr);
         }
 
-        private static MTLTensorDataType ConvertDataType(in ERHIMLDataType dataType)
+        internal static MTLTensorDataType ConvertDataType(in ERHIMLDataType dataType)
         {
             return dataType switch
             {
@@ -297,7 +297,7 @@ namespace SharpGPU
             };
         }
 
-        private static MTLTensorUsage ConvertTensorUsage(in ERHITensorUsage usage)
+        internal static MTLTensorUsage ConvertTensorUsage(in ERHITensorUsage usage)
         {
             MTLTensorUsage result = 0;
             if ((usage & ERHITensorUsage.MachineLearning) != 0)
@@ -318,7 +318,7 @@ namespace SharpGPU
             return result != 0 ? result : MTLTensorUsage.Compute;
         }
 
-        private static MTLResourceOptions ConvertStorageMode(in ERHIStorageMode storageMode)
+        internal static MTLResourceOptions ConvertStorageMode(in ERHIStorageMode storageMode)
         {
             return storageMode switch
             {
@@ -329,6 +329,12 @@ namespace SharpGPU
                 ERHIStorageMode.Memoryless => MTLResourceOptions.ResourceStorageModeMemoryless,
                 _ => MTLResourceOptions.ResourceStorageModePrivate,
             };
+        }
+
+        public override RHITensorView CreateView(in RHITensorViewDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            return new MetalTensorView(this, descriptor);
         }
 
         protected override void Release()
@@ -346,6 +352,101 @@ namespace SharpGPU
             }
 
             m_BackingBuffer = null;
+        }
+    }
+
+    internal sealed class MetalTensorView : RHITensorView
+    {
+        internal MetalTensor ParentTensor => (MetalTensor)Parent;
+        internal MTLTensor NativeTensor => m_NativeTensor;
+        internal MetalBuffer? BackingBuffer => m_BackingBuffer;
+        internal ulong BackingBufferOffset => m_AbsoluteOffset;
+        internal ulong ByteLength => m_ByteLength;
+
+        private MTLTensor m_NativeTensor;
+        private MetalBuffer? m_BackingBuffer;
+        private readonly ulong m_AbsoluteOffset;
+        private readonly ulong m_ByteLength;
+
+        internal MetalTensorView(MetalTensor parent, in RHITensorViewDescriptor descriptor)
+        {
+            ArgumentNullException.ThrowIfNull(parent);
+            if (parent.IsDisposed)
+            {
+                throw new ObjectDisposedException(parent.GetType().FullName);
+            }
+            if (descriptor.Dimensions.Length == 0)
+            {
+                throw new ArgumentException("Tensor view requires a non-empty subshape.", nameof(descriptor));
+            }
+            if (parent.BackingBuffer == null)
+            {
+                throw new InvalidOperationException("Metal tensor views require a buffer-backed parent tensor.");
+            }
+
+            m_Parent = parent;
+            m_BackingBuffer = parent.BackingBuffer;
+            m_ViewDescriptor = descriptor;
+            m_AbsoluteOffset = checked(parent.BackingBufferOffset + descriptor.Offset);
+
+            RHIMLTensorDescriptor layout = parent.Descriptor;
+            layout.Dimensions = descriptor.Dimensions.ToArray();
+            layout.Strides =
+                descriptor.Strides is Memory<uint> strides && strides.Length > 0
+                    ? strides.ToArray()
+                    : null;
+            layout.BackingBuffer = parent.BackingBuffer;
+            layout.BackingBufferOffset = m_AbsoluteOffset;
+            m_Descriptor = layout;
+            m_ByteLength = RHIMLHelpers.CalculateMinimumByteLength(layout);
+
+            ulong backingByteSize = checked((ulong)parent.BackingBuffer.Descriptor.ByteSize);
+            if (m_AbsoluteOffset + m_ByteLength > backingByteSize)
+            {
+                throw new InvalidOperationException(
+                    $"Metal tensor view range [{m_AbsoluteOffset}, {m_AbsoluteOffset + m_ByteLength}) exceeds backing buffer size {backingByteSize}.");
+            }
+
+            MTLTensorDescriptor nativeDescriptor = MTLTensorDescriptor.New();
+            MTLTensorExtents nativeDimensions = default;
+            MTLTensorExtents nativeStrides = default;
+            try
+            {
+                nativeDescriptor.DataType = MetalTensor.ConvertDataType(layout.DataType);
+                nativeDescriptor.Usage = MetalTensor.ConvertTensorUsage(layout.UsageFlag);
+                nativeDescriptor.ResourceOptions = MetalTensor.ConvertStorageMode(layout.StorageMode);
+                nativeDimensions = MetalTensor.CreateNativeTensorExtents(layout.Dimensions.Span);
+                nativeDescriptor.Dimensions = nativeDimensions;
+                nativeStrides = MetalTensor.CreateNativeTensorExtentsFromNativeOrder(
+                    MetalTensor.CalculateNativeTensorStrides(layout));
+                nativeDescriptor.Strides = nativeStrides;
+
+                NSError tensorError = default;
+                m_NativeTensor = parent.BackingBuffer.NativeBuffer.NewTensor(nativeDescriptor, m_AbsoluteOffset, ref tensorError);
+                if (m_NativeTensor.NativePtr == IntPtr.Zero)
+                {
+                    string errorText = tensorError.NativePtr != IntPtr.Zero ? tensorError.LocalizedDescription.ToString() : "unknown error";
+                    throw new InvalidOperationException($"Failed to create buffer-backed MTLTensor view: {errorText}");
+                }
+            }
+            finally
+            {
+                MetalTensor.ReleaseNativeObject(nativeStrides);
+                MetalTensor.ReleaseNativeObject(nativeDimensions);
+                MetalTensor.ReleaseNativeObject(nativeDescriptor);
+            }
+        }
+
+        protected override void Release()
+        {
+            if (m_NativeTensor.NativePtr != IntPtr.Zero)
+            {
+                ObjectiveCRuntime.Release(m_NativeTensor);
+                m_NativeTensor = default;
+            }
+
+            m_BackingBuffer = null;
+            m_Parent = null;
         }
     }
 }

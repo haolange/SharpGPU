@@ -151,6 +151,166 @@ public sealed class SharpGPUDirectMLContractTests
         }
 
     [Fact]
+    public void Dx12_DirectML_TensorViewOffsetBind_ShouldDispatchAndReadback()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using DirectMLTestContext? context = DirectMLTestContext.TryCreate();
+        if (context == null)
+        {
+            return;
+        }
+
+        uint[] dims = { 1, 1, 2, 3 };
+        float[] a = { 0.25f, -0.5f, 1.5f, -2.0f, 0.75f, 0.0f };
+        float[] b = { 0.75f, 0.5f, -0.5f, 2.0f, 0.25f, 1.0f };
+        float[] expected = new float[a.Length];
+        for (int i = 0; i < a.Length; ++i)
+        {
+            expected[i] = a[i] + b[i];
+        }
+
+        RHIMLTensorDescriptor layout = CreateTensorDescriptor(dims, ERHITensorUsage.MachineLearning | ERHITensorUsage.Read);
+        RHIMLTensorDescriptor outLayout = CreateTensorDescriptor(dims, ERHITensorUsage.MachineLearning | ERHITensorUsage.Write);
+        RHIMLOpDescriptor addOp = RHIMLOpDescriptor.Create(
+            ERHIMLOpKind.ElementWiseAdd,
+            new[] { RHIMLOpTensorRef.FromInput(0), RHIMLOpTensorRef.FromInput(1) },
+            outLayout,
+            "Add");
+        RHIMLProgramIR programIr = RHIMLProgramIR.Create(
+            "DirectML.TensorViewAdd",
+            new[] { layout, layout },
+            new[] { outLayout },
+            new[] { addOp });
+        RHIMLBinary binary = Dx12MlBinaryCodec.Pack(programIr);
+        RHIMLPipeline pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
+        {
+            Name = "DirectML.TensorViewAdd.Pipeline",
+            Binary = binary,
+        });
+
+        ulong tensorBytes = CalculateTensorByteLength(dims);
+        // DirectML buffer bindings require an aligned base offset (use 256B pad).
+        const ulong viewOffset = 256;
+        int parentBytes = checked((int)(viewOffset + tensorBytes));
+
+        RHIBuffer uploadA = CreateUploadBuffer(context.Device, parentBytes);
+        RHIBuffer uploadB = CreateUploadBuffer(context.Device, parentBytes);
+        RHIBuffer inputABacking = CreateTensorBackingBuffer(context.Device, parentBytes);
+        RHIBuffer inputBBacking = CreateTensorBackingBuffer(context.Device, parentBytes);
+        RHIBuffer outputBacking = CreateTensorBackingBuffer(context.Device, parentBytes);
+        RHIBuffer readback = CreateReadbackBuffer(context.Device, parentBytes);
+
+        // Parents span the full padded buffer; CreateView selects the aligned payload window.
+        uint[] parentDims = { 1, 1, 1, (uint)(parentBytes / sizeof(float)) };
+        RHITensor parentA = context.Device.CreateTensor(CreateTensorDescriptor(
+            parentDims,
+            ERHITensorUsage.MachineLearning | ERHITensorUsage.Read,
+            inputABacking));
+        RHITensor parentB = context.Device.CreateTensor(CreateTensorDescriptor(
+            parentDims,
+            ERHITensorUsage.MachineLearning | ERHITensorUsage.Read,
+            inputBBacking));
+        RHITensor parentOut = context.Device.CreateTensor(CreateTensorDescriptor(
+            parentDims,
+            ERHITensorUsage.MachineLearning | ERHITensorUsage.Write,
+            outputBacking));
+
+        using RHITensorView viewA = parentA.CreateView(new RHITensorViewDescriptor
+        {
+            Offset = viewOffset,
+            Dimensions = dims,
+        });
+        using RHITensorView viewB = parentB.CreateView(new RHITensorViewDescriptor
+        {
+            Offset = viewOffset,
+            Dimensions = dims,
+        });
+        using RHITensorView viewOut = parentOut.CreateView(new RHITensorViewDescriptor
+        {
+            Offset = viewOffset,
+            Dimensions = dims,
+        });
+        Assert.Equal(viewOffset, viewA.Descriptor.BackingBufferOffset);
+        Assert.Equal(viewOffset, viewB.Descriptor.BackingBufferOffset);
+        Assert.Equal(viewOffset, viewOut.Descriptor.BackingBufferOffset);
+
+        RHIMLBindingTable bindingTable = context.Device.CreateMLBindingTable(new RHIMLBindingTableDescriptor
+        {
+            Pipeline = pipeline,
+            InputViews = new[] { viewA, viewB },
+            OutputViews = new[] { viewOut },
+        });
+
+        // Upload into the view window (offset region) of each parent buffer.
+        byte[] uploadBytesA = new byte[parentBytes];
+        byte[] uploadBytesB = new byte[parentBytes];
+        Buffer.BlockCopy(a, 0, uploadBytesA, checked((int)viewOffset), a.Length * sizeof(float));
+        Buffer.BlockCopy(b, 0, uploadBytesB, checked((int)viewOffset), b.Length * sizeof(float));
+        UploadBytes(uploadA, uploadBytesA);
+        UploadBytes(uploadB, uploadBytesB);
+
+        using RHICommandBuffer commandBuffer = context.CommandQueue.CreateCommandBuffer();
+        commandBuffer.Begin("DirectML.TensorViewAdd");
+        RHITransferEncoder upload = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor { Name = "Upload" });
+        upload.Barriers(new[]
+        {
+            RHIBarrier.Buffer(inputABacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+            RHIBarrier.Buffer(inputBBacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+        });
+        upload.CopyBufferToBuffer(uploadA, 0, inputABacking, 0, inputABacking.Descriptor.ByteSize);
+        upload.CopyBufferToBuffer(uploadB, 0, inputBBacking, 0, inputBBacking.Descriptor.ByteSize);
+        upload.Barriers(new[]
+        {
+            RHIBarrier.Buffer(inputABacking, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
+            RHIBarrier.Buffer(inputBBacking, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
+            RHIBarrier.Buffer(outputBacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.MachineLearning, ERHIAccessMask.None, ERHIAccessMask.ShaderWrite),
+        });
+        commandBuffer.EndTransferPass();
+
+        RHIMLEncoder ml = commandBuffer.BeginMLPass(new RHIMLPassDescriptor { Name = "TensorViewAdd" });
+        ml.SetPipeline(pipeline);
+        ml.SetBindingTable(bindingTable);
+        ml.Dispatch();
+        commandBuffer.EndMLPass();
+
+        RHITransferEncoder download = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor { Name = "Readback" });
+        download.Barriers(new[]
+        {
+            RHIBarrier.Buffer(outputBacking, RHIBufferRange.Whole(), ERHISyncStageMask.MachineLearning, ERHISyncStageMask.Transfer, ERHIAccessMask.ShaderWrite, ERHIAccessMask.TransferRead),
+        });
+        download.CopyBufferToBuffer(outputBacking, 0, readback, 0, readback.Descriptor.ByteSize);
+        commandBuffer.EndTransferPass();
+        commandBuffer.End();
+
+        context.Fence.Reset();
+        context.CommandQueue.Submit(new RHIQueueSubmitDescriptor(
+            new RHICommandBuffer[] { commandBuffer },
+            completionFence: context.Fence));
+        context.Fence.Wait();
+
+        float[] actualFull = ReadBackFloats(readback, parentBytes / sizeof(float));
+        float[] actual = new float[expected.Length];
+        Array.Copy(actualFull, checked((int)(viewOffset / sizeof(float))), actual, 0, expected.Length);
+        AssertFloatArraysEqual(expected, actual);
+
+        bindingTable.Dispose();
+        parentOut.Dispose();
+        parentB.Dispose();
+        parentA.Dispose();
+        readback.Dispose();
+        outputBacking.Dispose();
+        inputBBacking.Dispose();
+        inputABacking.Dispose();
+        uploadB.Dispose();
+        uploadA.Dispose();
+        pipeline.Dispose();
+    }
+
+    [Fact]
     public void Dx12_NeuralCook_ElementWiseAdd_DmlbinFixture_ShouldCreateMLPipeline()
     {
         if (!OperatingSystem.IsWindows())
@@ -480,6 +640,19 @@ public sealed class SharpGPUDirectMLContractTests
         }
     }
 
+    private static void UploadBytes(RHIBuffer buffer, byte[] data)
+    {
+        IntPtr pointer = buffer.Map(0, 0);
+        try
+        {
+            Marshal.Copy(data, 0, pointer, data.Length);
+        }
+        finally
+        {
+            buffer.UnMap(0, checked((uint)data.Length));
+        }
+    }
+
     private static float[] ReadBackFloats(RHIBuffer buffer, int elementCount)
     {
         float[] result = new float[elementCount];
@@ -487,6 +660,22 @@ public sealed class SharpGPUDirectMLContractTests
         try
         {
             Marshal.Copy(pointer, result, 0, elementCount);
+        }
+        finally
+        {
+            buffer.UnMap(0, 0);
+        }
+
+        return result;
+    }
+
+    private static float[] ReadBackFloatsAtOffset(RHIBuffer buffer, int byteOffset, int elementCount)
+    {
+        float[] result = new float[elementCount];
+        IntPtr pointer = buffer.Map(0, 0);
+        try
+        {
+            Marshal.Copy(IntPtr.Add(pointer, byteOffset), result, 0, elementCount);
         }
         finally
         {
