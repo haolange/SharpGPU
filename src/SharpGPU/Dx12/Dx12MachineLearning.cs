@@ -253,7 +253,7 @@ namespace SharpGPU
         /// advertise the program's input and output slots so that <see cref="Dx12MLPipeline"/> and
         /// <see cref="Dx12MLBindingSet"/> can wire every stage from the same descriptor contract.
         /// </summary>
-        internal static Dx12MLProgram Create(in RHIMLProgramDescriptor descriptor)
+        internal static Dx12MLProgram Create(in RHIMLProgramIR descriptor)
         {
             if (descriptor.Ops.Length == 0)
             {

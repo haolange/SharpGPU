@@ -24,10 +24,8 @@ public sealed class SharpGPUDirectMLContractTests
                 return;
             }
 
-            // A 2-op program built via the generic descriptor path (ADR-0028): ElementWiseAdd(a,b)
-            // -> intermediate -> Sigmoid -> output. This verifies that CreateMLProgram + the
-            // N-stage pipeline/bindingset/encoder machinery work for an arbitrary op sequence, not
-            // just one preselected workload shape.
+            // A 2-op program cooked to DirectMLProgramV1 binary: ElementWiseAdd(a,b) -> intermediate
+            // -> Sigmoid -> output. Verifies CreateMLPipeline(binary) end-to-end (ADR-0052).
             uint[] dims = { 1, 1, 2, 3 };
             float[] a = { 0.5f, -1.0f, 2.0f, -3.0f, 1.0f, 0.0f };
             float[] b = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
@@ -62,17 +60,17 @@ public sealed class SharpGPUDirectMLContractTests
                 outLayout,
                 "Sigmoid");
 
-            RHIMLProgramDescriptor programDesc = RHIMLProgramDescriptor.Create(
+            RHIMLProgramIR programIr = RHIMLProgramIR.Create(
                 "DirectML.AddSigmoid",
                 new[] { aLayout, bLayout },
                 new[] { outLayout },
                 new[] { addOp, sigmoidOp });
+            RHIMLBinary binary = Dx12MlBinaryCodec.Pack(programIr);
 
-            RHIMLProgram program = context.Device.CreateMLProgram(programDesc);
             RHIMLPipeline pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
             {
                 Name = "DirectML.AddSigmoid.Pipeline",
-                Program = program,
+                Binary = binary,
             });
 
             ulong byteSize = CalculateTensorByteLength(dims);
@@ -149,7 +147,6 @@ public sealed class SharpGPUDirectMLContractTests
             uploadA.Dispose();
             bindingSet.Dispose();
             pipeline.Dispose();
-            program.Dispose();
         }
 
     [Fact]
@@ -219,11 +216,11 @@ public sealed class SharpGPUDirectMLContractTests
         ulong cBytes = CalculateTensorByteLength(cDimensions);
         ulong outputBytes = CalculateTensorByteLength(outputDimensions);
 
-        RHIMLProgram program = CreateGemmReluProgram(context.Device, aLayout, bLayout, cLayout, outputLayout);
+        RHIMLBinary binary = CreateGemmReluBinary(aLayout, bLayout, cLayout, outputLayout);
         RHIMLPipeline pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
         {
             Name = "DirectML.GemmAddRelu",
-            Program = program,
+            Binary = binary,
         });
 
         RHIBuffer uploadABacking = CreateUploadBuffer(context.Device, checked((int)aBytes));
@@ -250,7 +247,6 @@ public sealed class SharpGPUDirectMLContractTests
         });
 
         return new DirectMLFixture(
-            program,
             pipeline,
             bindingSet,
             uploadABacking,
@@ -316,8 +312,7 @@ public sealed class SharpGPUDirectMLContractTests
         commandBuffer.End();
     }
 
-    private static RHIMLProgram CreateGemmReluProgram(
-        RHIDevice device,
+    private static RHIMLBinary CreateGemmReluBinary(
         in RHIMLTensorDescriptor aLayout,
         in RHIMLTensorDescriptor bLayout,
         in RHIMLTensorDescriptor cLayout,
@@ -350,11 +345,12 @@ public sealed class SharpGPUDirectMLContractTests
             outputLayout,
             "DirectML.Relu");
 
-        return device.CreateMLProgram(RHIMLProgramDescriptor.Create(
+        RHIMLProgramIR programIr = RHIMLProgramIR.Create(
             "DirectML.GemmAddRelu",
             new[] { aLayout, bLayout, cLayout },
             new[] { outputLayout },
-            new[] { gemmOp, reluOp }));
+            new[] { gemmOp, reluOp });
+        return Dx12MlBinaryCodec.Pack(programIr);
     }
 
     private static RHIMLTensorDescriptor CreateTensorDescriptor(uint[] dimensions, ERHITensorUsage usage, RHIBuffer? backingBuffer = null)
@@ -537,7 +533,6 @@ public sealed class SharpGPUDirectMLContractTests
 
     private sealed class DirectMLFixture : IDisposable
     {
-        public RHIMLProgram Program { get; }
         public RHIMLPipeline Pipeline { get; }
         public RHIMLBindingSet BindingSet { get; }
         public RHIBuffer UploadABacking { get; }
@@ -554,7 +549,6 @@ public sealed class SharpGPUDirectMLContractTests
         public RHIBuffer ReadbackOutput { get; }
 
         public DirectMLFixture(
-            RHIMLProgram program,
             RHIMLPipeline pipeline,
             RHIMLBindingSet bindingSet,
             RHIBuffer uploadABacking,
@@ -570,7 +564,6 @@ public sealed class SharpGPUDirectMLContractTests
             RHITensor outputTensor,
             RHIBuffer readbackOutput)
         {
-            Program = program;
             Pipeline = pipeline;
             BindingSet = bindingSet;
             UploadABacking = uploadABacking;
@@ -603,7 +596,6 @@ public sealed class SharpGPUDirectMLContractTests
             InputABacking.Dispose();
             BindingSet.Dispose();
             Pipeline.Dispose();
-            Program.Dispose();
         }
     }
 }

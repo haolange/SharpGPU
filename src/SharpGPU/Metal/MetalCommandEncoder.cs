@@ -49,9 +49,10 @@ namespace SharpGPU
     {
         // TODO: ThirdParty SharpMetal bindings still expose pre-Metal4 barrier APIs.
         // SharpGPU no longer references them; remove binding symbols after dependency audit.
-        // Vertex | Fragment | Dispatch | Blit | AccelerationStructure
+        // Vertex | Fragment | Dispatch | Blit | AccelerationStructure | MachineLearning
         private const ulong s_ValidMetal4StageMask =
-            (1UL << 0) | (1UL << 1) | (1UL << 27) | (1UL << 28) | (1UL << 29);
+            (1UL << 0) | (1UL << 1) | (1UL << 27) | (1UL << 28) | (1UL << 29) | (1UL << 30);
+        private const ulong s_Metal4MachineLearningStage = 1UL << 30;
 
         internal struct MetalBarrierBatchPlan
         {
@@ -98,7 +99,19 @@ namespace SharpGPU
             }
 
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(encoderPtr);
-            encoder4.BarrierAfterQueueStages(afterStages, beforeStages, MTL4VisibilityOptions.Device);
+            bool afterIncludesMl = (afterStages & s_Metal4MachineLearningStage) != 0;
+            bool beforeIncludesMl = (beforeStages & s_Metal4MachineLearningStage) != 0;
+            if (beforeIncludesMl && !afterIncludesMl)
+            {
+                // Producer encoder (e.g. blit) finished; subsequent ML work must wait.
+                // WWDC25: barrierAfterStages:beforeQueueStages:
+                encoder4.BarrierAfterStages(afterStages, beforeStages, MTL4VisibilityOptions.Device);
+            }
+            else
+            {
+                // Consumer encoder waits for prior queue stages (including ML).
+                encoder4.BarrierAfterQueueStages(afterStages, beforeStages, MTL4VisibilityOptions.Device);
+            }
         }
 
         internal static bool IsValidMetal4StageMask(in ulong stages)
@@ -125,7 +138,14 @@ namespace SharpGPU
 
                 bool transfersQueueOwnership = RHIBarrierUtility.TryGetQueueOwnership(
                     in barriers[i], out _, out _);
-                if (!transfersQueueOwnership && commandBuffer.IsIntraEncoderBarrier(afterStages))
+                // MTLStageMachineLearning is not an encoder-local stage for blit/compute/render.
+                // Cross-stage sync involving ML must use queue barriers (WWDC25).
+                bool involvesMachineLearning =
+                    (afterStages & s_Metal4MachineLearningStage) != 0 ||
+                    (beforeStages & s_Metal4MachineLearningStage) != 0;
+                if (!transfersQueueOwnership &&
+                    !involvesMachineLearning &&
+                    commandBuffer.IsIntraEncoderBarrier(afterStages))
                 {
                     plan.IntraAfterStages |= afterStages;
                     plan.IntraBeforeStages |= beforeStages;
@@ -154,7 +174,13 @@ namespace SharpGPU
 
                 bool transfersQueueOwnership = RHIBarrierUtility.TryGetQueueOwnership(
                     in barriers[i], out _, out _);
-                if (!transfersQueueOwnership && afterStages != 0 && (seenStages & afterStages) != 0)
+                bool involvesMachineLearning =
+                    (afterStages & s_Metal4MachineLearningStage) != 0 ||
+                    (beforeStages & s_Metal4MachineLearningStage) != 0;
+                if (!transfersQueueOwnership &&
+                    !involvesMachineLearning &&
+                    afterStages != 0 &&
+                    (seenStages & afterStages) != 0)
                 {
                     plan.IntraAfterStages |= afterStages;
                     plan.IntraBeforeStages |= beforeStages;
@@ -1882,14 +1908,21 @@ namespace SharpGPU
 
         public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
         {
+            MetalEncoderStateValidation.RequireActive(
+                m_NativeEncoder4.NativePtr,
+                "ExecuteIndirectCommandBuffer");
             MetalComputeIndirectCommandBuffer metalICB = (MetalComputeIndirectCommandBuffer)indirectCmdBuffer;
             MTLIndirectCommandBuffer nativeICB = metalICB.NativeIndirectCommandBuffer;
             NSRange range = new NSRange { location = 0, length = metalICB.MaxCommandCount };
 
-            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
+            if (m_CommandBuffer?.CommandQueue is MetalCommandQueue queue)
             {
-                m_NativeEncoder4.ExecuteCommandsInBuffer(nativeICB, range);
+                queue.AddResidencyAllocation(nativeICB);
             }
+
+            m_NativeEncoder4.ExecuteCommandsInBuffer(nativeICB, range);
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(
+                MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
         }
 
         internal override void EndPassCore()

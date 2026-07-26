@@ -868,10 +868,10 @@ namespace SharpGPU
                 return 0;
             }
 
+            // Mesh/Task remain unavailable on this Metal path; MachineLearning maps to MTLStageMachineLearning.
             const ERHISyncStageMask unsupportedSharpGpuStages =
                 ERHISyncStageMask.Task |
-                ERHISyncStageMask.Mesh |
-                ERHISyncStageMask.MachineLearning;
+                ERHISyncStageMask.Mesh;
             const ERHISyncStageMask knownStages =
                 ERHISyncStageMask.Transfer |
                 ERHISyncStageMask.Indirect |
@@ -880,6 +880,7 @@ namespace SharpGPU
                 ERHISyncStageMask.Vertex |
                 ERHISyncStageMask.Fragment |
                 ERHISyncStageMask.Compute |
+                ERHISyncStageMask.MachineLearning |
                 unsupportedSharpGpuStages |
                 ERHISyncStageMask.RayTracing |
                 ERHISyncStageMask.AccelStructBuild |
@@ -918,13 +919,12 @@ namespace SharpGPU
                         "Metal synchronization contains an unknown stage bit.");
                 }
 
-                // Convenience aggregates (AllGraphics/AllShading) embed Task/Mesh/ML.
-                // Call sites often OR those aggregates together (e.g. GraphicsCommonSync);
-                // strip unavailable bits instead of throwing so Metal can lower the rest.
+                // Convenience aggregates may embed Task/Mesh; strip unavailable bits.
                 normalizedStages = stages & ~unsupportedSharpGpuStages;
             }
 
-            // MTLStages (Metal 26+): Vertex=0, Fragment=1, Dispatch=27, Blit=28, AccelerationStructure=29.
+            // MTLStages (Metal 26+): Vertex=0, Fragment=1, Dispatch=27, Blit=28,
+            // AccelerationStructure=29, MachineLearning=30.
             ulong result = 0;
             if ((normalizedStages & ERHISyncStageMask.Transfer) != 0) result |= 1UL << 28;
             if ((normalizedStages & ERHISyncStageMask.Indirect) != 0) result |= 1UL << 27;
@@ -936,6 +936,7 @@ namespace SharpGPU
             if ((normalizedStages & ERHISyncStageMask.RayTracing) != 0) result |= 1UL << 29;
             if ((normalizedStages & ERHISyncStageMask.AccelStructBuild) != 0) result |= 1UL << 29;
             if ((normalizedStages & ERHISyncStageMask.AccelStructCopy) != 0) result |= 1UL << 29;
+            if ((normalizedStages & ERHISyncStageMask.MachineLearning) != 0) result |= 1UL << 30;
             return result;
         }
 

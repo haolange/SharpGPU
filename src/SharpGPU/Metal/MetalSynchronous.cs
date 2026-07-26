@@ -542,37 +542,72 @@ namespace SharpGPU
             : base(device, descriptor, 1UL)
         {
             m_MetalDevice = device;
+            m_NativeHeap = CreateNativeHeap(device, descriptor, heapType, applyStorageOptions: true);
+        }
 
+        /// <summary>
+        /// WWDC25 ML sample heap: MTLHeapTypePlacement + size only (no ResourceOptions).
+        /// </summary>
+        internal static MetalHeap CreateMachineLearningIntermediates(MetalDevice device, ulong sizeInBytes)
+        {
+            RHIResourceMemoryRequirements requirements = new RHIResourceMemoryRequirements(
+                device,
+                sizeInBytes,
+                1,
+                ERHIStorageMode.GPULocal,
+                1,
+                ERHIMemoryResourceKind.Buffer);
+            RHIHeapDescription descriptor = new RHIHeapDescription(sizeInBytes, requirements);
+            return new MetalHeap(device, descriptor, MTLHeapType.Placement, applyStorageOptions: false);
+        }
+
+        private MetalHeap(MetalDevice device, in RHIHeapDescription descriptor, MTLHeapType heapType, bool applyStorageOptions)
+            : base(device, descriptor, 1UL)
+        {
+            m_MetalDevice = device;
+            m_NativeHeap = CreateNativeHeap(device, descriptor, heapType, applyStorageOptions);
+        }
+
+        private static SharpMetal.Metal.MTLHeap CreateNativeHeap(
+            MetalDevice device,
+            in RHIHeapDescription descriptor,
+            MTLHeapType heapType,
+            bool applyStorageOptions)
+        {
             MTLHeapDescriptor nativeDescriptor = MTLHeapDescriptor.New();
             nativeDescriptor.Size = descriptor.Size;
             nativeDescriptor.Type = heapType;
-            nativeDescriptor.ResourceOptions = MetalUtility.ConvertToMetalResourceOptions(descriptor.StorageMode);
-            nativeDescriptor.StorageMode = (MTLStorageMode)(((ulong)nativeDescriptor.ResourceOptions >> 4) & 0xF);
-            nativeDescriptor.CpuCacheMode = (MTLCPUCacheMode)((ulong)nativeDescriptor.ResourceOptions & 0xF);
-            if (MetalSparseMemoryUtility.RequiresPlacementSparseCompatibility(
-                    descriptor.Compatibility))
+            if (applyStorageOptions)
             {
-                nativeDescriptor.MaxCompatiblePlacementSparsePageSize =
-                    MetalSparseMemoryUtility.SparsePageSize;
-            }
-            else if (descriptor.Compatibility.NativeAllocationFlags != 0)
-            {
-                ObjectiveCRuntime.Release(nativeDescriptor.NativePtr);
-                throw new ArgumentException(
-                    "The Metal heap compatibility contains unknown native allocation flags.",
-                    nameof(descriptor));
+                nativeDescriptor.ResourceOptions = MetalUtility.ConvertToMetalResourceOptions(descriptor.StorageMode);
+                nativeDescriptor.StorageMode = (MTLStorageMode)(((ulong)nativeDescriptor.ResourceOptions >> 4) & 0xF);
+                nativeDescriptor.CpuCacheMode = (MTLCPUCacheMode)((ulong)nativeDescriptor.ResourceOptions & 0xF);
+                if (MetalSparseMemoryUtility.RequiresPlacementSparseCompatibility(
+                        descriptor.Compatibility))
+                {
+                    nativeDescriptor.MaxCompatiblePlacementSparsePageSize =
+                        MetalSparseMemoryUtility.SparsePageSize;
+                }
+                else if (descriptor.Compatibility.NativeAllocationFlags != 0)
+                {
+                    ObjectiveCRuntime.Release(nativeDescriptor.NativePtr);
+                    throw new ArgumentException(
+                        "The Metal heap compatibility contains unknown native allocation flags.",
+                        nameof(descriptor));
+                }
             }
 
+            SharpMetal.Metal.MTLHeap nativeHeap;
             try
             {
-                m_NativeHeap = device.NativeDevice.NewHeap(nativeDescriptor);
+                nativeHeap = device.NativeDevice.NewHeap(nativeDescriptor);
             }
             finally
             {
                 ObjectiveCRuntime.Release(nativeDescriptor.NativePtr);
             }
 
-            if (m_NativeHeap.NativePtr == IntPtr.Zero)
+            if (nativeHeap.NativePtr == IntPtr.Zero)
             {
                 throw new RHIException(
                     ERHIErrorCode.OutOfMemory,
@@ -581,6 +616,8 @@ namespace SharpGPU
                     "MTLDevice failed to create a placement heap.",
                     ERHIDeviceState.Operational);
             }
+
+            return nativeHeap;
         }
 
         protected override void Release()

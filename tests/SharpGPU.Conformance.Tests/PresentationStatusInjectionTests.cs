@@ -534,10 +534,6 @@ namespace SharpGPU.Conformance.Tests
                     in RHIWorkGraphPipelineDescriptor descriptor) =>
                 Unsupported<RHIWorkGraphPipeline>();
 
-            public override RHIMLProgram CreateMLProgram(
-                in RHIMLProgramDescriptor descriptor) =>
-                Unsupported<RHIMLProgram>();
-
             private T Unsupported<T>()
             {
                 ThrowIfDeviceUnavailable();

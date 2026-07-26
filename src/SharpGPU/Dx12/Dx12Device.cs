@@ -582,6 +582,13 @@ namespace SharpGPU
             return new Dx12MLPipeline(this, descriptor);
         }
 
+        internal override RHIMLPipeline CreateMLPipelineFromInternalProgramIR(string name, in RHIMLProgramIR programIr)
+        {
+            Capabilities.MachineLearning.Execution.Require("DX12 machine learning");
+
+            return Dx12MLPipeline.CreateFromProgramIR(this, name, programIr);
+        }
+
         public override RHIMLBindingSet CreateMLBindingSet(in RHIMLBindingSetDescriptor descriptor)
         {
             Capabilities.MachineLearning.Execution.Require("DX12 machine learning");
@@ -594,13 +601,6 @@ namespace SharpGPU
             Capabilities.MachineLearning.Execution.Require("DX12 machine learning tensors");
 
             return new Dx12Tensor(this, descriptor);
-        }
-
-        public override RHIMLProgram CreateMLProgram(in RHIMLProgramDescriptor descriptor)
-        {
-            Capabilities.MachineLearning.Execution.Require("DX12 machine learning");
-
-            return Dx12MLProgram.Create(descriptor);
         }
 
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)

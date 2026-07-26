@@ -1100,12 +1100,38 @@ namespace SharpGPU
         private ulong m_ProgramIntermediateTensorSize;
 
         public Dx12MLPipeline(Dx12Device device, in RHIMLPipelineDescriptor descriptor)
+            : this(
+                device,
+                descriptor,
+                descriptor.Binary.Format == ERHIMLBinaryFormat.DirectMLProgramV1
+                    ? Dx12MlBinaryCodec.DeserializeProgram(descriptor.Binary.Payload)
+                    : throw new InvalidOperationException(
+                        $"DX12 ML pipeline requires {nameof(ERHIMLBinaryFormat.DirectMLProgramV1)} binary."))
+        {
+        }
+
+        /// <summary>
+        /// NativeML internal path: compile DirectML stages from private program IR (ADR-0053).
+        /// Does not require a public <see cref="RHIMLBinary"/>.
+        /// </summary>
+        internal static Dx12MLPipeline CreateFromProgramIR(Dx12Device device, string name, in RHIMLProgramIR programIr)
+        {
+            return new Dx12MLPipeline(
+                device,
+                new RHIMLPipelineDescriptor
+                {
+                    Name = name ?? string.Empty,
+                    Binary = default,
+                },
+                programIr);
+        }
+
+        private Dx12MLPipeline(Dx12Device device, in RHIMLPipelineDescriptor descriptor, in RHIMLProgramIR programIr)
         {
             m_Descriptor = descriptor;
             m_Dx12Device = device;
             m_Name = descriptor.Name;
-            m_Program = descriptor.Program as Dx12MLProgram
-                ?? throw new InvalidOperationException("DX12 ML pipeline requires a Dx12MLProgram.");
+            m_Program = Dx12MLProgram.Create(programIr);
             m_Program.ValidateDeviceSupport(device);
             m_BindingInfos = m_Program.BindingInfos;
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using SharpMetal.Foundation;
@@ -15,8 +16,16 @@ namespace SharpGPU
         internal RHIMLTensorBindingInfo[] BindingInfos { get; }
 
         private MTLLibrary m_NativeLibrary;
+        private readonly string? m_OwnedPackageDirectory;
 
-        internal MetalMLProgram(string name, MTLLibrary nativeLibrary, string entryName, string packageDirectory, params RHIMLTensorBindingInfo[] bindingInfos)
+        internal const string DefaultEntryName = "main";
+
+        internal MetalMLProgram(
+            string name,
+            MTLLibrary nativeLibrary,
+            string entryName,
+            RHIMLTensorBindingInfo[] bindingInfos,
+            string? ownedPackageDirectory = null)
         {
             m_Name = name;
             if (nativeLibrary.NativePtr == IntPtr.Zero)
@@ -25,14 +34,28 @@ namespace SharpGPU
             }
 
             m_NativeLibrary = nativeLibrary;
-            EntryName = string.IsNullOrWhiteSpace(entryName) ? MetalMpsGraphPackageBuilder.EntryName : entryName;
-            _ = packageDirectory;
+            EntryName = string.IsNullOrWhiteSpace(entryName) ? DefaultEntryName : entryName;
             BindingInfos = bindingInfos ?? Array.Empty<RHIMLTensorBindingInfo>();
+            m_OwnedPackageDirectory = ownedPackageDirectory;
         }
 
         protected override void Release()
         {
             m_NativeLibrary = default;
+            if (!string.IsNullOrWhiteSpace(m_OwnedPackageDirectory))
+            {
+                try
+                {
+                    if (Directory.Exists(m_OwnedPackageDirectory))
+                    {
+                        Directory.Delete(m_OwnedPackageDirectory, recursive: true);
+                    }
+                }
+                catch
+                {
+                    // Best-effort cleanup of extracted MetalPackageV1 contents.
+                }
+            }
         }
     }
 
@@ -73,21 +96,12 @@ namespace SharpGPU
 
             device.RegisterMetalMLArgumentTable(m_NativeArgumentTable);
 
-            if (metalPipeline.TemporaryResourceSize > 0)
-            {
-                RHIResourceMemoryRequirements heapRequirements = new RHIResourceMemoryRequirements(
-                    device,
-                    metalPipeline.TemporaryResourceSize,
-                    1,
-                    ERHIStorageMode.GPULocal,
-                    1,
-                    ERHIMemoryResourceKind.Buffer);
-                RHIHeapDescription heapDescriptor = new RHIHeapDescription(
-                    metalPipeline.TemporaryResourceSize,
-                    heapRequirements);
-                m_IntermediatesHeap = new MetalHeap(device, heapDescriptor, MTLHeapType.Automatic);
-                device.RegisterMetalMLIntermediatesHeap(m_IntermediatesHeap.NativeHeap);
-            }
+            // WWDC25 / Apple docs: MTLHeapTypePlacement with size >= pipeline.intermediatesHeapSize.
+            // Do not force ResourceOptions on this heap — MetalHeap.CreateMachineLearningIntermediates
+            // mirrors Apple's minimal descriptor (type + size only).
+            ulong intermediatesHeapSize = Math.Max(metalPipeline.TemporaryResourceSize, 1UL);
+            m_IntermediatesHeap = MetalHeap.CreateMachineLearningIntermediates(device, intermediatesHeapSize);
+            device.RegisterMetalMLIntermediatesHeap(m_IntermediatesHeap);
 
             PopulateArgumentTable(device, metalPipeline);
         }
@@ -150,8 +164,11 @@ namespace SharpGPU
         protected override void Release()
         {
             m_NativeArgumentTable = default;
+            // Keep the managed heap alive until device teardown; MetalDevice retains the
+            // native MTLHeap. Dropping + GC-finalizing here raced with later ML encodes.
             m_IntermediatesHeap = null;
         }
+
     }
 
     internal class MetalMLPipeline : RHIMLPipeline
@@ -171,8 +188,7 @@ namespace SharpGPU
         public MetalMLPipeline(MetalDevice device, in RHIMLPipelineDescriptor descriptor)
         {
             m_Descriptor = descriptor;
-            m_Program = descriptor.Program as MetalMLProgram
-                ?? throw new InvalidOperationException("Metal ML pipeline requires a MetalMLProgram.");
+            m_Program = MetalMlBinaryCodec.LoadProgram(device, descriptor.Binary, descriptor.Name);
             m_BindingInfos = m_Program.BindingInfos;
 
             if (!device.SupportsMetal4)
@@ -215,18 +231,8 @@ namespace SharpGPU
                 mlDesc.Label = new NSString(descriptor.Name);
             }
 
-            for (int i = 0; i < m_BindingInfos.Length; ++i)
-            {
-                ref readonly RHIMLTensorBindingInfo bindingInfo = ref m_BindingInfos[i];
-                if (bindingInfo.Kind != ERHIMLTensorBindingKind.Input)
-                {
-                    continue;
-                }
-
-                MTLTensorExtents dimensions = MetalTensor.CreateNativeTensorExtents(bindingInfo.Descriptor.Dimensions.Span);
-                mlDesc.SetInputDimensions(dimensions, bindingInfo.Index);
-                ReleaseNativeObject(dimensions);
-            }
+            // Static MTLPackage networks embed extents; WWDC notes setInputDimensions only for
+            // dynamic inputs. Skip here so logical binding indices cannot disagree with native slots.
             ObjectiveCRuntime.Release(funcDesc);
 
             // ── Create pipeline state ──

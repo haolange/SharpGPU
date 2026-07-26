@@ -36,14 +36,13 @@ namespace SharpGPU
         private string? m_MetalMLUnavailableReason;
         private MTLTextureViewPool m_TextureViewPool;
         private readonly MetalTextureViewIndexAllocator m_TextureViewIndices = new();
-        // Metal 4 ML package objects are retained for the device lifetime. Releasing argument
-        // tables / intermediates heaps / pipeline libraries at per-program disposal time made
-        // subsequent native ML dispatches observe zeroed outputs on macOS 26.5.
-        private readonly List<string> m_MetalMLPackageDirectories = new List<string>();
-        private readonly List<MTLLibrary> m_MetalMLLibraries = new List<MTLLibrary>();
+        // Metal 4 ML runtime objects (pipeline / argument table / intermediates heap) are retained
+        // for the device lifetime so a future Metal4-native artifact route can reuse the encoder path.
         private readonly List<MTL4MachineLearningPipelineState> m_MetalMLPipelineStates = new List<MTL4MachineLearningPipelineState>();
         private readonly List<MTL4ArgumentTable> m_MetalMLArgumentTables = new List<MTL4ArgumentTable>();
         private readonly List<MTLHeap> m_MetalMLIntermediatesHeaps = new List<MTLHeap>();
+        // Managed owners keep MetalHeap finalizers from releasing native heaps mid-session.
+        private readonly List<MetalHeap> m_MetalMLIntermediatesHeapOwners = new List<MetalHeap>();
         private RHIException? m_PendingCommandQueueFailure;
 
         private static readonly Selector s_RespondsToSelector = "respondsToSelector:";
@@ -536,6 +535,12 @@ namespace SharpGPU
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
                 "Metal machine-learning pipelines");
+            if (descriptor.Binary.Format != ERHIMLBinaryFormat.MetalPackageV1)
+            {
+                throw new InvalidOperationException(
+                    $"Metal ML pipeline requires {nameof(ERHIMLBinaryFormat.MetalPackageV1)} binary.");
+            }
+
             return new MetalMLPipeline(this, descriptor);
         }
 
@@ -553,42 +558,6 @@ namespace SharpGPU
             Capabilities.MachineLearning.Execution.Require(
                 "Metal machine-learning tensors");
             return new MetalTensor(this, descriptor);
-        }
-
-        public override RHIMLProgram CreateMLProgram(in RHIMLProgramDescriptor descriptor)
-        {
-            ThrowIfDisposed();
-            Capabilities.MachineLearning.Execution.Require(
-                "Metal machine-learning programs");
-
-            if (descriptor.Ops.Length > 1)
-            {
-                throw new NotSupportedException(
-                    "Metal ML MPSGraph package lowering currently supports one RHI ML op per native artifact. " +
-                    "Multi-op packages execute once but corrupt subsequent MTL4MachineLearningCommandEncoder dispatches on macOS 26.5; " +
-                    "compute-kernel and CPU fallbacks are intentionally rejected.");
-            }
-
-            try
-            {
-                MetalMpsGraphPackage package = MetalMpsGraphPackageBuilder.Build(this, descriptor);
-                RegisterMetalMLPackageDirectory(package.PackageDirectory);
-                RegisterMetalMLLibrary(package.Library);
-                return new MetalMLProgram(
-                    descriptor.Name,
-                    package.Library,
-                    MetalMpsGraphPackageBuilder.EntryName,
-                    package.PackageDirectory,
-                    package.BindingInfos);
-            }
-            catch (NotSupportedException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException($"Metal ML program construction failed for '{descriptor.Name}': {ex.Message}", ex);
-            }
         }
 
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
@@ -718,8 +687,8 @@ namespace SharpGPU
             bool isTimestampSupported = TryProbeTimestampCounterHeap(out string? timestampUnavailableReason);
             m_TimestampQueriesUnavailableReason = timestampUnavailableReason;
             bool isPipelineStatsSupported = TryGetStatisticsCounterSet(m_NativeDevice, out _);
-            bool isMLSupported = false; string? metalMLUnavailableReason = "Metal has no qualified stable native ML artifact and dispatch route.";
-            m_MetalMLUnavailableReason = metalMLUnavailableReason; // W11: ML surface closed
+            bool isMLSupported = TryProbeMetalMLSupport(out string? metalMLUnavailableReason);
+            m_MetalMLUnavailableReason = metalMLUnavailableReason;
 
             static RHICapability Probe(
                 bool available,
@@ -974,10 +943,17 @@ namespace SharpGPU
                         ERHICapabilityProbeKind.BackendContract,
                         "SharpGPU Metal factory surface")),
                 machineLearning: new RHIMachineLearningCapabilities(
-                    execution: RHICapability.Unavailable(
-                        "Metal ML remains Unavailable for stability until a qualified macOS probe passes.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "SharpGPU Metal stable native ML artifact and dispatch contract")),
+                    execution: isMLSupported
+                        ? RHICapability.Available(
+                            ERHICapabilityTier.Tier1,
+                            ERHICapabilityStrategy.NativeSpecialized,
+                            ERHICapabilityProbeKind.NativeFeatureQuery,
+                            "MTL4MachineLearningCommandEncoder (Metal4-native)")
+                        : RHICapability.Unavailable(
+                            metalMLUnavailableReason ??
+                            "Metal ML remains Unavailable until a Metal4-native program builder and stable multi-dispatch exist.",
+                            ERHICapabilityProbeKind.BackendContract,
+                            "SharpGPU Metal MTL4-only ML contract (ADR-0051)")),
                 workGraph: new RHIWorkGraphCapabilities(
                     execution: RHICapability.Unavailable(
                         "Metal Work Graph execution is not exposed by SharpGPU.",
@@ -1062,8 +1038,18 @@ namespace SharpGPU
 
         private bool TryProbeMetalMLSupport(out string? unavailableReason)
         {
-            unavailableReason = "Metal ML remains Unavailable for stability until a qualified macOS probe passes.";
-            return false;
+            unavailableReason = null;
+
+            if (!m_SupportsMetal4)
+            {
+                unavailableReason = "Metal ML requires Metal 4 (MTL4MachineLearningPipelineState / CommandEncoder).";
+                return false;
+            }
+
+            // ADR-0052 / TASK-20260726 W4: Binary-only public surface (MetalPackageV1) + MTL4 runtime.
+            // Capability opens when Metal 4 is present; matching-host multi-dispatch is proven by
+            // SharpGpuMetalQualified MetalMLStabilityProbeTests (CoreML → metal-package-builder fixtures).
+            return true;
         }
         internal void RegisterMetalMLPipelineState(in MTL4MachineLearningPipelineState pipelineState)
         {
@@ -1085,47 +1071,26 @@ namespace SharpGPU
             m_MetalMLArgumentTables.Add(argumentTable);
         }
 
-        internal void RegisterMetalMLIntermediatesHeap(in MTLHeap heap)
+        internal void RegisterMetalMLIntermediatesHeap(MetalHeap heap)
         {
-            if (heap.NativePtr == IntPtr.Zero)
+            if (heap == null || heap.NativeHeap.NativePtr == IntPtr.Zero)
             {
                 return;
             }
 
-            m_MetalMLIntermediatesHeaps.Add(heap);
-        }
-
-        private void RegisterMetalMLPackageDirectory(string packageDirectory)
-        {
-            if (string.IsNullOrWhiteSpace(packageDirectory))
-            {
-                return;
-            }
-
-            m_MetalMLPackageDirectories.Add(packageDirectory);
-        }
-
-        private void RegisterMetalMLLibrary(in MTLLibrary library)
-        {
-            if (library.NativePtr == IntPtr.Zero)
-            {
-                return;
-            }
-
-            m_MetalMLLibraries.Add(library);
+            m_MetalMLIntermediatesHeapOwners.Add(heap);
+            m_MetalMLIntermediatesHeaps.Add(heap.NativeHeap);
         }
 
         private void ReleaseMetalMLNativeObjects()
         {
-            for (int i = 0; i < m_MetalMLIntermediatesHeaps.Count; ++i)
+            // Dispose managed owners first; MetalHeap.Release releases the native MTLHeap.
+            for (int i = 0; i < m_MetalMLIntermediatesHeapOwners.Count; ++i)
             {
-                MTLHeap heap = m_MetalMLIntermediatesHeaps[i];
-                if (heap.NativePtr != IntPtr.Zero)
-                {
-                    ObjectiveCRuntime.Release(heap);
-                }
+                m_MetalMLIntermediatesHeapOwners[i].Dispose();
             }
 
+            m_MetalMLIntermediatesHeapOwners.Clear();
             m_MetalMLIntermediatesHeaps.Clear();
 
             for (int i = 0; i < m_MetalMLArgumentTables.Count; ++i)
@@ -1149,37 +1114,6 @@ namespace SharpGPU
             }
 
             m_MetalMLPipelineStates.Clear();
-
-            for (int i = 0; i < m_MetalMLLibraries.Count; ++i)
-            {
-                MTLLibrary library = m_MetalMLLibraries[i];
-                if (library.NativePtr != IntPtr.Zero)
-                {
-                    ObjectiveCRuntime.Release(library);
-                }
-            }
-
-            m_MetalMLLibraries.Clear();
-        }
-
-        private void DeleteMetalMLPackageDirectories()
-        {
-            for (int i = 0; i < m_MetalMLPackageDirectories.Count; ++i)
-            {
-                string packageDirectory = m_MetalMLPackageDirectories[i];
-                try
-                {
-                    if (Directory.Exists(packageDirectory))
-                    {
-                        Directory.Delete(packageDirectory, recursive: true);
-                    }
-                }
-                catch
-                {
-                }
-            }
-
-            m_MetalMLPackageDirectories.Clear();
         }
 
         internal static bool TryGetStatisticsCounterSet(MTLDevice device, out MTLCounterSet counterSet)
@@ -1521,7 +1455,6 @@ namespace SharpGPU
             }
 
             ReleaseMetalMLNativeObjects();
-            DeleteMetalMLPackageDirectories();
 
             if (m_NativeDevice.NativePtr != IntPtr.Zero)
             {

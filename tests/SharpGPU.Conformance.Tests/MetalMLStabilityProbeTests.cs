@@ -1,6 +1,8 @@
 // Copyright (c) CGBull. All rights reserved.
 
 using System;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Runtime.InteropServices;
 using Xunit;
 
@@ -24,35 +26,22 @@ public sealed class MetalMLStabilityProbeTests
         using MetalTestContext context = MetalTestContext.Create();
         if (context.Device.Capabilities.MachineLearning.Execution.Tier == ERHICapabilityTier.Unavailable)
         {
-            // ML not supported, skip probe
             return;
         }
 
-        // Create simple element-wise Add operator (no intermediates heap)
-        RHIMLTensorDescriptor tensorDesc = CreateTensorDescriptor(2, 3);
-        RHIMLOpDescriptor addOp = RHIMLOpDescriptor.Create(
-            ERHIMLOpKind.ElementWiseAdd,
-            new[] { RHIMLOpTensorRef.FromInput(0), RHIMLOpTensorRef.FromInput(1) },
-            tensorDesc,
-            "Add");
+        Assert.True(
+            TryCreatePipelineFromFixture(context, "probe_add_single.mtlmlbin", "Probe.Add.Pipeline", out RHIMLPipeline? pipeline),
+            "Missing Metal ML fixture probe_add_single.mtlmlbin (NeuralCook CoreML→mtlmlbin).");
 
-        using RHIMLProgram program = context.Device.CreateMLProgram(RHIMLProgramDescriptor.Create(
-            "Probe.SingleDispatch.Add",
-            new[] { tensorDesc, tensorDesc },
-            new[] { tensorDesc },
-            new[] { addOp }));
-
-        using RHIMLPipeline pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
+        using (pipeline)
         {
-            Name = "Probe.Add.Pipeline",
-            Program = program,
-        });
+            RHIMLTensorDescriptor tensorDesc = CreateTensorDescriptor(2, 3);
+            float[] result = ExecuteSingleDispatch(context, pipeline, tensorDesc,
+                new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f },
+                new[] { 10.0f, 20.0f, 30.0f, 40.0f, 50.0f, 60.0f });
 
-        float[] result = ExecuteSingleDispatch(context, pipeline, tensorDesc,
-            new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f },
-            new[] { 10.0f, 20.0f, 30.0f, 40.0f, 50.0f, 60.0f });
-
-        AssertClose(new[] { 11.0f, 22.0f, 33.0f, 44.0f, 55.0f, 66.0f }, result, "SingleDispatch.Add");
+            AssertClose(new[] { 11.0f, 22.0f, 33.0f, 44.0f, 55.0f, 66.0f }, result, "SingleDispatch.Add");
+        }
     }
 
     [Fact]
@@ -69,39 +58,26 @@ public sealed class MetalMLStabilityProbeTests
             return;
         }
 
-        // Test: Reuse same pipeline for multiple dispatches
-        RHIMLTensorDescriptor tensorDesc = CreateTensorDescriptor(2, 3);
-        RHIMLOpDescriptor addOp = RHIMLOpDescriptor.Create(
-            ERHIMLOpKind.ElementWiseAdd,
-            new[] { RHIMLOpTensorRef.FromInput(0), RHIMLOpTensorRef.FromInput(1) },
-            tensorDesc,
-            "Add");
+        Assert.True(
+            TryCreatePipelineFromFixture(context, "probe_add_multi.mtlmlbin", "Probe.Add.MultiDispatch", out RHIMLPipeline? pipeline),
+            "Missing Metal ML fixture probe_add_multi.mtlmlbin (NeuralCook CoreML→mtlmlbin).");
 
-        using RHIMLProgram program = context.Device.CreateMLProgram(RHIMLProgramDescriptor.Create(
-            "Probe.MultiDispatch.Add",
-            new[] { tensorDesc, tensorDesc },
-            new[] { tensorDesc },
-            new[] { addOp }));
-
-        using RHIMLPipeline pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
+        using (pipeline)
         {
-            Name = "Probe.Add.MultiDispatch",
-            Program = program,
-        });
+            RHIMLTensorDescriptor tensorDesc = CreateTensorDescriptor(2, 3);
 
-        // First dispatch
-        float[] result1 = ExecuteSingleDispatch(context, pipeline, tensorDesc,
-            new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f },
-            new[] { 10.0f, 20.0f, 30.0f, 40.0f, 50.0f, 60.0f });
+            float[] result1 = ExecuteSingleDispatch(context, pipeline, tensorDesc,
+                new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f },
+                new[] { 10.0f, 20.0f, 30.0f, 40.0f, 50.0f, 60.0f });
 
-        AssertClose(new[] { 11.0f, 22.0f, 33.0f, 44.0f, 55.0f, 66.0f }, result1, "MultiDispatch.First");
+            AssertClose(new[] { 11.0f, 22.0f, 33.0f, 44.0f, 55.0f, 66.0f }, result1, "MultiDispatch.First");
 
-        // Second dispatch - this is where corruption may occur
-        float[] result2 = ExecuteSingleDispatch(context, pipeline, tensorDesc,
-            new[] { 2.0f, 4.0f, 6.0f, 8.0f, 10.0f, 12.0f },
-            new[] { 100.0f, 200.0f, 300.0f, 400.0f, 500.0f, 600.0f });
+            float[] result2 = ExecuteSingleDispatch(context, pipeline, tensorDesc,
+                new[] { 2.0f, 4.0f, 6.0f, 8.0f, 10.0f, 12.0f },
+                new[] { 100.0f, 200.0f, 300.0f, 400.0f, 500.0f, 600.0f });
 
-        AssertClose(new[] { 102.0f, 204.0f, 306.0f, 408.0f, 510.0f, 612.0f }, result2, "MultiDispatch.Second");
+            AssertClose(new[] { 102.0f, 204.0f, 306.0f, 408.0f, 510.0f, 612.0f }, result2, "MultiDispatch.Second");
+        }
     }
 
     [Fact]
@@ -118,37 +94,24 @@ public sealed class MetalMLStabilityProbeTests
             return;
         }
 
-        // Gemm requires intermediates heap - this is the known problematic case
-        RHIMLTensorDescriptor aDesc = CreateTensorDescriptor(2, 3);
-        RHIMLTensorDescriptor bDesc = CreateTensorDescriptor(3, 2);
-        RHIMLTensorDescriptor cDesc = CreateTensorDescriptor(2, 2);
-        RHIMLTensorDescriptor outDesc = CreateTensorDescriptor(2, 2);
+        Assert.True(
+            TryCreatePipelineFromFixture(context, "probe_gemm_single.mtlmlbin", "Probe.Gemm.Pipeline", out RHIMLPipeline? pipeline),
+            "Missing Metal ML fixture probe_gemm_single.mtlmlbin (NeuralCook CoreML→mtlmlbin).");
 
-        RHIMLOpDescriptor gemmOp = RHIMLOpDescriptor.Create(
-            ERHIMLOpKind.GeneralMatrixMultiply,
-            new[] { RHIMLOpTensorRef.FromInput(0), RHIMLOpTensorRef.FromInput(1), RHIMLOpTensorRef.FromInput(2) },
-            outDesc,
-            "Gemm");
-
-        using RHIMLProgram program = context.Device.CreateMLProgram(RHIMLProgramDescriptor.Create(
-            "Probe.SingleDispatch.Gemm",
-            new[] { aDesc, bDesc, cDesc },
-            new[] { outDesc },
-            new[] { gemmOp }));
-
-        using RHIMLPipeline pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
+        using (pipeline)
         {
-            Name = "Probe.Gemm.Pipeline",
-            Program = program,
-        });
+            RHIMLTensorDescriptor aDesc = CreateTensorDescriptor(2, 3);
+            RHIMLTensorDescriptor bDesc = CreateTensorDescriptor(3, 2);
+            RHIMLTensorDescriptor cDesc = CreateTensorDescriptor(2, 2);
+            RHIMLTensorDescriptor outDesc = CreateTensorDescriptor(2, 2);
 
-        float[] result = ExecuteGemmDispatch(context, pipeline, aDesc, bDesc, cDesc, outDesc,
-            new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f },       // A: 2x3
-            new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f },       // B: 3x2
-            new[] { 0.5f, 1.0f, 1.5f, 2.0f });                   // C: 2x2
+            float[] result = ExecuteGemmDispatch(context, pipeline, aDesc, bDesc, cDesc, outDesc,
+                new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f },
+                new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f },
+                new[] { 0.5f, 1.0f, 1.5f, 2.0f });
 
-        // Expected: A @ B + C
-        AssertClose(new[] { 22.5f, 29.0f, 50.5f, 65.0f }, result, "SingleDispatch.Gemm");
+            AssertClose(new[] { 22.5f, 29.0f, 50.5f, 66.0f }, result, "SingleDispatch.Gemm");
+        }
     }
 
     [Fact]
@@ -165,51 +128,77 @@ public sealed class MetalMLStabilityProbeTests
             return;
         }
 
-        // CRITICAL TEST: This is the known blocker - Gemm with intermediates heap
-        // corrupts subsequent dispatches on macOS 26.5
-        RHIMLTensorDescriptor aDesc = CreateTensorDescriptor(2, 3);
-        RHIMLTensorDescriptor bDesc = CreateTensorDescriptor(3, 2);
-        RHIMLTensorDescriptor cDesc = CreateTensorDescriptor(2, 2);
-        RHIMLTensorDescriptor outDesc = CreateTensorDescriptor(2, 2);
+        Assert.True(
+            TryCreatePipelineFromFixture(context, "probe_gemm_multi.mtlmlbin", "Probe.Gemm.MultiDispatch", out RHIMLPipeline? pipeline),
+            "Missing Metal ML fixture probe_gemm_multi.mtlmlbin (NeuralCook CoreML→mtlmlbin).");
 
-        RHIMLOpDescriptor gemmOp = RHIMLOpDescriptor.Create(
-            ERHIMLOpKind.GeneralMatrixMultiply,
-            new[] { RHIMLOpTensorRef.FromInput(0), RHIMLOpTensorRef.FromInput(1), RHIMLOpTensorRef.FromInput(2) },
-            outDesc,
-            "Gemm");
-
-        using RHIMLProgram program = context.Device.CreateMLProgram(RHIMLProgramDescriptor.Create(
-            "Probe.MultiDispatch.Gemm",
-            new[] { aDesc, bDesc, cDesc },
-            new[] { outDesc },
-            new[] { gemmOp }));
-
-        using RHIMLPipeline pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
+        using (pipeline)
         {
-            Name = "Probe.Gemm.MultiDispatch",
-            Program = program,
-        });
+            RHIMLTensorDescriptor aDesc = CreateTensorDescriptor(2, 3);
+            RHIMLTensorDescriptor bDesc = CreateTensorDescriptor(3, 2);
+            RHIMLTensorDescriptor cDesc = CreateTensorDescriptor(2, 2);
+            RHIMLTensorDescriptor outDesc = CreateTensorDescriptor(2, 2);
 
-        // First dispatch
-        float[] result1 = ExecuteGemmDispatch(context, pipeline, aDesc, bDesc, cDesc, outDesc,
-            new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f },
-            new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f },
-            new[] { 0.5f, 1.0f, 1.5f, 2.0f });
+            float[] result1 = ExecuteGemmDispatch(context, pipeline, aDesc, bDesc, cDesc, outDesc,
+                new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f },
+                new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f },
+                new[] { 0.5f, 1.0f, 1.5f, 2.0f });
 
-        AssertClose(new[] { 22.5f, 29.0f, 50.5f, 65.0f }, result1, "MultiDispatch.Gemm.First");
+            AssertClose(new[] { 22.5f, 29.0f, 50.5f, 66.0f }, result1, "MultiDispatch.Gemm.First");
 
-        // Second dispatch - BLOCKER: this typically returns zeros or garbage
-        float[] result2 = ExecuteGemmDispatch(context, pipeline, aDesc, bDesc, cDesc, outDesc,
-            new[] { 2.0f, 0.0f, 1.0f, 3.0f, 1.0f, 2.0f },
-            new[] { 1.0f, 0.0f, 2.0f, 1.0f, 0.0f, 3.0f },
-            new[] { 1.0f, 2.0f, 3.0f, 4.0f });
+            float[] result2 = ExecuteGemmDispatch(context, pipeline, aDesc, bDesc, cDesc, outDesc,
+                new[] { 2.0f, 0.0f, 1.0f, 3.0f, 1.0f, 2.0f },
+                new[] { 1.0f, 0.0f, 2.0f, 1.0f, 0.0f, 3.0f },
+                new[] { 1.0f, 2.0f, 3.0f, 4.0f });
 
-        // Expected: [[2*1+0*2+1*0, 2*0+0*1+1*3], [3*1+1*2+2*0, 3*0+1*1+2*3]] + C
-        // = [[2, 3], [5, 7]] + [[1, 2], [3, 4]] = [[3, 5], [8, 11]]
-        AssertClose(new[] { 3.0f, 5.0f, 8.0f, 11.0f }, result2, "MultiDispatch.Gemm.Second");
+            AssertClose(new[] { 3.0f, 5.0f, 8.0f, 11.0f }, result2, "MultiDispatch.Gemm.Second");
+        }
     }
 
     // Helper Methods
+
+    private static bool TryCreatePipelineFromFixture(
+        MetalTestContext context,
+        string fixtureFileName,
+        string pipelineName,
+        [NotNullWhen(true)] out RHIMLPipeline? pipeline)
+    {
+        pipeline = null;
+        string? fixturePath = ResolveMetalMlFixturePath(fixtureFileName);
+        if (fixturePath == null)
+        {
+            return false;
+        }
+
+        RHIMLBinary binary = RHIMLBinaryLoader.Load(File.ReadAllBytes(fixturePath));
+        pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
+        {
+            Name = pipelineName,
+            Binary = binary,
+        });
+        return true;
+    }
+
+    private static string? ResolveMetalMlFixturePath(string fixtureFileName)
+    {
+        string[] candidates =
+        [
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "MetalML", fixtureFileName),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures", "MetalML", fixtureFileName)),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "TestData", "NeuralCook", fixtureFileName)),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "TestData", "NeuralCook", fixtureFileName)),
+        ];
+
+        foreach (string candidate in candidates)
+        {
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
 
     private static RHIMLTensorDescriptor CreateTensorDescriptor(params uint[] dimensions)
     {

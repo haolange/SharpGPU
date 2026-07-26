@@ -37,4 +37,9 @@
     <Compile Remove="obj\**\*.cs" />
     <EmbeddedFiles Remove="obj\**\*.cs" />
   </ItemGroup>
+
+  <ItemGroup Condition="Exists('Fixtures/MetalML')">
+    <None Include="Fixtures/MetalML/**/*" CopyToOutputDirectory="PreserveNewest" Link="Fixtures/MetalML/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

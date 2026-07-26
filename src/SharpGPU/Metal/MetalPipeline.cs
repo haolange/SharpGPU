@@ -107,8 +107,17 @@ namespace SharpGPU
             MetalBufferBindingPlanner.ValidatePipelineBufferBudget(
                 pipelineLayout.ArgumentTableLayouts, MetalBindingPipelineType.Compute);
             MetalFunction computeFunction = (MetalFunction)descriptor.ComputeFunction;
+            MTLComputePipelineDescriptor nativeDescriptor = MTLComputePipelineDescriptor.New();
+            nativeDescriptor.ComputeFunction = computeFunction.NativeFunction;
+            // Metal ICB encode requires pipelines compiled with supportIndirectCommandBuffers.
+            nativeDescriptor.SupportIndirectCommandBuffers = true;
             NSError error = default;
-            m_NativePipelineState = device.NativeDevice.NewComputePipelineState(computeFunction.NativeFunction, ref error);
+            m_NativePipelineState = device.NativeDevice.NewComputePipelineState(
+                nativeDescriptor,
+                MTLPipelineOption.None,
+                IntPtr.Zero,
+                ref error);
+            ObjectiveCRuntime.Release(nativeDescriptor.NativePtr);
             if (m_NativePipelineState.NativePtr == IntPtr.Zero)
             {
                 string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";

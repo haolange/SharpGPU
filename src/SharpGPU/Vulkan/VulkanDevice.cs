@@ -1984,16 +1984,6 @@ namespace SharpGPU
                 + Capabilities.MachineLearning.Execution.UnavailableReason);
         }
 
-        public override RHIMLProgram CreateMLProgram(in RHIMLProgramDescriptor descriptor)
-        {
-            ThrowIfDisposed();
-            Capabilities.MachineLearning.Execution.Require(
-                "Vulkan machine-learning programs");
-            throw new NotSupportedException(
-                "Vulkan machine-learning programs are unavailable: "
-                + Capabilities.MachineLearning.Execution.UnavailableReason);
-        }
-
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)
         {
             ThrowIfDisposed();
