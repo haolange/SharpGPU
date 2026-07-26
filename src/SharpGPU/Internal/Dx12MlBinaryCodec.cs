@@ -374,7 +374,11 @@ namespace SharpGPU
 
         private static int ReadInt32(ReadOnlySpan<byte> payload, ref int offset)
         {
-            return checked((int)ReadUInt32(payload, ref offset));
+            // Must preserve signed values (e.g. OpIndex/InputIndex sentinel -1).
+            EnsureRemaining(payload, offset, 4);
+            int value = BinaryPrimitives.ReadInt32LittleEndian(payload.Slice(offset, 4));
+            offset += 4;
+            return value;
         }
 
         private static float ReadSingle(ReadOnlySpan<byte> payload, ref int offset)

@@ -1,5 +1,6 @@
 #if SHARPGPU_ENABLE_DX12
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using SharpGPU;
 using Xunit;
@@ -148,6 +149,35 @@ public sealed class SharpGPUDirectMLContractTests
             bindingSet.Dispose();
             pipeline.Dispose();
         }
+
+    [Fact]
+    public void Dx12_NeuralCook_ElementWiseAdd_DmlbinFixture_ShouldCreateMLPipeline()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using DirectMLTestContext? context = DirectMLTestContext.TryCreate();
+        if (context == null)
+        {
+            return;
+        }
+
+        string? fixturePath = ResolveNeuralCookFixture("elementwise_add.dmlbin");
+        Assert.True(
+            fixturePath != null && File.Exists(fixturePath),
+            "Missing NeuralCook DX12 fixture elementwise_add.dmlbin.");
+
+        RHIMLBinary binary = RHIMLBinaryLoader.Load(File.ReadAllBytes(fixturePath));
+        Assert.Equal(ERHIMLBinaryFormat.DirectMLProgramV1, binary.Format);
+        using RHIMLPipeline pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
+        {
+            Name = "NeuralCook.elementwise_add",
+            Binary = binary,
+        });
+        Assert.NotNull(pipeline);
+    }
 
     [Fact]
     public void Dx12_DirectML_GemmAddRelu_EndToEnd_ShouldMatchCpuReference()
@@ -310,6 +340,44 @@ public sealed class SharpGPUDirectMLContractTests
         commandBuffer.EndTransferPass();
 
         commandBuffer.End();
+    }
+
+    private static string? ResolveNeuralCookFixture(string fixtureFileName)
+    {
+        for (DirectoryInfo? dir = new(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            string[] candidates =
+            [
+                Path.Combine(dir.FullName, "TestData", "NeuralCook", fixtureFileName),
+                Path.Combine(
+                    dir.FullName,
+                    "Engine",
+                    "Source",
+                    "Developer",
+                    "Tests",
+                    "TestData",
+                    "NeuralCook",
+                    fixtureFileName),
+                Path.Combine(
+                    dir.FullName,
+                    "Source",
+                    "Developer",
+                    "Tests",
+                    "TestData",
+                    "NeuralCook",
+                    fixtureFileName),
+            ];
+
+            foreach (string candidate in candidates)
+            {
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return null;
     }
 
     private static RHIMLBinary CreateGemmReluBinary(

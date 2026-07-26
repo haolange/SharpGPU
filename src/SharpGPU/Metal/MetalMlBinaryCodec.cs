@@ -367,7 +367,11 @@ namespace SharpGPU
 
         private static int ReadInt32(ReadOnlySpan<byte> payload, ref int offset)
         {
-            return checked((int)ReadUInt32(payload, ref offset));
+            // Preserve signed lengths/counts; do not round-trip via checked uint cast.
+            EnsureRemaining(payload, offset, 4);
+            int value = BinaryPrimitives.ReadInt32LittleEndian(payload.Slice(offset, 4));
+            offset += 4;
+            return value;
         }
 
         private static ulong ReadUInt64(ReadOnlySpan<byte> payload, ref int offset)

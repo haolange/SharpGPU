@@ -194,8 +194,9 @@ public sealed class W11AdvancedSurfaceContractTests
     [Fact]
     public void MetalAdvancedStageConversion_ShouldFailClosed()
     {
-        // Task/Mesh/ML are unavailable on Metal — strip to zero rather than throw
+        // Task/Mesh remain unavailable on Metal — strip to zero rather than throw
         // so aggregates that embed those bits can still lower the supported remainder.
+        // MachineLearning maps to MTLStageMachineLearning (bit 30); do not strip it.
         Assert.Equal(
             0UL,
             MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Task));
@@ -203,7 +204,7 @@ public sealed class W11AdvancedSurfaceContractTests
             0UL,
             MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Mesh));
         Assert.Equal(
-            0UL,
+            1UL << 30,
             MetalUtility.ConvertToMetal4Stages(
                 ERHISyncStageMask.MachineLearning));
         Assert.Throws<ArgumentOutOfRangeException>(
