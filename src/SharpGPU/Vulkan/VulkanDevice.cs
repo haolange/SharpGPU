@@ -1654,8 +1654,8 @@ namespace SharpGPU
 
         public override RHIStorageQueue CreateStorageQueue()
         {
-            throw new NotSupportedException(
-                "Vulkan StorageQueue is unavailable because SharpGPU has no official native storage API for this backend.");
+            ThrowIfDeviceUnavailable();
+            return new VulkanStorageQueue(this);
         }
 
         public override RHIQuery CreateQuery(in RHIQueryDescriptor descriptor)
@@ -1979,9 +1979,7 @@ namespace SharpGPU
             ThrowIfDisposed();
             Capabilities.MachineLearning.Execution.Require(
                 "Vulkan machine-learning tensors");
-            throw new NotSupportedException(
-                "Vulkan machine-learning tensors are unavailable: "
-                + Capabilities.MachineLearning.Execution.UnavailableReason);
+            return new VulkanTensor(this, descriptor);
         }
 
         public override RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor)

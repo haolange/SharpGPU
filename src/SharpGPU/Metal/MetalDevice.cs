@@ -205,8 +205,9 @@ namespace SharpGPU
 
         public override RHIStorageQueue CreateStorageQueue()
         {
-            throw new NotSupportedException(
-                "Metal StorageQueue is unavailable because SharpGPU has no official native storage API for this backend.");
+            ThrowIfCommandQueueFailed();
+            Capabilities.Storage.NativeGpuFileIo.Require("Metal storage queue creation");
+            return new MetalStorageQueue(this);
         }
 
         public override RHIQuery CreateQuery(in RHIQueryDescriptor descriptor)
@@ -689,6 +690,8 @@ namespace SharpGPU
             bool isPipelineStatsSupported = TryGetStatisticsCounterSet(m_NativeDevice, out _);
             bool isMLSupported = TryProbeMetalMLSupport(out string? metalMLUnavailableReason);
             m_MetalMLUnavailableReason = metalMLUnavailableReason;
+            bool nativeStorageAvailable =
+                MetalStorageQueue.TryProbeNativeSupport(this, out string nativeStorageReason);
 
             static RHICapability Probe(
                 bool available,
@@ -885,10 +888,11 @@ namespace SharpGPU
                         strategy: ERHICapabilityStrategy.CoreApi,
                         probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe)),
                 storage: new RHIStorageCapabilities(
-                    nativeGpuFileIo: RHICapability.Unavailable(
-                        "Metal has no SharpGPU-supported official native GPU file-I/O queue.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "Metal storage contract")),
+                    nativeGpuFileIo: Probe(
+                        nativeStorageAvailable,
+                        "MTLIOCommandQueue + MTLIOFileHandle runtime probe",
+                        nativeStorageReason,
+                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe)),
                 pipelineCache: new RHIPipelineCacheCapabilities(
                     nativeCache: RHICapability.Unavailable(
                         "MTLBinaryArchive is URL-based and cannot satisfy the caller-owned in-memory blob contract.",

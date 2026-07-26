@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using SharpMetal.Foundation;
+using SharpMetal.Metal;
+using SharpMetal.ObjectiveCCore;
 
 namespace SharpGPU
 {
@@ -97,6 +100,68 @@ namespace SharpGPU
                 m_FreeIndices.Push(lease.Index);
                 return true;
             }
+        }
+    }
+
+    internal sealed class MetalTextureView : RHITextureView
+    {
+        public MetalTexture Texture => m_Texture;
+        public MTLResourceID ResourceID => m_ResourceID;
+        public MTLTexture ParentTexture => m_Texture.NativeTexture;
+        public RHITextureViewDescriptor Descriptor => m_Descriptor;
+
+        private readonly MetalTexture m_Texture;
+        private readonly RHITextureViewDescriptor m_Descriptor;
+        private readonly MetalTextureViewIndexLease m_PoolLease;
+        private MTLResourceID m_ResourceID;
+
+        public MetalTextureView(MetalTexture texture, in RHITextureViewDescriptor descriptor)
+        {
+            m_Texture = texture;
+            m_Descriptor = descriptor;
+
+            MetalDevice device = texture.MetalDevice;
+            MTLTextureViewPool pool = device.TextureViewPool;
+            m_PoolLease = device.AllocateTextureViewIndex();
+
+            try
+            {
+                bool fullView = descriptor.BaseMipLevel == 0 &&
+                                descriptor.BaseArraySlice == 0 &&
+                                descriptor.MipCount >= texture.Descriptor.MipCount &&
+                                descriptor.ArrayCount >= texture.Descriptor.Extent.z;
+
+                if (fullView)
+                {
+                    m_ResourceID = pool.SetTextureView(texture.NativeTexture.NativePtr, m_PoolLease.Index);
+                    return;
+                }
+
+                MTLTextureViewDescriptor viewDescriptor = MTLTextureViewDescriptor.New();
+                try
+                {
+                    viewDescriptor.PixelFormat = MetalUtility.ConvertToMetalPixelFormat(texture.Descriptor.Format);
+                    viewDescriptor.TextureType = MetalUtility.ConvertToMetalTextureType(texture.Descriptor.Dimension);
+                    viewDescriptor.LevelRange = new NSRange { location = descriptor.BaseMipLevel, length = descriptor.MipCount };
+                    viewDescriptor.SliceRange = new NSRange { location = descriptor.BaseArraySlice, length = descriptor.ArrayCount };
+                    m_ResourceID = pool.SetTextureView(texture.NativeTexture.NativePtr, viewDescriptor.NativePtr, m_PoolLease.Index);
+                }
+                finally
+                {
+                    ObjectiveCRuntime.Release(viewDescriptor.NativePtr);
+                }
+            }
+            catch
+            {
+                device.ReleaseTextureViewIndex(m_PoolLease);
+                throw;
+            }
+        }
+
+        protected override void Release()
+        {
+            m_Texture.MetalDevice.ReleaseTextureViewIndex(m_PoolLease);
+            m_ResourceID = default;
         }
     }
 }

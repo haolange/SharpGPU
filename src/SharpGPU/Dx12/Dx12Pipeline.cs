@@ -5,6 +5,7 @@ using SharpGPU.Mathematics;
 using System.Collections.Generic;
 using System.Text;
 using System.Runtime.InteropServices;
+using Vortice.DirectML;
 
 namespace SharpGPU
 {
@@ -1637,5 +1638,1514 @@ namespace SharpGPU
         }
     }
     #endregion
+    #region MachineLearning
+internal static class Dx12MLUtilities
+    {
+        internal static TensorDataType ConvertToDirectMLDataType(in ERHIMLDataType dataType)
+        {
+            return dataType switch
+            {
+                ERHIMLDataType.Float32 => TensorDataType.Float32,
+                ERHIMLDataType.Float16 => TensorDataType.Float16,
+                ERHIMLDataType.Int32 => TensorDataType.Int32,
+                ERHIMLDataType.Int16 => TensorDataType.Int16,
+                ERHIMLDataType.Int8 => TensorDataType.Int8,
+                ERHIMLDataType.UInt32 => TensorDataType.Uint32,
+                ERHIMLDataType.UInt16 => TensorDataType.Uint16,
+                ERHIMLDataType.UInt8 => TensorDataType.Uint8,
+                _ => throw new NotSupportedException($"DX12 DirectML does not support ML data type '{dataType}'."),
+            };
+        }
+
+        internal static TensorDescription CreateTensorDescription(in RHIMLTensorDescriptor descriptor)
+        {
+            BufferTensorDescription tensorDescription = new BufferTensorDescription
+            {
+                DataType = ConvertToDirectMLDataType(descriptor.DataType),
+                Flags = TensorFlags.None,
+                Sizes = descriptor.Dimensions.ToArray(),
+                Strides = RHIMLHelpers.GetEffectiveStrides(descriptor),
+                TotalTensorSizeInBytes = RHIMLHelpers.CalculateMinimumByteLength(descriptor),
+                GuaranteedBaseOffsetAlignment = 0,
+            };
+            return tensorDescription;
+        }
+
+        internal static BindingDescription CreateBufferBinding(Dx12Buffer buffer, ulong offset, ulong sizeInBytes)
+        {
+            BufferBinding bufferBinding;
+            bufferBinding.Buffer = buffer.NativeResource;
+            bufferBinding.Offset = offset;
+            bufferBinding.SizeInBytes = sizeInBytes;
+            return bufferBinding;
+        }
+
+        internal static BindingDescription CreateTensorBinding(Dx12Tensor tensor)
+        {
+            return CreateBufferBinding(tensor.BackingBuffer, tensor.BackingBufferOffset, tensor.ByteLength);
+        }
+
+        internal static void ValidateTensorLayout(string label, in RHIMLTensorDescriptor expected, in RHIMLTensorDescriptor actual)
+        {
+            if (!RHIMLHelpers.HasCompatibleLayout(expected, actual))
+            {
+                throw new InvalidOperationException(
+                    $"{label} tensor layout mismatch. expected={RHIMLHelpers.DescribeLayout(expected)}, actual={RHIMLHelpers.DescribeLayout(actual)}.");
+            }
+        }
+
+        /// <summary>
+        /// Builds the DirectML <see cref="OperatorDescription"/> for a single RHI ML op, using the
+        /// provided resolved tensor descriptions (already mapped from program inputs / earlier op
+        /// outputs). Returns null when the op kind is not mapped to a DirectML operator; the caller
+        /// surfaces that as an explicit unsupported-op error.
+        /// </summary>
+        internal static OperatorDescription? CreateOperatorDescription(
+            in RHIMLOpDescriptor op,
+            TensorDescription[] resolvedInputs,
+            TensorDescription outputTensor)
+        {
+            switch (op.Kind)
+            {
+                case ERHIMLOpKind.ElementWiseAdd:
+                    return new ElementWiseAddOperatorDescription
+                    {
+                        ATensor = resolvedInputs[0],
+                        BTensor = resolvedInputs[1],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ElementWiseSubtract:
+                    return new ElementWiseSubtractOperatorDescription
+                    {
+                        ATensor = resolvedInputs[0],
+                        BTensor = resolvedInputs[1],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ElementWiseMultiply:
+                    return new ElementWiseMultiplyOperatorDescription
+                    {
+                        ATensor = resolvedInputs[0],
+                        BTensor = resolvedInputs[1],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ElementWiseDivide:
+                    return new ElementWiseDivideOperatorDescription
+                    {
+                        ATensor = resolvedInputs[0],
+                        BTensor = resolvedInputs[1],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ElementWiseNegate:
+                    return new ElementWiseNegateOperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ActivationRelu:
+                    return new ActivationReluOperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ActivationSigmoid:
+                    return new ActivationSigmoidOperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.ActivationTanh:
+                    return new ActivationTanhOperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.MatrixMultiply:
+                    return new GeneralMatrixMultiplyOperatorDescription
+                    {
+                        ATensor = resolvedInputs[0],
+                        BTensor = resolvedInputs[1],
+                        CTensor = null,
+                        OutputTensor = outputTensor,
+                        TransformA = MapMatrixTransform(op.TransformA),
+                        TransformB = MapMatrixTransform(op.TransformB),
+                        Alpha = op.Alpha,
+                        Beta = 0.0f,
+                        FusedActivation = BuildFusedActivation(op.FusedActivation),
+                    };
+                case ERHIMLOpKind.GeneralMatrixMultiply:
+                    return new GeneralMatrixMultiplyOperatorDescription
+                    {
+                        ATensor = resolvedInputs[0],
+                        BTensor = resolvedInputs[1],
+                        CTensor = resolvedInputs.Length >= 3 ? resolvedInputs[2] : null,
+                        OutputTensor = outputTensor,
+                        TransformA = MapMatrixTransform(op.TransformA),
+                        TransformB = MapMatrixTransform(op.TransformB),
+                        Alpha = op.Alpha,
+                        Beta = op.Beta,
+                        FusedActivation = BuildFusedActivation(op.FusedActivation),
+                    };
+                case ERHIMLOpKind.ActivationSoftmax:
+                    return new ActivationSoftmaxOperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                    };
+                case ERHIMLOpKind.MeanVarianceNormalization:
+                    return new MeanVarianceNormalization1OperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        ScaleTensor = resolvedInputs.Length >= 2 ? resolvedInputs[1] : null,
+                        BiasTensor = resolvedInputs.Length >= 3 ? resolvedInputs[2] : null,
+                        OutputTensor = outputTensor,
+                        Axes = op.Axes ?? new[] { -1 },
+                        NormalizeVariance = true,
+                        Epsilon = op.Epsilon,
+                        FusedActivation = null,
+                    };
+                case ERHIMLOpKind.ReduceMean:
+                    return new ReduceOperatorDescription
+                    {
+                        Function = ReduceFunction.Average,
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                        Axes = op.Axes ?? new[] { -1 },
+                    };
+                case ERHIMLOpKind.Reshape:
+                case ERHIMLOpKind.Transpose:
+                case ERHIMLOpKind.ElementWiseIdentity:
+                    // DirectML has no dedicated reshape/transpose operator: both are expressed as an
+                    // element-wise identity copy with the permuted/reshaped layout encoded on the
+                    // output tensor descriptor (sizes + strides). The outputTensor carries the
+                    // target shape (reshape) or the permuted strides (transpose).
+                    return new ElementWiseIdentityOperatorDescription
+                    {
+                        InputTensor = resolvedInputs[0],
+                        OutputTensor = outputTensor,
+                        ScaleBias = null,
+                    };
+                default:
+                    return null;
+            }
+        }
+
+        internal static OperatorDescription? BuildFusedActivation(ERHIMLFusedActivation activation)
+        {
+            return activation switch
+            {
+                ERHIMLFusedActivation.None => null,
+                ERHIMLFusedActivation.Relu => new ActivationReluOperatorDescription(),
+                ERHIMLFusedActivation.Sigmoid => new ActivationSigmoidOperatorDescription(),
+                ERHIMLFusedActivation.Tanh => new ActivationTanhOperatorDescription(),
+                _ => null,
+            };
+        }
+
+        internal static MatrixTransform MapMatrixTransform(ERHIMLMatrixTransform transform)
+        {
+            return transform switch
+            {
+                ERHIMLMatrixTransform.None => MatrixTransform.None,
+                ERHIMLMatrixTransform.Transpose => MatrixTransform.Transpose,
+                _ => MatrixTransform.None,
+            };
+        }
+    }
+
+    internal sealed class Dx12MLProgram : RHIMLProgram
+    {
+        internal RHIMLTensorBindingInfo[] BindingInfos { get; }
+        internal RHIMLTensorDescriptor[] IntermediateTensorDescriptors => m_IntermediateTensorDescriptors;
+        internal RHIMLOpDescriptor[] Ops => m_Ops;
+        internal RHIMLTensorDescriptor[] ProgramInputs => m_ProgramInputs;
+        internal RHIMLTensorDescriptor[] ProgramOutputs => m_ProgramOutputs;
+
+        private readonly RHIMLTensorDescriptor[] m_ProgramInputs;
+        private readonly RHIMLTensorDescriptor[] m_ProgramOutputs;
+        private readonly RHIMLTensorDescriptor[] m_IntermediateTensorDescriptors;
+        private readonly RHIMLOpDescriptor[] m_Ops;
+
+        private Dx12MLProgram(
+            string name,
+            RHIMLTensorDescriptor[] programInputs,
+            RHIMLTensorDescriptor[] programOutputs,
+            RHIMLTensorDescriptor[] intermediateDescriptors,
+            RHIMLOpDescriptor[] ops,
+            RHIMLTensorBindingInfo[] bindingInfos)
+        {
+            m_Name = name;
+            m_ProgramInputs = programInputs;
+            m_ProgramOutputs = programOutputs;
+            m_IntermediateTensorDescriptors = intermediateDescriptors;
+            m_Ops = ops;
+            BindingInfos = bindingInfos ?? Array.Empty<RHIMLTensorBindingInfo>();
+        }
+
+        /// <summary>
+        /// Descriptor-driven constructor: the canonical entry point for general subgraph lowering
+        /// (ADR-0028). Each op's output that is not a program output becomes an intermediate
+        /// tensor; program outputs are surfaced as the binding set's output slots. Binding infos
+        /// advertise the program's input and output slots so that <see cref="Dx12MLPipeline"/> and
+        /// <see cref="Dx12MLBindingTable"/> can wire every stage from the same descriptor contract.
+        /// </summary>
+        internal static Dx12MLProgram Create(in RHIMLProgramIR descriptor)
+        {
+            if (descriptor.Ops.Length == 0)
+            {
+                throw new InvalidOperationException("DX12 ML program descriptor must contain at least one op.");
+            }
+
+            RHIMLTensorDescriptor[] programInputs = CloneDescriptors(descriptor.Inputs);
+            RHIMLOpDescriptor[] ops = new RHIMLOpDescriptor[descriptor.Ops.Length];
+            List<RHIMLTensorDescriptor> intermediates = new List<RHIMLTensorDescriptor>();
+
+            // Determine which op outputs are program outputs (by matching shape/dtype to the
+            // declared program outputs, in declared order) and which are intermediates. A program
+            // output is matched to the op that produces it by position: the k-th program output is
+            // the output of the op referenced by no-one-but-the-output-binding. Because the
+            // descriptor is a linear DAG, we mark an op output as a program output when its op is
+            // the last producer of that logical output; the simpler, contract-faithful rule used
+            // here: op outputs that are never consumed by a later op are program outputs (in op
+            // order), and their count must equal descriptor.Outputs.Length.
+            bool[] isProgramOutput = new bool[ops.Length];
+            for (int i = 0; i < descriptor.Ops.Length; ++i)
+            {
+                isProgramOutput[i] = true;
+            }
+
+            for (int i = 0; i < descriptor.Ops.Length; ++i)
+            {
+                foreach (RHIMLOpTensorRef inputRef in descriptor.Ops[i].Inputs)
+                {
+                    if (inputRef.IsOpOutput && inputRef.OpIndex < isProgramOutput.Length)
+                    {
+                        isProgramOutput[inputRef.OpIndex] = false;
+                    }
+                }
+            }
+
+            int programOutputCount = 0;
+            for (int i = 0; i < isProgramOutput.Length; ++i)
+            {
+                if (isProgramOutput[i])
+                {
+                    ++programOutputCount;
+                }
+            }
+
+            if (programOutputCount != descriptor.Outputs.Length)
+            {
+                throw new InvalidOperationException(
+                    $"DX12 ML program descriptor output count mismatch: {programOutputCount} op(s) produce unconsumed outputs but {descriptor.Outputs.Length} program output(s) were declared.");
+            }
+
+            // Build per-op output descriptors: program outputs use the declared output descriptors
+            // (in op order over unconsumed ops); intermediate outputs get a GPULocal descriptor with
+            // the op's output shape. The op's output descriptor already carries the shape from the
+            // graph builder.
+            int outputMatchIndex = 0;
+            RHIMLTensorDescriptor[] opOutputDescriptors = new RHIMLTensorDescriptor[ops.Length];
+            for (int i = 0; i < descriptor.Ops.Length; ++i)
+            {
+                ref readonly RHIMLOpDescriptor srcOp = ref descriptor.Ops[i];
+                if (isProgramOutput[i])
+                {
+                    opOutputDescriptors[i] = RHIMLHelpers.CloneLayoutDescriptor(descriptor.Outputs[outputMatchIndex]);
+                    ++outputMatchIndex;
+                }
+                else
+                {
+                    RHIMLTensorDescriptor intermediate = RHIMLHelpers.CloneLayoutDescriptor(srcOp.Output);
+                    intermediate.StorageMode = ERHIStorageMode.GPULocal;
+                    intermediate.BackingBuffer = null;
+                    intermediate.BackingBufferOffset = 0;
+                    intermediate.UsageFlag = ERHITensorUsage.MachineLearning | ERHITensorUsage.Read | ERHITensorUsage.Write;
+                    opOutputDescriptors[i] = intermediate;
+                    intermediates.Add(intermediate);
+                }
+
+                ops[i] = srcOp;
+            }
+
+            // Binding infos: program inputs first (Input kind), then program outputs (Output kind).
+            // Intermediate tensors are owned by the binding set, not advertised as program bindings.
+            List<RHIMLTensorBindingInfo> bindingInfos = new List<RHIMLTensorBindingInfo>();
+            for (int i = 0; i < programInputs.Length; ++i)
+            {
+                bindingInfos.Add(new RHIMLTensorBindingInfo
+                {
+                    Name = $"Input{i}",
+                    Index = (uint)i,
+                    Kind = ERHIMLTensorBindingKind.Input,
+                    Descriptor = RHIMLHelpers.CloneLayoutDescriptor(programInputs[i]),
+                });
+            }
+
+            for (int i = 0; i < descriptor.Outputs.Length; ++i)
+            {
+                bindingInfos.Add(new RHIMLTensorBindingInfo
+                {
+                    Name = $"Output{i}",
+                    Index = (uint)i,
+                    Kind = ERHIMLTensorBindingKind.Output,
+                    Descriptor = RHIMLHelpers.CloneLayoutDescriptor(descriptor.Outputs[i]),
+                });
+            }
+
+            return new Dx12MLProgram(
+                descriptor.Name,
+                programInputs,
+                CloneDescriptors(descriptor.Outputs),
+                intermediates.ToArray(),
+                ops,
+                bindingInfos.ToArray());
+        }
+
+        internal void ValidateDeviceSupport(Dx12Device device)
+        {
+            ThrowIfDisposed();
+            if (!device.SupportsDirectML)
+            {
+                throw new NotSupportedException("DirectML is unavailable on this DX12 device.");
+            }
+
+            HashSet<TensorDataType> seenTypes = new HashSet<TensorDataType>();
+            for (int i = 0; i < m_ProgramInputs.Length; ++i)
+            {
+                seenTypes.Add(Dx12MLUtilities.ConvertToDirectMLDataType(m_ProgramInputs[i].DataType));
+            }
+
+            for (int i = 0; i < m_ProgramOutputs.Length; ++i)
+            {
+                seenTypes.Add(Dx12MLUtilities.ConvertToDirectMLDataType(m_ProgramOutputs[i].DataType));
+            }
+
+            for (int i = 0; i < m_IntermediateTensorDescriptors.Length; ++i)
+            {
+                seenTypes.Add(Dx12MLUtilities.ConvertToDirectMLDataType(m_IntermediateTensorDescriptors[i].DataType));
+            }
+
+            foreach (TensorDataType tensorDataType in seenTypes)
+            {
+                if (!device.DirectMLDevice.CheckTensorDataTypeSupport(tensorDataType))
+                {
+                    throw new NotSupportedException($"DirectML tensor data type '{tensorDataType}' is not supported by the current DX12 device.");
+                }
+            }
+        }
+
+        internal OperatorDescription[] CreateOperatorDescriptions()
+        {
+            OperatorDescription[] descriptions = new OperatorDescription[m_Ops.Length];
+            for (int i = 0; i < m_Ops.Length; ++i)
+            {
+                ref readonly RHIMLOpDescriptor op = ref m_Ops[i];
+                TensorDescription[] resolvedInputs = ResolveOpInputs(op);
+                TensorDescription outputTensor = Dx12MLUtilities.CreateTensorDescription(GetOpOutputDescriptor(i));
+                OperatorDescription? description = Dx12MLUtilities.CreateOperatorDescription(op, resolvedInputs, outputTensor);
+                if (!description.HasValue)
+                {
+                    throw new NotSupportedException($"DirectML does not support RHI ML op kind '{op.Kind}' (op '{op.Name}').");
+                }
+
+                descriptions[i] = description.Value;
+            }
+
+            return descriptions;
+        }
+
+        internal RHIMLTensorDescriptor GetOpOutputDescriptor(int opIndex)
+        {
+            // A program output if unconsumed; otherwise an intermediate.
+            // Re-derive the isProgramOutput flag consistently with Create().
+            bool isProgramOutput = true;
+            for (int i = 0; i < m_Ops.Length; ++i)
+            {
+                foreach (RHIMLOpTensorRef inputRef in m_Ops[i].Inputs)
+                {
+                    if (inputRef.IsOpOutput && inputRef.OpIndex == opIndex && i != opIndex)
+                    {
+                        isProgramOutput = false;
+                        break;
+                    }
+                }
+
+                if (!isProgramOutput)
+                {
+                    break;
+                }
+            }
+
+            if (isProgramOutput)
+            {
+                // Map to the program output by op order among unconsumed ops.
+                int outputIndex = 0;
+                for (int i = 0; i < opIndex; ++i)
+                {
+                    bool unconsumed = true;
+                    for (int j = 0; j < m_Ops.Length; ++j)
+                    {
+                        foreach (RHIMLOpTensorRef inputRef in m_Ops[j].Inputs)
+                        {
+                            if (inputRef.IsOpOutput && inputRef.OpIndex == i && j != i)
+                            {
+                                unconsumed = false;
+                                break;
+                            }
+                        }
+
+                        if (!unconsumed)
+                        {
+                            break;
+                        }
+                    }
+
+                    if (unconsumed)
+                    {
+                        ++outputIndex;
+                    }
+                }
+
+                return m_ProgramOutputs[outputIndex];
+            }
+
+            // Intermediate: find by op order among consumed ops.
+            int intermediateIndex = 0;
+            for (int i = 0; i < opIndex; ++i)
+            {
+                bool consumed = false;
+                for (int j = 0; j < m_Ops.Length; ++j)
+                {
+                    foreach (RHIMLOpTensorRef inputRef in m_Ops[j].Inputs)
+                    {
+                        if (inputRef.IsOpOutput && inputRef.OpIndex == i && j != i)
+                        {
+                            consumed = true;
+                            break;
+                        }
+                    }
+
+                    if (consumed)
+                    {
+                        break;
+                    }
+                }
+
+                if (consumed)
+                {
+                    ++intermediateIndex;
+                }
+            }
+
+            return m_IntermediateTensorDescriptors[intermediateIndex];
+        }
+
+        internal int GetOpIntermediateIndex(int opIndex)
+        {
+            int intermediateIndex = 0;
+            for (int i = 0; i < opIndex; ++i)
+            {
+                bool consumed = false;
+                for (int j = 0; j < m_Ops.Length; ++j)
+                {
+                    foreach (RHIMLOpTensorRef inputRef in m_Ops[j].Inputs)
+                    {
+                        if (inputRef.IsOpOutput && inputRef.OpIndex == i && j != i)
+                        {
+                            consumed = true;
+                            break;
+                        }
+                    }
+
+                    if (consumed)
+                    {
+                        break;
+                    }
+                }
+
+                if (consumed)
+                {
+                    ++intermediateIndex;
+                }
+            }
+
+            return intermediateIndex;
+        }
+
+        private TensorDescription[] ResolveOpInputs(in RHIMLOpDescriptor op)
+        {
+            TensorDescription[] resolved = new TensorDescription[op.Inputs.Length];
+            for (int i = 0; i < op.Inputs.Length; ++i)
+            {
+                RHIMLOpTensorRef inputRef = op.Inputs[i];
+                if (inputRef.IsOpOutput)
+                {
+                    resolved[i] = Dx12MLUtilities.CreateTensorDescription(GetOpOutputDescriptor(inputRef.OpIndex));
+                }
+                else
+                {
+                    resolved[i] = Dx12MLUtilities.CreateTensorDescription(m_ProgramInputs[inputRef.InputIndex]);
+                }
+            }
+
+            return resolved;
+        }
+
+        private static RHIMLTensorDescriptor[] CloneDescriptors(RHIMLTensorDescriptor[] descriptors)
+        {
+            RHIMLTensorDescriptor[] clones = new RHIMLTensorDescriptor[descriptors.Length];
+            for (int i = 0; i < descriptors.Length; ++i)
+            {
+                clones[i] = RHIMLHelpers.CloneLayoutDescriptor(descriptors[i]);
+            }
+
+            return clones;
+        }
+
+        protected override void Release()
+        {
+        }
+    }
+
+    internal sealed class Dx12MLBindingTable : RHIMLBindingTable
+    {
+        internal Dx12MLPipeline PipelineTyped => (Dx12MLPipeline)(m_Pipeline ?? throw new InvalidOperationException("DX12 ML binding set pipeline is unavailable."));
+        internal Dx12Tensor[] Inputs { get; }
+        internal Dx12Tensor[] Outputs { get; }
+        internal Dx12Buffer? TemporaryBuffer => m_TemporaryBuffer;
+        internal Dx12Buffer? PersistentBuffer => m_PersistentBuffer;
+        internal Dx12Buffer[] IntermediateBuffers => m_IntermediateBuffers;
+        internal IDMLBindingTable InitializerBindingTable => m_InitializerBindingTable ?? throw new InvalidOperationException("DX12 ML initializer binding table is unavailable.");
+        internal bool IsInitialized => m_IsInitialized;
+        internal bool InternalResourcesPrepared => m_InternalResourcesPrepared;
+        internal Dx12Device Device => m_Device;
+
+        private readonly Dx12Device m_Device;
+        private readonly BindingDescription[] m_ProgramInputBindings;
+        private readonly BindingDescription[] m_ProgramOutputBindings;
+        private readonly BindingDescription[] m_IntermediateBindings;
+        private readonly BindingDescription[][] m_StageInputs;
+        private readonly BindingDescription[][] m_StageOutputs;
+        private readonly BindingDescription?[] m_StagePersistentBindings;
+        private readonly BindingDescription? m_TemporaryBinding;
+
+        private IDMLBindingTable? m_InitializerBindingTable;
+        private IDMLBindingTable?[] m_ExecutionBindingTables;
+        private Dx12DescriptorInfo[] m_ExecutionDescriptorAllocations;
+        private int[] m_ExecutionDescriptorCounts;
+        private Dx12DescriptorInfo m_InitializerDescriptorAllocation;
+        private int m_InitializerDescriptorCount;
+        private Dx12Buffer? m_TemporaryBuffer;
+        private Dx12Buffer? m_PersistentBuffer;
+        private Dx12Buffer[] m_IntermediateBuffers;
+        private bool m_IsInitialized;
+        private bool m_InternalResourcesPrepared;
+
+        internal Dx12MLBindingTable(Dx12Device device, in RHIMLBindingTableDescriptor descriptor)
+        {
+            m_Device = device;
+
+            if (descriptor.Pipeline is not Dx12MLPipeline dx12Pipeline)
+            {
+                throw new ArgumentException($"DX12 ML binding set requires a {nameof(Dx12MLPipeline)}.", nameof(descriptor));
+            }
+            if (dx12Pipeline.IsDisposed)
+            {
+                throw new ObjectDisposedException(dx12Pipeline.GetType().FullName);
+            }
+            if (!ReferenceEquals(dx12Pipeline.Device, device))
+            {
+                throw new ArgumentException(
+                    "DX12 ML binding-set pipeline belongs to a different device.",
+                    nameof(descriptor));
+            }
+
+            m_Pipeline = dx12Pipeline;
+            Inputs = ConvertTensors(device, dx12Pipeline, descriptor.Inputs.Span, ERHIMLTensorBindingKind.Input, dx12Pipeline.InputCount);
+            Outputs = ConvertTensors(device, dx12Pipeline, descriptor.Outputs.Span, ERHIMLTensorBindingKind.Output, dx12Pipeline.OutputCount);
+
+            m_ProgramInputBindings = CreateTensorBindings(Inputs);
+            m_ProgramOutputBindings = CreateTensorBindings(Outputs);
+            m_ExecutionBindingTables = new IDMLBindingTable?[dx12Pipeline.StageCount];
+            m_ExecutionDescriptorAllocations = new Dx12DescriptorInfo[dx12Pipeline.StageCount];
+            m_ExecutionDescriptorCounts = new int[dx12Pipeline.StageCount];
+            m_StagePersistentBindings = new BindingDescription?[dx12Pipeline.StageCount];
+
+            Dx12MLProgram program = dx12Pipeline.Program;
+            int intermediateCount = program.IntermediateTensorDescriptors.Length;
+            m_IntermediateBuffers = new Dx12Buffer[intermediateCount];
+            m_IntermediateBindings = new BindingDescription[intermediateCount];
+
+            Dx12Buffer? temporaryBuffer = null;
+            Dx12Buffer? persistentBuffer = null;
+            IDMLBindingTable? initializerBindingTable = null;
+
+            try
+            {
+                m_InitializerDescriptorCount = Math.Max(1, checked((int)dx12Pipeline.InitializerBindingProperties.RequiredDescriptorCount));
+                m_InitializerDescriptorAllocation = device.AllocateCbvSrvUavDescriptor(m_InitializerDescriptorCount);
+                BindingTableDescription initializerTableDescription = new BindingTableDescription
+                {
+                    Dispatchable = dx12Pipeline.OperatorInitializer,
+                    CPUDescriptorHandle = m_InitializerDescriptorAllocation.CpuHandle,
+                    GPUDescriptorHandle = m_InitializerDescriptorAllocation.GpuHandle,
+                    SizeInDescriptors = checked((uint)m_InitializerDescriptorCount),
+                };
+                initializerBindingTable = device.DirectMLDevice.CreateBindingTable(ref initializerTableDescription);
+
+                if (dx12Pipeline.TemporaryResourceSize > 0)
+                {
+                    temporaryBuffer = CreateInternalResourceBuffer(device, dx12Pipeline.TemporaryResourceSize);
+                    m_TemporaryBinding = Dx12MLUtilities.CreateBufferBinding(temporaryBuffer, 0, dx12Pipeline.TemporaryResourceSize);
+                }
+
+                if (dx12Pipeline.PersistentResourceSize > 0)
+                {
+                    persistentBuffer = CreateInternalResourceBuffer(device, dx12Pipeline.PersistentResourceSize);
+                }
+
+                for (int i = 0; i < intermediateCount; ++i)
+                {
+                    ulong intermediateSize = RHIMLHelpers.CalculateMinimumByteLength(program.IntermediateTensorDescriptors[i]);
+                    Dx12Buffer intermediateBuffer = CreateInternalResourceBuffer(device, intermediateSize);
+                    m_IntermediateBuffers[i] = intermediateBuffer;
+                    m_IntermediateBindings[i] = Dx12MLUtilities.CreateBufferBinding(intermediateBuffer, 0, intermediateSize);
+                }
+
+                // Per-stage input/output binding arrays, resolved from the program's op dataflow.
+                m_StageInputs = new BindingDescription[dx12Pipeline.StageCount][];
+                m_StageOutputs = new BindingDescription[dx12Pipeline.StageCount][];
+                for (int stageIndex = 0; stageIndex < dx12Pipeline.StageCount; ++stageIndex)
+                {
+                    m_StageInputs[stageIndex] = ResolveStageInputs(program, stageIndex);
+                    m_StageOutputs[stageIndex] = ResolveStageOutputs(program, stageIndex);
+
+                    ulong stagePersistentSize = dx12Pipeline.GetPersistentResourceSize(stageIndex);
+                    if (persistentBuffer != null && stagePersistentSize > 0)
+                    {
+                        m_StagePersistentBindings[stageIndex] = Dx12MLUtilities.CreateBufferBinding(
+                            persistentBuffer,
+                            dx12Pipeline.GetPersistentResourceOffset(stageIndex),
+                            stagePersistentSize);
+                    }
+
+                    int executionDescriptorCount = Math.Max(1, checked((int)dx12Pipeline.GetRequiredDescriptorCount(stageIndex)));
+                    Dx12DescriptorInfo executionDescriptorAllocation = device.AllocateCbvSrvUavDescriptor(executionDescriptorCount);
+                    BindingTableDescription executionTableDescription = new BindingTableDescription
+                    {
+                        Dispatchable = dx12Pipeline.GetCompiledOperator(stageIndex),
+                        CPUDescriptorHandle = executionDescriptorAllocation.CpuHandle,
+                        GPUDescriptorHandle = executionDescriptorAllocation.GpuHandle,
+                        SizeInDescriptors = checked((uint)executionDescriptorCount),
+                    };
+
+                    m_ExecutionDescriptorCounts[stageIndex] = executionDescriptorCount;
+                    m_ExecutionDescriptorAllocations[stageIndex] = executionDescriptorAllocation;
+                    m_ExecutionBindingTables[stageIndex] = device.DirectMLDevice.CreateBindingTable(ref executionTableDescription);
+                }
+
+                m_InitializerBindingTable = initializerBindingTable;
+                m_TemporaryBuffer = temporaryBuffer;
+                m_PersistentBuffer = persistentBuffer;
+            }
+            catch
+            {
+                initializerBindingTable?.Release();
+                temporaryBuffer?.Dispose();
+                persistentBuffer?.Dispose();
+                for (int i = 0; i < m_IntermediateBuffers.Length; ++i)
+                {
+                    m_IntermediateBuffers[i]?.Dispose();
+                }
+
+                if (m_InitializerDescriptorCount > 0)
+                {
+                    device.FreeCbvSrvUavDescriptor(m_InitializerDescriptorAllocation.Index, m_InitializerDescriptorCount);
+                    m_InitializerDescriptorCount = 0;
+                }
+
+                ReleaseExecutionBindingsAndDescriptors();
+
+                throw;
+            }
+        }
+
+        internal void PrepareForInitialization()
+        {
+            if (m_TemporaryBinding.HasValue)
+            {
+                InitializerBindingTable.BindTemporaryResource(m_TemporaryBinding);
+            }
+
+            if (m_PersistentBuffer != null && PipelineTyped.PersistentResourceSize > 0)
+            {
+                InitializerBindingTable.BindPersistentResource(Dx12MLUtilities.CreateBufferBinding(m_PersistentBuffer, 0, PipelineTyped.PersistentResourceSize));
+            }
+        }
+
+        internal void PrepareForExecution(int stageIndex)
+        {
+            IDMLBindingTable bindingTable = m_ExecutionBindingTables[stageIndex]
+                ?? throw new InvalidOperationException($"DX12 ML execution binding table for stage {stageIndex} is unavailable.");
+            bindingTable.BindInputs(m_StageInputs[stageIndex]);
+            bindingTable.BindOutputs(m_StageOutputs[stageIndex]);
+            if (m_TemporaryBinding.HasValue)
+            {
+                bindingTable.BindTemporaryResource(m_TemporaryBinding);
+            }
+
+            if (m_StagePersistentBindings[stageIndex].HasValue)
+            {
+                bindingTable.BindPersistentResource(m_StagePersistentBindings[stageIndex]);
+            }
+        }
+
+        internal IDMLBindingTable GetExecutionBindingTable(int stageIndex)
+        {
+            return m_ExecutionBindingTables[stageIndex]
+                ?? throw new InvalidOperationException($"DX12 ML execution binding table for stage {stageIndex} is unavailable.");
+        }
+
+        internal void MarkInitialized()
+        {
+            m_IsInitialized = true;
+        }
+
+        internal void MarkInternalResourcesPrepared()
+        {
+            m_InternalResourcesPrepared = true;
+        }
+
+        private BindingDescription[] ResolveStageInputs(Dx12MLProgram program, int stageIndex)
+        {
+            RHIMLOpDescriptor op = program.Ops[stageIndex];
+            BindingDescription[] inputs = new BindingDescription[op.Inputs.Length];
+            for (int i = 0; i < op.Inputs.Length; ++i)
+            {
+                RHIMLOpTensorRef inputRef = op.Inputs[i];
+                if (inputRef.IsOpOutput)
+                {
+                    int intermediateIndex = program.GetOpIntermediateIndex(inputRef.OpIndex);
+                    inputs[i] = m_IntermediateBindings[intermediateIndex];
+                }
+                else
+                {
+                    inputs[i] = m_ProgramInputBindings[inputRef.InputIndex];
+                }
+            }
+
+            return inputs;
+        }
+
+        private BindingDescription[] ResolveStageOutputs(Dx12MLProgram program, int stageIndex)
+        {
+            // A stage output is either a program output (unconsumed op) or an intermediate.
+            bool isProgramOutput = true;
+            for (int i = 0; i < program.Ops.Length; ++i)
+            {
+                foreach (RHIMLOpTensorRef inputRef in program.Ops[i].Inputs)
+                {
+                    if (inputRef.IsOpOutput && inputRef.OpIndex == stageIndex && i != stageIndex)
+                    {
+                        isProgramOutput = false;
+                        break;
+                    }
+                }
+
+                if (!isProgramOutput)
+                {
+                    break;
+                }
+            }
+
+            if (isProgramOutput)
+            {
+                int outputIndex = 0;
+                for (int i = 0; i < stageIndex; ++i)
+                {
+                    bool unconsumed = true;
+                    for (int j = 0; j < program.Ops.Length; ++j)
+                    {
+                        foreach (RHIMLOpTensorRef inputRef in program.Ops[j].Inputs)
+                        {
+                            if (inputRef.IsOpOutput && inputRef.OpIndex == i && j != i)
+                            {
+                                unconsumed = false;
+                                break;
+                            }
+                        }
+
+                        if (!unconsumed)
+                        {
+                            break;
+                        }
+                    }
+
+                    if (unconsumed)
+                    {
+                        ++outputIndex;
+                    }
+                }
+
+                return new[] { m_ProgramOutputBindings[outputIndex] };
+            }
+
+            int intermediateIndex = program.GetOpIntermediateIndex(stageIndex);
+            return new[] { m_IntermediateBindings[intermediateIndex] };
+        }
+
+        private static Dx12Tensor[] ConvertTensors(
+            Dx12Device device,
+            Dx12MLPipeline pipeline,
+            ReadOnlySpan<RHITensor> tensors,
+            ERHIMLTensorBindingKind kind,
+            uint expectedCount)
+        {
+            if (tensors.Length != expectedCount)
+            {
+                throw new InvalidOperationException($"DX12 ML binding count mismatch for {kind}. expected={expectedCount}, actual={tensors.Length}.");
+            }
+
+            Dx12Tensor[] result = new Dx12Tensor[tensors.Length];
+            ReadOnlySpan<RHIMLTensorBindingInfo> bindingInfos = pipeline.BindingInfos.Span;
+            for (int i = 0; i < bindingInfos.Length; ++i)
+            {
+                ref readonly RHIMLTensorBindingInfo bindingInfo = ref bindingInfos[i];
+                if (bindingInfo.Kind != kind)
+                {
+                    continue;
+                }
+
+                if (bindingInfo.Index >= tensors.Length)
+                {
+                    throw new InvalidOperationException($"DX12 ML binding index out of range for {kind}. index={bindingInfo.Index}, count={tensors.Length}.");
+                }
+
+                RHITensor candidate = tensors[(int)bindingInfo.Index]
+                    ?? throw new ArgumentException($"DX12 ML binding tensor[{bindingInfo.Index}] cannot be null.", nameof(tensors));
+                if (candidate.IsDisposed)
+                {
+                    throw new ObjectDisposedException(candidate.GetType().FullName);
+                }
+                Dx12Tensor tensor = candidate as Dx12Tensor
+                    ?? throw new ArgumentException($"DX12 ML binding tensor[{bindingInfo.Index}] must be a {nameof(Dx12Tensor)}.", nameof(tensors));
+                if (!ReferenceEquals(tensor.Device, device))
+                {
+                    throw new ArgumentException(
+                        $"DX12 ML {kind}[{bindingInfo.Index}] belongs to a different device.",
+                        nameof(tensors));
+                }
+                Dx12MLUtilities.ValidateTensorLayout($"{kind}[{bindingInfo.Index}] '{bindingInfo.Name}'", bindingInfo.Descriptor, tensor.Descriptor);
+                if (tensor.BackingBuffer.Descriptor.StorageMode != ERHIStorageMode.GPULocal)
+                {
+                    throw new InvalidOperationException(
+                        $"DX12 ML {kind}[{bindingInfo.Index}] '{bindingInfo.Name}' must be backed by a GPULocal buffer. " +
+                        $"DirectML dispatch requires resources in COMMON/UAV-capable memory, but got {tensor.BackingBuffer.Descriptor.StorageMode}.");
+                }
+                if ((tensor.BackingBuffer.Descriptor.UsageFlag & ERHIBufferUsage.UnorderedAccess) == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"DX12 ML {kind}[{bindingInfo.Index}] '{bindingInfo.Name}' requires UnorderedAccess backing-buffer usage.");
+                }
+                result[bindingInfo.Index] = tensor;
+            }
+
+            for (int i = 0; i < result.Length; ++i)
+            {
+                if (result[i] is null)
+                {
+                    throw new InvalidOperationException($"DX12 ML binding set is missing a {kind} tensor at index {i}.");
+                }
+            }
+
+            return result;
+        }
+
+        private static BindingDescription[] CreateTensorBindings(Dx12Tensor[] tensors)
+        {
+            BindingDescription[] bindings = new BindingDescription[tensors.Length];
+            for (int i = 0; i < tensors.Length; ++i)
+            {
+                bindings[i] = Dx12MLUtilities.CreateTensorBinding(tensors[i]);
+            }
+
+            return bindings;
+        }
+
+        private static Dx12Buffer CreateInternalResourceBuffer(Dx12Device device, ulong byteSize)
+        {
+            RHIBufferDescriptor bufferDescriptor = new RHIBufferDescriptor
+            {
+                ByteSize = checked((int)byteSize),
+                Format = ERHIBufferFormat.Undefine,
+                StorageMode = ERHIStorageMode.GPULocal,
+                UsageFlag = ERHIBufferUsage.CopySrc | ERHIBufferUsage.CopyDst | ERHIBufferUsage.ShaderResource | ERHIBufferUsage.UnorderedAccess,
+            };
+            return new Dx12Buffer(device, bufferDescriptor);
+        }
+
+        protected override void Release()
+        {
+            m_InitializerBindingTable?.Release();
+            m_InitializerBindingTable = null;
+
+            ReleaseExecutionBindingsAndDescriptors();
+            m_ExecutionBindingTables = Array.Empty<IDMLBindingTable?>();
+            m_ExecutionDescriptorAllocations = Array.Empty<Dx12DescriptorInfo>();
+            m_ExecutionDescriptorCounts = Array.Empty<int>();
+
+            m_TemporaryBuffer?.Dispose();
+            m_TemporaryBuffer = null;
+
+            m_PersistentBuffer?.Dispose();
+            m_PersistentBuffer = null;
+
+            if (m_IntermediateBuffers != null)
+            {
+                for (int i = 0; i < m_IntermediateBuffers.Length; ++i)
+                {
+                    m_IntermediateBuffers[i]?.Dispose();
+                }
+                m_IntermediateBuffers = Array.Empty<Dx12Buffer>();
+            }
+
+            if (m_InitializerDescriptorCount > 0)
+            {
+                m_Device.FreeCbvSrvUavDescriptor(m_InitializerDescriptorAllocation.Index, m_InitializerDescriptorCount);
+                m_InitializerDescriptorCount = 0;
+            }
+        }
+
+        private void ReleaseExecutionBindingsAndDescriptors()
+        {
+            for (int i = 0; i < m_ExecutionDescriptorCounts.Length; ++i)
+            {
+                m_ExecutionBindingTables[i]?.Release();
+                m_ExecutionBindingTables[i] = null;
+
+                if (m_ExecutionDescriptorCounts[i] > 0)
+                {
+                    m_Device.FreeCbvSrvUavDescriptor(m_ExecutionDescriptorAllocations[i].Index, m_ExecutionDescriptorCounts[i]);
+                    m_ExecutionDescriptorCounts[i] = 0;
+                }
+            }
+        }
+    }
+    #endregion
+
+    #region PipelineCache
+#pragma warning disable CA1416
+internal sealed unsafe class Dx12PipelineCache : RHIPipelineCache
+    {
+        private const int EInvalidArg = unchecked((int)0x80070057);
+        private const int ENoInterface = unchecked((int)0x80004002);
+        private const int EFail = unchecked((int)0x80004005);
+        private const int EOutOfMemory = unchecked((int)0x8007000E);
+        private const int DxgiErrorDeviceRemoved = unchecked((int)0x887A0005);
+        private const int DxgiErrorDeviceReset = unchecked((int)0x887A0007);
+
+        private readonly object m_Gate = new object();
+        private readonly Dx12Device m_Dx12Device;
+        private Vortice.Direct3D12.ID3D12PipelineLibrary1? m_NativePipelineCache;
+
+        private Vortice.Direct3D12.ID3D12PipelineLibrary1 NativePipelineCache =>
+            m_NativePipelineCache ?? throw new ObjectDisposedException(GetType().FullName);
+
+        private int m_NativeHitCount;
+        private int m_NativeMissCount;
+        private int m_NativeStoreCount;
+
+        internal int NativeHitCount
+        {
+            get
+            {
+                lock (m_Gate)
+                {
+                    return m_NativeHitCount;
+                }
+            }
+        }
+
+        internal int NativeMissCount
+        {
+            get
+            {
+                lock (m_Gate)
+                {
+                    return m_NativeMissCount;
+                }
+            }
+        }
+
+        internal int NativeStoreCount
+        {
+            get
+            {
+                lock (m_Gate)
+                {
+                    return m_NativeStoreCount;
+                }
+            }
+        }
+
+        internal static bool TryProbeNativeSupport(Dx12Device device, out string reason)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+
+            Vortice.Direct3D12.ID3D12PipelineLibrary? baseCache = null;
+            Vortice.Direct3D12.ID3D12PipelineLibrary1? nativeCache = null;
+            try
+            {
+                SharpGen.Runtime.Result result =
+                    ((Vortice.Direct3D12.ID3D12Device2)device.NativeDevice)
+                    .CreatePipelineLibrary(
+                        Array.Empty<byte>().AsSpan(),
+                        out baseCache);
+                if (result.Failure || baseCache == null)
+                {
+                    reason =
+                        $"ID3D12Device2.CreatePipelineLibrary(empty) failed with HRESULT=0x{result.Code:X8}.";
+                    return false;
+                }
+
+                nativeCache =
+                    baseCache.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12PipelineLibrary1>();
+                if (nativeCache == null)
+                {
+                    reason =
+                        "The runtime-created DX12 pipeline library does not expose ID3D12PipelineLibrary1.";
+                    return false;
+                }
+
+                reason = string.Empty;
+                return true;
+            }
+            catch (SharpGen.Runtime.SharpGenException exception)
+            {
+                reason =
+                    $"DX12 pipeline-library runtime probing threw HRESULT=0x{exception.HResult:X8}.";
+                return false;
+            }
+            finally
+            {
+                nativeCache?.Release();
+                baseCache?.Release();
+            }
+        }
+
+        internal Dx12PipelineCache(Dx12Device device)
+            : base(device)
+        {
+            m_Dx12Device = device;
+            if (!TryCreateNativeCache(
+                    ReadOnlySpan<byte>.Empty,
+                    out m_NativePipelineCache,
+                    out string reason,
+                    out int nativeCode))
+            {
+                throw CreateNativeException(
+                    ERHIErrorCode.InitializationFailed,
+                    nativeCode,
+                    $"DX12 pipeline-cache initialization failed: {reason}");
+            }
+        }
+
+        public override RHIComputePipeline CreateComputePipeline(
+            in RHIComputePipelineDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            return new Dx12ComputePipeline(m_Dx12Device, descriptor, this);
+        }
+
+        public override RHIRasterPipeline CreateRasterPipeline(
+            in RHIRasterPipelineDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            return new Dx12RasterPipeline(m_Dx12Device, descriptor, this);
+        }
+
+        internal Vortice.Direct3D12.ID3D12PipelineState CreateComputePipelineState(
+            in RHIComputePipelineDescriptor descriptor,
+            in Vortice.Direct3D12.ComputePipelineStateDescription nativeDescriptor)
+        {
+            ThrowIfDisposed();
+            ValidateLayoutDevice(descriptor.PipelineLayout);
+            string key = BuildComputePipelineCacheKey(descriptor);
+
+            lock (m_Gate)
+            {
+                try
+                {
+                    Vortice.Direct3D12.ID3D12PipelineState? nativePipeline =
+                        NativePipelineCache.LoadComputePipeline(
+                        key,
+                        nativeDescriptor);
+                    if (nativePipeline == null)
+                    {
+                        throw CreateNativeException(
+                            ERHIErrorCode.NativeFailure,
+                            EFail,
+                            $"DX12 compute pipeline cache returned a null state for key {key}.");
+                    }
+                    ++m_NativeHitCount;
+                    return nativePipeline;
+                }
+                catch (SharpGen.Runtime.SharpGenException exception)
+                    when (exception.HResult == EInvalidArg)
+                {
+                    // E_INVALIDARG is the documented cache-miss signal for Load*Pipeline.
+                    ++m_NativeMissCount;
+                    SharpGen.Runtime.Result createResult =
+                        m_Dx12Device.NativeDevice.CreateComputePipelineState(
+                            nativeDescriptor,
+                            out Vortice.Direct3D12.ID3D12PipelineState? nativePipeline);
+                    if (createResult.Failure || nativePipeline == null)
+                    {
+                        nativePipeline?.Release();
+                        throw CreateNativeException(
+                            ERHIErrorCode.NativeFailure,
+                            createResult.Code,
+                            $"DX12 compute pipeline creation failed while populating cache key {key}. "
+                            + $"HRESULT=0x{createResult.Code:X8}.");
+                    }
+
+                    try
+                    {
+                        NativePipelineCache.StorePipeline(key, nativePipeline);
+                        ++m_NativeStoreCount;
+                        return nativePipeline;
+                    }
+                    catch (SharpGen.Runtime.SharpGenException storeException)
+                    {
+                        nativePipeline.Release();
+                        throw CreateNativeException(
+                            ERHIErrorCode.NativeFailure,
+                            storeException.HResult,
+                            $"DX12 compute pipeline cache store failed for key {key}.",
+                            storeException);
+                    }
+                    catch
+                    {
+                        nativePipeline.Release();
+                        throw;
+                    }
+                }
+                catch (SharpGen.Runtime.SharpGenException exception)
+                {
+                    throw CreateNativeException(
+                        ERHIErrorCode.NativeFailure,
+                        exception.HResult,
+                        $"DX12 compute pipeline cache lookup failed for key {key}.",
+                        exception);
+                }
+            }
+        }
+
+        internal Vortice.Direct3D12.ID3D12PipelineState CreateRasterPipelineState(
+            in RHIRasterPipelineDescriptor descriptor,
+            in Vortice.Direct3D12.GraphicsPipelineStateDescription nativeDescriptor)
+        {
+            ThrowIfDisposed();
+            ValidateLayoutDevice(descriptor.PipelineLayout);
+            string key = BuildRasterPipelineCacheKey(descriptor);
+
+            lock (m_Gate)
+            {
+                try
+                {
+                    Vortice.Direct3D12.ID3D12PipelineState? nativePipeline =
+                        NativePipelineCache.LoadGraphicsPipeline(
+                        key,
+                        nativeDescriptor);
+                    if (nativePipeline == null)
+                    {
+                        throw CreateNativeException(
+                            ERHIErrorCode.NativeFailure,
+                            EFail,
+                            $"DX12 raster pipeline cache returned a null state for key {key}.");
+                    }
+                    ++m_NativeHitCount;
+                    return nativePipeline;
+                }
+                catch (SharpGen.Runtime.SharpGenException exception)
+                    when (exception.HResult == EInvalidArg)
+                {
+                    // E_INVALIDARG is the documented cache-miss signal for Load*Pipeline.
+                    ++m_NativeMissCount;
+                    SharpGen.Runtime.Result createResult =
+                        m_Dx12Device.NativeDevice.CreateGraphicsPipelineState(
+                            nativeDescriptor,
+                            out Vortice.Direct3D12.ID3D12PipelineState? nativePipeline);
+                    if (createResult.Failure || nativePipeline == null)
+                    {
+                        nativePipeline?.Release();
+                        throw CreateNativeException(
+                            ERHIErrorCode.NativeFailure,
+                            createResult.Code,
+                            $"DX12 raster pipeline creation failed while populating cache key {key}. "
+                            + $"HRESULT=0x{createResult.Code:X8}.");
+                    }
+
+                    try
+                    {
+                        NativePipelineCache.StorePipeline(key, nativePipeline);
+                        ++m_NativeStoreCount;
+                        return nativePipeline;
+                    }
+                    catch (SharpGen.Runtime.SharpGenException storeException)
+                    {
+                        nativePipeline.Release();
+                        throw CreateNativeException(
+                            ERHIErrorCode.NativeFailure,
+                            storeException.HResult,
+                            $"DX12 raster pipeline cache store failed for key {key}.",
+                            storeException);
+                    }
+                    catch
+                    {
+                        nativePipeline.Release();
+                        throw;
+                    }
+                }
+                catch (SharpGen.Runtime.SharpGenException exception)
+                {
+                    throw CreateNativeException(
+                        ERHIErrorCode.NativeFailure,
+                        exception.HResult,
+                        $"DX12 raster pipeline cache lookup failed for key {key}.",
+                        exception);
+                }
+            }
+        }
+
+        protected override bool TryReplaceNativePayload(
+            ReadOnlySpan<byte> nativePayload,
+            out string reason)
+        {
+            ThrowIfDisposed();
+            if (!TryCreateNativeCache(
+                    nativePayload,
+                    out Vortice.Direct3D12.ID3D12PipelineLibrary1? replacement,
+                    out reason,
+                    out int nativeCode))
+            {
+                if (nativePayload.IsEmpty || IsFatalNativeFailure(nativeCode))
+                {
+                    throw CreateNativeException(
+                        ERHIErrorCode.InitializationFailed,
+                        nativeCode,
+                        $"DX12 pipeline-cache import initialization failed: {reason}");
+                }
+
+                // A compatible wrapper whose backend-private payload is rejected is corrupt.
+                return false;
+            }
+
+            lock (m_Gate)
+            {
+                Vortice.Direct3D12.ID3D12PipelineLibrary1? previous =
+                    m_NativePipelineCache;
+                m_NativePipelineCache = replacement;
+                previous?.Release();
+            }
+            return true;
+        }
+
+        protected override byte[] ExportNativePayload()
+        {
+            ThrowIfDisposed();
+            lock (m_Gate)
+            {
+                try
+                {
+                    SharpGen.Runtime.PointerUSize nativeSize =
+                        NativePipelineCache.SerializedSize;
+                    nuint byteCount = nativeSize;
+                    if (byteCount > int.MaxValue)
+                    {
+                        throw new InvalidOperationException(
+                            $"DX12 pipeline cache is {byteCount} bytes, exceeding the managed blob limit.");
+                    }
+
+                    byte[] payload = new byte[(int)byteCount];
+                    if (payload.Length == 0)
+                    {
+                        return payload;
+                    }
+
+                    fixed (byte* payloadPointer = payload)
+                    {
+                        NativePipelineCache.Serialize(
+                            (IntPtr)payloadPointer,
+                            nativeSize);
+                    }
+                    return payload;
+                }
+                catch (SharpGen.Runtime.SharpGenException exception)
+                {
+                    throw CreateNativeException(
+                        ERHIErrorCode.NativeFailure,
+                        exception.HResult,
+                        "DX12 pipeline-cache export failed.",
+                        exception);
+                }
+            }
+        }
+
+        protected override void Release()
+        {
+            lock (m_Gate)
+            {
+                if (m_NativePipelineCache != null)
+                {
+                    m_NativePipelineCache.Release();
+                    m_NativePipelineCache = null;
+                }
+            }
+        }
+
+        private bool TryCreateNativeCache(
+            ReadOnlySpan<byte> nativePayload,
+            out Vortice.Direct3D12.ID3D12PipelineLibrary1? nativeCache,
+            out string reason,
+            out int nativeCode)
+        {
+            nativeCache = null;
+            reason = string.Empty;
+            nativeCode = 0;
+            byte[] payloadCopy = nativePayload.ToArray();
+            SharpGen.Runtime.Result createResult;
+            Vortice.Direct3D12.ID3D12PipelineLibrary? baseCache = null;
+            try
+            {
+                createResult =
+                    ((Vortice.Direct3D12.ID3D12Device2)m_Dx12Device.NativeDevice)
+                    .CreatePipelineLibrary(
+                        payloadCopy.AsSpan(),
+                        out baseCache);
+            }
+            catch (SharpGen.Runtime.SharpGenException exception)
+            {
+                baseCache?.Release();
+                nativeCode = exception.HResult;
+                reason =
+                    $"ID3D12Device2.CreatePipelineLibrary threw HRESULT=0x{nativeCode:X8}.";
+                return false;
+            }
+            if (createResult.Failure || baseCache == null)
+            {
+                nativeCode = createResult.Code;
+                reason =
+                    $"ID3D12Device2.CreatePipelineLibrary failed with HRESULT=0x{createResult.Code:X8}.";
+                baseCache?.Release();
+                return false;
+            }
+
+            try
+            {
+                nativeCache =
+                    baseCache.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12PipelineLibrary1>();
+                if (nativeCache == null)
+                {
+                    nativeCode = ENoInterface;
+                    reason =
+                        "The created DX12 cache does not expose ID3D12PipelineLibrary1.";
+                    return false;
+                }
+                return true;
+            }
+            catch (SharpGen.Runtime.SharpGenException exception)
+            {
+                nativeCache?.Release();
+                nativeCache = null;
+                nativeCode = exception.HResult;
+                reason =
+                    $"ID3D12PipelineLibrary1 query failed with HRESULT=0x{nativeCode:X8}.";
+                return false;
+            }
+            finally
+            {
+                baseCache.Release();
+            }
+        }
+
+        private bool IsFatalNativeFailure(in int nativeCode)
+        {
+            return nativeCode == EOutOfMemory
+                || GetDeviceState(out _) != ERHIDeviceState.Operational;
+        }
+
+        private RHIException CreateNativeException(
+            in ERHIErrorCode requestedErrorCode,
+            in long nativeCode,
+            string message,
+            Exception? innerException = null)
+        {
+            ERHIDeviceState deviceState = GetDeviceState(out int deviceNativeCode);
+            ERHIErrorCode errorCode =
+                deviceState != ERHIDeviceState.Operational
+                    ? ERHIErrorCode.DeviceLost
+                    : nativeCode == EOutOfMemory
+                        ? ERHIErrorCode.OutOfMemory
+                        : requestedErrorCode;
+            long effectiveNativeCode =
+                nativeCode != 0 ? nativeCode : deviceNativeCode;
+            return new RHIException(
+                errorCode,
+                ERHIBackend.DirectX12,
+                effectiveNativeCode,
+                message,
+                deviceState,
+                innerException);
+        }
+
+        private ERHIDeviceState GetDeviceState(out int nativeCode)
+        {
+            try
+            {
+                SharpGen.Runtime.Result removalReason =
+                    m_Dx12Device.NativeDevice.DeviceRemovedReason;
+                nativeCode = removalReason.Code;
+                if (removalReason.Success)
+                {
+                    return ERHIDeviceState.Operational;
+                }
+
+                return nativeCode == DxgiErrorDeviceReset
+                    ? ERHIDeviceState.Reset
+                    : ERHIDeviceState.Removed;
+            }
+            catch (SharpGen.Runtime.SharpGenException exception)
+            {
+                nativeCode = exception.HResult;
+                return nativeCode == DxgiErrorDeviceReset
+                    ? ERHIDeviceState.Reset
+                    : nativeCode == DxgiErrorDeviceRemoved
+                        ? ERHIDeviceState.Removed
+                        : ERHIDeviceState.Unknown;
+            }
+        }
+
+        private void ValidateLayoutDevice(RHIPipelineLayout? pipelineLayout)
+        {
+            Dx12PipelineLayout dx12Layout = pipelineLayout as Dx12PipelineLayout
+                ?? throw new ArgumentException(
+                    "DX12 pipeline cache requires a Dx12PipelineLayout.",
+                    nameof(pipelineLayout));
+            if (dx12Layout.IsDisposed)
+            {
+                throw new ObjectDisposedException(dx12Layout.GetType().FullName);
+            }
+            if (!ReferenceEquals(dx12Layout.Device, m_Dx12Device))
+            {
+                throw new ArgumentException(
+                    "DX12 pipeline cache cannot create a pipeline from a different device's layout.",
+                    nameof(pipelineLayout));
+            }
+        }
+    }
+#pragma warning restore CA1416
+    #endregion
+
 #pragma warning restore CS0169, CS0649, CA1416
 }
