@@ -233,9 +233,9 @@ namespace SharpGPU
                         memoryBarriers.Add(new VkMemoryBarrier2
                         {
                             sType = VkStructureType.MemoryBarrier2,
-                            srcStageMask = AddRequiredStages2(VulkanUtility.ConvertToVkPipelineStage2(globalBarrier.SyncBefore, queuePipeline), globalBarrier.AccessBefore),
+                            srcStageMask = AddRequiredStages2(VulkanUtility.ConvertToVkPipelineStage2(globalBarrier.StageBefore, queuePipeline), globalBarrier.AccessBefore),
                             srcAccessMask = VulkanUtility.ConvertToVkAccessFlags2(globalBarrier.AccessBefore),
-                            dstStageMask = AddRequiredStages2(VulkanUtility.ConvertToVkPipelineStage2(globalBarrier.SyncAfter, queuePipeline), globalBarrier.AccessAfter),
+                            dstStageMask = AddRequiredStages2(VulkanUtility.ConvertToVkPipelineStage2(globalBarrier.StageAfter, queuePipeline), globalBarrier.AccessAfter),
                             dstAccessMask = VulkanUtility.ConvertToVkAccessFlags2(globalBarrier.AccessAfter)
                         });
                         break;
@@ -250,9 +250,9 @@ namespace SharpGPU
                         bufferBarriers.Add(new VkBufferMemoryBarrier2
                         {
                             sType = VkStructureType.BufferMemoryBarrier2,
-                            srcStageMask = AddRequiredStages2(VulkanUtility.ConvertToVkPipelineStage2(bufferBarrier.SyncBefore, queuePipeline), bufferBarrier.AccessBefore),
+                            srcStageMask = AddRequiredStages2(VulkanUtility.ConvertToVkPipelineStage2(bufferBarrier.StageBefore, queuePipeline), bufferBarrier.AccessBefore),
                             srcAccessMask = VulkanUtility.ConvertToVkAccessFlags2(bufferBarrier.AccessBefore),
-                            dstStageMask = AddRequiredStages2(VulkanUtility.ConvertToVkPipelineStage2(bufferBarrier.SyncAfter, queuePipeline), bufferBarrier.AccessAfter),
+                            dstStageMask = AddRequiredStages2(VulkanUtility.ConvertToVkPipelineStage2(bufferBarrier.StageAfter, queuePipeline), bufferBarrier.AccessAfter),
                             dstAccessMask = VulkanUtility.ConvertToVkAccessFlags2(bufferBarrier.AccessAfter),
                             srcQueueFamilyIndex = sourceFamily,
                             dstQueueFamilyIndex = destinationFamily,
@@ -499,8 +499,8 @@ namespace SharpGPU
             in RHITextureBarrier barrier) =>
             barrier.LayoutBefore != ERHITextureLayout.Undefined &&
             barrier.LayoutBefore == barrier.LayoutAfter &&
-            barrier.SyncBefore == ERHISyncStageMask.None &&
-            barrier.SyncAfter == ERHISyncStageMask.None &&
+            barrier.StageBefore == ERHIStageMask.None &&
+            barrier.StageAfter == ERHIStageMask.None &&
             barrier.AccessBefore == ERHIAccessMask.None &&
             barrier.AccessAfter == ERHIAccessMask.None &&
             !barrier.SourceQueue.HasValue &&
@@ -610,27 +610,27 @@ namespace SharpGPU
             out VkPipelineStageFlags srcStages,
             out VkPipelineStageFlags dstStages)
         {
-            ERHISyncStageMask syncBefore;
-            ERHISyncStageMask syncAfter;
+            ERHIStageMask stageBefore;
+            ERHIStageMask stageAfter;
             ERHIAccessMask accessBefore;
             ERHIAccessMask accessAfter;
             switch (barrier.Kind)
             {
                 case ERHIBarrierKind.Global:
-                    syncBefore = barrier.GlobalBarrier.SyncBefore;
-                    syncAfter = barrier.GlobalBarrier.SyncAfter;
+                    stageBefore = barrier.GlobalBarrier.StageBefore;
+                    stageAfter = barrier.GlobalBarrier.StageAfter;
                     accessBefore = barrier.GlobalBarrier.AccessBefore;
                     accessAfter = barrier.GlobalBarrier.AccessAfter;
                     break;
                 case ERHIBarrierKind.Buffer:
-                    syncBefore = barrier.BufferBarrier.SyncBefore;
-                    syncAfter = barrier.BufferBarrier.SyncAfter;
+                    stageBefore = barrier.BufferBarrier.StageBefore;
+                    stageAfter = barrier.BufferBarrier.StageAfter;
                     accessBefore = barrier.BufferBarrier.AccessBefore;
                     accessAfter = barrier.BufferBarrier.AccessAfter;
                     break;
                 case ERHIBarrierKind.Texture:
-                    syncBefore = barrier.TextureBarrier.SyncBefore;
-                    syncAfter = barrier.TextureBarrier.SyncAfter;
+                    stageBefore = barrier.TextureBarrier.StageBefore;
+                    stageAfter = barrier.TextureBarrier.StageAfter;
                     accessBefore = barrier.TextureBarrier.AccessBefore;
                     accessAfter = barrier.TextureBarrier.AccessAfter;
                     break;
@@ -642,12 +642,12 @@ namespace SharpGPU
 
             srcStages = AddRequiredStages(
                 VulkanUtility.ConvertToVkPipelineStage(
-                    syncBefore,
+                    stageBefore,
                     queuePipeline),
                 accessBefore);
             dstStages = AddRequiredStages(
                 VulkanUtility.ConvertToVkPipelineStage(
-                    syncAfter,
+                    stageAfter,
                     queuePipeline),
                 accessAfter);
             return true;
@@ -754,7 +754,7 @@ namespace SharpGPU
                 srcStageMask =
                     AddRequiredStages2(
                         VulkanUtility.ConvertToVkPipelineStage2(
-                            barrier.SyncBefore,
+                            barrier.StageBefore,
                             queuePipeline),
                         barrier.AccessBefore),
                 srcAccessMask =
@@ -763,7 +763,7 @@ namespace SharpGPU
                 dstStageMask =
                     AddRequiredStages2(
                         VulkanUtility.ConvertToVkPipelineStage2(
-                            barrier.SyncAfter,
+                            barrier.StageAfter,
                             queuePipeline),
                         barrier.AccessAfter),
                 dstAccessMask =

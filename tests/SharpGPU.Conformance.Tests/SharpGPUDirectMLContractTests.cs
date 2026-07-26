@@ -100,16 +100,16 @@ public sealed class SharpGPUDirectMLContractTests
             RHITransferEncoder upload = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor { Name = "Upload" });
             upload.Barriers(new[]
             {
-                RHIBarrier.Buffer(inputABacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
-                RHIBarrier.Buffer(inputBBacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+                RHIBarrier.Buffer(inputABacking, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+                RHIBarrier.Buffer(inputBBacking, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
             });
             upload.CopyBufferToBuffer(uploadA, 0, inputABacking, 0, inputABacking.Descriptor.ByteSize);
             upload.CopyBufferToBuffer(uploadB, 0, inputBBacking, 0, inputBBacking.Descriptor.ByteSize);
             upload.Barriers(new[]
             {
-                RHIBarrier.Buffer(inputABacking, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
-                RHIBarrier.Buffer(inputBBacking, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
-                RHIBarrier.Buffer(outputBacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.MachineLearning, ERHIAccessMask.None, ERHIAccessMask.ShaderWrite),
+                RHIBarrier.Buffer(inputABacking, RHIBufferRange.Whole(), ERHIStageMask.Transfer, ERHIStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
+                RHIBarrier.Buffer(inputBBacking, RHIBufferRange.Whole(), ERHIStageMask.Transfer, ERHIStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
+                RHIBarrier.Buffer(outputBacking, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.MachineLearning, ERHIAccessMask.None, ERHIAccessMask.ShaderWrite),
             });
             commandBuffer.EndTransferPass();
 
@@ -122,7 +122,7 @@ public sealed class SharpGPUDirectMLContractTests
             RHITransferEncoder download = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor { Name = "Readback" });
             download.Barriers(new[]
             {
-                RHIBarrier.Buffer(outputBacking, RHIBufferRange.Whole(), ERHISyncStageMask.MachineLearning, ERHISyncStageMask.Transfer, ERHIAccessMask.ShaderWrite, ERHIAccessMask.TransferRead),
+                RHIBarrier.Buffer(outputBacking, RHIBufferRange.Whole(), ERHIStageMask.MachineLearning, ERHIStageMask.Transfer, ERHIAccessMask.ShaderWrite, ERHIAccessMask.TransferRead),
             });
             download.CopyBufferToBuffer(outputBacking, 0, readback, 0, readback.Descriptor.ByteSize);
             commandBuffer.EndTransferPass();
@@ -258,16 +258,16 @@ public sealed class SharpGPUDirectMLContractTests
         RHITransferEncoder upload = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor { Name = "Upload" });
         upload.Barriers(new[]
         {
-            RHIBarrier.Buffer(inputABacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
-            RHIBarrier.Buffer(inputBBacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+            RHIBarrier.Buffer(inputABacking, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+            RHIBarrier.Buffer(inputBBacking, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
         });
         upload.CopyBufferToBuffer(uploadA, 0, inputABacking, 0, inputABacking.Descriptor.ByteSize);
         upload.CopyBufferToBuffer(uploadB, 0, inputBBacking, 0, inputBBacking.Descriptor.ByteSize);
         upload.Barriers(new[]
         {
-            RHIBarrier.Buffer(inputABacking, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
-            RHIBarrier.Buffer(inputBBacking, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
-            RHIBarrier.Buffer(outputBacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.MachineLearning, ERHIAccessMask.None, ERHIAccessMask.ShaderWrite),
+            RHIBarrier.Buffer(inputABacking, RHIBufferRange.Whole(), ERHIStageMask.Transfer, ERHIStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
+            RHIBarrier.Buffer(inputBBacking, RHIBufferRange.Whole(), ERHIStageMask.Transfer, ERHIStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
+            RHIBarrier.Buffer(outputBacking, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.MachineLearning, ERHIAccessMask.None, ERHIAccessMask.ShaderWrite),
         });
         commandBuffer.EndTransferPass();
 
@@ -280,7 +280,7 @@ public sealed class SharpGPUDirectMLContractTests
         RHITransferEncoder download = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor { Name = "Readback" });
         download.Barriers(new[]
         {
-            RHIBarrier.Buffer(outputBacking, RHIBufferRange.Whole(), ERHISyncStageMask.MachineLearning, ERHISyncStageMask.Transfer, ERHIAccessMask.ShaderWrite, ERHIAccessMask.TransferRead),
+            RHIBarrier.Buffer(outputBacking, RHIBufferRange.Whole(), ERHIStageMask.MachineLearning, ERHIStageMask.Transfer, ERHIAccessMask.ShaderWrite, ERHIAccessMask.TransferRead),
         });
         download.CopyBufferToBuffer(outputBacking, 0, readback, 0, readback.Descriptor.ByteSize);
         commandBuffer.EndTransferPass();
@@ -463,19 +463,19 @@ public sealed class SharpGPUDirectMLContractTests
         });
         uploadEncoder.Barriers(new[]
         {
-            RHIBarrier.Buffer(fixture.InputABacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
-            RHIBarrier.Buffer(fixture.InputBBacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
-            RHIBarrier.Buffer(fixture.InputCBacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+            RHIBarrier.Buffer(fixture.InputABacking, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+            RHIBarrier.Buffer(fixture.InputBBacking, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+            RHIBarrier.Buffer(fixture.InputCBacking, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
         });
         uploadEncoder.CopyBufferToBuffer(fixture.UploadABacking, 0, fixture.InputABacking, 0, fixture.InputABacking.Descriptor.ByteSize);
         uploadEncoder.CopyBufferToBuffer(fixture.UploadBBacking, 0, fixture.InputBBacking, 0, fixture.InputBBacking.Descriptor.ByteSize);
         uploadEncoder.CopyBufferToBuffer(fixture.UploadCBacking, 0, fixture.InputCBacking, 0, fixture.InputCBacking.Descriptor.ByteSize);
         uploadEncoder.Barriers(new[]
         {
-            RHIBarrier.Buffer(fixture.InputABacking, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
-            RHIBarrier.Buffer(fixture.InputBBacking, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
-            RHIBarrier.Buffer(fixture.InputCBacking, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
-            RHIBarrier.Buffer(fixture.OutputBacking, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.MachineLearning, ERHIAccessMask.None, ERHIAccessMask.ShaderWrite),
+            RHIBarrier.Buffer(fixture.InputABacking, RHIBufferRange.Whole(), ERHIStageMask.Transfer, ERHIStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
+            RHIBarrier.Buffer(fixture.InputBBacking, RHIBufferRange.Whole(), ERHIStageMask.Transfer, ERHIStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
+            RHIBarrier.Buffer(fixture.InputCBacking, RHIBufferRange.Whole(), ERHIStageMask.Transfer, ERHIStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderWrite),
+            RHIBarrier.Buffer(fixture.OutputBacking, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.MachineLearning, ERHIAccessMask.None, ERHIAccessMask.ShaderWrite),
         });
         commandBuffer.EndTransferPass();
 
@@ -494,7 +494,7 @@ public sealed class SharpGPUDirectMLContractTests
         });
         readbackEncoder.Barriers(new[]
         {
-            RHIBarrier.Buffer(fixture.OutputBacking, RHIBufferRange.Whole(), ERHISyncStageMask.MachineLearning, ERHISyncStageMask.Transfer, ERHIAccessMask.ShaderWrite, ERHIAccessMask.TransferRead),
+            RHIBarrier.Buffer(fixture.OutputBacking, RHIBufferRange.Whole(), ERHIStageMask.MachineLearning, ERHIStageMask.Transfer, ERHIAccessMask.ShaderWrite, ERHIAccessMask.TransferRead),
         });
         readbackEncoder.CopyBufferToBuffer(fixture.OutputBacking, 0, fixture.ReadbackOutput, 0, fixture.ReadbackOutput.Descriptor.ByteSize);
         commandBuffer.EndTransferPass();

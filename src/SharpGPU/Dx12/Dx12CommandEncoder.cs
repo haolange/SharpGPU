@@ -341,8 +341,8 @@ namespace SharpGPU
                     RHIBarrierUtility.CreateWholeSubresourceRange(texture),
                     ERHITextureLayout.General,
                     ERHITextureLayout.General,
-                    ERHISyncStageMask.Fragment,
-                    ERHISyncStageMask.Fragment,
+                    ERHIStageMask.Fragment,
+                    ERHIStageMask.Fragment,
                     ERHIAccessMask.ShaderWrite,
                     ERHIAccessMask.ShaderRead |
                         ERHIAccessMask.ShaderWrite);
@@ -494,8 +494,8 @@ namespace SharpGPU
                     {
                         RHIGlobalBarrier globalBarrier = barrier.GlobalBarrier;
                         (globalBarriers ??= new List<Vortice.Direct3D12.GlobalBarrier>(barriers.Length)).Add(new Vortice.Direct3D12.GlobalBarrier(
-                            ResolveBarrierSync(globalBarrier.SyncBefore, queuePipeline),
-                            ResolveBarrierSync(globalBarrier.SyncAfter, queuePipeline),
+                            ResolveBarrierSync(globalBarrier.StageBefore, queuePipeline),
+                            ResolveBarrierSync(globalBarrier.StageAfter, queuePipeline),
                             ConvertToBarrierAccess(globalBarrier.AccessBefore),
                             ConvertToBarrierAccess(globalBarrier.AccessAfter)));
                         break;
@@ -506,19 +506,19 @@ namespace SharpGPU
                         RHIBufferBarrier bufferBarrier = barrier.BufferBarrier;
                         Vortice.Direct3D12.BarrierAccess accessBefore = ConvertToBarrierAccess(bufferBarrier.AccessBefore);
                         Vortice.Direct3D12.BarrierAccess accessAfter = ConvertToBarrierAccess(bufferBarrier.AccessAfter);
-                        Vortice.Direct3D12.BarrierSync syncBefore = HarmonizeSyncWithAccess(
-                            ResolveBarrierSync(bufferBarrier.SyncBefore, queuePipeline),
+                        Vortice.Direct3D12.BarrierSync stageBefore = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(bufferBarrier.StageBefore, queuePipeline),
                             accessBefore,
                             queuePipeline);
-                        Vortice.Direct3D12.BarrierSync syncAfter = HarmonizeSyncWithAccess(
-                            ResolveBarrierSync(bufferBarrier.SyncAfter, queuePipeline),
+                        Vortice.Direct3D12.BarrierSync stageAfter = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(bufferBarrier.StageAfter, queuePipeline),
                             accessAfter,
                             queuePipeline);
 
                         (bufferBarriers ??= new List<Vortice.Direct3D12.BufferBarrier>(barriers.Length)).Add(new Vortice.Direct3D12.BufferBarrier
                         {
-                            SyncBefore = syncBefore,
-                            SyncAfter = syncAfter,
+                            StageBefore = stageBefore,
+                            StageAfter = stageAfter,
                             AccessBefore = accessBefore,
                             AccessAfter = accessAfter,
                             Resource = GetBufferResource(commandBuffer, bufferBarrier.Resource, i),
@@ -533,12 +533,12 @@ namespace SharpGPU
                         RHITextureBarrier textureBarrier = barrier.TextureBarrier;
                         Vortice.Direct3D12.BarrierAccess accessBefore = ConvertToBarrierAccess(textureBarrier.AccessBefore);
                         Vortice.Direct3D12.BarrierAccess accessAfter = ConvertToBarrierAccess(textureBarrier.AccessAfter);
-                        Vortice.Direct3D12.BarrierSync syncBefore = HarmonizeSyncWithAccess(
-                            ResolveBarrierSync(textureBarrier.SyncBefore, queuePipeline),
+                        Vortice.Direct3D12.BarrierSync stageBefore = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(textureBarrier.StageBefore, queuePipeline),
                             accessBefore,
                             queuePipeline);
-                        Vortice.Direct3D12.BarrierSync syncAfter = HarmonizeSyncWithAccess(
-                            ResolveBarrierSync(textureBarrier.SyncAfter, queuePipeline),
+                        Vortice.Direct3D12.BarrierSync stageAfter = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(textureBarrier.StageAfter, queuePipeline),
                             accessAfter,
                             queuePipeline);
 
@@ -548,8 +548,8 @@ namespace SharpGPU
                             i);
                         (textureBarriers ??= new List<Vortice.Direct3D12.TextureBarrier>(barriers.Length)).Add(new Vortice.Direct3D12.TextureBarrier
                         {
-                            SyncBefore = syncBefore,
-                            SyncAfter = syncAfter,
+                            StageBefore = stageBefore,
+                            StageAfter = stageAfter,
                             AccessBefore = accessBefore,
                             AccessAfter = accessAfter,
                             LayoutBefore = ConvertToBarrierLayout(textureBarrier.LayoutBefore, queuePipeline),
@@ -592,8 +592,8 @@ namespace SharpGPU
                 {
                     RHIGlobalBarrier globalBarrier = barrier.GlobalBarrier;
                     Vortice.Direct3D12.GlobalBarrier nativeBarrier = new(
-                        ResolveBarrierSync(globalBarrier.SyncBefore, queuePipeline),
-                        ResolveBarrierSync(globalBarrier.SyncAfter, queuePipeline),
+                        ResolveBarrierSync(globalBarrier.StageBefore, queuePipeline),
+                        ResolveBarrierSync(globalBarrier.StageAfter, queuePipeline),
                         ConvertToBarrierAccess(globalBarrier.AccessBefore),
                         ConvertToBarrierAccess(globalBarrier.AccessAfter));
                     commandBuffer.NativeCommandList.Barrier(in nativeBarrier);
@@ -607,12 +607,12 @@ namespace SharpGPU
                     Vortice.Direct3D12.BarrierAccess accessAfter = ConvertToBarrierAccess(bufferBarrier.AccessAfter);
                     Vortice.Direct3D12.BufferBarrier nativeBarrier = new()
                     {
-                        SyncBefore = HarmonizeSyncWithAccess(
-                            ResolveBarrierSync(bufferBarrier.SyncBefore, queuePipeline),
+                        StageBefore = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(bufferBarrier.StageBefore, queuePipeline),
                             accessBefore,
                             queuePipeline),
-                        SyncAfter = HarmonizeSyncWithAccess(
-                            ResolveBarrierSync(bufferBarrier.SyncAfter, queuePipeline),
+                        StageAfter = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(bufferBarrier.StageAfter, queuePipeline),
                             accessAfter,
                             queuePipeline),
                         AccessBefore = accessBefore,
@@ -636,12 +636,12 @@ namespace SharpGPU
                         0);
                     Vortice.Direct3D12.TextureBarrier nativeBarrier = new()
                     {
-                        SyncBefore = HarmonizeSyncWithAccess(
-                            ResolveBarrierSync(textureBarrier.SyncBefore, queuePipeline),
+                        StageBefore = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(textureBarrier.StageBefore, queuePipeline),
                             accessBefore,
                             queuePipeline),
-                        SyncAfter = HarmonizeSyncWithAccess(
-                            ResolveBarrierSync(textureBarrier.SyncAfter, queuePipeline),
+                        StageAfter = HarmonizeSyncWithAccess(
+                            ResolveBarrierSync(textureBarrier.StageAfter, queuePipeline),
                             accessAfter,
                             queuePipeline),
                         AccessBefore = accessBefore,
@@ -822,7 +822,7 @@ namespace SharpGPU
             return count;
         }
 
-        private static Vortice.Direct3D12.BarrierSync ResolveBarrierSync(in ERHISyncStageMask syncMask, in ERHIPipelineType queuePipeline)
+        private static Vortice.Direct3D12.BarrierSync ResolveBarrierSync(in ERHIStageMask syncMask, in ERHIPipelineType queuePipeline)
         {
             Vortice.Direct3D12.BarrierSync sync = ConvertToBarrierSync(syncMask);
             if (sync == Vortice.Direct3D12.BarrierSync.None)
@@ -833,27 +833,27 @@ namespace SharpGPU
             return NormalizeBarrierSyncForQueue(sync, queuePipeline);
         }
 
-        private static Vortice.Direct3D12.BarrierSync ConvertToBarrierSync(in ERHISyncStageMask syncMask)
+        private static Vortice.Direct3D12.BarrierSync ConvertToBarrierSync(in ERHIStageMask syncMask)
         {
-            if (syncMask == ERHISyncStageMask.None)
+            if (syncMask == ERHIStageMask.None)
             {
                 return Vortice.Direct3D12.BarrierSync.None;
             }
 
             Vortice.Direct3D12.BarrierSync sync = Vortice.Direct3D12.BarrierSync.None;
-            if ((syncMask & ERHISyncStageMask.Transfer) != 0) sync |= Vortice.Direct3D12.BarrierSync.Copy;
-            if ((syncMask & ERHISyncStageMask.Indirect) != 0) sync |= Vortice.Direct3D12.BarrierSync.ExecuteIndirect;
-            if ((syncMask & ERHISyncStageMask.IndexInput) != 0) sync |= Vortice.Direct3D12.BarrierSync.IndexInput;
-            if ((syncMask & ERHISyncStageMask.VertexInput) != 0) sync |= Vortice.Direct3D12.BarrierSync.IndexInput;
-            if ((syncMask & ERHISyncStageMask.Vertex) != 0) sync |= Vortice.Direct3D12.BarrierSync.VertexShading;
-            if ((syncMask & ERHISyncStageMask.Fragment) != 0) sync |= Vortice.Direct3D12.BarrierSync.PixelShading;
-            if ((syncMask & ERHISyncStageMask.Compute) != 0) sync |= Vortice.Direct3D12.BarrierSync.ComputeShading;
-            if ((syncMask & ERHISyncStageMask.Task) != 0) sync |= Vortice.Direct3D12.BarrierSync.NonPixelShading;
-            if ((syncMask & ERHISyncStageMask.Mesh) != 0) sync |= Vortice.Direct3D12.BarrierSync.NonPixelShading;
-            if ((syncMask & ERHISyncStageMask.AccelStructBuild) != 0) sync |= Vortice.Direct3D12.BarrierSync.BuildRaytracingAccelerationStructure;
-            if ((syncMask & ERHISyncStageMask.AccelStructCopy) != 0) sync |= Vortice.Direct3D12.BarrierSync.CopyRaytracingAccelerationStructure;
-            if ((syncMask & ERHISyncStageMask.MachineLearning) != 0) sync |= Vortice.Direct3D12.BarrierSync.ComputeShading;
-            if ((syncMask & ERHISyncStageMask.RayTracing) != 0)
+            if ((syncMask & ERHIStageMask.Transfer) != 0) sync |= Vortice.Direct3D12.BarrierSync.Copy;
+            if ((syncMask & ERHIStageMask.Indirect) != 0) sync |= Vortice.Direct3D12.BarrierSync.ExecuteIndirect;
+            if ((syncMask & ERHIStageMask.IndexInput) != 0) sync |= Vortice.Direct3D12.BarrierSync.IndexInput;
+            if ((syncMask & ERHIStageMask.VertexInput) != 0) sync |= Vortice.Direct3D12.BarrierSync.IndexInput;
+            if ((syncMask & ERHIStageMask.Vertex) != 0) sync |= Vortice.Direct3D12.BarrierSync.VertexShading;
+            if ((syncMask & ERHIStageMask.Fragment) != 0) sync |= Vortice.Direct3D12.BarrierSync.PixelShading;
+            if ((syncMask & ERHIStageMask.Compute) != 0) sync |= Vortice.Direct3D12.BarrierSync.ComputeShading;
+            if ((syncMask & ERHIStageMask.Task) != 0) sync |= Vortice.Direct3D12.BarrierSync.NonPixelShading;
+            if ((syncMask & ERHIStageMask.Mesh) != 0) sync |= Vortice.Direct3D12.BarrierSync.NonPixelShading;
+            if ((syncMask & ERHIStageMask.AccelStructBuild) != 0) sync |= Vortice.Direct3D12.BarrierSync.BuildRaytracingAccelerationStructure;
+            if ((syncMask & ERHIStageMask.AccelStructCopy) != 0) sync |= Vortice.Direct3D12.BarrierSync.CopyRaytracingAccelerationStructure;
+            if ((syncMask & ERHIStageMask.MachineLearning) != 0) sync |= Vortice.Direct3D12.BarrierSync.ComputeShading;
+            if ((syncMask & ERHIStageMask.RayTracing) != 0)
             {
                 sync |= Vortice.Direct3D12.BarrierSync.Raytracing
                         | Vortice.Direct3D12.BarrierSync.BuildRaytracingAccelerationStructure
@@ -861,7 +861,7 @@ namespace SharpGPU
                         | Vortice.Direct3D12.BarrierSync.EmitRaytracingAccelerationStructurePostBuildInfo;
             }
 
-            if ((syncMask & ERHISyncStageMask.AllGraphics) != 0)
+            if ((syncMask & ERHIStageMask.AllGraphics) != 0)
             {
                 sync |= Vortice.Direct3D12.BarrierSync.Draw
                         | Vortice.Direct3D12.BarrierSync.RenderTarget
@@ -2790,8 +2790,8 @@ namespace SharpGPU
                     attachment.SubresourceRange,
                     currentLayout,
                     desiredLayout,
-                    ERHISyncStageMask.Fragment,
-                    ERHISyncStageMask.Fragment,
+                    ERHIStageMask.Fragment,
+                    ERHIStageMask.Fragment,
                     AccessForColorLayout(currentLayout),
                     desiredAccess);
                 Dx12BarrierEmitter.EmitBarrier(commandBuffer, barrier);
@@ -2818,8 +2818,8 @@ namespace SharpGPU
                         attachment.SubresourceRange,
                         currentLayout,
                         desiredLayout,
-                        ERHISyncStageMask.Fragment,
-                        ERHISyncStageMask.Fragment,
+                        ERHIStageMask.Fragment,
+                        ERHIStageMask.Fragment,
                         currentLayout == ERHITextureLayout.DepthStencilReadOnly
                             ? ERHIAccessMask.DepthStencilRead
                             : ERHIAccessMask.DepthStencilWrite,
@@ -3072,8 +3072,8 @@ namespace SharpGPU
                     attachment.SubresourceRange,
                     currentLayout,
                     ERHITextureLayout.RenderTarget,
-                    ERHISyncStageMask.Fragment,
-                    ERHISyncStageMask.Fragment,
+                    ERHIStageMask.Fragment,
+                    ERHIStageMask.Fragment,
                     AccessForColorLayout(currentLayout),
                     ERHIAccessMask.RenderTargetRead |
                         ERHIAccessMask.RenderTargetWrite);
@@ -3093,8 +3093,8 @@ namespace SharpGPU
                     attachment.SubresourceRange,
                     ERHITextureLayout.DepthStencilReadOnly,
                     ERHITextureLayout.DepthStencilWrite,
-                    ERHISyncStageMask.Fragment,
-                    ERHISyncStageMask.Fragment,
+                    ERHIStageMask.Fragment,
+                    ERHIStageMask.Fragment,
                     ERHIAccessMask.DepthStencilRead,
                     ERHIAccessMask.DepthStencilWrite);
                 Dx12BarrierEmitter.EmitBarrier(commandBuffer, barrier);
@@ -3132,8 +3132,8 @@ namespace SharpGPU
                     attachment.SubresourceRange,
                     ERHITextureLayout.RenderTarget,
                     ERHITextureLayout.ResolveSource,
-                    ERHISyncStageMask.Fragment,
-                    ERHISyncStageMask.Transfer,
+                    ERHIStageMask.Fragment,
+                    ERHIStageMask.Transfer,
                     ERHIAccessMask.RenderTargetWrite,
                     ERHIAccessMask.ResolveRead);
                 Dx12BarrierEmitter.EmitBarrier(commandBuffer, toResolve);
@@ -3165,8 +3165,8 @@ namespace SharpGPU
                     attachment.SubresourceRange,
                     ERHITextureLayout.ResolveSource,
                     ERHITextureLayout.RenderTarget,
-                    ERHISyncStageMask.Transfer,
-                    ERHISyncStageMask.Fragment,
+                    ERHIStageMask.Transfer,
+                    ERHIStageMask.Fragment,
                     ERHIAccessMask.ResolveRead,
                     ERHIAccessMask.RenderTargetRead |
                         ERHIAccessMask.RenderTargetWrite);
@@ -3202,8 +3202,8 @@ namespace SharpGPU
                 depthStencil.SubresourceRange,
                 ERHITextureLayout.DepthStencilWrite,
                 ERHITextureLayout.ResolveSource,
-                ERHISyncStageMask.Fragment,
-                ERHISyncStageMask.Transfer,
+                ERHIStageMask.Fragment,
+                ERHIStageMask.Transfer,
                 ERHIAccessMask.DepthStencilWrite,
                 ERHIAccessMask.ResolveRead);
             Dx12BarrierEmitter.EmitBarrier(commandBuffer, depthToResolve);
@@ -3955,8 +3955,8 @@ namespace SharpGPU
             return RHIBarrier.Buffer(
                 buffer,
                 s_WholeBufferRange,
-                ERHISyncStageMask.None,
-                ERHISyncStageMask.MachineLearning,
+                ERHIStageMask.None,
+                ERHIStageMask.MachineLearning,
                 ERHIAccessMask.None,
                 ERHIAccessMask.ShaderWrite);
         }

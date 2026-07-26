@@ -211,21 +211,21 @@ public sealed class W11AdvancedSurfaceContractTests
         // MachineLearning maps to MTLStageMachineLearning (bit 30); do not strip it.
         Assert.Equal(
             0UL,
-            MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Task));
+            MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Task));
         Assert.Equal(
             0UL,
-            MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Mesh));
+            MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Mesh));
         Assert.Equal(
             1UL << 30,
             MetalUtility.ConvertToMetal4Stages(
-                ERHISyncStageMask.MachineLearning));
+                ERHIStageMask.MachineLearning));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => MetalUtility.ConvertToMetal4Stages(
-                (ERHISyncStageMask)(1UL << 63)));
+                (ERHIStageMask)(1UL << 63)));
 
         ulong supportedGraphicsStages =
             MetalUtility.ConvertToMetal4Stages(
-                ERHISyncStageMask.AllGraphics);
+                ERHIStageMask.AllGraphics);
         Assert.Equal(
             (1UL << 0) | (1UL << 1) | (1UL << 27),
             supportedGraphicsStages);

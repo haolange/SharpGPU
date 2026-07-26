@@ -318,8 +318,8 @@ namespace SharpGPU.Benchmarks
             RHIBarrier barrier = RHIBarrier.Buffer(
                 barrierBuffer,
                 RHIBufferRange.Whole(),
-                ERHISyncStageMask.None,
-                ERHISyncStageMask.Transfer,
+                ERHIStageMask.None,
+                ERHIStageMask.Transfer,
                 ERHIAccessMask.None,
                 ERHIAccessMask.TransferWrite);
             return new PreparedBenchmark

@@ -628,27 +628,27 @@ namespace SharpGPU
             }
         }
 
-        public static VkPipelineStageFlags ConvertToVkPipelineStage(in ERHISyncStageMask stages, in ERHIPipelineType queuePipeline)
+        public static VkPipelineStageFlags ConvertToVkPipelineStage(in ERHIStageMask stages, in ERHIPipelineType queuePipeline)
         {
-            if (stages == ERHISyncStageMask.None)
+            if (stages == ERHIStageMask.None)
             {
                 return GetSync1QueueDefaultStages(queuePipeline);
             }
 
             VkPipelineStageFlags result = 0;
-            if ((stages & ERHISyncStageMask.Transfer) != 0) result |= VkPipelineStageFlags.Transfer;
-            if ((stages & ERHISyncStageMask.Indirect) != 0) result |= VkPipelineStageFlags.DrawIndirect;
-            if ((stages & ERHISyncStageMask.IndexInput) != 0) result |= VkPipelineStageFlags.VertexInput;
-            if ((stages & ERHISyncStageMask.VertexInput) != 0) result |= VkPipelineStageFlags.VertexInput;
-            if ((stages & ERHISyncStageMask.Vertex) != 0) result |= VkPipelineStageFlags.VertexShader;
-            if ((stages & ERHISyncStageMask.Fragment) != 0) result |= VkPipelineStageFlags.FragmentShader;
-            if ((stages & ERHISyncStageMask.Compute) != 0) result |= VkPipelineStageFlags.ComputeShader;
-            if ((stages & ERHISyncStageMask.MachineLearning) != 0) result |= VkPipelineStageFlags.ComputeShader;
-            if ((stages & ERHISyncStageMask.Task) != 0) result |= VkPipelineStageFlags.TaskShaderEXT;
-            if ((stages & ERHISyncStageMask.Mesh) != 0) result |= VkPipelineStageFlags.MeshShaderEXT;
-            if ((stages & ERHISyncStageMask.RayTracing) != 0) result |= VkPipelineStageFlags.RayTracingShaderKHR;
-            if ((stages & ERHISyncStageMask.AccelStructBuild) != 0) result |= VkPipelineStageFlags.AccelerationStructureBuildKHR;
-            if ((stages & ERHISyncStageMask.AccelStructCopy) != 0)
+            if ((stages & ERHIStageMask.Transfer) != 0) result |= VkPipelineStageFlags.Transfer;
+            if ((stages & ERHIStageMask.Indirect) != 0) result |= VkPipelineStageFlags.DrawIndirect;
+            if ((stages & ERHIStageMask.IndexInput) != 0) result |= VkPipelineStageFlags.VertexInput;
+            if ((stages & ERHIStageMask.VertexInput) != 0) result |= VkPipelineStageFlags.VertexInput;
+            if ((stages & ERHIStageMask.Vertex) != 0) result |= VkPipelineStageFlags.VertexShader;
+            if ((stages & ERHIStageMask.Fragment) != 0) result |= VkPipelineStageFlags.FragmentShader;
+            if ((stages & ERHIStageMask.Compute) != 0) result |= VkPipelineStageFlags.ComputeShader;
+            if ((stages & ERHIStageMask.MachineLearning) != 0) result |= VkPipelineStageFlags.ComputeShader;
+            if ((stages & ERHIStageMask.Task) != 0) result |= VkPipelineStageFlags.TaskShaderEXT;
+            if ((stages & ERHIStageMask.Mesh) != 0) result |= VkPipelineStageFlags.MeshShaderEXT;
+            if ((stages & ERHIStageMask.RayTracing) != 0) result |= VkPipelineStageFlags.RayTracingShaderKHR;
+            if ((stages & ERHIStageMask.AccelStructBuild) != 0) result |= VkPipelineStageFlags.AccelerationStructureBuildKHR;
+            if ((stages & ERHIStageMask.AccelStructCopy) != 0)
             {
                 // TODO: sync1 cannot represent dedicated AS-copy stage; conservatively include transfer/build.
                 result |= VkPipelineStageFlags.Transfer | VkPipelineStageFlags.AccelerationStructureBuildKHR;
@@ -662,27 +662,27 @@ namespace SharpGPU
             return result;
         }
 
-        public static VkPipelineStageFlags2 ConvertToVkPipelineStage2(in ERHISyncStageMask stages, in ERHIPipelineType queuePipeline)
+        public static VkPipelineStageFlags2 ConvertToVkPipelineStage2(in ERHIStageMask stages, in ERHIPipelineType queuePipeline)
         {
-            if (stages == ERHISyncStageMask.None)
+            if (stages == ERHIStageMask.None)
             {
                 return GetSync2QueueDefaultStages(queuePipeline);
             }
 
             VkPipelineStageFlags2 result = VkPipelineStageFlags2.None;
-            if ((stages & ERHISyncStageMask.Transfer) != 0) result |= VkPipelineStageFlags2.AllTransfer;
-            if ((stages & ERHISyncStageMask.Indirect) != 0) result |= VkPipelineStageFlags2.DrawIndirect;
-            if ((stages & ERHISyncStageMask.IndexInput) != 0) result |= VkPipelineStageFlags2.IndexInput;
-            if ((stages & ERHISyncStageMask.VertexInput) != 0) result |= VkPipelineStageFlags2.VertexAttributeInput;
-            if ((stages & ERHISyncStageMask.Vertex) != 0) result |= VkPipelineStageFlags2.VertexShader;
-            if ((stages & ERHISyncStageMask.Fragment) != 0) result |= VkPipelineStageFlags2.FragmentShader;
-            if ((stages & ERHISyncStageMask.Compute) != 0) result |= VkPipelineStageFlags2.ComputeShader;
-            if ((stages & ERHISyncStageMask.MachineLearning) != 0) result |= VkPipelineStageFlags2.ComputeShader;
-            if ((stages & ERHISyncStageMask.Task) != 0) result |= VkPipelineStageFlags2.TaskShaderEXT;
-            if ((stages & ERHISyncStageMask.Mesh) != 0) result |= VkPipelineStageFlags2.MeshShaderEXT;
-            if ((stages & ERHISyncStageMask.RayTracing) != 0) result |= VkPipelineStageFlags2.RayTracingShaderKHR;
-            if ((stages & ERHISyncStageMask.AccelStructBuild) != 0) result |= VkPipelineStageFlags2.AccelerationStructureBuildKHR;
-            if ((stages & ERHISyncStageMask.AccelStructCopy) != 0) result |= VkPipelineStageFlags2.AccelerationStructureCopyKHR;
+            if ((stages & ERHIStageMask.Transfer) != 0) result |= VkPipelineStageFlags2.AllTransfer;
+            if ((stages & ERHIStageMask.Indirect) != 0) result |= VkPipelineStageFlags2.DrawIndirect;
+            if ((stages & ERHIStageMask.IndexInput) != 0) result |= VkPipelineStageFlags2.IndexInput;
+            if ((stages & ERHIStageMask.VertexInput) != 0) result |= VkPipelineStageFlags2.VertexAttributeInput;
+            if ((stages & ERHIStageMask.Vertex) != 0) result |= VkPipelineStageFlags2.VertexShader;
+            if ((stages & ERHIStageMask.Fragment) != 0) result |= VkPipelineStageFlags2.FragmentShader;
+            if ((stages & ERHIStageMask.Compute) != 0) result |= VkPipelineStageFlags2.ComputeShader;
+            if ((stages & ERHIStageMask.MachineLearning) != 0) result |= VkPipelineStageFlags2.ComputeShader;
+            if ((stages & ERHIStageMask.Task) != 0) result |= VkPipelineStageFlags2.TaskShaderEXT;
+            if ((stages & ERHIStageMask.Mesh) != 0) result |= VkPipelineStageFlags2.MeshShaderEXT;
+            if ((stages & ERHIStageMask.RayTracing) != 0) result |= VkPipelineStageFlags2.RayTracingShaderKHR;
+            if ((stages & ERHIStageMask.AccelStructBuild) != 0) result |= VkPipelineStageFlags2.AccelerationStructureBuildKHR;
+            if ((stages & ERHIStageMask.AccelStructCopy) != 0) result |= VkPipelineStageFlags2.AccelerationStructureCopyKHR;
 
             if (result == VkPipelineStageFlags2.None)
             {

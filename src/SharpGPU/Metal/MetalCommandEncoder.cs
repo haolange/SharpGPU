@@ -262,24 +262,24 @@ namespace SharpGPU
                 case ERHIBarrierKind.Global:
                 {
                     RHIGlobalBarrier globalBarrier = barrier.GlobalBarrier;
-                    afterStages = NormalizeToMetal4Stages(globalBarrier.SyncBefore);
-                    beforeStages = NormalizeToMetal4Stages(globalBarrier.SyncAfter);
+                    afterStages = NormalizeToMetal4Stages(globalBarrier.StageBefore);
+                    beforeStages = NormalizeToMetal4Stages(globalBarrier.StageAfter);
                     break;
                 }
 
                 case ERHIBarrierKind.Buffer:
                 {
                     RHIBufferBarrier bufferBarrier = barrier.BufferBarrier;
-                    afterStages = NormalizeToMetal4Stages(bufferBarrier.SyncBefore);
-                    beforeStages = NormalizeToMetal4Stages(bufferBarrier.SyncAfter);
+                    afterStages = NormalizeToMetal4Stages(bufferBarrier.StageBefore);
+                    beforeStages = NormalizeToMetal4Stages(bufferBarrier.StageAfter);
                     break;
                 }
 
                 case ERHIBarrierKind.Texture:
                 {
                     RHITextureBarrier textureBarrier = barrier.TextureBarrier;
-                    afterStages = NormalizeToMetal4Stages(textureBarrier.SyncBefore);
-                    beforeStages = NormalizeToMetal4Stages(textureBarrier.SyncAfter);
+                    afterStages = NormalizeToMetal4Stages(textureBarrier.StageBefore);
+                    beforeStages = NormalizeToMetal4Stages(textureBarrier.StageAfter);
                     break;
                 }
 
@@ -292,7 +292,7 @@ namespace SharpGPU
             return afterStages != 0 && beforeStages != 0;
         }
 
-        private static ulong NormalizeToMetal4Stages(in ERHISyncStageMask stages)
+        private static ulong NormalizeToMetal4Stages(in ERHIStageMask stages)
         {
             ulong result = MetalUtility.ConvertToMetal4Stages(stages) & s_ValidMetal4StageMask;
             if (result == 0)
@@ -975,7 +975,7 @@ namespace SharpGPU
 
         public override void CommitRaster(in MTL4RenderCommandEncoder encoder)
         {
-            ulong stages = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Vertex | ERHISyncStageMask.Fragment);
+            ulong stages = MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Vertex | ERHIStageMask.Fragment);
 
             if (m_UsesReferenceBuffers)
             {
@@ -1605,7 +1605,7 @@ namespace SharpGPU
             TrackResidency(src.NativeBuffer);
             TrackResidency(dst.NativeBuffer);
             m_NativeEncoder4.CopyFromBuffer(src.NativeBuffer, (ulong)srcOffset, dst.NativeBuffer, (ulong)dstOffset, (ulong)size);
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Transfer));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Transfer));
         }
 
         public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
@@ -1633,7 +1633,7 @@ namespace SharpGPU
                 dst.MipLevel,
                 new MTLOrigin(dst.Origin.x, dst.Origin.y, dst.Origin.z));
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Transfer));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Transfer));
         }
 
         public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in int3 size)
@@ -1661,7 +1661,7 @@ namespace SharpGPU
                 rowPitch,
                 imagePitch);
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Transfer));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Transfer));
         }
 
         public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in int3 size)
@@ -1686,7 +1686,7 @@ namespace SharpGPU
                 dst.MipLevel,
                 new MTLOrigin(dst.Origin.x, dst.Origin.y, dst.Origin.z));
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Transfer));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Transfer));
         }
 
         public override void EndPass()
@@ -1775,7 +1775,7 @@ namespace SharpGPU
         internal void WaitForFence(in MTLFence fence)
         {
             ValidateFenceAndEncoder(fence, nameof(WaitForFence));
-            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute);
+            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Compute);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.WaitForFence(fence, stage);
         }
@@ -1783,7 +1783,7 @@ namespace SharpGPU
         internal void SignalFence(in MTLFence fence)
         {
             ValidateFenceAndEncoder(fence, nameof(SignalFence));
-            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute);
+            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Compute);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.UpdateFence(fence, stage);
         }
@@ -1892,7 +1892,7 @@ namespace SharpGPU
             m_BindingBackend?.CommitCompute(m_NativeEncoder4);
             m_NativeEncoder4.DispatchThreadgroups(threadGroupCount, threadsPerGroup);
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Compute));
         }
 
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset)
@@ -1907,7 +1907,7 @@ namespace SharpGPU
             m_BindingBackend?.CommitCompute(m_NativeEncoder4);
             m_NativeEncoder4.DispatchThreadgroupsWithIndirectBuffer(indirectBuffer.NativeBuffer.GpuAddress + argsOffset, threadsPerGroup);
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Compute));
         }
 
         public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
@@ -1926,7 +1926,7 @@ namespace SharpGPU
 
             m_NativeEncoder4.ExecuteCommandsInBuffer(nativeICB, range);
             ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(
-                MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
+                MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Compute));
         }
 
         public override void EndPass()
@@ -2177,7 +2177,7 @@ namespace SharpGPU
                 throw new InvalidOperationException($"MTL4 TLAS build failed in ray-tracing pass. detail={ex.Message}");
             }
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Compute));
         }
 
         public override void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct)
@@ -2195,7 +2195,7 @@ namespace SharpGPU
                 throw new InvalidOperationException($"MTL4 BLAS build failed in ray-tracing pass. detail={ex.Message}");
             }
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Compute));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Compute));
         }
 
         public override void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable)
@@ -2225,7 +2225,7 @@ namespace SharpGPU
             m_BindingBackend?.CommitRaytracing(m_NativeEncoder4, table);
             m_NativeEncoder4.DispatchThreadgroups(threadgroupCount, threadsPerGroup);
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.RayTracing));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIStageMask.RayTracing));
         }
 
         public override void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable)
@@ -2248,7 +2248,7 @@ namespace SharpGPU
             m_BindingBackend?.CommitRaytracing(m_NativeEncoder4, table);
             m_NativeEncoder4.DispatchThreadgroupsWithIndirectBuffer(indirectBuffer.NativeBuffer.GpuAddress + argsOffset, threadsPerGroup);
 
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.RayTracing));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIStageMask.RayTracing));
         }
 
         public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
@@ -2290,7 +2290,7 @@ namespace SharpGPU
         internal void WaitForFence(in MTLFence fence)
         {
             ValidateFenceAndEncoder(fence, nameof(WaitForFence));
-            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.RayTracing);
+            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIStageMask.RayTracing);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.WaitForFence(fence, stage);
         }
@@ -2298,7 +2298,7 @@ namespace SharpGPU
         internal void SignalFence(in MTLFence fence)
         {
             ValidateFenceAndEncoder(fence, nameof(SignalFence));
-            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.RayTracing);
+            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIStageMask.RayTracing);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.UpdateFence(fence, stage);
         }
@@ -3198,7 +3198,7 @@ internal readonly struct MetalRasterCapabilities
         internal void WaitForFence(in MTLFence fence)
         {
             ValidateFenceAndEncoder(fence, nameof(WaitForFence));
-            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Vertex | ERHISyncStageMask.Fragment);
+            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Vertex | ERHIStageMask.Fragment);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.WaitForFence(fence, stage);
         }
@@ -3206,7 +3206,7 @@ internal readonly struct MetalRasterCapabilities
         internal void SignalFence(in MTLFence fence)
         {
             ValidateFenceAndEncoder(fence, nameof(SignalFence));
-            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Vertex | ERHISyncStageMask.Fragment);
+            ulong stage = MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Vertex | ERHIStageMask.Fragment);
             MTL4CommandEncoder encoder4 = new MTL4CommandEncoder(m_NativeEncoder4.NativePtr);
             encoder4.UpdateFence(fence, stage);
         }
@@ -3259,7 +3259,7 @@ internal readonly struct MetalRasterCapabilities
             {
                 MetalQuery query = m_PendingPassDescriptor.Timestamp.Value.Query as MetalQuery
                     ?? throw new InvalidOperationException("Metal raster timestamp pass requires a MetalQuery.");
-                ulong stages = MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Vertex | ERHISyncStageMask.Fragment);
+                ulong stages = MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Vertex | ERHIStageMask.Fragment);
                 query.WriteTimestamp(m_NativeEncoder4, stages, index);
             }
         }
@@ -3319,7 +3319,7 @@ internal readonly struct MetalRasterCapabilities
             RequireEncoderForState(nameof(NextSubPass));
 
             ulong fragmentStages =
-                MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Fragment);
+                MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Fragment);
             new MTL4CommandEncoder(m_NativeEncoder4.NativePtr)
                 .BarrierAfterEncoderStages(
                     fragmentStages,
@@ -4119,7 +4119,7 @@ internal readonly struct MetalRasterCapabilities
         private void MarkRasterStagesSeen()
         {
             ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(
-                MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.Vertex | ERHISyncStageMask.Fragment));
+                MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Vertex | ERHIStageMask.Fragment));
         }
     }
 
@@ -4341,7 +4341,7 @@ namespace SharpGPU
             }
 
             m_NativeEncoder.DispatchNetworkWithIntermediatesHeap(metalBindingTable.NativeIntermediatesHeap);
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.MachineLearning));
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIStageMask.MachineLearning));
         }
 
         public override void EndPass()

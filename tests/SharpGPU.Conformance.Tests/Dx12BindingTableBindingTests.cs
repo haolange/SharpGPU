@@ -511,8 +511,8 @@ public sealed class Dx12BindingTableBindingTests
             RHITextureSubresourceRange.Whole(ERHITextureAspectMask.Color),
             ERHITextureLayout.Undefined,
             ERHITextureLayout.CopyDestination,
-            ERHISyncStageMask.None,
-            ERHISyncStageMask.Transfer,
+            ERHIStageMask.None,
+            ERHIStageMask.Transfer,
             ERHIAccessMask.None,
             ERHIAccessMask.TransferWrite));
         upload.CopyBufferToTexture(
@@ -534,8 +534,8 @@ public sealed class Dx12BindingTableBindingTests
             RHITextureSubresourceRange.Whole(ERHITextureAspectMask.Color),
             ERHITextureLayout.CopyDestination,
             ERHITextureLayout.ShaderReadOnly,
-            ERHISyncStageMask.Transfer,
-            ERHISyncStageMask.Compute,
+            ERHIStageMask.Transfer,
+            ERHIStageMask.Compute,
             ERHIAccessMask.TransferWrite,
             ERHIAccessMask.ShaderRead));
         commandBuffer.EndTransferPass();
@@ -544,8 +544,8 @@ public sealed class Dx12BindingTableBindingTests
         compute.Barrier(RHIBarrier.Buffer(
             output,
             RHIBufferRange.Whole(),
-            ERHISyncStageMask.None,
-            ERHISyncStageMask.Compute,
+            ERHIStageMask.None,
+            ERHIStageMask.Compute,
             ERHIAccessMask.None,
             ERHIAccessMask.ShaderWrite));
         compute.SetPipeline(pipeline);
@@ -558,8 +558,8 @@ public sealed class Dx12BindingTableBindingTests
         copy.Barrier(RHIBarrier.Buffer(
             output,
             RHIBufferRange.Whole(),
-            ERHISyncStageMask.Compute,
-            ERHISyncStageMask.Transfer,
+            ERHIStageMask.Compute,
+            ERHIStageMask.Transfer,
             ERHIAccessMask.ShaderWrite,
             ERHIAccessMask.TransferRead));
         copy.CopyBufferToBuffer(output, 0, readback, 0, sizeof(uint));

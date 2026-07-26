@@ -99,8 +99,8 @@ public sealed class MetalIcbAndViewportQualifiedTests
         compute.Barrier(RHIBarrier.Buffer(
             output,
             RHIBufferRange.Whole(),
-            ERHISyncStageMask.None,
-            ERHISyncStageMask.Compute,
+            ERHIStageMask.None,
+            ERHIStageMask.Compute,
             ERHIAccessMask.None,
             ERHIAccessMask.ShaderWrite));
         compute.ExecuteIndirectCommandBuffer(icb);
@@ -113,8 +113,8 @@ public sealed class MetalIcbAndViewportQualifiedTests
         transfer.Barrier(RHIBarrier.Buffer(
             output,
             RHIBufferRange.Whole(),
-            ERHISyncStageMask.Compute,
-            ERHISyncStageMask.Transfer,
+            ERHIStageMask.Compute,
+            ERHIStageMask.Transfer,
             ERHIAccessMask.ShaderWrite,
             ERHIAccessMask.TransferRead));
         transfer.CopyBufferToBuffer(output, 0, readback, 0, sizeof(uint));
@@ -244,8 +244,8 @@ public sealed class MetalIcbAndViewportQualifiedTests
             RHITextureSubresourceRange.Whole(ERHITextureAspectMask.Color),
             ERHITextureLayout.RenderTarget,
             ERHITextureLayout.CopySource,
-            ERHISyncStageMask.Fragment,
-            ERHISyncStageMask.Transfer,
+            ERHIStageMask.Fragment,
+            ERHIStageMask.Transfer,
             ERHIAccessMask.RenderTargetWrite,
             ERHIAccessMask.TransferRead));
         transfer.CopyTextureToBuffer(

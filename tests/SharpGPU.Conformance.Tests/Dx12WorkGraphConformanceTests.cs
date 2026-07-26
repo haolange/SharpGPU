@@ -218,15 +218,15 @@ public sealed class Dx12WorkGraphConformanceTests
         workGraph.Barrier(RHIBarrier.Buffer(
             fixture.BackingMemory,
             RHIBufferRange.Whole(),
-            ERHISyncStageMask.None,
-            ERHISyncStageMask.Compute,
+            ERHIStageMask.None,
+            ERHIStageMask.Compute,
             ERHIAccessMask.None,
             ERHIAccessMask.ShaderWrite));
         workGraph.Barrier(RHIBarrier.Buffer(
             fixture.OutputBuffer,
             RHIBufferRange.Whole(),
-            ERHISyncStageMask.None,
-            ERHISyncStageMask.Compute,
+            ERHIStageMask.None,
+            ERHIStageMask.Compute,
             ERHIAccessMask.None,
             ERHIAccessMask.ShaderWrite));
         workGraph.SetBackingMemory(fixture.BackingMemory, 0, (ulong)fixture.BackingMemorySize);
@@ -240,8 +240,8 @@ public sealed class Dx12WorkGraphConformanceTests
         transfer.Barrier(RHIBarrier.Buffer(
             fixture.OutputBuffer,
             RHIBufferRange.Whole(),
-            ERHISyncStageMask.Compute,
-            ERHISyncStageMask.Transfer,
+            ERHIStageMask.Compute,
+            ERHIStageMask.Transfer,
             ERHIAccessMask.ShaderWrite,
             ERHIAccessMask.TransferRead));
         transfer.CopyBufferToBuffer(fixture.OutputBuffer, 0, fixture.ReadbackBuffer, 0, sizeof(int));

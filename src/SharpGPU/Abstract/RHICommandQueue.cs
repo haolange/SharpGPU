@@ -10,12 +10,12 @@ namespace SharpGPU
             get;
         }
 
-        public ERHISyncStageMask StageMask
+        public ERHIStageMask StageMask
         {
             get;
         }
 
-        public RHIQueueSemaphoreWait(RHISemaphore semaphore, ERHISyncStageMask stageMask)
+        public RHIQueueSemaphoreWait(RHISemaphore semaphore, ERHIStageMask stageMask)
         {
             Semaphore = semaphore ?? throw new ArgumentNullException(nameof(semaphore));
             StageMask = stageMask;
@@ -59,20 +59,20 @@ namespace SharpGPU
 
     public abstract class RHICommandQueue : Disposal
     {
-        private const ERHISyncStageMask KnownWaitStageMask =
-            ERHISyncStageMask.Transfer |
-            ERHISyncStageMask.Indirect |
-            ERHISyncStageMask.IndexInput |
-            ERHISyncStageMask.VertexInput |
-            ERHISyncStageMask.Vertex |
-            ERHISyncStageMask.Fragment |
-            ERHISyncStageMask.Compute |
-            ERHISyncStageMask.Task |
-            ERHISyncStageMask.Mesh |
-            ERHISyncStageMask.RayTracing |
-            ERHISyncStageMask.AccelStructBuild |
-            ERHISyncStageMask.AccelStructCopy |
-            ERHISyncStageMask.MachineLearning;
+        private const ERHIStageMask KnownWaitStageMask =
+            ERHIStageMask.Transfer |
+            ERHIStageMask.Indirect |
+            ERHIStageMask.IndexInput |
+            ERHIStageMask.VertexInput |
+            ERHIStageMask.Vertex |
+            ERHIStageMask.Fragment |
+            ERHIStageMask.Compute |
+            ERHIStageMask.Task |
+            ERHIStageMask.Mesh |
+            ERHIStageMask.RayTracing |
+            ERHIStageMask.AccelStructBuild |
+            ERHIStageMask.AccelStructCopy |
+            ERHIStageMask.MachineLearning;
 
         public ERHIPipelineType PipelineType
         {
@@ -184,14 +184,14 @@ namespace SharpGPU
                 }
 
                 ValidateSemaphore(wait.Semaphore, $"wait semaphore at index {i}", in descriptor);
-                if (wait.StageMask == ERHISyncStageMask.None)
+                if (wait.StageMask == ERHIStageMask.None)
                 {
                     throw new ArgumentException(
                         $"Wait semaphore at index {i} must specify a non-empty stage mask.",
                         nameof(descriptor));
                 }
 
-                if (wait.StageMask != ERHISyncStageMask.All &&
+                if (wait.StageMask != ERHIStageMask.All &&
                     (((ulong)wait.StageMask & ~(ulong)KnownWaitStageMask) != 0))
                 {
                     throw new ArgumentOutOfRangeException(

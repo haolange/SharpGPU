@@ -423,8 +423,8 @@ public sealed class VulkanRasterSubpassQualifiedGpuTests
                         ERHITextureAspectMask.Color),
                     ERHITextureLayout.Undefined,
                     ERHITextureLayout.RenderTarget,
-                    ERHISyncStageMask.None,
-                    ERHISyncStageMask.Fragment,
+                    ERHIStageMask.None,
+                    ERHIStageMask.Fragment,
                     ERHIAccessMask.None,
                     ERHIAccessMask.RenderTargetRead |
                         ERHIAccessMask.RenderTargetWrite));
@@ -450,16 +450,16 @@ public sealed class VulkanRasterSubpassQualifiedGpuTests
                     ERHITextureAspectMask.Color),
                 ERHITextureLayout.RenderTarget,
                 ERHITextureLayout.CopySource,
-                ERHISyncStageMask.Fragment,
-                ERHISyncStageMask.Transfer,
+                ERHIStageMask.Fragment,
+                ERHIStageMask.Transfer,
                 ERHIAccessMask.RenderTargetWrite,
                 ERHIAccessMask.TransferRead));
         transfer.Barrier(
             RHIBarrier.Buffer(
                 readback,
                 RHIBufferRange.Whole(),
-                ERHISyncStageMask.None,
-                ERHISyncStageMask.Transfer,
+                ERHIStageMask.None,
+                ERHIStageMask.Transfer,
                 ERHIAccessMask.None,
                 ERHIAccessMask.TransferWrite));
         transfer.CopyTextureToBuffer(

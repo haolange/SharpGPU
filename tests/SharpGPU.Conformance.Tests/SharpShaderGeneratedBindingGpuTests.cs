@@ -348,8 +348,8 @@ namespace SharpGPU.Conformance.Tests
                             ERHITextureAspectMask.Color),
                         ERHITextureLayout.Undefined,
                         ERHITextureLayout.CopyDestination,
-                        ERHISyncStageMask.None,
-                        ERHISyncStageMask.Transfer,
+                        ERHIStageMask.None,
+                        ERHIStageMask.Transfer,
                         ERHIAccessMask.None,
                         ERHIAccessMask.TransferWrite));
                     upload.CopyBufferToTexture(
@@ -372,8 +372,8 @@ namespace SharpGPU.Conformance.Tests
                             ERHITextureAspectMask.Color),
                         ERHITextureLayout.CopyDestination,
                         ERHITextureLayout.ShaderReadOnly,
-                        ERHISyncStageMask.Transfer,
-                        ERHISyncStageMask.Compute,
+                        ERHIStageMask.Transfer,
+                        ERHIStageMask.Compute,
                         ERHIAccessMask.TransferWrite,
                         ERHIAccessMask.ShaderRead));
                     commandBuffer.EndTransferPass();
@@ -386,8 +386,8 @@ namespace SharpGPU.Conformance.Tests
                     compute.Barrier(RHIBarrier.Buffer(
                         output,
                         RHIBufferRange.Whole(),
-                        ERHISyncStageMask.None,
-                        ERHISyncStageMask.Compute,
+                        ERHIStageMask.None,
+                        ERHIStageMask.Compute,
                         ERHIAccessMask.None,
                         ERHIAccessMask.ShaderWrite));
                     compute.SetPipeline(pipeline);
@@ -403,8 +403,8 @@ namespace SharpGPU.Conformance.Tests
                     copy.Barrier(RHIBarrier.Buffer(
                         output,
                         RHIBufferRange.Whole(),
-                        ERHISyncStageMask.Compute,
-                        ERHISyncStageMask.Transfer,
+                        ERHIStageMask.Compute,
+                        ERHIStageMask.Transfer,
                         ERHIAccessMask.ShaderWrite,
                         ERHIAccessMask.TransferRead));
                     copy.CopyBufferToBuffer(

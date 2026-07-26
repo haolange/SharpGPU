@@ -25,7 +25,7 @@ public sealed class QueueSubmissionContractTests
         RHIQueueSubmitDescriptor waitBeforeSignal = new RHIQueueSubmitDescriptor(
             waitSemaphores: new[]
             {
-                new RHIQueueSemaphoreWait(semaphore, ERHISyncStageMask.Compute)
+                new RHIQueueSemaphoreWait(semaphore, ERHIStageMask.Compute)
             });
         Assert.Throws<InvalidOperationException>(() => queue.Submit(in waitBeforeSignal));
 
@@ -37,7 +37,7 @@ public sealed class QueueSubmissionContractTests
         RHIQueueSubmitDescriptor wait = new RHIQueueSubmitDescriptor(
             waitSemaphores: new[]
             {
-                new RHIQueueSemaphoreWait(semaphore, ERHISyncStageMask.Compute)
+                new RHIQueueSemaphoreWait(semaphore, ERHIStageMask.Compute)
             });
         queue.Submit(in wait);
         Assert.Throws<InvalidOperationException>(() => queue.Submit(in wait));
@@ -89,12 +89,12 @@ public sealed class QueueSubmissionContractTests
         Assert.Throws<ArgumentException>(() => queue.Submit(new RHIQueueSubmitDescriptor(
             waitSemaphores: new[]
             {
-                new RHIQueueSemaphoreWait(local, ERHISyncStageMask.None)
+                new RHIQueueSemaphoreWait(local, ERHIStageMask.None)
             })));
         Assert.Throws<ArgumentOutOfRangeException>(() => queue.Submit(new RHIQueueSubmitDescriptor(
             waitSemaphores: new[]
             {
-                new RHIQueueSemaphoreWait(local, (ERHISyncStageMask)(1UL << 40))
+                new RHIQueueSemaphoreWait(local, (ERHIStageMask)(1UL << 40))
             })));
     }
 

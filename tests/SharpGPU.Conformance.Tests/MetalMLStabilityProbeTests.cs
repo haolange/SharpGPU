@@ -358,16 +358,16 @@ public sealed class MetalMLStabilityProbeTests
         RHITransferEncoder upload = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor { Name = "Upload" });
         upload.Barriers(new[]
         {
-            RHIBarrier.Buffer(inputA, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
-            RHIBarrier.Buffer(inputB, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
-            RHIBarrier.Buffer(output, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.MachineLearning, ERHIAccessMask.None, ERHIAccessMask.ShaderWrite),
+            RHIBarrier.Buffer(inputA, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+            RHIBarrier.Buffer(inputB, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+            RHIBarrier.Buffer(output, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.MachineLearning, ERHIAccessMask.None, ERHIAccessMask.ShaderWrite),
         });
         upload.CopyBufferToBuffer(uploadA, 0, inputA, 0, nativeByteSize);
         upload.CopyBufferToBuffer(uploadB, 0, inputB, 0, nativeByteSize);
         upload.Barriers(new[]
         {
-            RHIBarrier.Buffer(inputA, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderRead),
-            RHIBarrier.Buffer(inputB, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderRead),
+            RHIBarrier.Buffer(inputA, RHIBufferRange.Whole(), ERHIStageMask.Transfer, ERHIStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderRead),
+            RHIBarrier.Buffer(inputB, RHIBufferRange.Whole(), ERHIStageMask.Transfer, ERHIStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderRead),
         });
         commandBuffer.EndTransferPass();
 
@@ -380,7 +380,7 @@ public sealed class MetalMLStabilityProbeTests
         RHITransferEncoder download = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor { Name = "Readback" });
         download.Barriers(new[]
         {
-            RHIBarrier.Buffer(output, RHIBufferRange.Whole(), ERHISyncStageMask.MachineLearning, ERHISyncStageMask.Transfer, ERHIAccessMask.ShaderWrite, ERHIAccessMask.TransferRead),
+            RHIBarrier.Buffer(output, RHIBufferRange.Whole(), ERHIStageMask.MachineLearning, ERHIStageMask.Transfer, ERHIAccessMask.ShaderWrite, ERHIAccessMask.TransferRead),
         });
         download.CopyBufferToBuffer(output, 0, readback, 0, nativeByteSize);
         commandBuffer.EndTransferPass();
@@ -439,19 +439,19 @@ public sealed class MetalMLStabilityProbeTests
         RHITransferEncoder upload = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor { Name = "Upload" });
         upload.Barriers(new[]
         {
-            RHIBarrier.Buffer(inputA, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
-            RHIBarrier.Buffer(inputB, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
-            RHIBarrier.Buffer(inputC, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
-            RHIBarrier.Buffer(output, RHIBufferRange.Whole(), ERHISyncStageMask.None, ERHISyncStageMask.MachineLearning, ERHIAccessMask.None, ERHIAccessMask.ShaderWrite),
+            RHIBarrier.Buffer(inputA, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+            RHIBarrier.Buffer(inputB, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+            RHIBarrier.Buffer(inputC, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.Transfer, ERHIAccessMask.None, ERHIAccessMask.TransferWrite),
+            RHIBarrier.Buffer(output, RHIBufferRange.Whole(), ERHIStageMask.None, ERHIStageMask.MachineLearning, ERHIAccessMask.None, ERHIAccessMask.ShaderWrite),
         });
         upload.CopyBufferToBuffer(uploadA, 0, inputA, 0, aNativeByteSize);
         upload.CopyBufferToBuffer(uploadB, 0, inputB, 0, bNativeByteSize);
         upload.CopyBufferToBuffer(uploadC, 0, inputC, 0, cNativeByteSize);
         upload.Barriers(new[]
         {
-            RHIBarrier.Buffer(inputA, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderRead),
-            RHIBarrier.Buffer(inputB, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderRead),
-            RHIBarrier.Buffer(inputC, RHIBufferRange.Whole(), ERHISyncStageMask.Transfer, ERHISyncStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderRead),
+            RHIBarrier.Buffer(inputA, RHIBufferRange.Whole(), ERHIStageMask.Transfer, ERHIStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderRead),
+            RHIBarrier.Buffer(inputB, RHIBufferRange.Whole(), ERHIStageMask.Transfer, ERHIStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderRead),
+            RHIBarrier.Buffer(inputC, RHIBufferRange.Whole(), ERHIStageMask.Transfer, ERHIStageMask.MachineLearning, ERHIAccessMask.TransferWrite, ERHIAccessMask.ShaderRead),
         });
         commandBuffer.EndTransferPass();
 
@@ -464,7 +464,7 @@ public sealed class MetalMLStabilityProbeTests
         RHITransferEncoder download = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor { Name = "Readback" });
         download.Barriers(new[]
         {
-            RHIBarrier.Buffer(output, RHIBufferRange.Whole(), ERHISyncStageMask.MachineLearning, ERHISyncStageMask.Transfer, ERHIAccessMask.ShaderWrite, ERHIAccessMask.TransferRead),
+            RHIBarrier.Buffer(output, RHIBufferRange.Whole(), ERHIStageMask.MachineLearning, ERHIStageMask.Transfer, ERHIAccessMask.ShaderWrite, ERHIAccessMask.TransferRead),
         });
         download.CopyBufferToBuffer(output, 0, readback, 0, outNativeByteSize);
         commandBuffer.EndTransferPass();

@@ -86,8 +86,8 @@ public sealed class SharpGPUDirectStorageQualifiedTests
                     transfer.Barrier(RHIBarrier.Buffer(
                         destination,
                         RHIBufferRange.Whole(),
-                        ERHISyncStageMask.None,
-                        ERHISyncStageMask.Transfer,
+                        ERHIStageMask.None,
+                        ERHIStageMask.Transfer,
                         ERHIAccessMask.None,
                         ERHIAccessMask.TransferRead));
                     transfer.CopyBufferToBuffer(destination, 0, readback, 0, byteCount);
@@ -218,8 +218,8 @@ public sealed class SharpGPUDirectStorageQualifiedTests
                         RHITextureSubresourceRange.Whole(ERHITextureAspectMask.Color),
                         ERHITextureLayout.Common,
                         ERHITextureLayout.CopySource,
-                        ERHISyncStageMask.None,
-                        ERHISyncStageMask.Transfer,
+                        ERHIStageMask.None,
+                        ERHIStageMask.Transfer,
                         ERHIAccessMask.None,
                         ERHIAccessMask.TransferRead));
                     transfer.CopyTextureToBuffer(

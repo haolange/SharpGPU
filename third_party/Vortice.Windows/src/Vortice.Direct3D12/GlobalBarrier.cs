@@ -1,4 +1,4 @@
-﻿// Copyright (c) Amer Koleci and Contributors.
+// Copyright (c) Amer Koleci and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 namespace Vortice.Direct3D12;
@@ -12,14 +12,14 @@ public partial struct GlobalBarrier
     /// <summary>
     /// Initializes a new transition instance of <see cref="GlobalBarrier"/> struct.
     /// </summary>
-    /// <param name="syncBefore">Synchronization scope of all preceding GPU work that must be completed before executing the barrier.</param>
-    /// <param name="syncAfter">Synchronization scope of all subsequent GPU work that must wait until the barrier execution is finished.</param>
+    /// <param name="stageBefore">Synchronization scope of all preceding GPU work that must be completed before executing the barrier.</param>
+    /// <param name="stageAfter">Synchronization scope of all subsequent GPU work that must wait until the barrier execution is finished.</param>
     /// <param name="accessBefore">Write accesses that must be flushed and finished before the barrier is executed.</param>
     /// <param name="accessAfter">Accesses that must be available for data written via AccessBefore after the barrier is executed.</param>
-    public GlobalBarrier(BarrierSync syncBefore, BarrierSync syncAfter, BarrierAccess accessBefore, BarrierAccess accessAfter)
+    public GlobalBarrier(BarrierSync stageBefore, BarrierSync stageAfter, BarrierAccess accessBefore, BarrierAccess accessAfter)
     {
-        SyncBefore = syncBefore;
-        SyncAfter = syncAfter;
+        StageBefore = stageBefore;
+        StageAfter = stageAfter;
         AccessBefore = accessBefore;
         AccessAfter = accessAfter;  
     }

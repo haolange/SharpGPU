@@ -138,8 +138,8 @@ public sealed class VulkanRasterW6ConvergenceTests
                 new[]
                 {
                     RHIBarrier.Global(
-                        ERHISyncStageMask.None,
-                        ERHISyncStageMask.None,
+                        ERHIStageMask.None,
+                        ERHIStageMask.None,
                         ERHIAccessMask.RenderTargetWrite |
                             ERHIAccessMask.DepthStencilWrite,
                         ERHIAccessMask.TransferRead),

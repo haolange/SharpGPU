@@ -11,14 +11,6 @@ namespace SharpGPU
         Undefined
     };
 
-    internal enum ERHIBinarySynchronizationState : byte
-    {
-        Ready = 0,
-        Pending = 1,
-        Signaled = 2,
-        Resetting = 3
-    }
-
     public abstract class RHIFence : Disposal
     {
         internal object OwnerDevice
@@ -31,7 +23,7 @@ namespace SharpGPU
         protected RHIFence(object ownerDevice)
         {
             OwnerDevice = ownerDevice ?? throw new ArgumentNullException(nameof(ownerDevice));
-            m_State = (int)ERHIBinarySynchronizationState.Ready;
+            m_State = (int)BinarySyncLifecycle.Ready;
         }
 
         public abstract ERHIFenceStatus Status
@@ -47,9 +39,9 @@ namespace SharpGPU
             ThrowIfSynchronizationDisposed();
             if (Interlocked.CompareExchange(
                     ref m_State,
-                    (int)ERHIBinarySynchronizationState.Pending,
-                    (int)ERHIBinarySynchronizationState.Ready) !=
-                (int)ERHIBinarySynchronizationState.Ready)
+                    (int)BinarySyncLifecycle.Pending,
+                    (int)BinarySyncLifecycle.Ready) !=
+                (int)BinarySyncLifecycle.Ready)
             {
                 throw new InvalidOperationException(
                     "The fence must be Ready before it can be used as a completion fence.");
@@ -60,9 +52,9 @@ namespace SharpGPU
         {
             if (Interlocked.CompareExchange(
                     ref m_State,
-                    (int)ERHIBinarySynchronizationState.Ready,
-                    (int)ERHIBinarySynchronizationState.Pending) !=
-                (int)ERHIBinarySynchronizationState.Pending)
+                    (int)BinarySyncLifecycle.Ready,
+                    (int)BinarySyncLifecycle.Pending) !=
+                (int)BinarySyncLifecycle.Pending)
             {
                 throw new InvalidOperationException("The fence signal reservation is not pending.");
             }
@@ -73,14 +65,14 @@ namespace SharpGPU
             ThrowIfSynchronizationDisposed();
             while (true)
             {
-                ERHIBinarySynchronizationState state =
-                    (ERHIBinarySynchronizationState)Volatile.Read(ref m_State);
-                if (state == ERHIBinarySynchronizationState.Ready)
+                BinarySyncLifecycle state =
+                    (BinarySyncLifecycle)Volatile.Read(ref m_State);
+                if (state == BinarySyncLifecycle.Ready)
                 {
                     return false;
                 }
 
-                if (state != ERHIBinarySynchronizationState.Signaled)
+                if (state != BinarySyncLifecycle.Signaled)
                 {
                     throw new InvalidOperationException(
                         "A fence cannot be reset before its pending signal has completed.");
@@ -88,9 +80,9 @@ namespace SharpGPU
 
                 if (Interlocked.CompareExchange(
                         ref m_State,
-                        (int)ERHIBinarySynchronizationState.Resetting,
-                        (int)ERHIBinarySynchronizationState.Signaled) ==
-                    (int)ERHIBinarySynchronizationState.Signaled)
+                        (int)BinarySyncLifecycle.Resetting,
+                        (int)BinarySyncLifecycle.Signaled) ==
+                    (int)BinarySyncLifecycle.Signaled)
                 {
                     return true;
                 }
@@ -101,9 +93,9 @@ namespace SharpGPU
         {
             if (Interlocked.CompareExchange(
                     ref m_State,
-                    (int)ERHIBinarySynchronizationState.Ready,
-                    (int)ERHIBinarySynchronizationState.Resetting) !=
-                (int)ERHIBinarySynchronizationState.Resetting)
+                    (int)BinarySyncLifecycle.Ready,
+                    (int)BinarySyncLifecycle.Resetting) !=
+                (int)BinarySyncLifecycle.Resetting)
             {
                 throw new InvalidOperationException("The fence reset operation is not active.");
             }
@@ -113,9 +105,9 @@ namespace SharpGPU
         {
             if (Interlocked.CompareExchange(
                     ref m_State,
-                    (int)ERHIBinarySynchronizationState.Signaled,
-                    (int)ERHIBinarySynchronizationState.Resetting) !=
-                (int)ERHIBinarySynchronizationState.Resetting)
+                    (int)BinarySyncLifecycle.Signaled,
+                    (int)BinarySyncLifecycle.Resetting) !=
+                (int)BinarySyncLifecycle.Resetting)
             {
                 throw new InvalidOperationException("The fence reset operation is not active.");
             }
@@ -126,8 +118,8 @@ namespace SharpGPU
             get
             {
                 ThrowIfSynchronizationDisposed();
-                return (ERHIBinarySynchronizationState)Volatile.Read(ref m_State) ==
-                    ERHIBinarySynchronizationState.Pending;
+                return (BinarySyncLifecycle)Volatile.Read(ref m_State) ==
+                    BinarySyncLifecycle.Pending;
             }
         }
 
@@ -136,22 +128,22 @@ namespace SharpGPU
             get
             {
                 ThrowIfSynchronizationDisposed();
-                return (ERHIBinarySynchronizationState)Volatile.Read(ref m_State) ==
-                    ERHIBinarySynchronizationState.Signaled;
+                return (BinarySyncLifecycle)Volatile.Read(ref m_State) ==
+                    BinarySyncLifecycle.Signaled;
             }
         }
 
         protected void EnsureWaitable()
         {
             ThrowIfSynchronizationDisposed();
-            ERHIBinarySynchronizationState state =
-                (ERHIBinarySynchronizationState)Volatile.Read(ref m_State);
-            if (state == ERHIBinarySynchronizationState.Ready)
+            BinarySyncLifecycle state =
+                (BinarySyncLifecycle)Volatile.Read(ref m_State);
+            if (state == BinarySyncLifecycle.Ready)
             {
                 throw new InvalidOperationException("A fence cannot be waited before it has been submitted.");
             }
 
-            if (state == ERHIBinarySynchronizationState.Resetting)
+            if (state == BinarySyncLifecycle.Resetting)
             {
                 throw new InvalidOperationException("A fence cannot be waited while it is being reset.");
             }
@@ -161,10 +153,10 @@ namespace SharpGPU
         {
             int prior = Interlocked.CompareExchange(
                 ref m_State,
-                (int)ERHIBinarySynchronizationState.Signaled,
-                (int)ERHIBinarySynchronizationState.Pending);
-            if (prior != (int)ERHIBinarySynchronizationState.Pending &&
-                prior != (int)ERHIBinarySynchronizationState.Signaled)
+                (int)BinarySyncLifecycle.Signaled,
+                (int)BinarySyncLifecycle.Pending);
+            if (prior != (int)BinarySyncLifecycle.Pending &&
+                prior != (int)BinarySyncLifecycle.Signaled)
             {
                 throw new InvalidOperationException("The fence does not have a pending signal.");
             }
@@ -195,7 +187,7 @@ namespace SharpGPU
         protected RHISemaphore(object ownerDevice)
         {
             OwnerDevice = ownerDevice ?? throw new ArgumentNullException(nameof(ownerDevice));
-            m_State = (int)ERHIBinarySynchronizationState.Ready;
+            m_State = (int)BinarySyncLifecycle.Ready;
         }
 
         internal void ReserveSignal()
@@ -203,9 +195,9 @@ namespace SharpGPU
             ThrowIfSynchronizationDisposed();
             if (Interlocked.CompareExchange(
                     ref m_State,
-                    (int)ERHIBinarySynchronizationState.Pending,
-                    (int)ERHIBinarySynchronizationState.Ready) !=
-                (int)ERHIBinarySynchronizationState.Ready)
+                    (int)BinarySyncLifecycle.Pending,
+                    (int)BinarySyncLifecycle.Ready) !=
+                (int)BinarySyncLifecycle.Ready)
             {
                 throw new InvalidOperationException(
                     "A binary semaphore cannot be signaled again before its prior signal has been consumed.");
@@ -216,9 +208,9 @@ namespace SharpGPU
         {
             if (Interlocked.CompareExchange(
                     ref m_State,
-                    (int)ERHIBinarySynchronizationState.Signaled,
-                    (int)ERHIBinarySynchronizationState.Pending) !=
-                (int)ERHIBinarySynchronizationState.Pending)
+                    (int)BinarySyncLifecycle.Signaled,
+                    (int)BinarySyncLifecycle.Pending) !=
+                (int)BinarySyncLifecycle.Pending)
             {
                 throw new InvalidOperationException("The semaphore signal reservation is not pending.");
             }
@@ -228,9 +220,9 @@ namespace SharpGPU
         {
             if (Interlocked.CompareExchange(
                     ref m_State,
-                    (int)ERHIBinarySynchronizationState.Ready,
-                    (int)ERHIBinarySynchronizationState.Pending) !=
-                (int)ERHIBinarySynchronizationState.Pending)
+                    (int)BinarySyncLifecycle.Ready,
+                    (int)BinarySyncLifecycle.Pending) !=
+                (int)BinarySyncLifecycle.Pending)
             {
                 throw new InvalidOperationException("The semaphore signal reservation is not pending.");
             }
@@ -241,9 +233,9 @@ namespace SharpGPU
             ThrowIfSynchronizationDisposed();
             if (Interlocked.CompareExchange(
                     ref m_State,
-                    (int)ERHIBinarySynchronizationState.Pending,
-                    (int)ERHIBinarySynchronizationState.Signaled) !=
-                (int)ERHIBinarySynchronizationState.Signaled)
+                    (int)BinarySyncLifecycle.Pending,
+                    (int)BinarySyncLifecycle.Signaled) !=
+                (int)BinarySyncLifecycle.Signaled)
             {
                 throw new InvalidOperationException(
                     "A binary semaphore cannot be waited before a signal has been submitted or after it has been consumed.");
@@ -254,9 +246,9 @@ namespace SharpGPU
         {
             if (Interlocked.CompareExchange(
                     ref m_State,
-                    (int)ERHIBinarySynchronizationState.Ready,
-                    (int)ERHIBinarySynchronizationState.Pending) !=
-                (int)ERHIBinarySynchronizationState.Pending)
+                    (int)BinarySyncLifecycle.Ready,
+                    (int)BinarySyncLifecycle.Pending) !=
+                (int)BinarySyncLifecycle.Pending)
             {
                 throw new InvalidOperationException("The semaphore wait reservation is not pending.");
             }
@@ -266,9 +258,9 @@ namespace SharpGPU
         {
             if (Interlocked.CompareExchange(
                     ref m_State,
-                    (int)ERHIBinarySynchronizationState.Signaled,
-                    (int)ERHIBinarySynchronizationState.Pending) !=
-                (int)ERHIBinarySynchronizationState.Pending)
+                    (int)BinarySyncLifecycle.Signaled,
+                    (int)BinarySyncLifecycle.Pending) !=
+                (int)BinarySyncLifecycle.Pending)
             {
                 throw new InvalidOperationException("The semaphore wait reservation is not pending.");
             }
@@ -289,7 +281,7 @@ namespace SharpGPU
 
     #region Barriers
     [Flags]
-    public enum ERHISyncStageMask : ulong
+    public enum ERHIStageMask : ulong
     {
         None = 0,
         Transfer = 1UL << 0,
@@ -410,8 +402,8 @@ namespace SharpGPU
 
     public struct RHIGlobalBarrier
     {
-        public ERHISyncStageMask SyncBefore;
-        public ERHISyncStageMask SyncAfter;
+        public ERHIStageMask StageBefore;
+        public ERHIStageMask StageAfter;
         public ERHIAccessMask AccessBefore;
         public ERHIAccessMask AccessAfter;
     }
@@ -420,8 +412,8 @@ namespace SharpGPU
     {
         public RHIBuffer Resource;
         public RHIBufferRange Range;
-        public ERHISyncStageMask SyncBefore;
-        public ERHISyncStageMask SyncAfter;
+        public ERHIStageMask StageBefore;
+        public ERHIStageMask StageAfter;
         public ERHIAccessMask AccessBefore;
         public ERHIAccessMask AccessAfter;
         public ERHIPipelineType? SourceQueue;
@@ -434,8 +426,8 @@ namespace SharpGPU
         public RHITextureSubresourceRange SubresourceRange;
         public ERHITextureLayout LayoutBefore;
         public ERHITextureLayout LayoutAfter;
-        public ERHISyncStageMask SyncBefore;
-        public ERHISyncStageMask SyncAfter;
+        public ERHIStageMask StageBefore;
+        public ERHIStageMask StageAfter;
         public ERHIAccessMask AccessBefore;
         public ERHIAccessMask AccessAfter;
         public ERHIPipelineType? SourceQueue;
@@ -454,15 +446,15 @@ namespace SharpGPU
         public RHIBufferBarrier BufferBarrier => m_Buffer;
         public RHITextureBarrier TextureBarrier => m_Texture;
 
-        public static RHIBarrier Global(ERHISyncStageMask syncBefore,
-                                        ERHISyncStageMask syncAfter,
+        public static RHIBarrier Global(ERHIStageMask stageBefore,
+                                        ERHIStageMask stageAfter,
                                         ERHIAccessMask accessBefore,
                                         ERHIAccessMask accessAfter)
         {
             RHIBarrier barrier = new RHIBarrier();
             barrier.m_Kind = ERHIBarrierKind.Global;
-            barrier.m_Global.SyncBefore = syncBefore;
-            barrier.m_Global.SyncAfter = syncAfter;
+            barrier.m_Global.StageBefore = stageBefore;
+            barrier.m_Global.StageAfter = stageAfter;
             barrier.m_Global.AccessBefore = accessBefore;
             barrier.m_Global.AccessAfter = accessAfter;
             return barrier;
@@ -470,8 +462,8 @@ namespace SharpGPU
 
         public static RHIBarrier Buffer(RHIBuffer resource,
                                         RHIBufferRange range,
-                                        ERHISyncStageMask syncBefore,
-                                        ERHISyncStageMask syncAfter,
+                                        ERHIStageMask stageBefore,
+                                        ERHIStageMask stageAfter,
                                         ERHIAccessMask accessBefore,
                                         ERHIAccessMask accessAfter,
                                         ERHIPipelineType? sourceQueue = null,
@@ -481,8 +473,8 @@ namespace SharpGPU
             barrier.m_Kind = ERHIBarrierKind.Buffer;
             barrier.m_Buffer.Resource = resource;
             barrier.m_Buffer.Range = range;
-            barrier.m_Buffer.SyncBefore = syncBefore;
-            barrier.m_Buffer.SyncAfter = syncAfter;
+            barrier.m_Buffer.StageBefore = stageBefore;
+            barrier.m_Buffer.StageAfter = stageAfter;
             barrier.m_Buffer.AccessBefore = accessBefore;
             barrier.m_Buffer.AccessAfter = accessAfter;
             barrier.m_Buffer.SourceQueue = sourceQueue;
@@ -494,8 +486,8 @@ namespace SharpGPU
                                          RHITextureSubresourceRange subresourceRange,
                                          ERHITextureLayout layoutBefore,
                                          ERHITextureLayout layoutAfter,
-                                         ERHISyncStageMask syncBefore,
-                                         ERHISyncStageMask syncAfter,
+                                         ERHIStageMask stageBefore,
+                                         ERHIStageMask stageAfter,
                                          ERHIAccessMask accessBefore,
                                          ERHIAccessMask accessAfter,
                                          ERHIPipelineType? sourceQueue = null,
@@ -507,8 +499,8 @@ namespace SharpGPU
             barrier.m_Texture.SubresourceRange = subresourceRange;
             barrier.m_Texture.LayoutBefore = layoutBefore;
             barrier.m_Texture.LayoutAfter = layoutAfter;
-            barrier.m_Texture.SyncBefore = syncBefore;
-            barrier.m_Texture.SyncAfter = syncAfter;
+            barrier.m_Texture.StageBefore = stageBefore;
+            barrier.m_Texture.StageAfter = stageAfter;
             barrier.m_Texture.AccessBefore = accessBefore;
             barrier.m_Texture.AccessAfter = accessAfter;
             barrier.m_Texture.SourceQueue = sourceQueue;
@@ -617,18 +609,18 @@ namespace SharpGPU
             }
         }
 
-        internal static ERHISyncStageMask ConvertToSyncStageMask(ERHIPipelineType pipeline)
+        internal static ERHIStageMask ConvertToStageMask(ERHIPipelineType pipeline)
         {
             switch (pipeline)
             {
                 case ERHIPipelineType.Transfer:
-                    return ERHISyncStageMask.Transfer;
+                    return ERHIStageMask.Transfer;
                 case ERHIPipelineType.Compute:
-                    return ERHISyncStageMask.Compute | ERHISyncStageMask.Transfer;
+                    return ERHIStageMask.Compute | ERHIStageMask.Transfer;
                 case ERHIPipelineType.Graphics:
-                    return ERHISyncStageMask.AllGraphics | ERHISyncStageMask.AllShading | ERHISyncStageMask.Transfer;
+                    return ERHIStageMask.AllGraphics | ERHIStageMask.AllShading | ERHIStageMask.Transfer;
                 default:
-                    return ERHISyncStageMask.All;
+                    return ERHIStageMask.All;
             }
         }
 
@@ -659,4 +651,12 @@ namespace SharpGPU
         }
     }
     #endregion
+}
+
+file enum BinarySyncLifecycle : byte
+{
+    Ready = 0,
+    Pending = 1,
+    Signaled = 2,
+    Resetting = 3
 }

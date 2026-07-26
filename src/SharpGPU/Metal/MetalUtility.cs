@@ -861,57 +861,57 @@ namespace SharpGPU
             }
         }
 
-        internal static ulong ConvertToMetal4Stages(in ERHISyncStageMask stages)
+        internal static ulong ConvertToMetal4Stages(in ERHIStageMask stages)
         {
-            if (stages == ERHISyncStageMask.None)
+            if (stages == ERHIStageMask.None)
             {
                 return 0;
             }
 
             // Mesh/Task remain unavailable on this Metal path; MachineLearning maps to MTLStageMachineLearning.
-            const ERHISyncStageMask unsupportedSharpGpuStages =
-                ERHISyncStageMask.Task |
-                ERHISyncStageMask.Mesh;
-            const ERHISyncStageMask knownStages =
-                ERHISyncStageMask.Transfer |
-                ERHISyncStageMask.Indirect |
-                ERHISyncStageMask.IndexInput |
-                ERHISyncStageMask.VertexInput |
-                ERHISyncStageMask.Vertex |
-                ERHISyncStageMask.Fragment |
-                ERHISyncStageMask.Compute |
-                ERHISyncStageMask.MachineLearning |
+            const ERHIStageMask unsupportedSharpGpuStages =
+                ERHIStageMask.Task |
+                ERHIStageMask.Mesh;
+            const ERHIStageMask knownStages =
+                ERHIStageMask.Transfer |
+                ERHIStageMask.Indirect |
+                ERHIStageMask.IndexInput |
+                ERHIStageMask.VertexInput |
+                ERHIStageMask.Vertex |
+                ERHIStageMask.Fragment |
+                ERHIStageMask.Compute |
+                ERHIStageMask.MachineLearning |
                 unsupportedSharpGpuStages |
-                ERHISyncStageMask.RayTracing |
-                ERHISyncStageMask.AccelStructBuild |
-                ERHISyncStageMask.AccelStructCopy;
+                ERHIStageMask.RayTracing |
+                ERHIStageMask.AccelStructBuild |
+                ERHIStageMask.AccelStructCopy;
 
-            ERHISyncStageMask normalizedStages = stages;
-            if (stages == ERHISyncStageMask.All)
+            ERHIStageMask normalizedStages = stages;
+            if (stages == ERHIStageMask.All)
             {
                 normalizedStages = knownStages & ~unsupportedSharpGpuStages;
             }
-            else if (stages == ERHISyncStageMask.AllGraphics)
+            else if (stages == ERHIStageMask.AllGraphics)
             {
                 normalizedStages =
-                    ERHISyncStageMask.Indirect |
-                    ERHISyncStageMask.IndexInput |
-                    ERHISyncStageMask.VertexInput |
-                    ERHISyncStageMask.Vertex |
-                    ERHISyncStageMask.Fragment;
+                    ERHIStageMask.Indirect |
+                    ERHIStageMask.IndexInput |
+                    ERHIStageMask.VertexInput |
+                    ERHIStageMask.Vertex |
+                    ERHIStageMask.Fragment;
             }
-            else if (stages == ERHISyncStageMask.AllShading)
+            else if (stages == ERHIStageMask.AllShading)
             {
                 normalizedStages =
-                    ERHISyncStageMask.Vertex |
-                    ERHISyncStageMask.Fragment |
-                    ERHISyncStageMask.Compute |
-                    ERHISyncStageMask.RayTracing;
+                    ERHIStageMask.Vertex |
+                    ERHIStageMask.Fragment |
+                    ERHIStageMask.Compute |
+                    ERHIStageMask.RayTracing;
             }
             else
             {
-                ERHISyncStageMask unknownStages = stages & ~knownStages;
-                if (unknownStages != ERHISyncStageMask.None)
+                ERHIStageMask unknownStages = stages & ~knownStages;
+                if (unknownStages != ERHIStageMask.None)
                 {
                     throw new ArgumentOutOfRangeException(
                         nameof(stages),
@@ -926,17 +926,17 @@ namespace SharpGPU
             // MTLStages (Metal 26+): Vertex=0, Fragment=1, Dispatch=27, Blit=28,
             // AccelerationStructure=29, MachineLearning=30.
             ulong result = 0;
-            if ((normalizedStages & ERHISyncStageMask.Transfer) != 0) result |= 1UL << 28;
-            if ((normalizedStages & ERHISyncStageMask.Indirect) != 0) result |= 1UL << 27;
-            if ((normalizedStages & ERHISyncStageMask.IndexInput) != 0) result |= 1UL << 0;
-            if ((normalizedStages & ERHISyncStageMask.VertexInput) != 0) result |= 1UL << 0;
-            if ((normalizedStages & ERHISyncStageMask.Vertex) != 0) result |= 1UL << 0;
-            if ((normalizedStages & ERHISyncStageMask.Fragment) != 0) result |= 1UL << 1;
-            if ((normalizedStages & ERHISyncStageMask.Compute) != 0) result |= 1UL << 27;
-            if ((normalizedStages & ERHISyncStageMask.RayTracing) != 0) result |= 1UL << 29;
-            if ((normalizedStages & ERHISyncStageMask.AccelStructBuild) != 0) result |= 1UL << 29;
-            if ((normalizedStages & ERHISyncStageMask.AccelStructCopy) != 0) result |= 1UL << 29;
-            if ((normalizedStages & ERHISyncStageMask.MachineLearning) != 0) result |= 1UL << 30;
+            if ((normalizedStages & ERHIStageMask.Transfer) != 0) result |= 1UL << 28;
+            if ((normalizedStages & ERHIStageMask.Indirect) != 0) result |= 1UL << 27;
+            if ((normalizedStages & ERHIStageMask.IndexInput) != 0) result |= 1UL << 0;
+            if ((normalizedStages & ERHIStageMask.VertexInput) != 0) result |= 1UL << 0;
+            if ((normalizedStages & ERHIStageMask.Vertex) != 0) result |= 1UL << 0;
+            if ((normalizedStages & ERHIStageMask.Fragment) != 0) result |= 1UL << 1;
+            if ((normalizedStages & ERHIStageMask.Compute) != 0) result |= 1UL << 27;
+            if ((normalizedStages & ERHIStageMask.RayTracing) != 0) result |= 1UL << 29;
+            if ((normalizedStages & ERHIStageMask.AccelStructBuild) != 0) result |= 1UL << 29;
+            if ((normalizedStages & ERHIStageMask.AccelStructCopy) != 0) result |= 1UL << 29;
+            if ((normalizedStages & ERHIStageMask.MachineLearning) != 0) result |= 1UL << 30;
             return result;
         }
 

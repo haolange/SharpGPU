@@ -218,8 +218,8 @@ public sealed class MetalHalContractTests
             RHITextureSubresourceRange.Whole(ERHITextureAspectMask.Color),
             ERHITextureLayout.RenderTarget,
             ERHITextureLayout.CopySource,
-            ERHISyncStageMask.Fragment,
-            ERHISyncStageMask.Transfer,
+            ERHIStageMask.Fragment,
+            ERHIStageMask.Transfer,
             ERHIAccessMask.RenderTargetWrite,
             ERHIAccessMask.TransferRead));
         transfer.CopyTextureToBuffer(

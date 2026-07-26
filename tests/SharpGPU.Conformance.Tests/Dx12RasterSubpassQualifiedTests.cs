@@ -1249,8 +1249,8 @@ public sealed class Dx12RasterSubpassQualifiedTests
                     ERHITextureAspectMask.Color),
                 ERHITextureLayout.Undefined,
                 ERHITextureLayout.RenderTarget,
-                ERHISyncStageMask.None,
-                ERHISyncStageMask.Fragment,
+                ERHIStageMask.None,
+                ERHIStageMask.Fragment,
                 ERHIAccessMask.None,
                 ERHIAccessMask.RenderTargetRead |
                     ERHIAccessMask.RenderTargetWrite));
@@ -1273,8 +1273,8 @@ public sealed class Dx12RasterSubpassQualifiedTests
                 ERHITextureAspectMask.Color),
             ERHITextureLayout.Undefined,
             ERHITextureLayout.ResolveDestination,
-            ERHISyncStageMask.None,
-            ERHISyncStageMask.Transfer,
+            ERHIStageMask.None,
+            ERHIStageMask.Transfer,
             ERHIAccessMask.None,
             ERHIAccessMask.ResolveWrite));
         transfer.EndPass();
@@ -1297,8 +1297,8 @@ public sealed class Dx12RasterSubpassQualifiedTests
             colorRange,
             ERHITextureLayout.Undefined,
             ERHITextureLayout.RenderTarget,
-            ERHISyncStageMask.None,
-            ERHISyncStageMask.Fragment,
+            ERHIStageMask.None,
+            ERHIStageMask.Fragment,
             ERHIAccessMask.None,
             ERHIAccessMask.RenderTargetRead |
                 ERHIAccessMask.RenderTargetWrite));
@@ -1307,8 +1307,8 @@ public sealed class Dx12RasterSubpassQualifiedTests
             depthStencilRange,
             ERHITextureLayout.Undefined,
             ERHITextureLayout.DepthStencilWrite,
-            ERHISyncStageMask.None,
-            ERHISyncStageMask.Fragment,
+            ERHIStageMask.None,
+            ERHIStageMask.Fragment,
             ERHIAccessMask.None,
             ERHIAccessMask.DepthStencilWrite));
         transfer.EndPass();
@@ -1332,16 +1332,16 @@ public sealed class Dx12RasterSubpassQualifiedTests
                 ERHITextureAspectMask.Color),
             layoutBefore,
             ERHITextureLayout.CopySource,
-            ERHISyncStageMask.Fragment |
-                ERHISyncStageMask.Transfer,
-            ERHISyncStageMask.Transfer,
+            ERHIStageMask.Fragment |
+                ERHIStageMask.Transfer,
+            ERHIStageMask.Transfer,
             accessBefore,
             ERHIAccessMask.TransferRead));
         transfer.Barrier(RHIBarrier.Buffer(
             readback,
             RHIBufferRange.Whole(),
-            ERHISyncStageMask.None,
-            ERHISyncStageMask.Transfer,
+            ERHIStageMask.None,
+            ERHIStageMask.Transfer,
             ERHIAccessMask.None,
             ERHIAccessMask.TransferWrite));
         transfer.CopyTextureToBuffer(
@@ -1382,15 +1382,15 @@ public sealed class Dx12RasterSubpassQualifiedTests
             range,
             layoutBefore,
             ERHITextureLayout.CopySource,
-            ERHISyncStageMask.Fragment,
-            ERHISyncStageMask.Transfer,
+            ERHIStageMask.Fragment,
+            ERHIStageMask.Transfer,
             accessBefore,
             ERHIAccessMask.TransferRead));
         transfer.Barrier(RHIBarrier.Buffer(
             readback,
             RHIBufferRange.Whole(),
-            ERHISyncStageMask.None,
-            ERHISyncStageMask.Transfer,
+            ERHIStageMask.None,
+            ERHIStageMask.Transfer,
             ERHIAccessMask.None,
             ERHIAccessMask.TransferWrite));
         transfer.CopyTextureToBuffer(
