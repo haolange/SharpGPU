@@ -39,7 +39,7 @@ namespace SharpGPU
             string operation)
             where TQuery : RHIQuery
         {
-            return RequireCore<TQuery>(
+            return RequireQuery<TQuery>(
                 query,
                 ownerDevice,
                 expectedType,
@@ -56,7 +56,7 @@ namespace SharpGPU
             string operation)
             where TQuery : RHIQuery
         {
-            return RequireCore<TQuery>(
+            return RequireQuery<TQuery>(
                 query,
                 ownerDevice,
                 ERHIQueryType.Timestamp,
@@ -65,7 +65,7 @@ namespace SharpGPU
                 operation);
         }
 
-        private static TQuery RequireCore<TQuery>(
+        private static TQuery RequireQuery<TQuery>(
             RHIQuery? query,
             RHIDevice ownerDevice,
             ERHIQueryType expectedType,

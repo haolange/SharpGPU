@@ -582,7 +582,7 @@ namespace SharpGPU
             return new Dx12MLPipeline(this, descriptor);
         }
 
-        internal override RHIMLPipeline CreateMLPipelineFromInternalProgramIR(string name, in RHIMLProgramIR programIr)
+        internal RHIMLPipeline CreateMLPipelineFromInternalProgramIR(string name, in RHIMLProgramIR programIr)
         {
             Capabilities.MachineLearning.Execution.Require("DX12 machine learning");
 

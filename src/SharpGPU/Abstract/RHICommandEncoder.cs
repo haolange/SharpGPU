@@ -274,8 +274,8 @@ namespace SharpGPU
         public ERHIStoreAction StencilStoreOp;
         public RHITexture RenderTarget;
         public RHITextureSubresourceRange ResolveSubresourceRange;
-        public EResolveMode DepthResolveMode;
-        public EResolveMode StencilResolveMode;
+        public ERHIResolveMode DepthResolveMode;
+        public ERHIResolveMode StencilResolveMode;
         public RHITexture? ResolveTarget;
     }
 
@@ -365,6 +365,372 @@ namespace SharpGPU
         }
     }
 
+    public readonly struct RHIAttachmentInterfaceSignature :
+        IEquatable<RHIAttachmentInterfaceSignature>
+    {
+        public const int UnboundLogicalAttachment = -1;
+
+        private const uint PackedUnboundAttachment = 0xFu;
+        private const int BitsPerAttachmentSlot = 4;
+
+        private readonly uint m_ColorInputs;
+        private readonly uint m_ColorOutputs;
+        private readonly uint m_SampledFeedbackInputs;
+
+        public byte ColorAttachmentCount { get; }
+        public byte ColorInputSlotCount { get; }
+        public byte ColorOutputLocationCount { get; }
+        public byte SampledFeedbackSlotCount { get; }
+        public byte ColorInputMask { get; }
+        public byte ColorOutputMask { get; }
+        public byte RasterOrderedReadWriteMask { get; }
+        public byte SampledFeedbackMask { get; }
+        public byte LayeredAccessMask { get; }
+        public ERHISubPassFlags DepthStencilFlags { get; }
+        public bool UsesDualSourceColor { get; }
+
+        public RHIAttachmentInterfaceSignature(
+            int colorAttachmentCount,
+            in RHIAttachmentIndexArray colorInputs,
+            in RHIAttachmentIndexArray colorOutputs,
+            in RHIAttachmentIndexArray sampledFeedbackInputs,
+            byte rasterOrderedReadWriteMask = 0,
+            ERHISubPassFlags depthStencilFlags = ERHISubPassFlags.None,
+            bool usesDualSourceColor = false,
+            byte layeredAccessMask = 0)
+        {
+            if ((uint)colorAttachmentCount > RHIAttachmentIndexArray.MaxAttachments)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(colorAttachmentCount),
+                    colorAttachmentCount,
+                    $"Color attachment count must be in [0, {RHIAttachmentIndexArray.MaxAttachments}].");
+            }
+
+            uint packedColorInputs = PackOrderedSlots(
+                colorInputs,
+                colorAttachmentCount,
+                nameof(colorInputs),
+                out byte colorInputMask);
+            uint packedColorOutputs = PackOrderedSlots(
+                colorOutputs,
+                colorAttachmentCount,
+                nameof(colorOutputs),
+                out byte colorOutputMask);
+            uint packedSampledFeedbackInputs = PackOrderedSlots(
+                sampledFeedbackInputs,
+                colorAttachmentCount,
+                nameof(sampledFeedbackInputs),
+                out byte sampledFeedbackMask);
+            if ((rasterOrderedReadWriteMask & ~(colorInputMask & colorOutputMask)) != 0)
+            {
+                throw new ArgumentException(
+                    "RasterOrderedReadWrite entries must appear in both ColorInputMask and ColorOutputMask.",
+                    nameof(rasterOrderedReadWriteMask));
+            }
+            if ((colorInputMask & sampledFeedbackMask) != 0)
+            {
+                throw new ArgumentException(
+                    "An attachment cannot be both a local color input and SampledFeedback.");
+            }
+            byte specialAccessMask = checked((byte)(
+                colorInputMask |
+                rasterOrderedReadWriteMask |
+                sampledFeedbackMask));
+            if ((layeredAccessMask & ~specialAccessMask) != 0)
+            {
+                throw new ArgumentException(
+                    "LayeredAccess entries must declare local input, RasterOrderedReadWrite, or SampledFeedback access.",
+                    nameof(layeredAccessMask));
+            }
+
+            const ERHISubPassFlags knownDepthStencilFlags =
+                ERHISubPassFlags.ReadOnlyDepthStencil;
+            if ((depthStencilFlags & ~knownDepthStencilFlags) != 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(depthStencilFlags),
+                    depthStencilFlags,
+                    "Unknown subpass depth/stencil flags.");
+            }
+            if (usesDualSourceColor &&
+                (colorOutputs.Length == 0 ||
+                 GetPackedSlot(packedColorOutputs, 0) == UnboundLogicalAttachment))
+            {
+                throw new ArgumentException(
+                    "Dual-source color output requires a bound output at location 0.",
+                    nameof(usesDualSourceColor));
+            }
+
+            m_ColorInputs = packedColorInputs;
+            m_ColorOutputs = packedColorOutputs;
+            m_SampledFeedbackInputs = packedSampledFeedbackInputs;
+            ColorAttachmentCount = checked((byte)colorAttachmentCount);
+            ColorInputSlotCount = checked((byte)colorInputs.Length);
+            ColorOutputLocationCount = checked((byte)colorOutputs.Length);
+            SampledFeedbackSlotCount =
+                checked((byte)sampledFeedbackInputs.Length);
+            ColorInputMask = colorInputMask;
+            ColorOutputMask = colorOutputMask;
+            RasterOrderedReadWriteMask = rasterOrderedReadWriteMask;
+            SampledFeedbackMask = sampledFeedbackMask;
+            LayeredAccessMask = layeredAccessMask;
+            DepthStencilFlags = depthStencilFlags;
+            UsesDualSourceColor = usesDualSourceColor;
+        }
+
+        public int GetColorInputLogicalAttachment(int inputIndex)
+        {
+            ValidateOrderedSlot(
+                inputIndex,
+                ColorInputSlotCount,
+                nameof(inputIndex));
+            return GetPackedSlot(m_ColorInputs, inputIndex);
+        }
+
+        public int GetColorOutputLogicalAttachment(
+            int outputLocation,
+            int outputIndex = 0)
+        {
+            ValidateOrderedSlot(
+                outputLocation,
+                ColorOutputLocationCount,
+                nameof(outputLocation));
+            if ((uint)outputIndex > 1u)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(outputIndex),
+                    outputIndex,
+                    "Color output index must be 0 or 1.");
+            }
+            if (outputIndex == 1 &&
+                (!UsesDualSourceColor || outputLocation != 0))
+            {
+                return UnboundLogicalAttachment;
+            }
+            return GetPackedSlot(m_ColorOutputs, outputLocation);
+        }
+
+        public int GetSampledFeedbackLogicalAttachment(
+            int sampledFeedbackOrdinal)
+        {
+            ValidateOrderedSlot(
+                sampledFeedbackOrdinal,
+                SampledFeedbackSlotCount,
+                nameof(sampledFeedbackOrdinal));
+            return GetPackedSlot(
+                m_SampledFeedbackInputs,
+                sampledFeedbackOrdinal);
+        }
+
+        internal static int GetPrivateInputAttachmentBinding(int inputIndex)
+        {
+            ValidatePrivateBindingOrdinal(inputIndex, nameof(inputIndex));
+            return inputIndex;
+        }
+
+        public bool Equals(RHIAttachmentInterfaceSignature other)
+        {
+            return ColorAttachmentCount == other.ColorAttachmentCount &&
+                ColorInputSlotCount == other.ColorInputSlotCount &&
+                ColorOutputLocationCount == other.ColorOutputLocationCount &&
+                SampledFeedbackSlotCount == other.SampledFeedbackSlotCount &&
+                m_ColorInputs == other.m_ColorInputs &&
+                m_ColorOutputs == other.m_ColorOutputs &&
+                m_SampledFeedbackInputs == other.m_SampledFeedbackInputs &&
+                ColorInputMask == other.ColorInputMask &&
+                ColorOutputMask == other.ColorOutputMask &&
+                RasterOrderedReadWriteMask == other.RasterOrderedReadWriteMask &&
+                SampledFeedbackMask == other.SampledFeedbackMask &&
+                LayeredAccessMask == other.LayeredAccessMask &&
+                DepthStencilFlags == other.DepthStencilFlags &&
+                UsesDualSourceColor == other.UsesDualSourceColor;
+        }
+
+        public override bool Equals(object? obj) =>
+            obj is RHIAttachmentInterfaceSignature other && Equals(other);
+
+        public override int GetHashCode()
+        {
+            HashCode hash = new HashCode();
+            hash.Add(ColorAttachmentCount);
+            hash.Add(ColorInputSlotCount);
+            hash.Add(ColorOutputLocationCount);
+            hash.Add(SampledFeedbackSlotCount);
+            hash.Add(m_ColorInputs);
+            hash.Add(m_ColorOutputs);
+            hash.Add(m_SampledFeedbackInputs);
+            hash.Add(RasterOrderedReadWriteMask);
+            hash.Add(LayeredAccessMask);
+            hash.Add(DepthStencilFlags);
+            hash.Add(UsesDualSourceColor);
+            return hash.ToHashCode();
+        }
+
+        public static bool operator ==(
+            RHIAttachmentInterfaceSignature left,
+            RHIAttachmentInterfaceSignature right) => left.Equals(right);
+
+        public static bool operator !=(
+            RHIAttachmentInterfaceSignature left,
+            RHIAttachmentInterfaceSignature right) => !left.Equals(right);
+
+        public override string ToString()
+        {
+            return $"Colors={ColorAttachmentCount}, " +
+                $"InputSlots={ColorInputSlotCount}/0x{ColorInputMask:X2}, " +
+                $"OutputLocations={ColorOutputLocationCount}/0x{ColorOutputMask:X2}, " +
+                $"RORW=0x{RasterOrderedReadWriteMask:X2}, " +
+                $"SampledFeedbackSlots={SampledFeedbackSlotCount}/0x{SampledFeedbackMask:X2}, " +
+                $"Layered=0x{LayeredAccessMask:X2}, " +
+                $"DS={DepthStencilFlags}, " +
+                $"DualSource={UsesDualSourceColor}";
+        }
+
+        internal RHIAttachmentInterfaceSignature NormalizeForPipeline(
+            int colorAttachmentCount,
+            bool usesDualSourceColor)
+        {
+            if (Equals(default))
+            {
+                RHIAttachmentIndexArray outputs =
+                    new RHIAttachmentIndexArray(colorAttachmentCount);
+                for (int outputLocation = 0;
+                     outputLocation < colorAttachmentCount;
+                     ++outputLocation)
+                {
+                    outputs[outputLocation] = outputLocation;
+                }
+                return new RHIAttachmentInterfaceSignature(
+                    colorAttachmentCount,
+                    RHIAttachmentIndexArray.Empty,
+                    outputs,
+                    RHIAttachmentIndexArray.Empty,
+                    usesDualSourceColor: usesDualSourceColor);
+            }
+            if (ColorAttachmentCount != colorAttachmentCount)
+            {
+                throw new ArgumentException(
+                    $"Attachment interface declares {ColorAttachmentCount} color attachments, " +
+                    $"but the pipeline declares {colorAttachmentCount} formats.");
+            }
+            if (UsesDualSourceColor != usesDualSourceColor)
+            {
+                throw new ArgumentException(
+                    "Attachment interface dual-source declaration does not match the blend state.");
+            }
+            return this;
+        }
+
+        internal bool IsPassCompatibleWith(
+            in RHIAttachmentInterfaceSignature pipelineSignature)
+        {
+            return ColorAttachmentCount == pipelineSignature.ColorAttachmentCount &&
+                ColorInputSlotCount == pipelineSignature.ColorInputSlotCount &&
+                ColorOutputLocationCount ==
+                    pipelineSignature.ColorOutputLocationCount &&
+                SampledFeedbackSlotCount ==
+                    pipelineSignature.SampledFeedbackSlotCount &&
+                m_ColorInputs == pipelineSignature.m_ColorInputs &&
+                m_ColorOutputs == pipelineSignature.m_ColorOutputs &&
+                m_SampledFeedbackInputs ==
+                    pipelineSignature.m_SampledFeedbackInputs &&
+                RasterOrderedReadWriteMask == pipelineSignature.RasterOrderedReadWriteMask &&
+                LayeredAccessMask == pipelineSignature.LayeredAccessMask &&
+                DepthStencilFlags == pipelineSignature.DepthStencilFlags &&
+                (!pipelineSignature.UsesDualSourceColor ||
+                 (ColorOutputLocationCount != 0 &&
+                  GetPackedSlot(m_ColorOutputs, 0) !=
+                      UnboundLogicalAttachment));
+        }
+
+        internal static byte CreateDeclaredMask(int colorAttachmentCount)
+        {
+            return colorAttachmentCount == RHIAttachmentIndexArray.MaxAttachments
+                ? byte.MaxValue
+                : checked((byte)((1 << colorAttachmentCount) - 1));
+        }
+
+        private static uint PackOrderedSlots(
+            in RHIAttachmentIndexArray slots,
+            int colorAttachmentCount,
+            string parameterName,
+            out byte attachmentMask)
+        {
+            uint packed = 0;
+            byte mask = 0;
+            for (int slot = 0; slot < slots.Length; ++slot)
+            {
+                int logicalAttachment = slots[slot];
+                uint packedAttachment;
+                if (logicalAttachment == UnboundLogicalAttachment)
+                {
+                    packedAttachment = PackedUnboundAttachment;
+                }
+                else
+                {
+                    if ((uint)logicalAttachment >= colorAttachmentCount)
+                    {
+                        throw new ArgumentOutOfRangeException(
+                            parameterName,
+                            logicalAttachment,
+                            $"Logical attachment at ordered slot {slot} must be -1 or in [0, {colorAttachmentCount}).");
+                    }
+                    byte attachmentBit =
+                        checked((byte)(1 << logicalAttachment));
+                    if ((mask & attachmentBit) != 0)
+                    {
+                        throw new ArgumentException(
+                            $"{parameterName} maps logical attachment {logicalAttachment} more than once.",
+                            parameterName);
+                    }
+                    mask |= attachmentBit;
+                    packedAttachment = checked((uint)logicalAttachment);
+                }
+                packed |= packedAttachment << (slot * BitsPerAttachmentSlot);
+            }
+            attachmentMask = mask;
+            return packed;
+        }
+
+        private static int GetPackedSlot(uint packed, int slot)
+        {
+            uint value =
+                (packed >> (slot * BitsPerAttachmentSlot)) &
+                PackedUnboundAttachment;
+            return value == PackedUnboundAttachment
+                ? UnboundLogicalAttachment
+                : checked((int)value);
+        }
+
+        private static void ValidateOrderedSlot(
+            int slot,
+            int slotCount,
+            string parameterName)
+        {
+            if ((uint)slot >= slotCount)
+            {
+                throw new ArgumentOutOfRangeException(
+                    parameterName,
+                    slot,
+                    $"Ordered attachment slot must be in [0, {slotCount}).");
+            }
+        }
+
+        private static void ValidatePrivateBindingOrdinal(
+            int ordinal,
+            string parameterName)
+        {
+            if ((uint)ordinal >= RHIAttachmentIndexArray.MaxAttachments)
+            {
+                throw new ArgumentOutOfRangeException(
+                    parameterName,
+                    ordinal,
+                    $"Private attachment binding ordinal must be in [0, {RHIAttachmentIndexArray.MaxAttachments}).");
+            }
+        }
+    }
+
     public struct RHISubPassDescriptor
     {
         public ERHISubPassFlags Flags;
@@ -386,7 +752,7 @@ namespace SharpGPU
         public RHIDepthStencilAttachmentDescriptor? DepthStencilAttachment;
         public Memory<RHISubPassDescriptor> SubPassDescriptors;
     }
-    internal readonly struct RasterSubPassPlan
+    internal readonly struct RHIRasterSubPassPlan
     {
         internal RHIAttachmentInterfaceSignature AttachmentInterface { get; }
         internal byte ReadMask { get; }
@@ -398,7 +764,7 @@ namespace SharpGPU
         internal bool PreservesDepthStencil { get; }
         internal bool RequiresDepthStencilTransition { get; }
 
-        internal RasterSubPassPlan(
+        internal RHIRasterSubPassPlan(
             in RHIAttachmentInterfaceSignature attachmentInterface,
             byte readMask,
             byte writeMask,
@@ -419,11 +785,11 @@ namespace SharpGPU
             RequiresDepthStencilTransition = requiresDepthStencilTransition;
         }
 
-        internal RasterSubPassPlan WithPreserveMask(
+        internal RHIRasterSubPassPlan WithPreserveMask(
             byte preserveMask,
             bool preservesDepthStencil)
         {
-            return new RasterSubPassPlan(
+            return new RHIRasterSubPassPlan(
                 AttachmentInterface,
                 ReadMask,
                 WriteMask,
@@ -435,11 +801,11 @@ namespace SharpGPU
         }
     }
 
-    internal sealed class RasterPassPlan
+    internal sealed class RHIRasterPassPlan
     {
         private readonly RHIColorAttachmentDescriptor[] m_ColorAttachments;
         private readonly RHISubPassDescriptor[] m_SubPassDescriptors;
-        private readonly RasterSubPassPlan[] m_SubPasses;
+        private readonly RHIRasterSubPassPlan[] m_SubPasses;
         private readonly RHIDepthStencilAttachmentDescriptor? m_DepthStencilAttachment;
         private readonly RHITimestampDescriptor? m_Timestamp;
         private readonly RHIOcclusionDescriptor? m_Occlusion;
@@ -483,7 +849,7 @@ namespace SharpGPU
             }
         }
 
-        internal RasterPassPlan(
+        internal RHIRasterPassPlan(
             string name,
             uint arrayLength,
             ERHISampleCount sampleCount,
@@ -492,7 +858,7 @@ namespace SharpGPU
             RHIColorAttachmentDescriptor[] colorAttachments,
             RHIDepthStencilAttachmentDescriptor? depthStencilAttachment,
             RHISubPassDescriptor[] subPassDescriptors,
-            RasterSubPassPlan[] subPasses,
+            RHIRasterSubPassPlan[] subPasses,
             RHITimestampDescriptor? timestamp,
             RHIOcclusionDescriptor? occlusion,
             RHIStatisticsDescriptor? statistics,
@@ -525,20 +891,20 @@ namespace SharpGPU
                     "The raster pass does not declare a depth/stencil attachment.");
         }
 
-        internal ref readonly RasterSubPassPlan GetSubPass(int index)
+        internal ref readonly RHIRasterSubPassPlan GetSubPass(int index)
         {
             return ref m_SubPasses[index];
         }
     }
 
-    internal static class RasterPassPlanner
+    internal static class RHIRasterPassPlanner
     {
         private const ERHIRasterAttachmentAccess KnownAttachmentAccess =
             ERHIRasterAttachmentAccess.RasterOrderedReadWrite;
         private const ERHISubPassFlags KnownSubPassFlags =
             ERHISubPassFlags.ReadOnlyDepthStencil;
 
-        internal static RasterPassPlan Compile(in RHIRasterPassDescriptor descriptor)
+        internal static RHIRasterPassPlan Compile(in RHIRasterPassDescriptor descriptor)
         {
             RHIColorAttachmentDescriptor[] colorAttachments =
                 descriptor.ColorAttachments.Span.ToArray();
@@ -724,9 +1090,9 @@ namespace SharpGPU
                 depthStencilAttachment,
                 normalizedArrayLength,
                 out RHISubPassDescriptor[] subPassDescriptors,
-                out RasterSubPassPlan[] subPasses);
+                out RHIRasterSubPassPlan[] subPasses);
 
-            return new RasterPassPlan(
+            return new RHIRasterPassPlan(
                 descriptor.Name ?? string.Empty,
                 normalizedArrayLength,
                 normalizedSampleCount,
@@ -748,7 +1114,7 @@ namespace SharpGPU
             RHIDepthStencilAttachmentDescriptor? depthStencilAttachment,
             uint arrayLength,
             out RHISubPassDescriptor[] subPassDescriptors,
-            out RasterSubPassPlan[] subPasses)
+            out RHIRasterSubPassPlan[] subPasses)
         {
             int colorAttachmentCount = colorAttachments.Length;
             if (sourceSubPasses.Length == 0)
@@ -775,7 +1141,7 @@ namespace SharpGPU
                 subPassDescriptors = sourceSubPasses.Span.ToArray();
             }
 
-            subPasses = new RasterSubPassPlan[subPassDescriptors.Length];
+            subPasses = new RHIRasterSubPassPlan[subPassDescriptors.Length];
             byte declaredAttachmentMask =
                 RHIAttachmentInterfaceSignature.CreateDeclaredMask(colorAttachmentCount);
             byte initiallyAvailableMask = 0;
@@ -880,7 +1246,7 @@ namespace SharpGPU
                     i != 0 &&
                     depthStencilAttachment.HasValue &&
                     previousFlags != subPass.Flags;
-                subPasses[i] = new RasterSubPassPlan(
+                subPasses[i] = new RHIRasterSubPassPlan(
                     attachmentInterface,
                     readMask,
                     outputMask,
@@ -908,7 +1274,7 @@ namespace SharpGPU
             bool futureDepthStencilUse = false;
             for (int i = subPasses.Length - 1; i >= 0; --i)
             {
-                RasterSubPassPlan subPass = subPasses[i];
+                RHIRasterSubPassPlan subPass = subPasses[i];
                 byte currentUseMask =
                     checked((byte)(subPass.ReadMask | subPass.WriteMask));
                 byte preserveMask = checked((byte)(
@@ -1184,8 +1550,8 @@ namespace SharpGPU
             bool stencilStoreResolves =
                 attachment.StencilStoreOp == ERHIStoreAction.Resolve ||
                 attachment.StencilStoreOp == ERHIStoreAction.StoreAndResolve;
-            bool depthModeResolves = attachment.DepthResolveMode != EResolveMode.None;
-            bool stencilModeResolves = attachment.StencilResolveMode != EResolveMode.None;
+            bool depthModeResolves = attachment.DepthResolveMode != ERHIResolveMode.None;
+            bool stencilModeResolves = attachment.StencilResolveMode != ERHIResolveMode.None;
 
             if ((!hasDepth && (depthStoreResolves || depthModeResolves)) ||
                 (!hasStencil && (stencilStoreResolves || stencilModeResolves)))
@@ -1476,13 +1842,13 @@ namespace SharpGPU
         }
 
         private static void ValidateResolveMode(
-            EResolveMode mode,
+            ERHIResolveMode mode,
             string parameterName)
         {
-            if (mode != EResolveMode.None &&
-                mode != EResolveMode.Min &&
-                mode != EResolveMode.Max &&
-                mode != EResolveMode.Sample0)
+            if (mode != ERHIResolveMode.None &&
+                mode != ERHIResolveMode.Min &&
+                mode != ERHIResolveMode.Max &&
+                mode != ERHIResolveMode.Sample0)
             {
                 throw new ArgumentOutOfRangeException(
                     parameterName,
@@ -1498,7 +1864,7 @@ namespace SharpGPU
     {
         protected RHICommandBuffer? m_CommandBuffer;
         protected RHIRasterPipeline? m_CachedPipeline;
-        internal RasterPassPlan? m_RasterPassPlan;
+        internal RHIRasterPassPlan? m_RasterPassPlan;
         internal int m_CurrentSubPassIndex = -1;
         internal int m_PipelineSubPassIndex = -1;
 
@@ -1510,7 +1876,7 @@ namespace SharpGPU
                 throw new InvalidOperationException("A raster pass is already active on this encoder.");
             }
 
-            RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+            RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
             m_RasterPassPlan = plan;
             m_CurrentSubPassIndex = 0;
             m_PipelineSubPassIndex = -1;
@@ -1539,7 +1905,7 @@ namespace SharpGPU
         public virtual void NextSubPass()
         {
             ThrowIfDisposed();
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             int nextSubPassIndex = m_CurrentSubPassIndex + 1;
             if (nextSubPassIndex >= plan.SubPassCount)
             {
@@ -1560,7 +1926,7 @@ namespace SharpGPU
         public virtual void SetPipeline(RHIRasterPipeline pipeline)
         {
             ThrowIfDisposed();
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             ValidatePipelineCompatibility(plan, m_CurrentSubPassIndex, pipeline);
             throw new NotSupportedException(
                 $"{GetType().Name} does not implement raster pipeline binding.");
@@ -1625,7 +1991,7 @@ namespace SharpGPU
             RHICommandBuffer commandBuffer = m_CommandBuffer ??
                 throw new InvalidOperationException("The raster encoder is not attached to a command buffer.");
             commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Raster);
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             if (m_CurrentSubPassIndex != plan.SubPassCount - 1)
             {
                 throw new InvalidOperationException(
@@ -1639,7 +2005,7 @@ namespace SharpGPU
 
         internal int CurrentSubPassIndex => m_CurrentSubPassIndex;
 
-        internal RasterPassPlan RequireActiveRasterPass()
+        internal RHIRasterPassPlan RequireActiveRasterPass()
         {
             return m_RasterPassPlan ??
                 throw new InvalidOperationException("No raster pass is active on this encoder.");
@@ -1648,7 +2014,7 @@ namespace SharpGPU
         protected void ValidateDrawState()
         {
             ThrowIfDisposed();
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             if (m_CachedPipeline == null || m_PipelineSubPassIndex != m_CurrentSubPassIndex)
             {
                 throw new InvalidOperationException(
@@ -1663,7 +2029,7 @@ namespace SharpGPU
         }
 
         internal static void ValidatePipelineCompatibility(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             int subPassIndex,
             RHIRasterPipeline pipeline)
         {
@@ -1752,4 +2118,85 @@ namespace SharpGPU
         }
     }
     #endregion
+
+    internal static class RHIIndirectArgumentValidator
+    {
+        internal const uint DispatchArgumentStride = 12;
+        internal const uint DrawArgumentStride = 16;
+        internal const uint DrawIndexedArgumentStride = 20;
+
+        internal static void ValidateDispatch(
+            RHIBuffer? buffer,
+            uint offset,
+            string parameterName,
+            string operation)
+        {
+            Validate(
+                buffer,
+                offset,
+                1,
+                DispatchArgumentStride,
+                parameterName,
+                operation);
+        }
+
+        internal static void ValidateDraw(
+            RHIBuffer? buffer,
+            uint offset,
+            uint drawCount,
+            bool indexed,
+            string parameterName,
+            string operation)
+        {
+            Validate(
+                buffer,
+                offset,
+                drawCount,
+                indexed ? DrawIndexedArgumentStride : DrawArgumentStride,
+                parameterName,
+                operation);
+        }
+
+        private static void Validate(
+            RHIBuffer? buffer,
+            uint offset,
+            uint commandCount,
+            uint commandStride,
+            string parameterName,
+            string operation)
+        {
+            ArgumentNullException.ThrowIfNull(buffer, parameterName);
+            if (buffer.IsDisposed)
+            {
+                throw new ObjectDisposedException(buffer.GetType().FullName);
+            }
+
+            RHIBufferDescriptor descriptor = buffer.Descriptor;
+            if ((descriptor.UsageFlag & ERHIBufferUsage.IndirectBuffer) == 0)
+            {
+                throw new ArgumentException(
+                    $"{operation} requires a buffer created with IndirectBuffer usage.",
+                    parameterName);
+            }
+            if ((offset & 3u) != 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    parameterName,
+                    offset,
+                    $"{operation} argument offset must be four-byte aligned.");
+            }
+
+            ulong requiredEnd = checked(
+                (ulong)offset + (ulong)commandCount * commandStride);
+            ulong byteSize = checked((ulong)descriptor.ByteSize);
+            if (requiredEnd > byteSize)
+            {
+                throw new ArgumentOutOfRangeException(
+                    parameterName,
+                    offset,
+                    $"{operation} requires byte range [{offset}, {requiredEnd}), " +
+                    $"but the indirect buffer contains {byteSize} bytes.");
+            }
+        }
+    }
 }

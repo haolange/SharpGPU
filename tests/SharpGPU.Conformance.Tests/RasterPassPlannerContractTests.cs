@@ -6,7 +6,7 @@ using Xunit;
 
 namespace SharpGPU.Conformance.Tests;
 
-public sealed class RasterPassPlannerContractTests
+public sealed class RHIRasterPassPlannerContractTests
 {
     [Fact]
     public void Compile_DeepSnapshotsAndNormalizesAttachmentState()
@@ -46,7 +46,7 @@ public sealed class RasterPassPlannerContractTests
             SubPassDescriptors = subPasses,
         };
 
-        RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+        RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
 
         attachments[0].RenderTarget = replacement;
         subPasses[0].ColorOutputs[0] = -1;
@@ -89,7 +89,7 @@ public sealed class RasterPassPlannerContractTests
         };
 
         Assert.Throws<ArgumentException>(
-            () => RasterPassPlanner.Compile(in readBeforeWrite));
+            () => RHIRasterPassPlanner.Compile(in readBeforeWrite));
 
         RHIRasterPassDescriptor overlap = new RHIRasterPassDescriptor
         {
@@ -101,7 +101,7 @@ public sealed class RasterPassPlannerContractTests
         };
 
         Assert.Throws<ArgumentException>(
-            () => RasterPassPlanner.Compile(in overlap));
+            () => RHIRasterPassPlanner.Compile(in overlap));
     }
 
     [Fact]
@@ -118,7 +118,7 @@ public sealed class RasterPassPlannerContractTests
             ColorAttachments = new[] { CreateColorAttachment(depthAsColor) },
         };
         Assert.Throws<ArgumentException>(
-            () => RasterPassPlanner.Compile(in wrongFormat));
+            () => RHIRasterPassPlanner.Compile(in wrongFormat));
 
         using TestTexture singleSample = CreateColorTexture();
         using TestTexture multiSample = CreateColorTexture(
@@ -133,7 +133,7 @@ public sealed class RasterPassPlannerContractTests
             },
         };
         Assert.Throws<ArgumentException>(
-            () => RasterPassPlanner.Compile(in sampleMismatch));
+            () => RHIRasterPassPlanner.Compile(in sampleMismatch));
 
         using TestTexture differentExtent = CreateColorTexture(width: 8);
         RHIRasterPassDescriptor extentMismatch = new RHIRasterPassDescriptor
@@ -145,7 +145,7 @@ public sealed class RasterPassPlannerContractTests
             },
         };
         Assert.Throws<ArgumentException>(
-            () => RasterPassPlanner.Compile(in extentMismatch));
+            () => RHIRasterPassPlanner.Compile(in extentMismatch));
 
         RHIRasterPassDescriptor aspectMismatch = new RHIRasterPassDescriptor
         {
@@ -162,7 +162,7 @@ public sealed class RasterPassPlannerContractTests
             },
         };
         Assert.Throws<ArgumentException>(
-            () => RasterPassPlanner.Compile(in aspectMismatch));
+            () => RHIRasterPassPlanner.Compile(in aspectMismatch));
 
         RHIRasterPassDescriptor layerMismatch = new RHIRasterPassDescriptor
         {
@@ -170,7 +170,7 @@ public sealed class RasterPassPlannerContractTests
             ColorAttachments = new[] { CreateColorAttachment(singleSample) },
         };
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => RasterPassPlanner.Compile(in layerMismatch));
+            () => RHIRasterPassPlanner.Compile(in layerMismatch));
     }
 
     [Fact]
@@ -199,8 +199,8 @@ public sealed class RasterPassPlannerContractTests
                 StencilLoadOp = ERHILoadAction.Clear,
                 StencilStoreOp = ERHIStoreAction.StoreAndResolve,
                 RenderTarget = source,
-                DepthResolveMode = EResolveMode.Sample0,
-                StencilResolveMode = EResolveMode.Min,
+                DepthResolveMode = ERHIResolveMode.Sample0,
+                StencilResolveMode = ERHIResolveMode.Min,
                 ResolveTarget = destination,
             };
         RHIRasterPassDescriptor descriptor = new RHIRasterPassDescriptor
@@ -208,21 +208,21 @@ public sealed class RasterPassPlannerContractTests
             DepthStencilAttachment = attachment,
         };
 
-        RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+        RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
         RHIDepthStencilAttachmentDescriptor normalized =
             plan.DescriptorSnapshot.DepthStencilAttachment!.Value;
 
         Assert.Equal(
             ERHITextureAspectMask.Depth | ERHITextureAspectMask.Stencil,
             normalized.SubresourceRange.AspectMask);
-        Assert.Equal(EResolveMode.Sample0, normalized.DepthResolveMode);
-        Assert.Equal(EResolveMode.Min, normalized.StencilResolveMode);
+        Assert.Equal(ERHIResolveMode.Sample0, normalized.DepthResolveMode);
+        Assert.Equal(ERHIResolveMode.Min, normalized.StencilResolveMode);
         Assert.Same(destination, normalized.ResolveTarget);
 
-        attachment.DepthResolveMode = EResolveMode.None;
+        attachment.DepthResolveMode = ERHIResolveMode.None;
         descriptor.DepthStencilAttachment = attachment;
         Assert.Throws<ArgumentException>(
-            () => RasterPassPlanner.Compile(in descriptor));
+            () => RHIRasterPassPlanner.Compile(in descriptor));
     }
 
     [Fact]
@@ -255,9 +255,9 @@ public sealed class RasterPassPlannerContractTests
             },
         };
 
-        RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
-        ref readonly RasterSubPassPlan first = ref plan.GetSubPass(0);
-        ref readonly RasterSubPassPlan second = ref plan.GetSubPass(1);
+        RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
+        ref readonly RHIRasterSubPassPlan first = ref plan.GetSubPass(0);
+        ref readonly RHIRasterSubPassPlan second = ref plan.GetSubPass(1);
 
         Assert.Equal((byte)2, first.PreserveMask);
         Assert.Equal((byte)0, first.TransitionMask);
@@ -307,7 +307,7 @@ public sealed class RasterPassPlannerContractTests
         };
 
         RHIAttachmentInterfaceSignature signature =
-            RasterPassPlanner.Compile(in descriptor)
+            RHIRasterPassPlanner.Compile(in descriptor)
                 .GetSubPass(0)
                 .AttachmentInterface;
 
@@ -342,7 +342,7 @@ public sealed class RasterPassPlannerContractTests
             },
         };
 
-        RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+        RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
         RHIAttachmentInterfaceSignature signature =
             plan.GetSubPass(0).AttachmentInterface;
 
@@ -397,11 +397,11 @@ public sealed class RasterPassPlannerContractTests
         };
 
         Assert.Throws<ArgumentException>(
-            () => RasterPassPlanner.Compile(in duplicate));
+            () => RHIRasterPassPlanner.Compile(in duplicate));
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => RasterPassPlanner.Compile(in invalidNegative));
+            () => RHIRasterPassPlanner.Compile(in invalidNegative));
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => RasterPassPlanner.Compile(in outOfRange));
+            () => RHIRasterPassPlanner.Compile(in outOfRange));
     }
 
     [Fact]
@@ -1272,7 +1272,7 @@ public sealed class RasterPassPlannerContractTests
                 throw new InvalidOperationException("A raster pass is already active on this encoder.");
             }
 
-            RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+            RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
             m_RasterPassPlan = plan;
             m_CurrentSubPassIndex = 0;
             m_PipelineSubPassIndex = -1;
@@ -1318,7 +1318,7 @@ public sealed class RasterPassPlannerContractTests
         public override void NextSubPass()
         {
             ThrowIfDisposed();
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             int nextSubPassIndex = m_CurrentSubPassIndex + 1;
             if (nextSubPassIndex >= plan.SubPassCount)
             {
@@ -1363,7 +1363,7 @@ public sealed class RasterPassPlannerContractTests
         public override void SetPipeline(RHIRasterPipeline pipeline)
         {
             ThrowIfDisposed();
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             ValidatePipelineCompatibility(plan, m_CurrentSubPassIndex, pipeline);
             m_CachedPipeline = pipeline;
             m_PipelineSubPassIndex = m_CurrentSubPassIndex;

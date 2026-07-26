@@ -2025,7 +2025,7 @@ namespace SharpGPU
                 throw new InvalidOperationException("A raster pass is already active on this encoder.");
             }
 
-            RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+            RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
             m_RasterPassPlan = plan;
             m_CurrentSubPassIndex = 0;
             m_PipelineSubPassIndex = -1;
@@ -2269,7 +2269,7 @@ namespace SharpGPU
 
         private Vortice.Direct3D12.CpuDescriptorHandle[][]
             CreateOmSubPassRenderTargetViews(
-                RasterPassPlan plan,
+                RHIRasterPassPlan plan,
                 Dx12RasterPassLowering lowering,
                 Dx12Device device)
         {
@@ -2313,7 +2313,7 @@ namespace SharpGPU
 
         private Vortice.Direct3D12.CpuDescriptorHandle
             CreateTypedNullRenderTargetView(
-                RasterPassPlan plan,
+                RHIRasterPassPlan plan,
                 in Dx12RasterSubPassLowering subPass,
                 int outputLocation,
                 Dx12Device device)
@@ -2405,7 +2405,7 @@ namespace SharpGPU
         }
 
         private void CreatePrivateAttachmentDescriptors(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             Dx12RasterPassLowering lowering,
             Dx12Device device,
             Dx12CommandBuffer commandBuffer)
@@ -2581,7 +2581,7 @@ namespace SharpGPU
         }
 
         private static void GetPrivateAttachmentView(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             int logicalAttachment,
             Dx12Device device,
             out Dx12Texture texture,
@@ -2706,7 +2706,7 @@ namespace SharpGPU
 
         private void BindOmSubPass(
             Dx12CommandBuffer commandBuffer,
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             int subPassIndex)
         {
             ref readonly Dx12RasterSubPassLowering subPass =
@@ -2740,7 +2740,7 @@ namespace SharpGPU
 
         private void ApplyOmSubPassTransitions(
             Dx12CommandBuffer commandBuffer,
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             in Dx12RasterSubPassLowering subPass)
         {
             for (int attachmentIndex = 0;
@@ -2992,7 +2992,7 @@ namespace SharpGPU
                         throw new InvalidOperationException("Depth/stencil resolve requires Dx12 textures for source and destination.");
                     }
 
-                    EResolveMode requestedResolveMode = isDepth
+                    ERHIResolveMode requestedResolveMode = isDepth
                         ? depthStencilAttachmentDescriptor.DepthResolveMode
                         : depthStencilAttachmentDescriptor.StencilResolveMode;
                     Vortice.Direct3D12.ResolveMode resolveMode = ConvertDepthResolveMode(requestedResolveMode);
@@ -3018,20 +3018,20 @@ namespace SharpGPU
             }
         }
 
-        private static Vortice.Direct3D12.ResolveMode ConvertDepthResolveMode(in EResolveMode resolveMode)
+        private static Vortice.Direct3D12.ResolveMode ConvertDepthResolveMode(in ERHIResolveMode resolveMode)
         {
             switch (resolveMode)
             {
-                case EResolveMode.None:
+                case ERHIResolveMode.None:
                     return Vortice.Direct3D12.ResolveMode.Average;
 
-                case EResolveMode.Min:
+                case ERHIResolveMode.Min:
                     return Vortice.Direct3D12.ResolveMode.Min;
 
-                case EResolveMode.Max:
+                case ERHIResolveMode.Max:
                     return Vortice.Direct3D12.ResolveMode.Max;
 
-                case EResolveMode.Sample0:
+                case ERHIResolveMode.Sample0:
                     throw new NotSupportedException("Depth/stencil resolve mode Sample0 is not supported in DX12 render pass path.");
 
                 default:
@@ -3236,7 +3236,7 @@ namespace SharpGPU
                 return;
             }
             uint plane = isDepth ? 0u : 1u;
-            EResolveMode resolveMode =
+            ERHIResolveMode resolveMode =
                 isDepth
                     ? attachment.DepthResolveMode
                     : attachment.StencilResolveMode;
@@ -3352,7 +3352,7 @@ namespace SharpGPU
         public override void NextSubPass()
         {
             ThrowIfDisposed();
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             int nextSubPassIndex = m_CurrentSubPassIndex + 1;
             if (nextSubPassIndex >= plan.SubPassCount)
             {
@@ -3389,7 +3389,7 @@ namespace SharpGPU
 
         private static void EmitRasterOrderPhaseBarriers(
             Dx12CommandBuffer commandBuffer,
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             in Dx12RasterSubPassLowering source,
             in Dx12RasterSubPassLowering destination)
         {
@@ -3479,7 +3479,7 @@ namespace SharpGPU
         public override void SetPipeline(RHIRasterPipeline pipeline)
         {
             ThrowIfDisposed();
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             ValidatePipelineCompatibility(plan, m_CurrentSubPassIndex, pipeline);
             m_CachedPipeline = pipeline;
 
@@ -3656,7 +3656,7 @@ namespace SharpGPU
             RHICommandBuffer commandBuffer = m_CommandBuffer ??
                 throw new InvalidOperationException("The raster encoder is not attached to a command buffer.");
             commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Raster);
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             if (m_CurrentSubPassIndex != plan.SubPassCount - 1)
             {
                 throw new InvalidOperationException(
@@ -4442,7 +4442,7 @@ internal enum EDx12RasterPassStrategy
         private readonly ERHIPixelFormat[] m_OutputLocationFormats;
 
         internal Dx12RasterSubPassLowering(
-            in RasterSubPassPlan plan,
+            in RHIRasterSubPassPlan plan,
             ReadOnlySpan<ERHIPixelFormat> logicalAttachmentFormats)
         {
             RHIAttachmentInterfaceSignature attachmentInterface =
@@ -4682,7 +4682,7 @@ internal enum EDx12RasterPassStrategy
         }
 
         internal static Dx12RasterPassLowering Compile(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             bool supportsNativeRenderPass,
             bool supportsRasterOrderedViews,
             bool usesEnhancedBarriers)
@@ -4707,7 +4707,7 @@ internal enum EDx12RasterPassStrategy
                 new Dx12RasterSubPassLowering[plan.SubPassCount];
             for (int i = 0; i < subPasses.Length; ++i)
             {
-                ref readonly RasterSubPassPlan subPass =
+                ref readonly RHIRasterSubPassPlan subPass =
                     ref plan.GetSubPass(i);
                 ValidateAccessModel(in subPass, i);
                 Dx12RasterSubPassLowering lowering =
@@ -4810,7 +4810,7 @@ internal enum EDx12RasterPassStrategy
         }
 
         private static void ValidateAccessModel(
-            in RasterSubPassPlan subPass,
+            in RHIRasterSubPassPlan subPass,
             int subPassIndex)
         {
             RHIAttachmentInterfaceSignature attachmentInterface =

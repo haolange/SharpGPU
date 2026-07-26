@@ -1318,7 +1318,7 @@ internal enum EVulkanRasterPassStrategy
         private readonly int[] m_InputIndicesByPhysicalAttachment;
 
         internal VulkanRasterSubPassLowering(
-            in RasterSubPassPlan plan)
+            in RHIRasterSubPassPlan plan)
         {
             RHIAttachmentInterfaceSignature attachmentInterface =
                 plan.AttachmentInterface;
@@ -1547,7 +1547,7 @@ internal enum EVulkanRasterPassStrategy
         }
 
         internal static VulkanRasterPassLowering Compile(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             in VulkanRasterCapabilities capabilities,
             EVulkanRasterPassForcedStrategy forcedStrategy =
                 EVulkanRasterPassForcedStrategy.Auto)
@@ -1565,7 +1565,7 @@ internal enum EVulkanRasterPassStrategy
                 new VulkanRasterSubPassLowering[plan.SubPassCount];
             for (int i = 0; i < subPasses.Length; ++i)
             {
-                ref readonly RasterSubPassPlan subPass =
+                ref readonly RHIRasterSubPassPlan subPass =
                     ref plan.GetSubPass(i);
                 VulkanRasterSubPassLowering lowering =
                     new VulkanRasterSubPassLowering(subPass);
@@ -1635,7 +1635,7 @@ internal enum EVulkanRasterPassStrategy
         }
 
         private static void ValidateInitialDepthStencilReadOnlyContract(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             in VulkanRasterSubPassLowering firstSubPass)
         {
             if (!plan.HasDepthStencilAttachment)
@@ -1888,234 +1888,6 @@ internal enum EVulkanRasterPassStrategy
             throw new NotSupportedException(
                 $"The requested Vulkan raster strategy {forcedStrategy} " +
                 "cannot express this pass on the current device.");
-        }
-    }
-
-
-
-    internal readonly struct VulkanPrivateRasterBindingPlan
-    {
-        internal const uint InputAttachmentBindingBase = 0;
-        internal const uint RasterOrderedBindingBase = 8;
-
-        internal uint DescriptorSet { get; }
-        internal byte LocalInputMask { get; }
-        internal byte LocalInputBindingMask { get; }
-        internal byte RasterOrderedMask { get; }
-        internal uint InputAttachmentCount =>
-            checked((uint)BitOperations.PopCount((uint)LocalInputBindingMask));
-        internal uint StorageImageCount =>
-            checked((uint)BitOperations.PopCount((uint)RasterOrderedMask));
-        internal VulkanDescriptorPoolRequirements PoolRequirements =>
-            new VulkanDescriptorPoolRequirements(
-                samplers: 0,
-                sampledImages: 0,
-                storageImages: StorageImageCount,
-                uniformBuffers: 0,
-                storageBuffers: 0,
-                accelerationStructures: 0,
-                inputAttachments: InputAttachmentCount);
-
-        internal bool HasPrivateBindings =>
-            LocalInputBindingMask != 0 ||
-            RasterOrderedMask != 0;
-
-        private VulkanPrivateRasterBindingPlan(
-            uint descriptorSet,
-            byte localInputMask,
-            byte localInputBindingMask,
-            byte rasterOrderedMask)
-        {
-            DescriptorSet = descriptorSet;
-            LocalInputMask = localInputMask;
-            LocalInputBindingMask = localInputBindingMask;
-            RasterOrderedMask = rasterOrderedMask;
-        }
-
-        internal bool UsesInputAttachmentBinding(int inputIndex)
-        {
-            if ((uint)inputIndex >=
-                RHIAttachmentIndexArray.MaxAttachments)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(inputIndex));
-            }
-            return (LocalInputBindingMask & (1 << inputIndex)) != 0;
-        }
-
-        internal uint GetInputAttachmentBinding(int inputIndex)
-        {
-            if (!UsesInputAttachmentBinding(inputIndex))
-            {
-                throw new InvalidOperationException(
-                    $"Input index {inputIndex} is not a private Vulkan " +
-                    "input-attachment binding.");
-            }
-            return checked(
-                InputAttachmentBindingBase +
-                checked((uint)inputIndex));
-        }
-
-        internal uint GetRasterOrderedBinding(
-            int logicalAttachment)
-        {
-            if ((uint)logicalAttachment >=
-                RHIAttachmentIndexArray.MaxAttachments)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(logicalAttachment));
-            }
-            byte bit =
-                checked((byte)(1 << logicalAttachment));
-            if ((RasterOrderedMask & bit) == 0)
-            {
-                throw new InvalidOperationException(
-                    $"Logical attachment {logicalAttachment} is not " +
-                    "raster-ordered in this pipeline.");
-            }
-            return checked(
-                RasterOrderedBindingBase +
-                checked((uint)logicalAttachment));
-        }
-
-        internal static uint GetPrivateAttachmentDescriptorSet(
-            ReadOnlySpan<uint> ordinaryDescriptorSets)
-        {
-            bool hasOrdinarySet = false;
-            uint highestOrdinarySet = 0;
-            for (int index = 0;
-                 index < ordinaryDescriptorSets.Length;
-                 ++index)
-            {
-                uint descriptorSet = ordinaryDescriptorSets[index];
-                if (!hasOrdinarySet ||
-                    descriptorSet > highestOrdinarySet)
-                {
-                    highestOrdinarySet = descriptorSet;
-                    hasOrdinarySet = true;
-                }
-            }
-
-            if (hasOrdinarySet &&
-                highestOrdinarySet == uint.MaxValue)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(ordinaryDescriptorSets),
-                    highestOrdinarySet,
-                    "The highest Vulkan descriptor-set index leaves no " +
-                    "representable slot for the private attachment set.");
-            }
-            return hasOrdinarySet
-                ? highestOrdinarySet + 1
-                : 0;
-        }
-
-        internal static VulkanPrivateRasterBindingPlan Compile(
-            ReadOnlySpan<uint> ordinaryDescriptorSets,
-            uint maximumBoundDescriptorSets,
-            in RHIAttachmentInterfaceSignature attachmentInterface)
-        {
-            if (maximumBoundDescriptorSets == 0)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(maximumBoundDescriptorSets),
-                    maximumBoundDescriptorSets,
-                    "Vulkan must expose at least one bound descriptor set.");
-            }
-
-            for (int index = 0;
-                 index < ordinaryDescriptorSets.Length;
-                 ++index)
-            {
-                uint descriptorSet =
-                    ordinaryDescriptorSets[index];
-                if (descriptorSet >= maximumBoundDescriptorSets)
-                {
-                    throw new ArgumentOutOfRangeException(
-                        nameof(ordinaryDescriptorSets),
-                        descriptorSet,
-                        $"Ordinary Vulkan descriptor set {descriptorSet} " +
-                        $"exceeds maxBoundDescriptorSets " +
-                        $"{maximumBoundDescriptorSets}.");
-                }
-                for (int previous = 0;
-                     previous < index;
-                     ++previous)
-                {
-                    if (ordinaryDescriptorSets[previous] ==
-                        descriptorSet)
-                    {
-                        throw new ArgumentException(
-                            $"Ordinary Vulkan descriptor set " +
-                            $"{descriptorSet} is duplicated.",
-                            nameof(ordinaryDescriptorSets));
-                    }
-                }
-            }
-            uint privateDescriptorSet =
-                GetPrivateAttachmentDescriptorSet(
-                    ordinaryDescriptorSets);
-
-            byte rasterOrderedMask =
-                attachmentInterface.RasterOrderedReadWriteMask;
-            byte localInputMask = checked((byte)(
-                attachmentInterface.ColorInputMask &
-                ~rasterOrderedMask));
-            byte localInputBindingMask = 0;
-            for (int inputIndex = 0;
-                 inputIndex < attachmentInterface.ColorInputSlotCount;
-                 ++inputIndex)
-            {
-                int logicalAttachment =
-                    attachmentInterface.GetColorInputLogicalAttachment(
-                        inputIndex);
-                if (logicalAttachment < 0 ||
-                    (rasterOrderedMask &
-                     (1 << logicalAttachment)) != 0)
-                {
-                    continue;
-                }
-                localInputBindingMask |=
-                    checked((byte)(1 << inputIndex));
-            }
-
-            bool hasPrivateBindings =
-                localInputBindingMask != 0 ||
-                rasterOrderedMask != 0;
-            if (hasPrivateBindings &&
-                privateDescriptorSet >= maximumBoundDescriptorSets)
-            {
-                throw new NotSupportedException(
-                    $"Vulkan ordinary descriptor sets consume slots through " +
-                    $"{privateDescriptorSet - 1}; no slot remains for the private " +
-                    $"attachment set within maxBoundDescriptorSets " +
-                    $"{maximumBoundDescriptorSets}.");
-            }
-
-            return new VulkanPrivateRasterBindingPlan(
-                privateDescriptorSet,
-                localInputMask,
-                localInputBindingMask,
-                rasterOrderedMask);
-        }
-
-        internal static void ValidatePipelineLayoutIdentity(
-            bool isDisposed,
-            object? actualDevice,
-            object expectedDevice)
-        {
-            ArgumentNullException.ThrowIfNull(expectedDevice);
-            if (isDisposed)
-            {
-                throw new ObjectDisposedException(
-                    nameof(VulkanPipelineLayout));
-            }
-            if (!ReferenceEquals(actualDevice, expectedDevice))
-            {
-                throw new ArgumentException(
-                    "Vulkan pipeline layout belongs to a different device.",
-                    nameof(actualDevice));
-            }
         }
     }
 
@@ -2606,7 +2378,7 @@ internal enum EVulkanRasterPassStrategy
         }
 
         internal static VulkanRenderPass2Description Compile(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             VulkanRasterPassLowering lowering)
         {
             ArgumentNullException.ThrowIfNull(plan);
@@ -2678,7 +2450,7 @@ internal enum EVulkanRasterPassStrategy
                  subPassIndex < subPasses.Length;
                  ++subPassIndex)
             {
-                ref readonly RasterSubPassPlan planSubPass =
+                ref readonly RHIRasterSubPassPlan planSubPass =
                     ref plan.GetSubPass(subPassIndex);
                 ref readonly VulkanRasterSubPassLowering loweringSubPass =
                     ref lowering.SubPasses.Span[subPassIndex];
@@ -2786,7 +2558,7 @@ internal enum EVulkanRasterPassStrategy
         private const uint AttachmentUnused = uint.MaxValue;
 
         internal static void PopulateSubpasses(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             VulkanRenderPass2Description description,
             VkSubpassDescription2* subpasses,
             VkAttachmentReference2* inputReferences,
@@ -3006,12 +2778,12 @@ internal enum EVulkanRasterPassStrategy
             };
 
         private static VkResolveModeFlags ConvertResolveMode(
-            EResolveMode mode) => mode switch
+            ERHIResolveMode mode) => mode switch
         {
-            EResolveMode.None => VkResolveModeFlags.None,
-            EResolveMode.Sample0 => VkResolveModeFlags.SampleZero,
-            EResolveMode.Min => VkResolveModeFlags.Min,
-            EResolveMode.Max => VkResolveModeFlags.Max,
+            ERHIResolveMode.None => VkResolveModeFlags.None,
+            ERHIResolveMode.Sample0 => VkResolveModeFlags.SampleZero,
+            ERHIResolveMode.Min => VkResolveModeFlags.Min,
+            ERHIResolveMode.Max => VkResolveModeFlags.Max,
             _ => VkResolveModeFlags.Average,
         };
     }
@@ -3053,7 +2825,7 @@ internal enum EVulkanRasterPassStrategy
 
         internal static VulkanRenderPass2Plan Create(
             VkDevice device,
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             VulkanRasterPassLowering lowering,
             bool useKhrEntryPoints)
         {
@@ -3194,7 +2966,7 @@ internal enum EVulkanRasterPassStrategy
         }
 
         private static void PopulateAttachmentDescriptions(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             VulkanRasterPassLowering lowering,
             VkAttachmentDescription2* attachments,
             int[] resolveAttachmentIndices,
@@ -3319,7 +3091,7 @@ internal enum EVulkanRasterPassStrategy
         }
 
         private static int PopulateDependencies(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             VulkanRenderPass2Description description,
             VkSubpassDependency2* dependencies)
         {
@@ -3471,12 +3243,12 @@ internal enum EVulkanRasterPassStrategy
                 : VkAttachmentStoreOp.DontCare;
 
         private static VkResolveModeFlags ConvertResolveMode(
-            EResolveMode mode) => mode switch
+            ERHIResolveMode mode) => mode switch
         {
-            EResolveMode.None => VkResolveModeFlags.None,
-            EResolveMode.Sample0 => VkResolveModeFlags.SampleZero,
-            EResolveMode.Min => VkResolveModeFlags.Min,
-            EResolveMode.Max => VkResolveModeFlags.Max,
+            ERHIResolveMode.None => VkResolveModeFlags.None,
+            ERHIResolveMode.Sample0 => VkResolveModeFlags.SampleZero,
+            ERHIResolveMode.Min => VkResolveModeFlags.Min,
+            ERHIResolveMode.Max => VkResolveModeFlags.Max,
             _ => VkResolveModeFlags.Average,
         };
 
@@ -4078,7 +3850,7 @@ internal readonly struct VulkanSampledFeedbackAttachmentFact
                 throw new InvalidOperationException("A raster pass is already active on this encoder.");
             }
 
-            RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+            RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
             m_RasterPassPlan = plan;
             m_CurrentSubPassIndex = 0;
             m_PipelineSubPassIndex = -1;
@@ -4611,7 +4383,7 @@ internal readonly struct VulkanSampledFeedbackAttachmentFact
             RHICommandBuffer commandBuffer = m_CommandBuffer ??
                 throw new InvalidOperationException("The raster encoder is not attached to a command buffer.");
             commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Raster);
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             if (m_CurrentSubPassIndex != plan.SubPassCount - 1)
             {
                 throw new InvalidOperationException(
@@ -4645,7 +4417,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
 
         private readonly VulkanCommandBuffer m_VulkanCommandBuffer;
         private RHIRasterPassDescriptor m_PassDescriptor;
-        private RasterPassPlan? m_Plan;
+        private RHIRasterPassPlan? m_Plan;
         private VulkanRasterPassLowering? m_Lowering;
         private VulkanRenderPass2Plan? m_RenderPass2Plan;
         private VkImageView[]? m_ColorViews;
@@ -4679,7 +4451,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                 throw new InvalidOperationException("A raster pass is already active on this encoder.");
             }
 
-            RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+            RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
             m_RasterPassPlan = plan;
             m_CurrentSubPassIndex = 0;
             m_PipelineSubPassIndex = -1;
@@ -4765,7 +4537,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
         public override void NextSubPass()
         {
             ThrowIfDisposed();
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             int sourceSubPassIndex = m_CurrentSubPassIndex;
             int destinationSubPassIndex = sourceSubPassIndex + 1;
             if (destinationSubPassIndex >= plan.SubPassCount)
@@ -5177,7 +4949,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             RHICommandBuffer commandBuffer = m_CommandBuffer ??
                 throw new InvalidOperationException("The raster encoder is not attached to a command buffer.");
             commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Raster);
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             if (m_CurrentSubPassIndex != plan.SubPassCount - 1)
             {
                 throw new InvalidOperationException(
@@ -5241,7 +5013,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             ClearRasterPassState();
         }
 
-        private void CreateAttachmentViews(RasterPassPlan plan)
+        private void CreateAttachmentViews(RHIRasterPassPlan plan)
         {
             m_ColorViews =
                 new VkImageView[plan.ColorAttachmentCount];
@@ -5330,7 +5102,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
         }
 
         private void BeginDynamicRendering(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             VulkanRasterPassLowering lowering)
         {
             VulkanDevice device = GetDevice();
@@ -5558,7 +5330,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             }
         }
         private void BeginRenderPass2(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             VulkanRasterPassLowering lowering)
         {
             VulkanDevice device = GetDevice();
@@ -5772,7 +5544,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
         }
 
         private void TransitionAttachmentScopeLayouts(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             VulkanRasterPassLowering lowering)
         {
             for (int colorIndex = 0;
@@ -6028,7 +5800,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
 
         private void RestoreCanonicalAttachmentLayouts()
         {
-            RasterPassPlan? plan = m_Plan;
+            RHIRasterPassPlan? plan = m_Plan;
             VulkanRasterPassLowering? lowering = m_Lowering;
             if (plan == null || lowering == null)
             {
@@ -6108,7 +5880,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
         }
 
         private void RestoreResolveDestinationLayouts(
-            RasterPassPlan plan)
+            RHIRasterPassPlan plan)
         {
             for (int colorIndex = 0;
                  colorIndex < plan.ColorAttachmentCount;
@@ -6194,7 +5966,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
         }
 
         private void RestoreDepthStencilBoundaryLayouts(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             VulkanRasterPassLowering lowering)
         {
             if (!plan.HasDepthStencilAttachment)
@@ -6593,7 +6365,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
 
         private static void
             ValidateRasterOrderedAttachmentStorageFormats(
-                RasterPassPlan plan,
+                RHIRasterPassPlan plan,
                 VulkanRasterPassLowering lowering,
                 VulkanDevice device)
         {
@@ -6681,7 +6453,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             }
         }
         private void InitializeSampledFeedbackState(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             VulkanRasterPassLowering lowering,
             VulkanDevice device)
         {
@@ -7060,14 +6832,14 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             stencilLayout = combined;
         }
         private static VkResolveModeFlags ConvertResolveMode(
-            EResolveMode mode) =>
+            ERHIResolveMode mode) =>
             mode switch
             {
-                EResolveMode.None => VkResolveModeFlags.None,
-                EResolveMode.Sample0 =>
+                ERHIResolveMode.None => VkResolveModeFlags.None,
+                ERHIResolveMode.Sample0 =>
                     VkResolveModeFlags.SampleZero,
-                EResolveMode.Min => VkResolveModeFlags.Min,
-                EResolveMode.Max => VkResolveModeFlags.Max,
+                ERHIResolveMode.Min => VkResolveModeFlags.Min,
+                ERHIResolveMode.Max => VkResolveModeFlags.Max,
                 _ => throw new ArgumentOutOfRangeException(
                     nameof(mode),
                     mode,
@@ -7269,7 +7041,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             {
                 RHIAccelStructGeometry geom = descriptor.Geometries[i];
 
-                if (geom.GeometryType == EAccelStructGeometryType.Triangle)
+                if (geom.GeometryType == ERHIAccelStructGeometryType.Triangle)
                 {
                     RHIAccelStructTriangles triangleGeometry = (RHIAccelStructTriangles)geom;
                     VulkanBuffer vertexBuffer = triangleGeometry.VertexBuffer as VulkanBuffer
@@ -7285,7 +7057,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                     {
                         sType = VkStructureType.AccelerationStructureGeometryKHR,
                         geometryType = VkGeometryTypeKHR.Triangles,
-                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
+                        flags = (geom.GeometryFlag & ERHIAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
                     };
                     geometries[i].geometry.triangles.sType = VkStructureType.AccelerationStructureGeometryTrianglesDataKHR;
                     geometries[i].geometry.triangles.vertexFormat = VulkanUtility.ConvertToVkAccelerationStructureVertexFormat(triangleGeometry.VertexFormat);
@@ -7321,7 +7093,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                         };
                     }
                 }
-                else if (geom.GeometryType == EAccelStructGeometryType.AABB)
+                else if (geom.GeometryType == ERHIAccelStructGeometryType.AABB)
                 {
                     RHIAccelStructAABBs aabbGeometry = (RHIAccelStructAABBs)geom;
                     VulkanBuffer aabbBuffer = aabbGeometry.AABBBuffer as VulkanBuffer
@@ -7337,7 +7109,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                     {
                         sType = VkStructureType.AccelerationStructureGeometryKHR,
                         geometryType = VkGeometryTypeKHR.Aabbs,
-                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
+                        flags = (geom.GeometryFlag & ERHIAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
                     };
                     geometries[i].geometry.aabbs.sType = VkStructureType.AccelerationStructureGeometryAabbsDataKHR;
                     geometries[i].geometry.aabbs.data.deviceAddress = aabbAddress + aabbGeometry.Offset;
@@ -7347,7 +7119,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                         primitiveCount = aabbGeometry.Count,
                     };
                 }
-                else if (geom.GeometryType == EAccelStructGeometryType.Curves)
+                else if (geom.GeometryType == ERHIAccelStructGeometryType.Curves)
                 {
                     RHIAccelStructCurves curveGeometry = geom as RHIAccelStructCurves
                         ?? throw new InvalidOperationException("Curve geometry descriptor type mismatch.");
@@ -7364,7 +7136,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                     {
                         sType = VkStructureType.AccelerationStructureGeometryKHR,
                         geometryType = VkGeometryTypeKHR.Aabbs,
-                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
+                        flags = (geom.GeometryFlag & ERHIAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
                     };
                     geometries[i].geometry.aabbs.sType = VkStructureType.AccelerationStructureGeometryAabbsDataKHR;
                     geometries[i].geometry.aabbs.data.deviceAddress = curveAabbAddress;

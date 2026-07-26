@@ -159,8 +159,8 @@ namespace SharpGPU
             RHIQueueSubmitDescriptor descriptor =
                 new(completionFence: completion);
             Submit(in descriptor);
-            EFenceStatus status = completion.Wait();
-            if (status != EFenceStatus.Success)
+            ERHIFenceStatus status = completion.Wait();
+            if (status != ERHIFenceStatus.Success)
             {
                 throw new RHIException(
                     ERHIErrorCode.SynchronizationFailed,

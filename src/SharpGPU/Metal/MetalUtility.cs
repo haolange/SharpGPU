@@ -732,15 +732,15 @@ namespace SharpGPU
             }
         }
 
-        internal static MTLAccelerationStructureUsage ConvertToMetalAccelerationStructureUsage(in EAccelStructFlag flag)
+        internal static MTLAccelerationStructureUsage ConvertToMetalAccelerationStructureUsage(in ERHIAccelStructFlag flag)
         {
             MTLAccelerationStructureUsage usage = MTLAccelerationStructureUsage.None;
-            if ((flag & EAccelStructFlag.AllowUpdate) != 0 || (flag & EAccelStructFlag.PerformUpdate) != 0)
+            if ((flag & ERHIAccelStructFlag.AllowUpdate) != 0 || (flag & ERHIAccelStructFlag.PerformUpdate) != 0)
             {
                 usage |= MTLAccelerationStructureUsage.Refit;
             }
 
-            if ((flag & EAccelStructFlag.PreferFastBuild) != 0)
+            if ((flag & ERHIAccelStructFlag.PreferFastBuild) != 0)
             {
                 usage |= MTLAccelerationStructureUsage.PreferFastBuild;
             }
@@ -748,25 +748,25 @@ namespace SharpGPU
             return usage;
         }
 
-        internal static MTLAccelerationStructureInstanceOptions ConvertToMetalAccelerationStructureInstanceOptions(in EAccelStructInstanceFlag flag)
+        internal static MTLAccelerationStructureInstanceOptions ConvertToMetalAccelerationStructureInstanceOptions(in ERHIAccelStructInstanceFlag flag)
         {
             MTLAccelerationStructureInstanceOptions options = MTLAccelerationStructureInstanceOptions.None;
-            if ((flag & EAccelStructInstanceFlag.TriangleCullDisable) != 0)
+            if ((flag & ERHIAccelStructInstanceFlag.TriangleCullDisable) != 0)
             {
                 options |= MTLAccelerationStructureInstanceOptions.DisableTriangleCulling;
             }
 
-            if ((flag & EAccelStructInstanceFlag.TriangleFrontCounterclockwise) != 0)
+            if ((flag & ERHIAccelStructInstanceFlag.TriangleFrontCounterclockwise) != 0)
             {
                 options |= MTLAccelerationStructureInstanceOptions.TriangleFrontFacingWindingCounterClockwise;
             }
 
-            if ((flag & EAccelStructInstanceFlag.ForceOpaque) != 0)
+            if ((flag & ERHIAccelStructInstanceFlag.ForceOpaque) != 0)
             {
                 options |= MTLAccelerationStructureInstanceOptions.Opaque;
             }
 
-            if ((flag & EAccelStructInstanceFlag.ForceNonOpaque) != 0)
+            if ((flag & ERHIAccelStructInstanceFlag.ForceNonOpaque) != 0)
             {
                 options |= MTLAccelerationStructureInstanceOptions.NonOpaque;
             }
@@ -774,55 +774,55 @@ namespace SharpGPU
             return options;
         }
 
-        internal static bool IsMetalGeometryOpaque(in EAccelStructGeometryFlag flag)
+        internal static bool IsMetalGeometryOpaque(in ERHIAccelStructGeometryFlag flag)
         {
-            return (flag & EAccelStructGeometryFlag.Opaque) != 0;
+            return (flag & ERHIAccelStructGeometryFlag.Opaque) != 0;
         }
 
-        internal static bool AllowMetalDuplicateIntersectionInvocation(in EAccelStructGeometryFlag flag)
+        internal static bool AllowMetalDuplicateIntersectionInvocation(in ERHIAccelStructGeometryFlag flag)
         {
-            return (flag & EAccelStructGeometryFlag.NoDuplicateAnyhitInverseOcation) == 0;
+            return (flag & ERHIAccelStructGeometryFlag.NoDuplicateAnyhitInverseOcation) == 0;
         }
 
-        internal static MTLCurveType ConvertToMetalCurveType(in EAccelStructCurveType curveType)
+        internal static MTLCurveType ConvertToMetalCurveType(in ERHIAccelStructCurveType curveType)
         {
             switch (curveType)
             {
-                case EAccelStructCurveType.Round:
+                case ERHIAccelStructCurveType.Round:
                     return MTLCurveType.Round;
-                case EAccelStructCurveType.Flat:
+                case ERHIAccelStructCurveType.Flat:
                     return MTLCurveType.Flat;
                 default:
                     throw new NotSupportedException($"Unsupported curve type '{curveType}'.");
             }
         }
 
-        internal static MTLCurveBasis ConvertToMetalCurveBasis(in EAccelStructCurveBasis curveBasis)
+        internal static MTLCurveBasis ConvertToMetalCurveBasis(in ERHIAccelStructCurveBasis curveBasis)
         {
             switch (curveBasis)
             {
-                case EAccelStructCurveBasis.BSpline:
+                case ERHIAccelStructCurveBasis.BSpline:
                     return MTLCurveBasis.BSpline;
-                case EAccelStructCurveBasis.CatmullRom:
+                case ERHIAccelStructCurveBasis.CatmullRom:
                     return MTLCurveBasis.CatmullRom;
-                case EAccelStructCurveBasis.Linear:
+                case ERHIAccelStructCurveBasis.Linear:
                     return MTLCurveBasis.Linear;
-                case EAccelStructCurveBasis.Bezier:
+                case ERHIAccelStructCurveBasis.Bezier:
                     return MTLCurveBasis.Bezier;
                 default:
                     throw new NotSupportedException($"Unsupported curve basis '{curveBasis}'.");
             }
         }
 
-        internal static MTLCurveEndCaps ConvertToMetalCurveEndCaps(in EAccelStructCurveEndCaps curveEndCaps)
+        internal static MTLCurveEndCaps ConvertToMetalCurveEndCaps(in ERHIAccelStructCurveEndCaps curveEndCaps)
         {
             switch (curveEndCaps)
             {
-                case EAccelStructCurveEndCaps.None:
+                case ERHIAccelStructCurveEndCaps.None:
                     return MTLCurveEndCaps.None;
-                case EAccelStructCurveEndCaps.Disk:
+                case ERHIAccelStructCurveEndCaps.Disk:
                     return MTLCurveEndCaps.Disk;
-                case EAccelStructCurveEndCaps.Sphere:
+                case ERHIAccelStructCurveEndCaps.Sphere:
                     return MTLCurveEndCaps.Sphere;
                 default:
                     throw new NotSupportedException($"Unsupported curve end caps '{curveEndCaps}'.");

@@ -329,7 +329,7 @@ public sealed class SharpGPUDirectMLContractTests
             fixturePath != null && File.Exists(fixturePath),
             "Missing NeuralCook DX12 fixture elementwise_add.dmlbin.");
 
-        RHIMLBinary binary = RHIMLBinaryLoader.Load(File.ReadAllBytes(fixturePath));
+        RHIMLBinary binary = Dx12MlBinaryCodec.Load(File.ReadAllBytes(fixturePath));
         Assert.Equal(ERHIMLBinaryFormat.DirectMLProgramV1, binary.Format);
         using RHIMLPipeline pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
         {

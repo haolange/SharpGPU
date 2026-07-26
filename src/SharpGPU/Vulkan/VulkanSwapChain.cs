@@ -111,7 +111,7 @@ namespace SharpGPU
 
             switch (descriptor.SurfaceKind)
             {
-                case RHINativeSurfaceKind.Win32Hwnd:
+                case ERHINativeSurfaceKind.Win32Hwnd:
                 {
                     // TODO(UNVERIFIED): Validate on Windows runtime (x64/x86_64).
                     IntPtr moduleHandle = descriptor.InstanceHandle;
@@ -134,7 +134,7 @@ namespace SharpGPU
                     VulkanUtility.CheckErrors(VulkanNative.vkCreateWin32SurfaceKHR(vkInstance.NativeInstance, &surfaceCreateInfo, null, &surface));
                     break;
                 }
-                case RHINativeSurfaceKind.X11Window:
+                case ERHINativeSurfaceKind.X11Window:
                 {
                     // TODO(UNVERIFIED): Validate on Linux/X11 runtime.
                     if (descriptor.DisplayHandle == IntPtr.Zero)
@@ -152,7 +152,7 @@ namespace SharpGPU
                     VulkanUtility.CheckErrors(VulkanNative.vkCreateXlibSurfaceKHR(vkInstance.NativeInstance, &surfaceCreateInfo, null, &surface));
                     break;
                 }
-                case RHINativeSurfaceKind.WaylandSurface:
+                case ERHINativeSurfaceKind.WaylandSurface:
                 {
                     // TODO(UNVERIFIED): Validate on Linux/Wayland runtime.
                     if (descriptor.DisplayHandle == IntPtr.Zero)
@@ -170,7 +170,7 @@ namespace SharpGPU
                     VulkanUtility.CheckErrors(VulkanNative.vkCreateWaylandSurfaceKHR(vkInstance.NativeInstance, &surfaceCreateInfo, null, &surface));
                     break;
                 }
-                case RHINativeSurfaceKind.AndroidNativeWindow:
+                case ERHINativeSurfaceKind.AndroidNativeWindow:
                 {
                     // TODO(UNVERIFIED): Validate on Android runtime with ANativeWindow* surface handle.
                     VkAndroidSurfaceCreateInfoKHR surfaceCreateInfo = new VkAndroidSurfaceCreateInfoKHR()
@@ -182,15 +182,15 @@ namespace SharpGPU
                     VulkanUtility.CheckErrors(VulkanNative.vkCreateAndroidSurfaceKHR(vkInstance.NativeInstance, &surfaceCreateInfo, null, &surface));
                     break;
                 }
-                case RHINativeSurfaceKind.AppKitNsWindow:
-                case RHINativeSurfaceKind.UIKitUiWindow:
+                case ERHINativeSurfaceKind.AppKitNsWindow:
+                case ERHINativeSurfaceKind.UIKitUiWindow:
                 {
 #if INFINITY_TARGET_ANDROID
                     throw new PlatformNotSupportedException(
                         "Apple Metal surfaces are unavailable on Android Vulkan builds.");
 #else
                     // TODO(UNVERIFIED): iOS path requires device runtime verification.
-                    EOSPlatform platform = descriptor.SurfaceKind == RHINativeSurfaceKind.AppKitNsWindow ? EOSPlatform.MacOS : EOSPlatform.iOS;
+                    EOSPlatform platform = descriptor.SurfaceKind == ERHINativeSurfaceKind.AppKitNsWindow ? EOSPlatform.MacOS : EOSPlatform.iOS;
                     metalLayerHandle = ResolveMetalLayer(descriptor.WindowHandle, platform);
                     if (metalLayerHandle == IntPtr.Zero)
                     {
@@ -1523,7 +1523,7 @@ namespace SharpGPU
         }
 
         private static void ValidateSurfaceDescriptor(
-            RHINativeSurfaceKind surfaceKind,
+            ERHINativeSurfaceKind surfaceKind,
             IntPtr windowHandle,
             IntPtr displayHandle)
         {
@@ -1534,8 +1534,8 @@ namespace SharpGPU
                     nameof(windowHandle));
             }
             if (surfaceKind is
-                RHINativeSurfaceKind.X11Window or
-                RHINativeSurfaceKind.WaylandSurface &&
+                ERHINativeSurfaceKind.X11Window or
+                ERHINativeSurfaceKind.WaylandSurface &&
                 displayHandle == IntPtr.Zero)
             {
                 throw new ArgumentException(
@@ -1543,8 +1543,8 @@ namespace SharpGPU
                     nameof(displayHandle));
             }
             if (surfaceKind is
-                RHINativeSurfaceKind.Unknown or
-                RHINativeSurfaceKind.Headless)
+                ERHINativeSurfaceKind.Unknown or
+                ERHINativeSurfaceKind.Headless)
             {
                 throw new NotSupportedException(
                     $"Vulkan presentation does not support surface kind " +

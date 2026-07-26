@@ -8,35 +8,35 @@ internal unsafe class VulkanFence : RHIFence
     {
         public VkFence NativeFence => m_NativeFence;
 
-        public override EFenceStatus Status
+        public override ERHIFenceStatus Status
         {
             get
             {
                 ThrowIfSynchronizationDisposed();
                 if (IsSignalKnownComplete)
                 {
-                    return EFenceStatus.Success;
+                    return ERHIFenceStatus.Success;
                 }
 
                 if (!IsSignalPending)
                 {
-                    return EFenceStatus.NotReady;
+                    return ERHIFenceStatus.NotReady;
                 }
 
                 VkResult result = VulkanNative.vkGetFenceStatus(m_VulkanDevice.NativeDevice, m_NativeFence);
                 if (result == VkResult.Success)
                 {
                     MarkSignaled();
-                    return EFenceStatus.Success;
+                    return ERHIFenceStatus.Success;
                 }
 
                 if (result == VkResult.NotReady)
                 {
-                    return EFenceStatus.NotReady;
+                    return ERHIFenceStatus.NotReady;
                 }
 
                 VulkanUtility.CheckErrors(result);
-                return EFenceStatus.Undefined;
+                return ERHIFenceStatus.Undefined;
             }
         }
 
@@ -87,12 +87,12 @@ internal unsafe class VulkanFence : RHIFence
             }
         }
 
-        public override EFenceStatus Wait(ulong timeoutNanoseconds = ulong.MaxValue)
+        public override ERHIFenceStatus Wait(ulong timeoutNanoseconds = ulong.MaxValue)
         {
             EnsureWaitable();
             if (IsSignalKnownComplete)
             {
-                return EFenceStatus.Success;
+                return ERHIFenceStatus.Success;
             }
 
             fixed (VkFence* fencePtr = &m_NativeFence)
@@ -105,14 +105,14 @@ internal unsafe class VulkanFence : RHIFence
                     timeoutNanoseconds);
                 if (result == VkResult.Timeout)
                 {
-                    return EFenceStatus.NotReady;
+                    return ERHIFenceStatus.NotReady;
                 }
 
                 VulkanUtility.CheckErrors(result);
             }
 
             MarkSignaled();
-            return EFenceStatus.Success;
+            return ERHIFenceStatus.Success;
         }
 
         protected override void Release()

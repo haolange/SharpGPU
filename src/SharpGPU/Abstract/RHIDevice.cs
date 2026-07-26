@@ -248,17 +248,6 @@ namespace SharpGPU
         public abstract RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor);
         public abstract RHIWorkGraphPipeline CreateWorkGraphPipeline(in RHIWorkGraphPipelineDescriptor descriptor);
 
-        /// <summary>
-        /// Backend-private NativeML path: compile an internal program IR without a public RHIMLBinary.
-        /// ADR-0053: Auto/NativeML uses this; RHI ML whole-graph uses <see cref="CreateMLPipeline"/>.
-        /// </summary>
-        internal virtual RHIMLPipeline CreateMLPipelineFromInternalProgramIR(string name, in RHIMLProgramIR programIr)
-        {
-            throw new NotSupportedException(
-                "Internal NativeML program-IR compilation is unavailable on this backend. " +
-                "Use Cook ??RHIMLBinary ??CreateMLPipeline for the explicit RHI ML binary route.");
-        }
-
         public virtual bool TryToggleGpuCapture(string savedPath, string reason)
         {
             return false;

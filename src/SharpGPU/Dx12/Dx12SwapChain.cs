@@ -197,7 +197,7 @@ namespace SharpGPU
                     result = RHISwapChainOperationResult.FromStatus(
                         ERHISwapChainStatus.NotReady);
                 }
-                else if (descriptor.SurfaceKind != RHINativeSurfaceKind.Win32Hwnd ||
+                else if (descriptor.SurfaceKind != ERHINativeSurfaceKind.Win32Hwnd ||
                     descriptor.WindowHandle == IntPtr.Zero)
                 {
                     result = EnterTerminal(
@@ -604,7 +604,7 @@ namespace SharpGPU
             in RHISwapChainDescriptor descriptor)
         {
             if (descriptor.SurfaceKind !=
-                RHINativeSurfaceKind.Win32Hwnd)
+                ERHINativeSurfaceKind.Win32Hwnd)
             {
                 throw new NotSupportedException(
                     "DX12 swapchains require a Win32 HWND surface.");

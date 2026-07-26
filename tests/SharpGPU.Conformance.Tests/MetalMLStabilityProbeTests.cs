@@ -170,7 +170,7 @@ public sealed class MetalMLStabilityProbeTests
             return false;
         }
 
-        RHIMLBinary binary = RHIMLBinaryLoader.Load(File.ReadAllBytes(fixturePath));
+        RHIMLBinary binary = MetalMlBinaryCodec.Load(File.ReadAllBytes(fixturePath));
         pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
         {
             Name = pipelineName,

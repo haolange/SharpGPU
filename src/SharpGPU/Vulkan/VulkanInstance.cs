@@ -14,7 +14,7 @@ namespace SharpGPU
         public VkInstance NativeInstance => m_VkInstance;
         internal uint LoaderApiVersion => m_LoaderApiVersion;
         internal uint ApiVersion => m_ApiVersion;
-        internal RHINativeSurfaceKind SurfaceKind => m_SurfaceKind;
+        internal ERHINativeSurfaceKind SurfaceKind => m_SurfaceKind;
         internal VulkanValidationDiagnostics? ValidationDiagnostics =>
             m_ValidationDiagnostics;
         public bool HasDebugUtils => m_HasDebugUtils;
@@ -30,7 +30,7 @@ namespace SharpGPU
         private uint m_LoaderApiVersion;
         private uint m_ApiVersion;
         private List<string> m_ValidationLayers = new List<string>();
-        private readonly RHINativeSurfaceKind m_SurfaceKind;
+        private readonly ERHINativeSurfaceKind m_SurfaceKind;
         private List<string> m_RequiredExtensions = new List<string>();
 
         // Debug utils function pointers (loaded at runtime via vkGetInstanceProcAddr)
@@ -85,7 +85,7 @@ namespace SharpGPU
         }
 
         internal static bool RequiresSwapchainDeviceExtension(
-            RHINativeSurfaceKind surfaceKind)
+            ERHINativeSurfaceKind surfaceKind)
         {
             if (!Enum.IsDefined(surfaceKind))
             {
@@ -95,7 +95,7 @@ namespace SharpGPU
                     "The native surface kind is not defined.");
             }
 
-            return surfaceKind != RHINativeSurfaceKind.Headless;
+            return surfaceKind != ERHINativeSurfaceKind.Headless;
         }
 
         private static bool ContainsExtension(HashSet<string> availableExtensions, string extension)
@@ -143,29 +143,29 @@ namespace SharpGPU
             m_RequiredExtensions = new List<string>();
             m_EnablePortabilityEnumeration = false;
 
-            if (descriptor.SurfaceKind != RHINativeSurfaceKind.Headless)
+            if (descriptor.SurfaceKind != ERHINativeSurfaceKind.Headless)
             {
                 RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_surface");
             }
 
             switch (descriptor.SurfaceKind)
             {
-                case RHINativeSurfaceKind.Headless:
+                case ERHINativeSurfaceKind.Headless:
                     break;
-                case RHINativeSurfaceKind.Win32Hwnd:
+                case ERHINativeSurfaceKind.Win32Hwnd:
                     RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_win32_surface");
                     break;
-                case RHINativeSurfaceKind.X11Window:
+                case ERHINativeSurfaceKind.X11Window:
                     RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_xlib_surface");
                     break;
-                case RHINativeSurfaceKind.WaylandSurface:
+                case ERHINativeSurfaceKind.WaylandSurface:
                     RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_wayland_surface");
                     break;
-                case RHINativeSurfaceKind.AndroidNativeWindow:
+                case ERHINativeSurfaceKind.AndroidNativeWindow:
                     RequireExtension(availableExtensions, m_RequiredExtensions, "VK_KHR_android_surface");
                     break;
-                case RHINativeSurfaceKind.AppKitNsWindow:
-                case RHINativeSurfaceKind.UIKitUiWindow:
+                case ERHINativeSurfaceKind.AppKitNsWindow:
+                case ERHINativeSurfaceKind.UIKitUiWindow:
                     // TODO(UNVERIFIED): iOS runtime verification pending.
                     RequireExtension(availableExtensions, m_RequiredExtensions, "VK_EXT_metal_surface");
                     if (ContainsExtension(availableExtensions, "VK_KHR_portability_enumeration"))

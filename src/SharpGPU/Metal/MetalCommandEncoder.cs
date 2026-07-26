@@ -2453,7 +2453,7 @@ internal readonly struct MetalRasterCapabilities
         private readonly ulong[] m_PhysicalAttachmentsByMappingIndex;
 
         internal MetalRasterSubPassLowering(
-            in RasterSubPassPlan plan,
+            in RHIRasterSubPassPlan plan,
             byte passRasterOrderedMask)
         {
             RHIAttachmentInterfaceSignature attachmentInterface =
@@ -2657,7 +2657,7 @@ internal readonly struct MetalRasterCapabilities
         }
 
         internal static MetalRasterPassLowering Compile(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             in MetalRasterCapabilities capabilities)
         {
             ArgumentNullException.ThrowIfNull(plan);
@@ -2678,7 +2678,7 @@ internal readonly struct MetalRasterCapabilities
                 new MetalRasterSubPassLowering[plan.SubPassCount];
             for (int i = 0; i < subPasses.Length; ++i)
             {
-                ref readonly RasterSubPassPlan subPass =
+                ref readonly RHIRasterSubPassPlan subPass =
                     ref plan.GetSubPass(i);
                 ValidateMetalAccess(in subPass, i);
                 MetalRasterSubPassLowering lowering =
@@ -2746,7 +2746,7 @@ internal readonly struct MetalRasterCapabilities
         }
 
         private static void ValidateMetalAccess(
-            in RasterSubPassPlan subPass,
+            in RHIRasterSubPassPlan subPass,
             int subPassIndex)
         {
             if (subPass.AttachmentInterface.SampledFeedbackMask != 0)
@@ -2761,7 +2761,7 @@ internal readonly struct MetalRasterCapabilities
         }
 
         private static void ValidateMemorylessAttachments(
-            RasterPassPlan plan)
+            RHIRasterPassPlan plan)
         {
             for (int i = 0; i < plan.ColorAttachmentCount; ++i)
             {
@@ -2818,211 +2818,6 @@ internal readonly struct MetalRasterCapabilities
             ERHIStoreAction storeAction) =>
             storeAction == ERHIStoreAction.DontCare ||
             storeAction == ERHIStoreAction.Resolve;
-    }
-
-    internal readonly struct MetalPrivateRasterBindingPlan
-    {
-        internal uint TextureBase { get; }
-        internal uint MaximumTextureBindings { get; }
-        internal uint RequiredTextureBindingCount { get; }
-        internal byte RasterOrderedMask { get; }
-
-        internal bool HasRasterOrderedBindings =>
-            RasterOrderedMask != 0;
-
-        private MetalPrivateRasterBindingPlan(
-            uint textureBase,
-            uint maximumTextureBindings,
-            uint requiredTextureBindingCount,
-            byte rasterOrderedMask)
-        {
-            TextureBase = textureBase;
-            MaximumTextureBindings = maximumTextureBindings;
-            RequiredTextureBindingCount = requiredTextureBindingCount;
-            RasterOrderedMask = rasterOrderedMask;
-        }
-
-        internal uint GetRasterOrderedTextureIndex(
-            int logicalAttachment)
-        {
-            if ((uint)logicalAttachment >=
-                RHIAttachmentIndexArray.MaxAttachments)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(logicalAttachment));
-            }
-            byte bit =
-                checked((byte)(1 << logicalAttachment));
-            if ((RasterOrderedMask & bit) == 0)
-            {
-                throw new InvalidOperationException(
-                    $"Logical attachment {logicalAttachment} is not " +
-                    "raster-ordered in this pipeline.");
-            }
-            uint index = checked(
-                TextureBase +
-                checked((uint)logicalAttachment));
-            if (index >= MaximumTextureBindings)
-            {
-                throw new InvalidOperationException(
-                    $"Metal private texture index {index} exceeds the " +
-                    $"qualified fragment texture limit " +
-                    $"{MaximumTextureBindings}.");
-            }
-            return index;
-        }
-
-        internal static MetalPrivateRasterBindingPlan Compile(
-            MetalDevice device,
-            MetalPipelineLayout pipelineLayout,
-            in RHIAttachmentInterfaceSignature attachmentInterface)
-        {
-            ArgumentNullException.ThrowIfNull(device);
-            ArgumentNullException.ThrowIfNull(pipelineLayout);
-            ValidatePipelineLayoutIdentity(
-                pipelineLayout.IsDisposed,
-                pipelineLayout.Device,
-                device);
-            if (!device.Capabilities.Binding.DescriptorIndexing.Limits
-                    .TryGetValue(
-                        ERHICapabilityLimitKind.MaximumBoundTextures,
-                        out ulong maximumTextureBindings) ||
-                maximumTextureBindings == 0 ||
-                maximumTextureBindings > uint.MaxValue)
-            {
-                throw new NotSupportedException(
-                    "The Metal device did not publish a usable " +
-                    "MaximumBoundTextures capability limit.");
-            }
-
-            return Compile(
-                pipelineLayout.BindingTableLayouts,
-                checked((uint)maximumTextureBindings),
-                in attachmentInterface);
-        }
-
-        internal static MetalPrivateRasterBindingPlan Compile(
-            ReadOnlySpan<MetalBindingTableLayout> layouts,
-            uint maximumTextureBindings,
-            in RHIAttachmentInterfaceSignature attachmentInterface)
-        {
-            if (maximumTextureBindings == 0)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(maximumTextureBindings),
-                    maximumTextureBindings,
-                    "Metal must expose at least one fragment texture binding.");
-            }
-
-            uint textureBase = GetOrdinaryTextureRangeEnd(layouts);
-            byte rasterOrderedMask =
-                attachmentInterface.RasterOrderedReadWriteMask;
-            uint requiredTextureBindingCount = textureBase;
-            if (rasterOrderedMask != 0)
-            {
-                int highestLogicalAttachment =
-                    HighestSetBit(rasterOrderedMask);
-                uint highestPrivateIndex = checked(
-                    textureBase +
-                    checked((uint)highestLogicalAttachment));
-                if (highestPrivateIndex >= maximumTextureBindings)
-                {
-                    throw new NotSupportedException(
-                        $"Metal ordinary texture bindings consume indices " +
-                        $"through {Math.Max(0, (long)textureBase - 1)}; " +
-                        $"raster-ordered logical attachment " +
-                        $"{highestLogicalAttachment} would require private " +
-                        $"index {highestPrivateIndex}, exceeding the " +
-                        $"qualified limit {maximumTextureBindings}.");
-                }
-                requiredTextureBindingCount =
-                    checked(highestPrivateIndex + 1);
-            }
-
-            return new MetalPrivateRasterBindingPlan(
-                textureBase,
-                maximumTextureBindings,
-                requiredTextureBindingCount,
-                rasterOrderedMask);
-        }
-
-        internal static uint GetOrdinaryTextureRangeEnd(
-            ReadOnlySpan<MetalBindingTableLayout> layouts)
-        {
-            uint nextIndex = 0;
-            for (int layoutIndex = 0;
-                 layoutIndex < layouts.Length;
-                 ++layoutIndex)
-            {
-                MetalBindingTableLayout layout =
-                    layouts[layoutIndex]
-                    ?? throw new ArgumentException(
-                        $"Metal pipeline layout slot {layoutIndex} is null.",
-                        nameof(layouts));
-                if (layout.IsDisposed)
-                {
-                    throw new ObjectDisposedException(
-                        $"MetalBindingTableLayout[{layout.Index}]");
-                }
-
-                ReadOnlySpan<MetalBindInfo> bindings =
-                    layout.BindInfos;
-                for (int bindingIndex = 0;
-                     bindingIndex < bindings.Length;
-                     ++bindingIndex)
-                {
-                    ref readonly MetalBindInfo binding =
-                        ref bindings[bindingIndex];
-                    if (MetalBindingTableValidation
-                            .GetDirectBindingNamespace(
-                                binding.Type) !=
-                        MetalBindingTableValidation
-                            .BindingNamespace.Texture)
-                    {
-                        continue;
-                    }
-
-                    nextIndex = Math.Max(
-                        nextIndex,
-                        checked(binding.Slot + binding.Count));
-                }
-            }
-            return nextIndex;
-        }
-
-        internal static void ValidatePipelineLayoutIdentity(
-            bool isDisposed,
-            object? actualDevice,
-            object expectedDevice)
-        {
-            ArgumentNullException.ThrowIfNull(expectedDevice);
-            if (isDisposed)
-            {
-                throw new ObjectDisposedException(
-                    nameof(MetalPipelineLayout));
-            }
-            if (!ReferenceEquals(actualDevice, expectedDevice))
-            {
-                throw new ArgumentException(
-                    "Metal pipeline layout belongs to a different device.",
-                    nameof(actualDevice));
-            }
-        }
-
-        private static int HighestSetBit(byte mask)
-        {
-            for (int bit = 7; bit >= 0; --bit)
-            {
-                if ((mask & (1 << bit)) != 0)
-                {
-                    return bit;
-                }
-            }
-            throw new ArgumentOutOfRangeException(
-                nameof(mask),
-                mask,
-                "A non-empty mask is required.");
-        }
     }
 
     internal readonly struct MetalVertexBufferBinding
@@ -3332,7 +3127,7 @@ internal readonly struct MetalRasterCapabilities
                 throw new InvalidOperationException("A raster pass is already active on this encoder.");
             }
 
-            RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+            RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
             m_RasterPassPlan = plan;
             m_CurrentSubPassIndex = 0;
             m_PipelineSubPassIndex = -1;
@@ -3512,7 +3307,7 @@ internal readonly struct MetalRasterCapabilities
         public override void NextSubPass()
         {
             ThrowIfDisposed();
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             int sourceSubPassIndex = m_CurrentSubPassIndex;
             int destinationSubPassIndex = sourceSubPassIndex + 1;
             if (destinationSubPassIndex >= plan.SubPassCount)
@@ -3826,7 +3621,7 @@ internal readonly struct MetalRasterCapabilities
             RHICommandBuffer commandBuffer = m_CommandBuffer ??
                 throw new InvalidOperationException("The raster encoder is not attached to a command buffer.");
             commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Raster);
-            RasterPassPlan plan = RequireActiveRasterPass();
+            RHIRasterPassPlan plan = RequireActiveRasterPass();
             if (m_CurrentSubPassIndex != plan.SubPassCount - 1)
             {
                 throw new InvalidOperationException(
@@ -4088,7 +3883,7 @@ internal readonly struct MetalRasterCapabilities
 
         private MTLLogicalToPhysicalColorAttachmentMap[]
             CreateColorAttachmentMaps(
-                RasterPassPlan plan,
+                RHIRasterPassPlan plan,
                 MetalRasterPassLowering lowering)
         {
             if (!lowering.RequiresColorAttachmentMapping)
@@ -4164,7 +3959,7 @@ internal readonly struct MetalRasterCapabilities
         }
 
         private void CaptureRasterOrderedBindings(
-            RasterPassPlan plan,
+            RHIRasterPassPlan plan,
             in byte rasterOrderedMask)
         {
             Array.Clear(m_RasterOrderedBindings);
@@ -4267,20 +4062,20 @@ internal readonly struct MetalRasterCapabilities
         }
 
         private static MTLMultisampleDepthResolveFilter
-            ConvertDepthResolveFilter(EResolveMode mode)
+            ConvertDepthResolveFilter(ERHIResolveMode mode)
         {
             return mode switch
             {
-                EResolveMode.Min => MTLMultisampleDepthResolveFilter.Min,
-                EResolveMode.Max => MTLMultisampleDepthResolveFilter.Max,
+                ERHIResolveMode.Min => MTLMultisampleDepthResolveFilter.Min,
+                ERHIResolveMode.Max => MTLMultisampleDepthResolveFilter.Max,
                 _ => MTLMultisampleDepthResolveFilter.Sample0,
             };
         }
 
         private static MTLMultisampleStencilResolveFilter
-            ConvertStencilResolveFilter(EResolveMode mode)
+            ConvertStencilResolveFilter(ERHIResolveMode mode)
         {
-            if (mode != EResolveMode.None && mode != EResolveMode.Sample0)
+            if (mode != ERHIResolveMode.None && mode != ERHIResolveMode.Sample0)
             {
                 throw new NotSupportedException(
                     $"Metal cannot exactly express stencil resolve mode {mode}.");
@@ -4413,4 +4208,205 @@ namespace SharpGPU
             m_IsDisposed = true;
         }
     }
+
+    #region MachineLearning
+    internal sealed class MetalMLEncoder : RHIMLEncoder
+    {
+        private MTL4MachineLearningCommandEncoder m_NativeEncoder;
+        private readonly MetalDevice m_MetalDevice;
+        private RHIMLPassDescriptor m_PassDescriptor;
+
+        public MetalMLEncoder(MetalCommandBuffer cmdBuffer)
+        {
+            m_CommandBuffer = cmdBuffer;
+            m_MetalDevice = ((MetalCommandQueue)cmdBuffer.CommandQueue).MetalDevice;
+        }
+
+        internal override void BeginPass(in RHIMLPassDescriptor descriptor)
+        {
+            if (!m_MetalDevice.SupportsMetalML)
+            {
+                throw new NotSupportedException(m_MetalDevice.MetalMLUnavailableReason ?? "Metal ML is not supported on this device.");
+            }
+
+            m_PassDescriptor = descriptor;
+            m_NativeEncoder = default;
+            m_CachedPipeline = null;
+            m_CachedBindingTable = null;
+
+            MTL4CommandBuffer mtl4CmdBuffer = ((MetalCommandBuffer)m_CommandBuffer!).EnsureMtl4CommandBuffer();
+            m_NativeEncoder = mtl4CmdBuffer.MachineLearningCommandEncoder();
+
+            if (m_NativeEncoder.NativePtr == IntPtr.Zero)
+            {
+                throw new NotSupportedException("Metal ML requires a native MTL4MachineLearningCommandEncoder.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(descriptor.Name))
+            {
+                PushDebugGroup(descriptor.Name);
+            }
+
+            if (descriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(descriptor.Timestamp.Value.BeginIndex);
+            }
+        }
+
+        public override void Barrier(in RHIBarrier barrier)
+        {
+            ReadOnlySpan<RHIBarrier> singleBarrier = MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in barrier), 1);
+            Barriers(singleBarrier);
+        }
+
+        public override void Barriers(ReadOnlySpan<RHIBarrier> barriers)
+        {
+            if (barriers.Length == 0 || m_NativeEncoder.NativePtr == IntPtr.Zero)
+            {
+                return;
+            }
+
+            MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
+            MetalBarrierHelper.MetalBarrierBatchPlan plan = MetalBarrierHelper.PlanBarriers(commandBuffer, barriers);
+            MetalBarrierHelper.ApplyPlan(m_NativeEncoder.NativePtr, plan);
+        }
+
+        public override void PushDebugGroup(string name)
+        {
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder baseEncoder = new MTL4CommandEncoder(m_NativeEncoder.NativePtr);
+                baseEncoder.PushDebugGroup(new NSString(name));
+            }
+        }
+
+        public override void PopDebugGroup()
+        {
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder baseEncoder = new MTL4CommandEncoder(m_NativeEncoder.NativePtr);
+                baseEncoder.PopDebugGroup();
+            }
+        }
+
+        public override void WriteTimestamp(in uint index)
+        {
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                MetalQuery query = m_PassDescriptor.Timestamp.Value.Query as MetalQuery
+                    ?? throw new InvalidOperationException("Metal ML timestamp pass requires a MetalQuery.");
+                query.WriteTimestamp((MetalCommandBuffer)m_CommandBuffer!, index);
+            }
+        }
+
+        public override void SetPipeline(RHIMLPipeline pipeline)
+        {
+            m_CachedPipeline = pipeline as MetalMLPipeline
+                ?? throw new InvalidOperationException($"Metal ML encoder expects {nameof(MetalMLPipeline)} but got {pipeline?.GetType().Name ?? "<null>"}.");
+            MetalMLPipeline metalPipeline = (MetalMLPipeline)m_CachedPipeline;
+            if (metalPipeline.NativePipelineState.NativePtr != IntPtr.Zero)
+            {
+                if (m_CommandBuffer?.CommandQueue is MetalCommandQueue queue)
+                {
+                    queue.AddResidencyAllocation(new MTLAllocation(metalPipeline.NativePipelineState.NativePtr));
+                }
+
+                m_NativeEncoder.SetPipelineState(metalPipeline.NativePipelineState);
+            }
+        }
+
+        public override void SetBindingTable(RHIMLBindingTable bindingTable)
+        {
+            MetalMLBindingTable metalBindingTable = bindingTable as MetalMLBindingTable
+                ?? throw new InvalidOperationException($"Metal ML encoder expects {nameof(MetalMLBindingTable)} but got {bindingTable?.GetType().Name ?? "<null>"}.");
+            m_CachedBindingTable = metalBindingTable;
+            if (metalBindingTable.NativeArgumentTable.NativePtr != IntPtr.Zero)
+            {
+                TrackBindingResidency(metalBindingTable);
+                // Native MTL4 ML API name (not RHI BindingTable).
+                m_NativeEncoder.SetArgumentTable(metalBindingTable.NativeArgumentTable);
+            }
+        }
+
+        public override void Dispatch()
+        {
+            if (m_CachedPipeline is not MetalMLPipeline)
+            {
+                throw new InvalidOperationException("Metal ML encoder requires SetPipeline before Dispatch.");
+            }
+
+            if (m_CachedBindingTable is not MetalMLBindingTable metalBindingTable)
+            {
+                throw new InvalidOperationException("Metal ML encoder requires SetBindingTable before Dispatch.");
+            }
+
+            m_NativeEncoder.DispatchNetworkWithIntermediatesHeap(metalBindingTable.NativeIntermediatesHeap);
+            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHISyncStageMask.MachineLearning));
+        }
+
+        public override void EndPass()
+        {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException("The machine-learning encoder is not attached to a command buffer.");
+            commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.MachineLearning);
+
+            if (m_PassDescriptor.Timestamp.HasValue)
+            {
+                WriteTimestamp(m_PassDescriptor.Timestamp.Value.EndIndex);
+            }
+
+            if (m_NativeEncoder.NativePtr != IntPtr.Zero)
+            {
+                MTL4CommandEncoder baseEncoder = new MTL4CommandEncoder(m_NativeEncoder.NativePtr);
+                baseEncoder.EndEncoding();
+                m_NativeEncoder = default;
+            }
+            m_CachedPipeline = null;
+            m_CachedBindingTable = null;
+            m_PassDescriptor = default;
+            commandBuffer.MarkEncoderEndFromEncoder();
+        }
+
+        protected override void Release()
+        {
+        }
+
+        private void TrackBindingResidency(MetalMLBindingTable bindingTable)
+        {
+            if (m_CommandBuffer?.CommandQueue is not MetalCommandQueue queue)
+            {
+                return;
+            }
+
+            for (int i = 0; i < bindingTable.Inputs.Length; ++i)
+            {
+                TrackTensorResidency(queue, bindingTable.Inputs[i]);
+            }
+
+            for (int i = 0; i < bindingTable.Outputs.Length; ++i)
+            {
+                TrackTensorResidency(queue, bindingTable.Outputs[i]);
+            }
+
+            if (bindingTable.NativeIntermediatesHeap.NativePtr != IntPtr.Zero)
+            {
+                queue.AddResidencyAllocation(bindingTable.NativeIntermediatesHeap);
+            }
+        }
+
+        private static void TrackTensorResidency(MetalCommandQueue queue, MetalTensor tensor)
+        {
+            if (tensor.BackingBuffer != null)
+            {
+                queue.AddResidencyAllocation(tensor.BackingBuffer.NativeBuffer);
+            }
+
+            MTLBuffer nativeBuffer = tensor.NativeTensor.Buffer;
+            if (nativeBuffer.NativePtr != IntPtr.Zero)
+            {
+                queue.AddResidencyAllocation(nativeBuffer);
+            }
+        }
+    }
+    #endregion
 }

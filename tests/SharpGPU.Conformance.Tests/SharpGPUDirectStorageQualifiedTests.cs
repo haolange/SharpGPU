@@ -71,7 +71,7 @@ public sealed class SharpGPUDirectStorageQualifiedTests
                         DestinationOffset = 0,
                     });
                     storageQueue.Submit(qualifiedContext.Fence);
-                    Assert.Equal(EFenceStatus.Success, qualifiedContext.Fence.Wait());
+                    Assert.Equal(ERHIFenceStatus.Success, qualifiedContext.Fence.Wait());
                     storageQueue.ThrowIfSubmissionFailed();
                     storageQueue.CloseFile(fileHandle);
                     fileOpened = false;
@@ -97,7 +97,7 @@ public sealed class SharpGPUDirectStorageQualifiedTests
                     qualifiedContext.CommandQueue.Submit(new RHIQueueSubmitDescriptor(
                         new RHICommandBuffer[] { commandBuffer },
                         completionFence: qualifiedContext.Fence));
-                    Assert.Equal(EFenceStatus.Success, qualifiedContext.Fence.Wait());
+                    Assert.Equal(ERHIFenceStatus.Success, qualifiedContext.Fence.Wait());
 
                     IntPtr mapped = readback.Map(0, byteCount);
                     byte[] actual = new byte[byteCount];
@@ -200,7 +200,7 @@ public sealed class SharpGPUDirectStorageQualifiedTests
                         ArraySlice = 0,
                     });
                     storageQueue.Submit(qualifiedContext.Fence);
-                    Assert.Equal(EFenceStatus.Success, qualifiedContext.Fence.Wait());
+                    Assert.Equal(ERHIFenceStatus.Success, qualifiedContext.Fence.Wait());
                     storageQueue.ThrowIfSubmissionFailed();
                     storageQueue.CloseFile(fileHandle);
                     fileOpened = false;
@@ -245,7 +245,7 @@ public sealed class SharpGPUDirectStorageQualifiedTests
                     qualifiedContext.CommandQueue.Submit(new RHIQueueSubmitDescriptor(
                         new RHICommandBuffer[] { commandBuffer },
                         completionFence: qualifiedContext.Fence));
-                    Assert.Equal(EFenceStatus.Success, qualifiedContext.Fence.Wait());
+                    Assert.Equal(ERHIFenceStatus.Success, qualifiedContext.Fence.Wait());
 
                     IntPtr mapped = readback.Map(0, rowPitch * height);
                     byte[] actualRow = new byte[tightRowBytes];

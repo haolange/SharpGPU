@@ -252,7 +252,7 @@ public sealed class Dx12WorkGraphConformanceTests
     private static void WaitForFenceOrFail(RHIFence fence, TimeSpan timeout, RHIDevice selectedDevice, SharpGPUFeatureReport[] reports)
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
-        while (fence.Status != EFenceStatus.Success)
+        while (fence.Status != ERHIFenceStatus.Success)
         {
             if (stopwatch.Elapsed >= timeout)
             {

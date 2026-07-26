@@ -55,7 +55,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
             },
         };
 
-        RasterPassPlan passPlan = RasterPassPlanner.Compile(in descriptor);
+        RHIRasterPassPlan passPlan = RHIRasterPassPlanner.Compile(in descriptor);
         Dx12RasterPassLowering lowering =
             Dx12RasterPassLowering.Compile(
                 passPlan,
@@ -125,7 +125,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
         };
         Dx12RasterPassLowering sampledFeedbackOnlyLowering =
             Dx12RasterPassLowering.Compile(
-                RasterPassPlanner.Compile(
+                RHIRasterPassPlanner.Compile(
                     in sampledFeedbackOnlyDescriptor),
                 supportsNativeRenderPass: true,
                 supportsRasterOrderedViews: true,
@@ -191,7 +191,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
                 SubPass(inputs: new[] { 0 }, outputs: new[] { 0 }),
             },
         };
-        RasterPassPlan passPlan = RasterPassPlanner.Compile(in descriptor);
+        RHIRasterPassPlan passPlan = RHIRasterPassPlanner.Compile(in descriptor);
 
         Assert.Throws<NotSupportedException>(() =>
             Dx12RasterPassLowering.Compile(
@@ -534,7 +534,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
                 SubPass(outputs: new[] { -1, 0 }),
             },
         };
-        RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+        RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
         using RHIPipelineLayout layout = CreatePipelineLayout(
             context.Device);
         using RHIFunction vertex = CompileFunction(
@@ -616,7 +616,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
                 SubPass(inputs: new[] { 0 }, outputs: new[] { 1 }),
             },
         };
-        RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+        RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
         using RHIPipelineLayout layout = CreatePipelineLayout(
             context.Device);
         using RHIFunction vertex = CompileFunction(
@@ -719,7 +719,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
                 SubPass(inputs: new[] { 0 }, outputs: new[] { 0 }),
             },
         };
-        RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+        RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
         using RHIPipelineLayout layout = CreatePipelineLayout(
             context.Device);
         using RHIFunction vertex = CompileFunction(
@@ -903,7 +903,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
                     flags: ERHISubPassFlags.ReadOnlyDepthStencil),
             },
         };
-        RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+        RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
         using RHIPipelineLayout layout = CreatePipelineLayout(
             context.Device);
         using RHIFunction vertex = CompileFunction(

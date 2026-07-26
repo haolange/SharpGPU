@@ -83,9 +83,9 @@ namespace SharpGPU
 
                 IntPtr geometryDescriptorPtr = geometry.GeometryType switch
                 {
-                    EAccelStructGeometryType.Triangle => CreateTriangleGeometryDescriptor((RHIAccelStructTriangles)geometry),
-                    EAccelStructGeometryType.AABB => CreateAabbGeometryDescriptor((RHIAccelStructAABBs)geometry),
-                    EAccelStructGeometryType.Curves => CreateCurveGeometryDescriptor((RHIAccelStructCurves)geometry),
+                    ERHIAccelStructGeometryType.Triangle => CreateTriangleGeometryDescriptor((RHIAccelStructTriangles)geometry),
+                    ERHIAccelStructGeometryType.AABB => CreateAabbGeometryDescriptor((RHIAccelStructAABBs)geometry),
+                    ERHIAccelStructGeometryType.Curves => CreateCurveGeometryDescriptor((RHIAccelStructCurves)geometry),
                     _ => throw new NotSupportedException($"Unsupported geometry type '{geometry.GeometryType}'.")
                 };
 
@@ -322,7 +322,7 @@ namespace SharpGPU
             RecreateAccelerationStructureResources(sizes.accelerationStructureSize, sizes.buildScratchBufferSize);
         }
 
-        private static unsafe MetalInstanceDescriptorRaw BuildRawInstanceDescriptor(in float4x4 transform, in EAccelStructInstanceFlag flag, in byte mask, in uint functionTableOffset, in uint accelerationStructureIndex)
+        private static unsafe MetalInstanceDescriptorRaw BuildRawInstanceDescriptor(in float4x4 transform, in ERHIAccelStructInstanceFlag flag, in byte mask, in uint functionTableOffset, in uint accelerationStructureIndex)
         {
             MetalInstanceDescriptorRaw descriptor = default;
             descriptor.Options = (uint)MetalUtility.ConvertToMetalAccelerationStructureInstanceOptions(flag);

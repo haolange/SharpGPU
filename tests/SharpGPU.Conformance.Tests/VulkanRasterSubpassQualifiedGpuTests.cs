@@ -148,8 +148,8 @@ public sealed class VulkanRasterSubpassQualifiedGpuTests
                 SubPass(inputs: new[] { 0 }, outputs: new[] { 1 }),
             },
         };
-        RasterPassPlan passPlan =
-            RasterPassPlanner.Compile(in descriptor);
+        RHIRasterPassPlan passPlan =
+            RHIRasterPassPlanner.Compile(in descriptor);
         using RHIPipelineLayout layout =
             device.CreatePipelineLayout(
                 new RHIPipelineLayoutDescriptor
@@ -510,24 +510,24 @@ public sealed class VulkanRasterSubpassQualifiedGpuTests
         }
     }
 
-    private static RHINativeSurfaceKind
+    private static ERHINativeSurfaceKind
         GetVulkanSurfaceKind()
     {
         if (OperatingSystem.IsWindows())
         {
-            return RHINativeSurfaceKind.Win32Hwnd;
+            return ERHINativeSurfaceKind.Win32Hwnd;
         }
         if (OperatingSystem.IsLinux())
         {
             return string.IsNullOrWhiteSpace(
                 Environment.GetEnvironmentVariable(
                     "WAYLAND_DISPLAY"))
-                ? RHINativeSurfaceKind.X11Window
-                : RHINativeSurfaceKind.WaylandSurface;
+                ? ERHINativeSurfaceKind.X11Window
+                : ERHINativeSurfaceKind.WaylandSurface;
         }
         if (OperatingSystem.IsAndroid())
         {
-            return RHINativeSurfaceKind.AndroidNativeWindow;
+            return ERHINativeSurfaceKind.AndroidNativeWindow;
         }
         throw new PlatformNotSupportedException();
     }

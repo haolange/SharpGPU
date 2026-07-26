@@ -1036,36 +1036,36 @@ namespace SharpGPU
             return result;
         }
 
-        internal static Vortice.Direct3D12.RaytracingGeometryFlags ConvertToDx12AccelStructGeometryFlag(in EAccelStructGeometryFlag geometryFlag)
+        internal static Vortice.Direct3D12.RaytracingGeometryFlags ConvertToDx12AccelStructGeometryFlag(in ERHIAccelStructGeometryFlag geometryFlag)
         {
-            if (geometryFlag == EAccelStructGeometryFlag.None)
+            if (geometryFlag == ERHIAccelStructGeometryFlag.None)
             {
                 return Vortice.Direct3D12.RaytracingGeometryFlags.None;
             }
 
             Vortice.Direct3D12.RaytracingGeometryFlags result = Vortice.Direct3D12.RaytracingGeometryFlags.None;
 
-            if ((geometryFlag & EAccelStructGeometryFlag.Opaque) != 0) result |= Vortice.Direct3D12.RaytracingGeometryFlags.Opaque;
-            if ((geometryFlag & EAccelStructGeometryFlag.NoDuplicateAnyhitInverseOcation) != 0) result |= Vortice.Direct3D12.RaytracingGeometryFlags.NoDuplicateAnyHitInvocation;
+            if ((geometryFlag & ERHIAccelStructGeometryFlag.Opaque) != 0) result |= Vortice.Direct3D12.RaytracingGeometryFlags.Opaque;
+            if ((geometryFlag & ERHIAccelStructGeometryFlag.NoDuplicateAnyhitInverseOcation) != 0) result |= Vortice.Direct3D12.RaytracingGeometryFlags.NoDuplicateAnyHitInvocation;
 
             return result;
         }
 
-        internal static Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags ConvertToDx12AccelStructGeometryFlag(in EAccelStructFlag buildFlag)
+        internal static Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags ConvertToDx12AccelStructGeometryFlag(in ERHIAccelStructFlag buildFlag)
         {
-            if (buildFlag == EAccelStructFlag.None)
+            if (buildFlag == ERHIAccelStructFlag.None)
             {
                 return Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.None;
             }
 
             Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags result = Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.None;
 
-            if ((buildFlag & EAccelStructFlag.AllowUpdate) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.AllowUpdate;
-            if ((buildFlag & EAccelStructFlag.PerformUpdate) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PerformUpdate;
-            if ((buildFlag & EAccelStructFlag.MinimizeMemory) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.MinimizeMemory;
-            if ((buildFlag & EAccelStructFlag.PreferFastTrace) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PreferFastTrace; 
-            if ((buildFlag & EAccelStructFlag.PreferFastBuild) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PreferFastBuild;
-            if ((buildFlag & EAccelStructFlag.AllowCompaction) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.AllowCompaction;
+            if ((buildFlag & ERHIAccelStructFlag.AllowUpdate) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.AllowUpdate;
+            if ((buildFlag & ERHIAccelStructFlag.PerformUpdate) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PerformUpdate;
+            if ((buildFlag & ERHIAccelStructFlag.MinimizeMemory) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.MinimizeMemory;
+            if ((buildFlag & ERHIAccelStructFlag.PreferFastTrace) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PreferFastTrace; 
+            if ((buildFlag & ERHIAccelStructFlag.PreferFastBuild) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PreferFastBuild;
+            if ((buildFlag & ERHIAccelStructFlag.AllowCompaction) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.AllowCompaction;
 
             return result;
         }

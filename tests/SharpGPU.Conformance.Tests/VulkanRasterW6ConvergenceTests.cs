@@ -220,7 +220,7 @@ public sealed class VulkanRasterW6ConvergenceTests
                 },
             },
         };
-        RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+        RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
         VulkanRasterCapabilities capabilities = AllRasterCapabilities();
 
         Assert.Throws<ArgumentException>(
@@ -273,7 +273,7 @@ public sealed class VulkanRasterW6ConvergenceTests
                 },
             },
         };
-        RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+        RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
         VulkanRasterCapabilities capabilities =
             new(
                 dynamicRendering: false,

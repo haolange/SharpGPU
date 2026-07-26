@@ -12,7 +12,7 @@ public sealed class VulkanRasterSubpassPlannerTests
     public void AutoPrefersExactDynamicLocalReadAndFallsBackToRenderPass2()
     {
         using TestTexture texture = CreateColorTexture();
-        RasterPassPlan plan = Compile(
+        RHIRasterPassPlan plan = Compile(
             new[] { CreateAttachment(texture) },
             CreateSubPass(outputs: new[] { 0 }),
             CreateSubPass(inputs: new[] { 0 }, outputs: new[] { 0 }));
@@ -57,7 +57,7 @@ public sealed class VulkanRasterSubpassPlannerTests
         using TestTexture first = CreateColorTexture();
         using TestTexture second = CreateColorTexture();
         using TestTexture third = CreateColorTexture();
-        RasterPassPlan plan = Compile(
+        RHIRasterPassPlan plan = Compile(
             new[]
             {
                 CreateAttachment(first),
@@ -109,7 +109,7 @@ public sealed class VulkanRasterSubpassPlannerTests
     {
         using TestTexture output = CreateColorTexture();
         using TestTexture sampled = CreateColorTexture();
-        RasterPassPlan plan = Compile(
+        RHIRasterPassPlan plan = Compile(
             new[]
             {
                 CreateAttachment(output),
@@ -167,7 +167,7 @@ public sealed class VulkanRasterSubpassPlannerTests
                 in noLoweringRoute));
     }
 
-    private static RasterPassPlan Compile(
+    private static RHIRasterPassPlan Compile(
         RHIColorAttachmentDescriptor[] attachments,
         params RHISubPassDescriptor[] subPasses)
     {
@@ -176,7 +176,7 @@ public sealed class VulkanRasterSubpassPlannerTests
             ColorAttachments = attachments,
             SubPassDescriptors = subPasses,
         };
-        return RasterPassPlanner.Compile(in descriptor);
+        return RHIRasterPassPlanner.Compile(in descriptor);
     }
 
     private static RHIColorAttachmentDescriptor CreateAttachment(

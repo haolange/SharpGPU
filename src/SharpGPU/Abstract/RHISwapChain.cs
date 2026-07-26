@@ -17,7 +17,7 @@ namespace SharpGPU
         DeviceLost
     }
 
-    public enum RHINativeSurfaceKind : byte
+    public enum ERHINativeSurfaceKind : byte
     {
         Unknown = 0,
         Win32Hwnd,
@@ -35,7 +35,7 @@ namespace SharpGPU
         public uint FPS;
         public uint Count;
         public uint2 Extent;
-        public RHINativeSurfaceKind SurfaceKind;
+        public ERHINativeSurfaceKind SurfaceKind;
         public IntPtr WindowHandle;
         public IntPtr DisplayHandle;
         public IntPtr InstanceHandle;
@@ -79,7 +79,7 @@ namespace SharpGPU
     public readonly struct RHISwapChainResizeDescriptor
     {
         public uint2 Extent { get; }
-        public RHINativeSurfaceKind SurfaceKind { get; }
+        public ERHINativeSurfaceKind SurfaceKind { get; }
         public IntPtr WindowHandle { get; }
         public IntPtr DisplayHandle { get; }
         public IntPtr InstanceHandle { get; }
@@ -87,14 +87,14 @@ namespace SharpGPU
 
         public RHISwapChainResizeDescriptor(
             in uint2 extent,
-            RHINativeSurfaceKind surfaceKind,
+            ERHINativeSurfaceKind surfaceKind,
             IntPtr windowHandle,
             IntPtr displayHandle = default,
             IntPtr instanceHandle = default,
             uint surfaceGeneration = 0)
         {
             if (!Enum.IsDefined(surfaceKind) ||
-                surfaceKind == RHINativeSurfaceKind.Unknown)
+                surfaceKind == ERHINativeSurfaceKind.Unknown)
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(surfaceKind),

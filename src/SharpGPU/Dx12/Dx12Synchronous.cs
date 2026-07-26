@@ -15,19 +15,19 @@ namespace SharpGPU
                 return m_NativeFence;
             }
         }
-        public override EFenceStatus Status
+        public override ERHIFenceStatus Status
         {
             get
             {
                 ThrowIfSynchronizationDisposed();
                 if (IsSignalKnownComplete)
                 {
-                    return EFenceStatus.Success;
+                    return ERHIFenceStatus.Success;
                 }
 
                 if (!IsSignalPending)
                 {
-                    return EFenceStatus.NotReady;
+                    return ERHIFenceStatus.NotReady;
                 }
 
                 ulong targetValue = (ulong)Volatile.Read(ref m_LastSignaledValue);
@@ -37,7 +37,7 @@ namespace SharpGPU
                     MarkSignaled();
                 }
 
-                return complete ? EFenceStatus.Success : EFenceStatus.NotReady;
+                return complete ? ERHIFenceStatus.Success : ERHIFenceStatus.NotReady;
             }
         }
 
@@ -79,12 +79,12 @@ namespace SharpGPU
             CompleteReset();
         }
 
-        public override EFenceStatus Wait(ulong timeoutNanoseconds = ulong.MaxValue)
+        public override ERHIFenceStatus Wait(ulong timeoutNanoseconds = ulong.MaxValue)
         {
             EnsureWaitable();
             if (IsSignalKnownComplete)
             {
-                return EFenceStatus.Success;
+                return ERHIFenceStatus.Success;
             }
 
             ulong targetValue = (ulong)Volatile.Read(ref m_LastSignaledValue);
@@ -96,7 +96,7 @@ namespace SharpGPU
             if (m_NativeFence.CompletedValue >= targetValue)
             {
                 MarkSignaled();
-                return EFenceStatus.Success;
+                return ERHIFenceStatus.Success;
             }
 
             IntPtr eventPtr = m_FenceEvent.SafeWaitHandle.DangerousGetHandle();
@@ -122,11 +122,11 @@ namespace SharpGPU
 
             if (!completed && m_NativeFence.CompletedValue < targetValue)
             {
-                return EFenceStatus.NotReady;
+                return ERHIFenceStatus.NotReady;
             }
 
             MarkSignaled();
-            return EFenceStatus.Success;
+            return ERHIFenceStatus.Success;
         }
 
         internal ulong PrepareSignalValue()

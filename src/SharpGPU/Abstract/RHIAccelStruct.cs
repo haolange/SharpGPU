@@ -6,7 +6,7 @@ using System;
 
 namespace SharpGPU
 {
-    public enum EAccelStructFlag
+    public enum ERHIAccelStructFlag
     {
         None = 0,
         AllowUpdate = 0x1,
@@ -17,14 +17,14 @@ namespace SharpGPU
         AllowCompaction = 0x20
     }
 
-    public enum EAccelStructGeometryFlag
+    public enum ERHIAccelStructGeometryFlag
     {
         None = 0,
         Opaque = 0x1,
         NoDuplicateAnyhitInverseOcation = 0x2
     }
 
-    public enum EAccelStructInstanceFlag
+    public enum ERHIAccelStructInstanceFlag
     {
         None = 0,
         ForceOpaque = 0x4,
@@ -33,20 +33,20 @@ namespace SharpGPU
         TriangleFrontCounterclockwise = 0x2
     }
 
-    public enum EAccelStructGeometryType : byte
+    public enum ERHIAccelStructGeometryType : byte
     {
         AABB,
         Curves,
         Triangle
     }
 
-    public enum EAccelStructCurveType : byte
+    public enum ERHIAccelStructCurveType : byte
     {
         Round = 0,
         Flat = 1
     }
 
-    public enum EAccelStructCurveBasis : byte
+    public enum ERHIAccelStructCurveBasis : byte
     {
         BSpline = 0,
         CatmullRom = 1,
@@ -54,7 +54,7 @@ namespace SharpGPU
         Bezier = 3
     }
 
-    public enum EAccelStructCurveEndCaps : byte
+    public enum ERHIAccelStructCurveEndCaps : byte
     {
         None = 0,
         Disk = 1,
@@ -63,8 +63,8 @@ namespace SharpGPU
 
     public class RHIAccelStructGeometry
     {
-        public EAccelStructGeometryType GeometryType;
-        public EAccelStructGeometryFlag GeometryFlag;
+        public ERHIAccelStructGeometryType GeometryType;
+        public ERHIAccelStructGeometryFlag GeometryFlag;
         public uint FunctionTableOffset;
     }
 
@@ -95,9 +95,9 @@ namespace SharpGPU
 
         public uint SegmentCount;
         public uint SegmentControlPointCount;
-        public EAccelStructCurveType CurveType;
-        public EAccelStructCurveBasis CurveBasis;
-        public EAccelStructCurveEndCaps CurveEndCaps;
+        public ERHIAccelStructCurveType CurveType;
+        public ERHIAccelStructCurveBasis CurveBasis;
+        public ERHIAccelStructCurveEndCaps CurveEndCaps;
     }
 
     public class RHIAccelStructTriangles : RHIAccelStructGeometry
@@ -120,7 +120,7 @@ namespace SharpGPU
         public byte InstanceMask;
         public uint HitGroupIndex;
         public float4x4 TransformMatrix;
-        public EAccelStructInstanceFlag Flag;
+        public ERHIAccelStructInstanceFlag Flag;
         public RHIBottomLevelAccelStruct BottomLevelAccelStruct;
     }
 
@@ -128,7 +128,7 @@ namespace SharpGPU
     public struct RHITopLevelAccelStructDescriptor
     {
         public uint Offset;
-        public EAccelStructFlag Flag;
+        public ERHIAccelStructFlag Flag;
         public Memory<RHIAccelStructInstance> Instances;
     }
 

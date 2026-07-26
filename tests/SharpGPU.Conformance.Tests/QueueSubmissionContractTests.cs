@@ -53,7 +53,7 @@ public sealed class QueueSubmissionContractTests
         using FakeFence fence = new FakeFence(owner);
         RHIQueueSubmitDescriptor submit = new RHIQueueSubmitDescriptor(completionFence: fence);
 
-        Assert.Equal(EFenceStatus.NotReady, fence.Status);
+        Assert.Equal(ERHIFenceStatus.NotReady, fence.Status);
         Assert.Throws<InvalidOperationException>(() => fence.Wait());
         fence.Reset();
 
@@ -62,9 +62,9 @@ public sealed class QueueSubmissionContractTests
         Assert.Throws<InvalidOperationException>(() => queue.Submit(in submit));
 
         fence.Wait();
-        Assert.Equal(EFenceStatus.Success, fence.Status);
+        Assert.Equal(ERHIFenceStatus.Success, fence.Status);
         fence.Reset();
-        Assert.Equal(EFenceStatus.NotReady, fence.Status);
+        Assert.Equal(ERHIFenceStatus.NotReady, fence.Status);
 
         queue.Submit(in submit);
     }
@@ -236,8 +236,8 @@ public sealed class QueueSubmissionContractTests
         {
         }
 
-        public override EFenceStatus Status =>
-            IsSignalKnownComplete ? EFenceStatus.Success : EFenceStatus.NotReady;
+        public override ERHIFenceStatus Status =>
+            IsSignalKnownComplete ? ERHIFenceStatus.Success : ERHIFenceStatus.NotReady;
 
         public override void Reset()
         {
@@ -247,11 +247,11 @@ public sealed class QueueSubmissionContractTests
             }
         }
 
-        public override EFenceStatus Wait(ulong timeoutNanoseconds = ulong.MaxValue)
+        public override ERHIFenceStatus Wait(ulong timeoutNanoseconds = ulong.MaxValue)
         {
             EnsureWaitable();
             MarkSignaled();
-            return EFenceStatus.Success;
+            return ERHIFenceStatus.Success;
         }
     }
 

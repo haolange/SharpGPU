@@ -245,7 +245,7 @@ public sealed class SharpGpuMemoryGpuTests
             new RHIHeap[] { heap },
             fence);
         device.RequestResidency(evict);
-        Assert.Equal(EFenceStatus.Success, fence.Wait(10_000_000_000));
+        Assert.Equal(ERHIFenceStatus.Success, fence.Wait(10_000_000_000));
         fence.Reset();
 
         RHIResidencyRequestDescriptor makeResident = new(
@@ -255,7 +255,7 @@ public sealed class SharpGpuMemoryGpuTests
         device.RequestResidency(makeResident);
         Assert.Throws<InvalidOperationException>(
             () => device.RequestResidency(makeResident));
-        Assert.Equal(EFenceStatus.Success, fence.Wait(10_000_000_000));
+        Assert.Equal(ERHIFenceStatus.Success, fence.Wait(10_000_000_000));
         fence.Reset();
     }
 #endif
@@ -354,7 +354,7 @@ public sealed class SharpGpuMemoryGpuTests
             signalSemaphores: new RHISemaphore[] { semaphore },
             completionFence: fence);
         queue.BindSparse(bind);
-        Assert.Equal(EFenceStatus.Success, fence.Wait(10_000_000_000));
+        Assert.Equal(ERHIFenceStatus.Success, fence.Wait(10_000_000_000));
         fence.Reset();
 
         RHISparseTextureTileBinding[] unbindTiles =
@@ -383,7 +383,7 @@ public sealed class SharpGpuMemoryGpuTests
             waitSemaphores: new RHISemaphore[] { semaphore },
             completionFence: fence);
         queue.BindSparse(unbind);
-        Assert.Equal(EFenceStatus.Success, fence.Wait(10_000_000_000));
+        Assert.Equal(ERHIFenceStatus.Success, fence.Wait(10_000_000_000));
         fence.Reset();
     }
 
@@ -437,23 +437,23 @@ public sealed class SharpGpuMemoryGpuTests
                    "Vulkan did not expose a graphics queue.");
     }
 
-    private static RHINativeSurfaceKind GetVulkanSurfaceKind()
+    private static ERHINativeSurfaceKind GetVulkanSurfaceKind()
     {
         if (OperatingSystem.IsWindows())
         {
-            return RHINativeSurfaceKind.Win32Hwnd;
+            return ERHINativeSurfaceKind.Win32Hwnd;
         }
         if (OperatingSystem.IsLinux())
         {
             return string.IsNullOrWhiteSpace(
                     Environment.GetEnvironmentVariable(
                         "WAYLAND_DISPLAY"))
-                ? RHINativeSurfaceKind.X11Window
-                : RHINativeSurfaceKind.WaylandSurface;
+                ? ERHINativeSurfaceKind.X11Window
+                : ERHINativeSurfaceKind.WaylandSurface;
         }
         if (OperatingSystem.IsAndroid())
         {
-            return RHINativeSurfaceKind.AndroidNativeWindow;
+            return ERHINativeSurfaceKind.AndroidNativeWindow;
         }
         throw new PlatformNotSupportedException();
     }

@@ -21,7 +21,7 @@ public sealed class MetalRasterSubpassLoweringTests
         using TestTexture input = CreateColorTexture();
         using TestTexture unused = CreateColorTexture();
         using TestTexture output = CreateColorTexture();
-        RasterPassPlan plan = Compile(
+        RHIRasterPassPlan plan = Compile(
             new[]
             {
                 CreateAttachment(input),
@@ -58,7 +58,7 @@ public sealed class MetalRasterSubpassLoweringTests
     {
         using TestTexture input = CreateColorTexture();
         using TestTexture output = CreateColorTexture();
-        RasterPassPlan plan = Compile(
+        RHIRasterPassPlan plan = Compile(
             new[]
             {
                 CreateAttachment(input),
@@ -85,7 +85,7 @@ public sealed class MetalRasterSubpassLoweringTests
     {
         using TestTexture input = CreateColorTexture();
         using TestTexture output = CreateColorTexture();
-        RasterPassPlan localRead = Compile(
+        RHIRasterPassPlan localRead = Compile(
             new[]
             {
                 CreateAttachment(input),
@@ -104,7 +104,7 @@ public sealed class MetalRasterSubpassLoweringTests
                 localRead,
                 in noLocalRead));
 
-        RasterPassPlan outputMapping = Compile(
+        RHIRasterPassPlan outputMapping = Compile(
             new[]
             {
                 CreateAttachment(input),
@@ -129,7 +129,7 @@ public sealed class MetalRasterSubpassLoweringTests
         using TestTexture ordered = CreateColorTexture(
             ERHITextureUsage.RenderTarget |
             ERHITextureUsage.RasterizerOrdered);
-        RasterPassPlan plan = Compile(
+        RHIRasterPassPlan plan = Compile(
             new[]
             {
                 CreateAttachment(
@@ -164,7 +164,7 @@ public sealed class MetalRasterSubpassLoweringTests
     {
         using TestTexture input = CreateColorTexture();
         using TestTexture output = CreateColorTexture();
-        RasterPassPlan plan = Compile(
+        RHIRasterPassPlan plan = Compile(
             new[]
             {
                 CreateAttachment(input),
@@ -232,7 +232,7 @@ public sealed class MetalRasterSubpassLoweringTests
     {
         using TestTexture input = CreateColorTexture();
         using TestTexture output = CreateColorTexture();
-        RasterPassPlan plan = Compile(
+        RHIRasterPassPlan plan = Compile(
             new[]
             {
                 CreateAttachment(input),
@@ -299,7 +299,7 @@ public sealed class MetalRasterSubpassLoweringTests
             "barrier emission");
     }
 
-    private static RasterPassPlan Compile(
+    private static RHIRasterPassPlan Compile(
         RHIColorAttachmentDescriptor[] attachments,
         params RHISubPassDescriptor[] subPasses)
     {
@@ -309,7 +309,7 @@ public sealed class MetalRasterSubpassLoweringTests
                 ColorAttachments = attachments,
                 SubPassDescriptors = subPasses,
             };
-        return RasterPassPlanner.Compile(in descriptor);
+        return RHIRasterPassPlanner.Compile(in descriptor);
     }
 
     private static RHIColorAttachmentDescriptor CreateAttachment(

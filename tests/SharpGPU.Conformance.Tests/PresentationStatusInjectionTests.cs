@@ -209,7 +209,7 @@ namespace SharpGPU.Conformance.Tests
             uint2 extent = new(1280, 720);
             return new RHISwapChainResizeDescriptor(
                 extent,
-                RHINativeSurfaceKind.Headless,
+                ERHINativeSurfaceKind.Headless,
                 new IntPtr(1),
                 surfaceGeneration: 1);
         }
@@ -373,14 +373,14 @@ namespace SharpGPU.Conformance.Tests
             {
             }
 
-            public override EFenceStatus Status
+            public override ERHIFenceStatus Status
             {
                 get
                 {
                     ThrowIfSynchronizationDisposed();
                     return IsSignalKnownComplete
-                        ? EFenceStatus.Success
-                        : EFenceStatus.NotReady;
+                        ? ERHIFenceStatus.Success
+                        : ERHIFenceStatus.NotReady;
                 }
             }
 
@@ -393,12 +393,12 @@ namespace SharpGPU.Conformance.Tests
                 CompleteReset();
             }
 
-            public override EFenceStatus Wait(
+            public override ERHIFenceStatus Wait(
                 ulong timeoutNanoseconds = ulong.MaxValue)
             {
                 EnsureWaitable();
                 MarkSignaled();
-                return EFenceStatus.Success;
+                return ERHIFenceStatus.Success;
             }
         }
 

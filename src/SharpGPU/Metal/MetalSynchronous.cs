@@ -28,19 +28,19 @@ namespace SharpGPU
             m_TargetValue = 0;
         }
 
-        public override EFenceStatus Status
+        public override ERHIFenceStatus Status
         {
             get
             {
                 ThrowIfSynchronizationDisposed();
                 if (IsSignalKnownComplete)
                 {
-                    return EFenceStatus.Success;
+                    return ERHIFenceStatus.Success;
                 }
 
                 if (!IsSignalPending)
                 {
-                    return EFenceStatus.NotReady;
+                    return ERHIFenceStatus.NotReady;
                 }
 
                 ulong targetValue = (ulong)Volatile.Read(ref m_TargetValue);
@@ -50,7 +50,7 @@ namespace SharpGPU
                     MarkSignaled();
                 }
 
-                return complete ? EFenceStatus.Success : EFenceStatus.NotReady;
+                return complete ? ERHIFenceStatus.Success : ERHIFenceStatus.NotReady;
             }
         }
 
@@ -69,12 +69,12 @@ namespace SharpGPU
             CompleteReset();
         }
 
-        public override EFenceStatus Wait(ulong timeoutNanoseconds = ulong.MaxValue)
+        public override ERHIFenceStatus Wait(ulong timeoutNanoseconds = ulong.MaxValue)
         {
             EnsureWaitable();
             if (IsSignalKnownComplete)
             {
-                return EFenceStatus.Success;
+                return ERHIFenceStatus.Success;
             }
 
             ulong targetValue = (ulong)Volatile.Read(ref m_TargetValue);
@@ -100,11 +100,11 @@ namespace SharpGPU
             m_NativeEvent.WaitUntilSignaledValue(targetValue, timeoutMilliseconds);
             if (m_NativeEvent.SignaledValue < targetValue)
             {
-                return EFenceStatus.NotReady;
+                return ERHIFenceStatus.NotReady;
             }
 
             MarkSignaled();
-            return EFenceStatus.Success;
+            return ERHIFenceStatus.Success;
         }
 
         internal ulong PrepareSignalValue()

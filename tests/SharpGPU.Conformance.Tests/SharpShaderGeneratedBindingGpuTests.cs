@@ -142,7 +142,7 @@ namespace SharpGPU.Conformance.Tests
                     SurfaceKind =
                         backend == ERHIBackend.Vulkan
                             ? GetVulkanSurfaceKind()
-                            : RHINativeSurfaceKind.Headless,
+                            : ERHINativeSurfaceKind.Headless,
                     EnableDebugLayer = backend == ERHIBackend.DirectX12,
                     EnableValidation = backend == ERHIBackend.Vulkan,
                     GraphicsQueueRequestCount = 1,
@@ -493,11 +493,11 @@ namespace SharpGPU.Conformance.Tests
             }
         }
 
-        private static RHINativeSurfaceKind GetVulkanSurfaceKind()
+        private static ERHINativeSurfaceKind GetVulkanSurfaceKind()
         {
             if (OperatingSystem.IsWindows())
             {
-                return RHINativeSurfaceKind.Win32Hwnd;
+                return ERHINativeSurfaceKind.Win32Hwnd;
             }
 
             if (OperatingSystem.IsLinux())
@@ -505,23 +505,23 @@ namespace SharpGPU.Conformance.Tests
                 return string.IsNullOrWhiteSpace(
                         Environment.GetEnvironmentVariable(
                             "WAYLAND_DISPLAY"))
-                    ? RHINativeSurfaceKind.X11Window
-                    : RHINativeSurfaceKind.WaylandSurface;
+                    ? ERHINativeSurfaceKind.X11Window
+                    : ERHINativeSurfaceKind.WaylandSurface;
             }
 
             if (OperatingSystem.IsMacOS())
             {
-                return RHINativeSurfaceKind.AppKitNsWindow;
+                return ERHINativeSurfaceKind.AppKitNsWindow;
             }
 
             if (OperatingSystem.IsIOS())
             {
-                return RHINativeSurfaceKind.UIKitUiWindow;
+                return ERHINativeSurfaceKind.UIKitUiWindow;
             }
 
             if (OperatingSystem.IsAndroid())
             {
-                return RHINativeSurfaceKind.AndroidNativeWindow;
+                return ERHINativeSurfaceKind.AndroidNativeWindow;
             }
 
             throw new PlatformNotSupportedException(

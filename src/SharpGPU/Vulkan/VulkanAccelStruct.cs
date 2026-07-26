@@ -198,22 +198,22 @@ namespace SharpGPU
             return VulkanNative.vkGetAccelerationStructureDeviceAddressKHR(m_VulkanDevice.NativeDevice, &addressInfo);
         }
 
-        private static VkGeometryInstanceFlagsKHR ConvertToVkGeometryInstanceFlags(EAccelStructInstanceFlag flag)
+        private static VkGeometryInstanceFlagsKHR ConvertToVkGeometryInstanceFlags(ERHIAccelStructInstanceFlag flag)
         {
             VkGeometryInstanceFlagsKHR result = 0;
-            if ((flag & EAccelStructInstanceFlag.TriangleCullDisable) != 0)
+            if ((flag & ERHIAccelStructInstanceFlag.TriangleCullDisable) != 0)
             {
                 result |= VkGeometryInstanceFlagsKHR.TriangleFacingCullDisable;
             }
-            if ((flag & EAccelStructInstanceFlag.TriangleFrontCounterclockwise) != 0)
+            if ((flag & ERHIAccelStructInstanceFlag.TriangleFrontCounterclockwise) != 0)
             {
                 result |= VkGeometryInstanceFlagsKHR.TriangleFrontCounterclockwise;
             }
-            if ((flag & EAccelStructInstanceFlag.ForceOpaque) != 0)
+            if ((flag & ERHIAccelStructInstanceFlag.ForceOpaque) != 0)
             {
                 result |= VkGeometryInstanceFlagsKHR.ForceOpaque;
             }
-            if ((flag & EAccelStructInstanceFlag.ForceNonOpaque) != 0)
+            if ((flag & ERHIAccelStructInstanceFlag.ForceNonOpaque) != 0)
             {
                 result |= VkGeometryInstanceFlagsKHR.ForceNoOpaque;
             }
@@ -274,7 +274,7 @@ namespace SharpGPU
             {
                 RHIAccelStructGeometry geom = descriptor.Geometries[i];
 
-                if (geom.GeometryType == EAccelStructGeometryType.Triangle)
+                if (geom.GeometryType == ERHIAccelStructGeometryType.Triangle)
                 {
                     RHIAccelStructTriangles triangleGeometry = (RHIAccelStructTriangles)geom;
                     VulkanBuffer vertexBuffer = triangleGeometry.VertexBuffer as VulkanBuffer
@@ -290,7 +290,7 @@ namespace SharpGPU
                     {
                         sType = VkStructureType.AccelerationStructureGeometryKHR,
                         geometryType = VkGeometryTypeKHR.Triangles,
-                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
+                        flags = (geom.GeometryFlag & ERHIAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
                     };
                     geometries[i].geometry.triangles.sType = VkStructureType.AccelerationStructureGeometryTrianglesDataKHR;
                     geometries[i].geometry.triangles.vertexFormat = VulkanUtility.ConvertToVkAccelerationStructureVertexFormat(triangleGeometry.VertexFormat);
@@ -320,7 +320,7 @@ namespace SharpGPU
                         maxPrimitiveCounts[i] = triangleGeometry.VertexCount / 3;
                     }
                 }
-                else if (geom.GeometryType == EAccelStructGeometryType.AABB)
+                else if (geom.GeometryType == ERHIAccelStructGeometryType.AABB)
                 {
                     RHIAccelStructAABBs aabbGeometry = (RHIAccelStructAABBs)geom;
                     VulkanBuffer aabbBuffer = aabbGeometry.AABBBuffer as VulkanBuffer
@@ -336,14 +336,14 @@ namespace SharpGPU
                     {
                         sType = VkStructureType.AccelerationStructureGeometryKHR,
                         geometryType = VkGeometryTypeKHR.Aabbs,
-                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
+                        flags = (geom.GeometryFlag & ERHIAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
                     };
                     geometries[i].geometry.aabbs.sType = VkStructureType.AccelerationStructureGeometryAabbsDataKHR;
                     geometries[i].geometry.aabbs.data.deviceAddress = aabbAddress + aabbGeometry.Offset;
                     geometries[i].geometry.aabbs.stride = aabbGeometry.Stride;
                     maxPrimitiveCounts[i] = aabbGeometry.Count;
                 }
-                else if (geom.GeometryType == EAccelStructGeometryType.Curves)
+                else if (geom.GeometryType == ERHIAccelStructGeometryType.Curves)
                 {
                     RHIAccelStructCurves curveGeometry = geom as RHIAccelStructCurves
                         ?? throw new InvalidOperationException("Curve geometry descriptor type mismatch.");
@@ -434,7 +434,7 @@ namespace SharpGPU
                     {
                         sType = VkStructureType.AccelerationStructureGeometryKHR,
                         geometryType = VkGeometryTypeKHR.Aabbs,
-                        flags = (geom.GeometryFlag & EAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
+                        flags = (geom.GeometryFlag & ERHIAccelStructGeometryFlag.Opaque) != 0 ? VkGeometryFlagsKHR.Opaque : 0,
                     };
                     geometries[i].geometry.aabbs.sType = VkStructureType.AccelerationStructureGeometryAabbsDataKHR;
                     geometries[i].geometry.aabbs.data.deviceAddress = curveAabbAddress;

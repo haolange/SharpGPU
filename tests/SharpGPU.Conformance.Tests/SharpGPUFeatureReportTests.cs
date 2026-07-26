@@ -46,7 +46,7 @@ public sealed class SharpGPUFeatureReportTests
                 using RHIInstance instance = RHIInstance.Create(new RHIInstanceDescriptor
                 {
                     Backend = backend,
-                    SurfaceKind = RHINativeSurfaceKind.Headless,
+                    SurfaceKind = ERHINativeSurfaceKind.Headless,
                     EnableDebugLayer = false,
                     EnableValidation = false,
                     ComputeQueueRequestCount = 0,

@@ -557,8 +557,8 @@ namespace SharpGPU
                 return TerminalOperationResult();
             }
             if (descriptor.SurfaceKind is not
-                    (RHINativeSurfaceKind.AppKitNsWindow or
-                     RHINativeSurfaceKind.UIKitUiWindow) ||
+                    (ERHINativeSurfaceKind.AppKitNsWindow or
+                     ERHINativeSurfaceKind.UIKitUiWindow) ||
                 descriptor.WindowHandle == IntPtr.Zero)
             {
                 return EnterSurfaceLost(
@@ -697,8 +697,8 @@ namespace SharpGPU
             in RHISwapChainDescriptor descriptor)
         {
             if (descriptor.SurfaceKind is not
-                (RHINativeSurfaceKind.AppKitNsWindow or
-                 RHINativeSurfaceKind.UIKitUiWindow))
+                (ERHINativeSurfaceKind.AppKitNsWindow or
+                 ERHINativeSurfaceKind.UIKitUiWindow))
             {
                 throw new NotSupportedException(
                     "Metal swapchains require an AppKit or UIKit surface.");

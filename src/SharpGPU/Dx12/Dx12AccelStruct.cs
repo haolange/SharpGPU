@@ -227,7 +227,7 @@ namespace SharpGPU
 
                 switch (asGeometry.GeometryType)
                 {
-                    case EAccelStructGeometryType.AABB:
+                    case ERHIAccelStructGeometryType.AABB:
                         if (asGeometry is not RHIAccelStructAABBs aabbGeometry)
                         {
                             throw new ArgumentException("DX12 AABB geometry descriptor has an unexpected type.", nameof(descriptor));
@@ -243,7 +243,7 @@ namespace SharpGPU
                         nativeAABBGeometry.AABBs.StrideInBytes = aabbGeometry.Stride;
                         break;
 
-                    case EAccelStructGeometryType.Triangle:
+                    case ERHIAccelStructGeometryType.Triangle:
                         if (asGeometry is not RHIAccelStructTriangles triangleGeometry)
                         {
                             throw new ArgumentException("DX12 triangle geometry descriptor has an unexpected type.", nameof(descriptor));
@@ -271,7 +271,7 @@ namespace SharpGPU
                         nativeTriangleGeometry.VertexFormat = vertexFormat;
                         break;
 
-                    case EAccelStructGeometryType.Curves:
+                    case ERHIAccelStructGeometryType.Curves:
                         if (asGeometry is not RHIAccelStructCurves curveGeometry)
                         {
                             throw new ArgumentException("DX12 curve geometry descriptor has an unexpected type.", nameof(descriptor));

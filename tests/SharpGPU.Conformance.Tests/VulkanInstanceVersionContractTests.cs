@@ -42,16 +42,16 @@ public sealed class VulkanInstanceVersionContractTests
     {
         Assert.False(
             VulkanInstance.RequiresSwapchainDeviceExtension(
-                RHINativeSurfaceKind.Headless));
+                ERHINativeSurfaceKind.Headless));
         Assert.True(
             VulkanInstance.RequiresSwapchainDeviceExtension(
-                RHINativeSurfaceKind.Win32Hwnd));
+                ERHINativeSurfaceKind.Win32Hwnd));
         Assert.True(
             VulkanInstance.RequiresSwapchainDeviceExtension(
-                RHINativeSurfaceKind.X11Window));
+                ERHINativeSurfaceKind.X11Window));
         Assert.True(
             VulkanInstance.RequiresSwapchainDeviceExtension(
-                RHINativeSurfaceKind.AndroidNativeWindow));
+                ERHINativeSurfaceKind.AndroidNativeWindow));
     }
 
     [Fact]

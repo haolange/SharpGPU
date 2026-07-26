@@ -26,7 +26,7 @@ public sealed class VulkanSampledFeedbackCloneQualifiedGpuTests
             new RHIInstanceDescriptor
             {
                 Backend = ERHIBackend.Vulkan,
-                SurfaceKind = RHINativeSurfaceKind.Headless,
+                SurfaceKind = ERHINativeSurfaceKind.Headless,
                 EnableDebugLayer = true,
                 EnableValidation = true,
                 GraphicsQueueRequestCount = 1,

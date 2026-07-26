@@ -455,10 +455,8 @@ namespace SharpGPU
         }
 
     }
-}
 
-namespace SharpGPU
-{
+    #region SparseMemory
     public enum ERHISparseBindingOperation : byte
     {
         Bind,
@@ -885,4 +883,5 @@ namespace SharpGPU
             CompletionFence = completionFence;
         }
     }
+    #endregion
 }

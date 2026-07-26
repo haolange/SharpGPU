@@ -106,7 +106,7 @@ public sealed class VulkanRasterExactFeedbackTests
                 },
             },
         };
-        RasterPassPlan plan = RasterPassPlanner.Compile(in descriptor);
+        RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
         VulkanRasterCapabilities exact = Capabilities(
             feedback: true,
             interlock: true,

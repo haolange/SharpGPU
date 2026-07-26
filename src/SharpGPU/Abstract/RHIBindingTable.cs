@@ -43,8 +43,6 @@ namespace SharpGPU
 
     public struct RHIBindingTableElement
     {
-        //public int Slot;
-        //public ERHIBindType BindType;
         public RHISampler Sampler;
         public RHIBufferView BufferView;
         public RHITextureView TextureView;
