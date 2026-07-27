@@ -1,4 +1,4 @@
-// Copyright (c) CGBull. All rights reserved.
+﻿// Copyright (c) CGBull. All rights reserved.
 
 using System;
 using System.Diagnostics.CodeAnalysis;
@@ -31,7 +31,7 @@ public sealed class MetalMLStabilityProbeTests
 
         Assert.True(
             TryCreatePipelineFromFixture(context, "probe_add_single.mtlmlbin", "Probe.Add.Pipeline", out RHIMLPipeline? pipeline),
-            "Missing Metal ML fixture probe_add_single.mtlmlbin (NeuralCook CoreML→mtlmlbin).");
+            "Missing Metal ML fixture probe_add_single.mtlmlbin (SharpGPU.MLCook CoreML鈫抦tlmlbin).");
 
         using (pipeline)
         {
@@ -60,7 +60,7 @@ public sealed class MetalMLStabilityProbeTests
 
         Assert.True(
             TryCreatePipelineFromFixture(context, "probe_add_multi.mtlmlbin", "Probe.Add.MultiDispatch", out RHIMLPipeline? pipeline),
-            "Missing Metal ML fixture probe_add_multi.mtlmlbin (NeuralCook CoreML→mtlmlbin).");
+            "Missing Metal ML fixture probe_add_multi.mtlmlbin (SharpGPU.MLCook CoreML鈫抦tlmlbin).");
 
         using (pipeline)
         {
@@ -96,7 +96,7 @@ public sealed class MetalMLStabilityProbeTests
 
         Assert.True(
             TryCreatePipelineFromFixture(context, "probe_gemm_single.mtlmlbin", "Probe.Gemm.Pipeline", out RHIMLPipeline? pipeline),
-            "Missing Metal ML fixture probe_gemm_single.mtlmlbin (NeuralCook CoreML→mtlmlbin).");
+            "Missing Metal ML fixture probe_gemm_single.mtlmlbin (SharpGPU.MLCook CoreML鈫抦tlmlbin).");
 
         using (pipeline)
         {
@@ -130,7 +130,7 @@ public sealed class MetalMLStabilityProbeTests
 
         Assert.True(
             TryCreatePipelineFromFixture(context, "probe_gemm_multi.mtlmlbin", "Probe.Gemm.MultiDispatch", out RHIMLPipeline? pipeline),
-            "Missing Metal ML fixture probe_gemm_multi.mtlmlbin (NeuralCook CoreML→mtlmlbin).");
+            "Missing Metal ML fixture probe_gemm_multi.mtlmlbin (SharpGPU.MLCook CoreML鈫抦tlmlbin).");
 
         using (pipeline)
         {
@@ -185,8 +185,8 @@ public sealed class MetalMLStabilityProbeTests
         [
             Path.Combine(AppContext.BaseDirectory, "Fixtures", "MetalML", fixtureFileName),
             Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures", "MetalML", fixtureFileName)),
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "TestData", "NeuralCook", fixtureFileName)),
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "TestData", "NeuralCook", fixtureFileName)),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "TestData", "SharpGPU.MLCook", fixtureFileName)),
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "TestData", "SharpGPU.MLCook", fixtureFileName)),
         ];
 
         foreach (string candidate in candidates)

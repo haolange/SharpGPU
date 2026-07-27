@@ -1,4 +1,4 @@
-#if SHARPGPU_ENABLE_DX12
+﻿#if SHARPGPU_ENABLE_DX12
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -311,7 +311,7 @@ public sealed class SharpGPUDirectMLContractTests
     }
 
     [Fact]
-    public void Dx12_NeuralCook_ElementWiseAdd_DmlbinFixture_ShouldCreateMLPipeline()
+    public void Dx12_SharpGpuMlCook_ElementWiseAdd_DmlbinFixture_ShouldCreateMLPipeline()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -324,16 +324,16 @@ public sealed class SharpGPUDirectMLContractTests
             return;
         }
 
-        string? fixturePath = ResolveNeuralCookFixture("elementwise_add.dmlbin");
+        string? fixturePath = ResolveSharpGpuMlCookFixture("elementwise_add.dmlbin");
         Assert.True(
             fixturePath != null && File.Exists(fixturePath),
-            "Missing NeuralCook DX12 fixture elementwise_add.dmlbin.");
+            "Missing SharpGPU.MLCook DX12 fixture elementwise_add.dmlbin.");
 
         RHIMLBinary binary = Dx12MlBinaryCodec.Load(File.ReadAllBytes(fixturePath));
         Assert.Equal(ERHIMLBinaryFormat.DirectMLProgramV1, binary.Format);
         using RHIMLPipeline pipeline = context.Device.CreateMLPipeline(new RHIMLPipelineDescriptor
         {
-            Name = "NeuralCook.elementwise_add",
+            Name = "SharpGPU.MLCook.elementwise_add",
             Binary = binary,
         });
         Assert.NotNull(pipeline);
@@ -502,13 +502,13 @@ public sealed class SharpGPUDirectMLContractTests
         commandBuffer.End();
     }
 
-    private static string? ResolveNeuralCookFixture(string fixtureFileName)
+    private static string? ResolveSharpGpuMlCookFixture(string fixtureFileName)
     {
         for (DirectoryInfo? dir = new(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
         {
             string[] candidates =
             [
-                Path.Combine(dir.FullName, "TestData", "NeuralCook", fixtureFileName),
+                Path.Combine(dir.FullName, "TestData", "SharpGPU.MLCook", fixtureFileName),
                 Path.Combine(
                     dir.FullName,
                     "Engine",
@@ -516,7 +516,7 @@ public sealed class SharpGPUDirectMLContractTests
                     "Developer",
                     "Tests",
                     "TestData",
-                    "NeuralCook",
+                    "SharpGPU.MLCook",
                     fixtureFileName),
                 Path.Combine(
                     dir.FullName,
@@ -524,7 +524,7 @@ public sealed class SharpGPUDirectMLContractTests
                     "Developer",
                     "Tests",
                     "TestData",
-                    "NeuralCook",
+                    "SharpGPU.MLCook",
                     fixtureFileName),
             ];
 
