@@ -809,6 +809,9 @@
     <map struct="D3D12_RENDER_PASS_ENDING_ACCESS_RESOLVE_PARAMETERS" name="RenderPassEndingAccessResolveParameters" native="true" struct-to-class="true" marshal="true" marshalto="false" />
     <remove field="D3D12_RENDER_PASS_ENDING_ACCESS_RESOLVE_PARAMETERS::.*"/>
 
+    <!-- SharpGPU's RHI contract calls D3D12 synchronization scopes "Stage". -->
+    <map field="D3D12_(GLOBAL|BUFFER|TEXTURE)_BARRIER::SyncBefore" name="StageBefore" />
+    <map field="D3D12_(GLOBAL|BUFFER|TEXTURE)_BARRIER::SyncAfter" name="StageAfter" />
     <map struct="D3D12_BARRIER_GROUP" name="BarrierGroup" native="true" struct-to-class="true" marshal="true" />
     <remove field="D3D12_BARRIER_GROUP::.*"/>
 
