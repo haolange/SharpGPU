@@ -22,7 +22,7 @@ public sealed class MetalIcbAndViewportQualifiedTests
     private const uint MagicValue = 0xA11CEu;
 
     [Fact]
-    public void Metal_ComputeICB_EncodeExecuteReadback_ShouldWriteExpectedValue()
+    public void Metal_LayoutStreamExecution_ShouldFailClosedUntilNativeLoweringExists()
     {
         if (!OperatingSystem.IsMacOS())
         {
@@ -30,109 +30,20 @@ public sealed class MetalIcbAndViewportQualifiedTests
         }
 
         using MetalTestContext context = MetalTestContext.Create();
-        Assert.NotEqual(
+        Assert.Equal(
             ERHICapabilityTier.Unavailable,
             context.Device.Capabilities.IndirectCommandBuffer.Execution.Tier);
-
-        using RHIFunction function = CreateMslFunction(
-            context.Device,
-            ERHIFunctionType.Compute,
-            "cs_main",
-            ComputeWriteMsl);
-        using RHIPipelineLayout layout = context.Device.CreatePipelineLayout(new RHIPipelineLayoutDescriptor
-        {
-            bLocalSignature = false,
-            bUseVertexLayout = false,
-            PushConstantSize = 0,
-            BindingTableLayouts = Array.Empty<RHIBindingTableLayout>(),
-        });
-        using RHIComputePipeline pipeline = context.Device.CreateComputePipeline(new RHIComputePipelineDescriptor
-        {
-            ThreadSize = new uint3(1, 1, 1),
-            ComputeFunction = function,
-            PipelineLayout = layout,
-        });
-
-        using RHIBuffer output = context.Device.CreateBuffer(new RHIBufferDescriptor
-        {
-            ByteSize = sizeof(uint),
-            Format = ERHIBufferFormat.Undefine,
-            StorageMode = ERHIStorageMode.GPULocal,
-            UsageFlag = ERHIBufferUsage.UnorderedAccess | ERHIBufferUsage.CopySrc | ERHIBufferUsage.ShaderResource,
-        });
-        using RHIBuffer readback = context.Device.CreateBuffer(new RHIBufferDescriptor
-        {
-            ByteSize = sizeof(uint),
-            Format = ERHIBufferFormat.Undefine,
-            StorageMode = ERHIStorageMode.Readback,
-            UsageFlag = ERHIBufferUsage.CopyDst,
-        });
-
-        using RHIComputeIndirectCommandBuffer icb = context.Device.CreateComputeIndirectCommandBuffer(
-            new RHIComputeIndirectCommandBufferDescription { MaxCommandCount = 1 });
-
-        MetalComputePipeline metalPipeline = Assert.IsType<MetalComputePipeline>(pipeline);
-        MetalBuffer metalOutput = Assert.IsType<MetalBuffer>(output);
-        MetalComputeIndirectCommandBuffer metalIcb = Assert.IsType<MetalComputeIndirectCommandBuffer>(icb);
-        MetalCommandQueue metalQueue = Assert.IsType<MetalCommandQueue>(context.Queue);
-
-        Assert.True(
-            metalPipeline.NativePipelineState.SupportIndirectCommandBuffers,
-            "Metal compute PSO must expose SupportIndirectCommandBuffers for ICB encode.");
-
-        MTLIndirectComputeCommand command = metalIcb.NativeIndirectCommandBuffer.IndirectComputeCommand(0);
-        command.SetComputePipelineState(metalPipeline.NativePipelineState);
-        command.SetKernelBuffer(metalOutput.NativeBuffer, 0, 0);
-        command.ConcurrentDispatchThreadgroups(new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
-
-        metalQueue.AddResidencyAllocation(new MTLAllocation(metalPipeline.NativePipelineState.NativePtr));
-        metalQueue.AddResidencyAllocation(metalOutput.NativeBuffer);
-        metalQueue.AddResidencyAllocation(metalIcb.NativeIndirectCommandBuffer);
-
-        using RHICommandBuffer commandBuffer = context.Queue.CreateCommandBuffer();
-        commandBuffer.Begin("Metal.ICB.Compute.EncodeExecuteReadback");
-
-        RHIComputeEncoder compute = commandBuffer.BeginComputePass(new RHIComputePassDescriptor
-        {
-            Name = "ICB.Execute",
-        });
-        compute.Barrier(RHIBarrier.Buffer(
-            output,
-            RHIBufferRange.Whole(),
-            ERHIStageMask.None,
-            ERHIStageMask.Compute,
-            ERHIAccessMask.None,
-            ERHIAccessMask.ShaderWrite));
-        compute.ExecuteIndirectCommandBuffer(icb);
-        commandBuffer.EndComputePass();
-
-        RHITransferEncoder transfer = commandBuffer.BeginTransferPass(new RHITransferPassDescriptor
-        {
-            Name = "ICB.Readback",
-        });
-        transfer.Barrier(RHIBarrier.Buffer(
-            output,
-            RHIBufferRange.Whole(),
-            ERHIStageMask.Compute,
-            ERHIStageMask.Transfer,
-            ERHIAccessMask.ShaderWrite,
-            ERHIAccessMask.TransferRead));
-        transfer.CopyBufferToBuffer(output, 0, readback, 0, sizeof(uint));
-        commandBuffer.EndTransferPass();
-        commandBuffer.End();
-
-        SubmitAndWait(context, commandBuffer);
-
-        IntPtr mapped = readback.Map(0, sizeof(uint));
-        try
-        {
-            uint actual = (uint)Marshal.ReadInt32(mapped);
-            Assert.Equal(MagicValue, actual);
-        }
-        finally
-        {
-            readback.UnMap(0, 0);
-        }
+        Assert.Equal(
+            ERHICapabilityTier.Unavailable,
+            context.Device.Capabilities.IndirectCommandBuffer.Tokens.Dispatch.Tier);
+        Assert.Throws<NotSupportedException>(
+            () => context.Device.CreateIndirectCommandLayout(
+                new RHIIndirectCommandLayoutDescriptor(
+                    ERHIIndirectDomain.Compute,
+                    new[]
+                    {
+                        new RHIIndirectTokenDescriptor(ERHIIndirectTokenType.Dispatch),
+                    })));
     }
 
     [Fact]

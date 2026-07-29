@@ -12,18 +12,18 @@ namespace SharpGPU.Conformance.Tests;
 public sealed class W11AdvancedSurfaceContractTests
 {
     [Fact]
-    public void PublicContract_ShouldExportIndirectCommandBufferFamiliesWithExactBackends()
+    public void PublicContract_ShouldExposeLayoutStreamIndirectExecutionWithExactBackends()
     {
         Type[] exportedTypes = typeof(RHIDevice).Assembly.GetExportedTypes();
         Assert.Contains(
             exportedTypes,
-            type => type.Name == nameof(RHIComputeIndirectCommandBuffer));
+            type => type.Name == nameof(RHIIndirectCommandLayout));
         Assert.Contains(
             exportedTypes,
-            type => type.Name == nameof(RHIRasterIndirectCommandBuffer));
+            type => type.Name == nameof(RHIIndirectCommandLayout));
         Assert.Contains(
             exportedTypes,
-            type => type.Name == nameof(RHIRayTracingIndirectCommandBuffer));
+            type => type.Name == nameof(RHIIndirectCommandLayout));
 
         MethodInfo[] deviceFactories = typeof(RHIDevice).GetMethods(
             BindingFlags.Public |
@@ -31,13 +31,13 @@ public sealed class W11AdvancedSurfaceContractTests
             BindingFlags.DeclaredOnly);
         Assert.Contains(
             deviceFactories,
-            method => method.Name == nameof(RHIDevice.CreateComputeIndirectCommandBuffer));
+            method => method.Name == nameof(RHIDevice.CreateIndirectCommandLayout));
         Assert.Contains(
             deviceFactories,
-            method => method.Name == nameof(RHIDevice.CreateRasterIndirectCommandBuffer));
+            method => method.Name == nameof(RHIDevice.CreateIndirectCommandLayout));
         Assert.Contains(
             deviceFactories,
-            method => method.Name == nameof(RHIDevice.CreateRayTracingIndirectCommandBuffer));
+            method => method.Name == nameof(RHIDevice.CreateIndirectCommandLayout));
 
         Assert.Equal(
             typeof(RHICapability),
@@ -46,8 +46,8 @@ public sealed class W11AdvancedSurfaceContractTests
                 .PropertyType);
 
         Type[] implementationTypes = typeof(RHIDevice).Assembly.GetTypes();
-        Assert.Contains(implementationTypes, type => type.Name == "Dx12ComputeIndirectCommandBuffer");
-        Assert.Contains(implementationTypes, type => type.Name == "MetalComputeIndirectCommandBuffer");
+        Assert.Contains(implementationTypes, type => type.Name == "Dx12IndirectCommandLayout");
+        Assert.Contains(implementationTypes, type => type.Name == "MetalIndirectCommandLayout");
         Assert.DoesNotContain(
             implementationTypes,
             type =>
@@ -71,7 +71,7 @@ public sealed class W11AdvancedSurfaceContractTests
         Assert.Contains(nameof(RHIDevice.CreateTensor), factoryNames);
         Assert.DoesNotContain("CreateMLProgram", factoryNames);
         Assert.Contains(nameof(RHIDevice.CreateWorkGraphPipeline), factoryNames);
-        Assert.Contains(nameof(RHIDevice.CreateComputeIndirectCommandBuffer), factoryNames);
+        Assert.Contains(nameof(RHIDevice.CreateIndirectCommandLayout), factoryNames);
 
         Type[] implementationTypes = typeof(RHIDevice).Assembly.GetTypes();
         Assert.Contains(
@@ -267,9 +267,9 @@ public sealed class W11AdvancedSurfaceContractTests
             nameof(RHIDevice.CreateMLBindingTable),
             nameof(RHIDevice.CreateTensor),
             nameof(RHIDevice.CreateWorkGraphPipeline),
-            nameof(RHIDevice.CreateComputeIndirectCommandBuffer),
-            nameof(RHIDevice.CreateRasterIndirectCommandBuffer),
-            nameof(RHIDevice.CreateRayTracingIndirectCommandBuffer),
+            nameof(RHIDevice.CreateIndirectCommandLayout),
+            nameof(RHIDevice.CreateIndirectCommandLayout),
+            nameof(RHIDevice.CreateIndirectCommandLayout),
         ];
 
         Assert.Equal(

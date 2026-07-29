@@ -9,6 +9,20 @@ namespace SharpGPU
     {
         public MetalDevice MetalDevice { get { ThrowIfDisposed(); return m_MetalDevice; } }
         public MTLBuffer NativeBuffer { get { ThrowIfDisposed(); return m_NativeBuffer; } }
+        public override ulong GpuVirtualAddress
+        {
+            get
+            {
+                ThrowIfDisposed();
+                ulong address = m_NativeBuffer.GpuAddress;
+                if (address == 0)
+                {
+                    throw new NotSupportedException("Metal did not expose a GPU address for this buffer.");
+                }
+                return address;
+            }
+        }
+
 
         private readonly MetalDevice m_MetalDevice;
         private MTLBuffer m_NativeBuffer;

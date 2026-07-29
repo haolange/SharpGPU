@@ -1256,6 +1256,10 @@ namespace SharpGPU
                 new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumComputeThreads, limits.maxComputeWorkGroupInvocations),
                 new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumGroupSharedMemoryBytes, limits.maxComputeSharedMemorySize));
 
+            RHICapability layoutIndirectUnavailable = RHICapability.Unavailable(
+                "Vulkan layout-driven indirect execution requires VK_EXT_device_generated_commands lowering.",
+                ERHICapabilityProbeKind.BackendContract,
+                "SharpGPU Vulkan VK_EXT_device_generated_commands lowering");
             m_Capabilities = new RHIDeviceCapabilities(
                 raster: new RHIRasterCapabilities(
                     ERHIProjectionStrategy.FlipY,
@@ -1468,6 +1472,14 @@ namespace SharpGPU
                         "enabled VkPhysicalDeviceFeatures sparseBinding/sparseResidencyImage* + sparse-capable created queue",
                         "Vulkan sparse image residency or a sparse-capable created queue is unavailable.",
                         strategy: ERHICapabilityStrategy.CoreApi),
+                    gpuVirtualAddress: RHICapability.Unavailable(
+                        "Vulkan buffer device-address allocation is not established for every SharpGPU buffer path.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Vulkan buffer-address contract"),
+                    sparseBufferBinding: RHICapability.Unavailable(
+                        "Vulkan sparse-buffer mapping is not implemented.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Vulkan sparse-buffer contract"),
                     residency: Probe(
                         false,
                         "SharpGPU Vulkan residency lowering",
@@ -1567,11 +1579,7 @@ namespace SharpGPU
                         "Vulkan Work Graph execution is not exposed by SharpGPU.",
                         ERHICapabilityProbeKind.BackendContract,
                         "SharpGPU Vulkan factory surface")),
-                indirectCommandBuffer: new RHIIndirectCommandBufferCapabilities(
-                    execution: RHICapability.Unavailable(
-                        "Vulkan device-generated / NV indirect commands are not exposed by SharpGPU.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "SharpGPU Vulkan ICB factory surface")),
+                indirectCommandBuffer: new RHIIndirectCommandBufferCapabilities(layoutIndirectUnavailable, new RHIIndirectTokenCapabilities(layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable)),
                 compute: new RHIComputeCapabilities(
                     ERHIWaveOperationStrategy.Basic,
                     waveOperations: RHICapability.Available(
@@ -1920,39 +1928,12 @@ namespace SharpGPU
             Capabilities.PipelineCache.NativeCache.Require("Vulkan pipeline cache");
             return new VulkanPipelineCache(this);
         }
-
-        public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(
-            in RHIComputeIndirectCommandBufferDescription descriptor)
+        public override RHIIndirectCommandLayout CreateIndirectCommandLayout(in RHIIndirectCommandLayoutDescriptor descriptor)
         {
             ThrowIfDisposed();
-            Capabilities.IndirectCommandBuffer.Execution.Require(
-                "Vulkan compute indirect command buffer");
-            throw new NotSupportedException(
-                "Vulkan compute IndirectCommandBuffer is unavailable: "
-                + Capabilities.IndirectCommandBuffer.Execution.UnavailableReason);
+            return new VulkanIndirectCommandLayout(this, descriptor);
         }
 
-        public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(
-            in RHIRayTracingIndirectCommandBufferDescription descriptor)
-        {
-            ThrowIfDisposed();
-            Capabilities.IndirectCommandBuffer.Execution.Require(
-                "Vulkan ray-tracing indirect command buffer");
-            throw new NotSupportedException(
-                "Vulkan ray-tracing IndirectCommandBuffer is unavailable: "
-                + Capabilities.IndirectCommandBuffer.Execution.UnavailableReason);
-        }
-
-        public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(
-            in RHIRasterIndirectCommandBufferDescription descriptor)
-        {
-            ThrowIfDisposed();
-            Capabilities.IndirectCommandBuffer.Execution.Require(
-                "Vulkan raster indirect command buffer");
-            throw new NotSupportedException(
-                "Vulkan raster IndirectCommandBuffer is unavailable: "
-                + Capabilities.IndirectCommandBuffer.Execution.UnavailableReason);
-        }
 
         public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
         {

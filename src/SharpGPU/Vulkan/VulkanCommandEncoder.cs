@@ -1174,14 +1174,6 @@ namespace SharpGPU
             VulkanNative.vkCmdDispatchIndirect(vkCmdBuf.NativeCommandBuffer, vkArgsBuffer.NativeBuffer, argsOffset);
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
-        {
-            VulkanEncoderGuards.RequireDevice(m_CommandBuffer).Capabilities.IndirectCommandBuffer.Execution.Require(
-                "Vulkan compute ExecuteIndirectCommandBuffer");
-            throw new NotSupportedException(
-                "Vulkan compute ExecuteIndirectCommandBuffer is unavailable.");
-        }
-
         public override void EndPass()
         {
             RHICommandBuffer commandBuffer = m_CommandBuffer ??
@@ -4370,14 +4362,6 @@ internal readonly struct VulkanSampledFeedbackAttachmentFact
             VulkanNative.vkCmdDrawMeshTasksIndirectEXT(vkCmdBuf.NativeCommandBuffer, vkArgs.NativeBuffer, argsOffset, 1, 0);
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
-        {
-            VulkanEncoderGuards.RequireDevice(m_CommandBuffer).Capabilities.IndirectCommandBuffer.Execution.Require(
-                "Vulkan raster ExecuteIndirectCommandBuffer");
-            throw new NotSupportedException(
-                "Vulkan raster ExecuteIndirectCommandBuffer is unavailable.");
-        }
-
         public override void EndPass()
         {
             RHICommandBuffer commandBuffer = m_CommandBuffer ??
@@ -4933,15 +4917,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                 argsOffset,
                 1,
                 0);
-        }
-
-        public override void ExecuteIndirectCommandBuffer(
-            RHIRasterIndirectCommandBuffer indirectCmdBuffer)
-        {
-            GetDevice().Capabilities.IndirectCommandBuffer.Execution.Require(
-                "Vulkan raster ExecuteIndirectCommandBuffer");
-            throw new NotSupportedException(
-                "Vulkan raster ExecuteIndirectCommandBuffer is unavailable.");
         }
 
         public override void EndPass()
@@ -7277,14 +7252,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             VulkanNative.vkCmdTraceRaysIndirectKHR(vkCmdBuf.NativeCommandBuffer,
                 &rayGenRegion, &missRegion, &hitGroupRegion, &callableRegion,
                 indirectAddress);
-        }
-
-        public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
-        {
-            VulkanEncoderGuards.RequireDevice(m_CommandBuffer).Capabilities.IndirectCommandBuffer.Execution.Require(
-                "Vulkan ray-tracing ExecuteIndirectCommandBuffer");
-            throw new NotSupportedException(
-                "Vulkan ray-tracing ExecuteIndirectCommandBuffer is unavailable.");
         }
 
         public override void EndPass()

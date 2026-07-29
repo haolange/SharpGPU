@@ -28,6 +28,15 @@ namespace SharpGPU
                 return m_AllocationMode;
             }
         }
+        public virtual ulong GpuVirtualAddress
+        {
+            get
+            {
+                ThrowIfDisposed();
+                throw new NotSupportedException(
+                    $"{GetType().Name} does not expose a GPU virtual address.");
+            }
+        }
 
         protected RHIBufferDescriptor m_Descriptor;
         protected ERHIResourceAllocationMode m_AllocationMode = ERHIResourceAllocationMode.Committed;

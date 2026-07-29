@@ -240,9 +240,7 @@ namespace SharpGPU
         public abstract RHIRaytracingPipeline CreateRaytracingPipeline(in RHIRaytracingPipelineDescriptor descriptor);
         public abstract RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor);
         public abstract RHIPipelineCache CreatePipelineCache();
-        public abstract RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor);
-        public abstract RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor);
-        public abstract RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor);
+        public abstract RHIIndirectCommandLayout CreateIndirectCommandLayout(in RHIIndirectCommandLayoutDescriptor descriptor);
         public abstract RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor);
         public abstract RHIMLBindingTable CreateMLBindingTable(in RHIMLBindingTableDescriptor descriptor);
         public abstract RHITensor CreateTensor(in RHIMLTensorDescriptor descriptor);
@@ -632,6 +630,8 @@ namespace SharpGPU
         public RHICapability UnifiedMemory { get; }
         public RHICapability PlacedResources { get; }
         public RHICapability SparseBinding { get; }
+        public RHICapability GpuVirtualAddress { get; }
+        public RHICapability SparseBufferBinding { get; }
         public RHICapability Residency { get; }
         public RHICapability BudgetQuery { get; }
 
@@ -639,12 +639,16 @@ namespace SharpGPU
             RHICapability unifiedMemory,
             RHICapability placedResources,
             RHICapability sparseBinding,
+            RHICapability gpuVirtualAddress,
+            RHICapability sparseBufferBinding,
             RHICapability residency,
             RHICapability budgetQuery)
         {
             UnifiedMemory = unifiedMemory;
             PlacedResources = placedResources;
             SparseBinding = sparseBinding;
+            GpuVirtualAddress = gpuVirtualAddress;
+            SparseBufferBinding = sparseBufferBinding;
             Residency = residency;
             BudgetQuery = budgetQuery;
         }
@@ -772,13 +776,53 @@ namespace SharpGPU
         }
     }
 
+    public sealed class RHIIndirectTokenCapabilities
+    {
+        public RHICapability VertexBuffer { get; }
+        public RHICapability IndexBuffer { get; }
+        public RHICapability Draw { get; }
+        public RHICapability DrawIndexed { get; }
+        public RHICapability Dispatch { get; }
+        public RHICapability DispatchMesh { get; }
+
+        public RHIIndirectTokenCapabilities(
+            RHICapability vertexBuffer,
+            RHICapability indexBuffer,
+            RHICapability draw,
+            RHICapability drawIndexed,
+            RHICapability dispatch,
+            RHICapability dispatchMesh)
+        {
+            VertexBuffer = vertexBuffer;
+            IndexBuffer = indexBuffer;
+            Draw = draw;
+            DrawIndexed = drawIndexed;
+            Dispatch = dispatch;
+            DispatchMesh = dispatchMesh;
+        }
+
+        internal static RHIIndirectTokenCapabilities FromExecution(
+            RHICapability execution)
+        {
+            return new RHIIndirectTokenCapabilities(
+                execution,
+                execution,
+                execution,
+                execution,
+                execution,
+                execution);
+        }
+    }
+
     public sealed class RHIIndirectCommandBufferCapabilities
     {
         public RHICapability Execution { get; }
+        public RHIIndirectTokenCapabilities Tokens { get; }
 
-        public RHIIndirectCommandBufferCapabilities(RHICapability execution)
+        public RHIIndirectCommandBufferCapabilities(RHICapability execution, RHIIndirectTokenCapabilities tokens)
         {
             Execution = execution;
+            Tokens = tokens;
         }
     }
 
@@ -854,6 +898,8 @@ namespace SharpGPU
                     unifiedMemory: unavailable,
                     placedResources: unavailable,
                     sparseBinding: unavailable,
+                    gpuVirtualAddress: unavailable,
+                    sparseBufferBinding: unavailable,
                     residency: unavailable,
                     budgetQuery: unavailable),
                 new RHIStorageCapabilities(unavailable),
@@ -873,7 +919,15 @@ namespace SharpGPU
                 new RHIMeshCapabilities(unavailable),
                 new RHIMachineLearningCapabilities(unavailable),
                 new RHIWorkGraphCapabilities(unavailable),
-                new RHIIndirectCommandBufferCapabilities(unavailable),
+                new RHIIndirectCommandBufferCapabilities(
+                    unavailable,
+                    new RHIIndirectTokenCapabilities(
+                        unavailable,
+                        unavailable,
+                        unavailable,
+                        unavailable,
+                        unavailable,
+                        unavailable)),
                 new RHIComputeCapabilities(
                     waveOperationStrategy: ERHIWaveOperationStrategy.Pending,
                     waveOperations: unavailable));

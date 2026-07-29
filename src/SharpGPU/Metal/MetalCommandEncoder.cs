@@ -1910,25 +1910,6 @@ namespace SharpGPU
             ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Compute));
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
-        {
-            MetalEncoderStateValidation.RequireActive(
-                m_NativeEncoder4.NativePtr,
-                "ExecuteIndirectCommandBuffer");
-            MetalComputeIndirectCommandBuffer metalICB = (MetalComputeIndirectCommandBuffer)indirectCmdBuffer;
-            MTLIndirectCommandBuffer nativeICB = metalICB.NativeIndirectCommandBuffer;
-            NSRange range = new NSRange { location = 0, length = metalICB.MaxCommandCount };
-
-            if (m_CommandBuffer?.CommandQueue is MetalCommandQueue queue)
-            {
-                queue.AddResidencyAllocation(nativeICB);
-            }
-
-            m_NativeEncoder4.ExecuteCommandsInBuffer(nativeICB, range);
-            ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(
-                MetalUtility.ConvertToMetal4Stages(ERHIStageMask.Compute));
-        }
-
         public override void EndPass()
         {
             RHICommandBuffer commandBuffer = m_CommandBuffer ??
@@ -2249,18 +2230,6 @@ namespace SharpGPU
             m_NativeEncoder4.DispatchThreadgroupsWithIndirectBuffer(indirectBuffer.NativeBuffer.GpuAddress + argsOffset, threadsPerGroup);
 
             ((MetalCommandBuffer)m_CommandBuffer!).MarkStagesSeen(MetalUtility.ConvertToMetal4Stages(ERHIStageMask.RayTracing));
-        }
-
-        public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
-        {
-            MetalRayTracingIndirectCommandBuffer metalICB = (MetalRayTracingIndirectCommandBuffer)indirectCmdBuffer;
-            MTLIndirectCommandBuffer nativeICB = metalICB.NativeIndirectCommandBuffer;
-            NSRange range = new NSRange { location = 0, length = metalICB.MaxCommandCount };
-
-            if (m_NativeEncoder4.NativePtr != IntPtr.Zero)
-            {
-                m_NativeEncoder4.ExecuteCommandsInBuffer(nativeICB, range);
-            }
         }
 
         public override void EndPass()
@@ -3601,19 +3570,6 @@ internal readonly struct MetalRasterCapabilities
             ulong indirectAddress = metalBuffer.NativeBuffer.GpuAddress + argsOffset;
             m_NativeEncoder4.DrawMeshThreadgroupsWithIndirectBuffer(indirectAddress, new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
             MarkRasterStagesSeen();
-        }
-
-        public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
-        {
-            if (m_NativeEncoder4.NativePtr == IntPtr.Zero)
-            {
-                return;
-            }
-
-            MetalRasterIndirectCommandBuffer metalICB = (MetalRasterIndirectCommandBuffer)indirectCmdBuffer;
-            MTLIndirectCommandBuffer nativeICB = metalICB.NativeIndirectCommandBuffer;
-            NSRange range = new NSRange { location = 0, length = metalICB.MaxCommandCount };
-            m_NativeEncoder4.ExecuteCommandsInBuffer(nativeICB, range);
         }
 
         public override void EndPass()

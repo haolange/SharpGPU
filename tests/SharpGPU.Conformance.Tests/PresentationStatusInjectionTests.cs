@@ -539,17 +539,9 @@ namespace SharpGPU.Conformance.Tests
             public override RHIPipelineCache CreatePipelineCache() =>
                 Unsupported<RHIPipelineCache>();
 
-            public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(
-                in RHIComputeIndirectCommandBufferDescription descriptor) =>
-                Unsupported<RHIComputeIndirectCommandBuffer>();
-
-            public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(
-                in RHIRayTracingIndirectCommandBufferDescription descriptor) =>
-                Unsupported<RHIRayTracingIndirectCommandBuffer>();
-
-            public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(
-                in RHIRasterIndirectCommandBufferDescription descriptor) =>
-                Unsupported<RHIRasterIndirectCommandBuffer>();
+            public override RHIIndirectCommandLayout CreateIndirectCommandLayout(
+                in RHIIndirectCommandLayoutDescriptor descriptor) =>
+                Unsupported<RHIIndirectCommandLayout>();
 
             public override RHIMLPipeline CreateMLPipeline(
                 in RHIMLPipelineDescriptor descriptor) =>

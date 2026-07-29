@@ -1777,11 +1777,51 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DispatchComputeIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer)
+        public override void ExecuteIndirect(
+            RHIIndirectCommandLayout layout,
+            RHIBuffer argumentsBuffer,
+            uint argumentsOffset,
+            uint maximumCommandCount,
+            RHIBuffer? countBuffer = null,
+            uint countOffset = 0)
         {
-            Dx12ComputeIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12ComputeIndirectCommandBuffer ?? throw new InvalidOperationException("DX12 compute indirect dispatch requires a Dx12ComputeIndirectCommandBuffer.");
-            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
+            if (layout == null || layout.Domain != ERHIIndirectDomain.Compute)
+            {
+                throw new ArgumentException("A DX12 compute encoder requires a compute indirect layout.", nameof(layout));
+            }
+            RHIIndirectCommandLayout.ValidateExecution(
+                layout, argumentsBuffer, argumentsOffset, countBuffer, countOffset,
+                maximumCommandCount, "DX12 compute indirect execution");
+
+            Dx12IndirectCommandLayout dx12Layout = layout as Dx12IndirectCommandLayout ??
+                throw new InvalidOperationException("DX12 compute indirect execution requires a DX12 indirect layout.");
+            Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            Dx12Device device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
+            Dx12Buffer arguments = Dx12EncoderGuards.RequireBuffer(argumentsBuffer);
+            if (!ReferenceEquals(dx12Layout.Device, device) ||
+                !ReferenceEquals(arguments.Dx12Device, device))
+            {
+                throw new ArgumentException("The indirect layout and arguments buffer must belong to this DX12 device.");
+            }
+
+            Vortice.Direct3D12.ID3D12Resource? countResource = null;
+            if (countBuffer != null)
+            {
+                Dx12Buffer count = Dx12EncoderGuards.RequireBuffer(countBuffer);
+                if (!ReferenceEquals(count.Dx12Device, device))
+                {
+                    throw new ArgumentException("The indirect count buffer must belong to this DX12 device.", nameof(countBuffer));
+                }
+                countResource = count.NativeResource;
+            }
+
+            commandBuffer.NativeCommandList.ExecuteIndirect(
+                dx12Layout.NativeCommandSignature,
+                maximumCommandCount,
+                arguments.NativeResource,
+                argumentsOffset,
+                countResource,
+                countOffset);
         }
 
         public override void EndPass()
@@ -1954,13 +1994,6 @@ namespace SharpGPU
                 Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
                 dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DispatchRayIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
             }
-        }
-
-        public override void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer)
-        {
-            Dx12RayTracingIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RayTracingIndirectCommandBuffer ?? throw new InvalidOperationException("DX12 ray-tracing indirect dispatch requires a Dx12RayTracingIndirectCommandBuffer.");
-            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
         }
 
         public override void EndPass()
@@ -3642,13 +3675,77 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DispatchMeshIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
         }
 
-        public override void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
+        public override void ExecuteIndirect(
+            RHIIndirectCommandLayout layout,
+            RHIBuffer argumentsBuffer,
+            uint argumentsOffset,
+            uint maximumCommandCount,
+            RHIBuffer? countBuffer = null,
+            uint countOffset = 0)
         {
             ValidateDrawState();
             EnsureNativeRenderPassActive();
-            Dx12RasterIndirectCommandBuffer dx12IndirectCmdBuffer = indirectCmdBuffer as Dx12RasterIndirectCommandBuffer ?? throw new InvalidOperationException("DX12 raster indirect draw requires a Dx12RasterIndirectCommandBuffer.");
-            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12IndirectCmdBuffer.NativeCommandSignature, dx12IndirectCmdBuffer.MaxCommandCount, dx12IndirectCmdBuffer.NativeArgumentBuffer, 0, null, 0);
+            if (layout == null || layout.Domain != ERHIIndirectDomain.Raster)
+            {
+                throw new ArgumentException("A DX12 raster encoder requires a raster indirect layout.", nameof(layout));
+            }
+            RHIIndirectCommandLayout.ValidateExecution(
+                layout, argumentsBuffer, argumentsOffset, countBuffer, countOffset,
+                maximumCommandCount, "DX12 raster indirect execution");
+
+            Dx12IndirectCommandLayout dx12Layout = layout as Dx12IndirectCommandLayout ??
+                throw new InvalidOperationException("DX12 raster indirect execution requires a DX12 indirect layout.");
+            Dx12CommandBuffer commandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            Dx12Device device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
+            Dx12Buffer arguments = Dx12EncoderGuards.RequireBuffer(argumentsBuffer);
+            if (!ReferenceEquals(dx12Layout.Device, device) ||
+                !ReferenceEquals(arguments.Dx12Device, device))
+            {
+                throw new ArgumentException("The indirect layout and arguments buffer must belong to this DX12 device.");
+            }
+
+            Vortice.Direct3D12.ID3D12Resource? countResource = null;
+            if (countBuffer != null)
+            {
+                Dx12Buffer count = Dx12EncoderGuards.RequireBuffer(countBuffer);
+                if (!ReferenceEquals(count.Dx12Device, device))
+                {
+                    throw new ArgumentException("The indirect count buffer must belong to this DX12 device.", nameof(countBuffer));
+                }
+                countResource = count.NativeResource;
+            }
+
+            commandBuffer.NativeCommandList.ExecuteIndirect(
+                dx12Layout.NativeCommandSignature,
+                maximumCommandCount,
+                arguments.NativeResource,
+                argumentsOffset,
+                countResource,
+                countOffset);
+            InvalidateIndirectInputBindings(layout, commandBuffer);
+        }
+
+        private static void InvalidateIndirectInputBindings(
+            RHIIndirectCommandLayout layout,
+            Dx12CommandBuffer commandBuffer)
+        {
+            ReadOnlySpan<RHIIndirectTokenDescriptor> tokens = layout.Tokens.Span;
+            Vortice.Direct3D12.VertexBufferView emptyVertexBuffer = default;
+            Vortice.Direct3D12.IndexBufferView emptyIndexBuffer = default;
+            for (int i = 0; i < tokens.Length; ++i)
+            {
+                if (tokens[i].Type == ERHIIndirectTokenType.VertexBuffer)
+                {
+                    commandBuffer.NativeCommandList.IASetVertexBuffers(
+                        tokens[i].VertexBufferSlot,
+                        1,
+                        &emptyVertexBuffer);
+                }
+                else if (tokens[i].Type == ERHIIndirectTokenType.IndexBuffer)
+                {
+                    commandBuffer.NativeCommandList.IASetIndexBuffer(&emptyIndexBuffer);
+                }
+            }
         }
 
         public override void EndPass()

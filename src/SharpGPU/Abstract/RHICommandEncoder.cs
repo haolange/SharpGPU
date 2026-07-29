@@ -4,6 +4,7 @@ using SharpGPU.Mathematics;
 
 namespace SharpGPU
 {
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 4)]
     public struct RHIIndirectDispatchArgs
     {
         public uint GroupCountX;
@@ -17,6 +18,7 @@ namespace SharpGPU
         }
     }
 
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 4)]
     public struct RHIIndirectDrawArgs
     {
         public uint VertexCount;
@@ -32,6 +34,7 @@ namespace SharpGPU
         }
     }
 
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 4)]
     public struct RHIIndirectDrawIndexedArgs
     {
         public uint IndexCount;
@@ -147,7 +150,21 @@ namespace SharpGPU
         public abstract void SetPushConstants(IntPtr data, in uint size, in uint offset = 0);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
-        public abstract void ExecuteIndirectCommandBuffer(RHIComputeIndirectCommandBuffer indirectCmdBuffer);
+        public virtual void ExecuteIndirect(
+            RHIIndirectCommandLayout layout,
+            RHIBuffer argumentsBuffer,
+            uint argumentsOffset,
+            uint maximumCommandCount,
+            RHIBuffer? countBuffer = null,
+            uint countOffset = 0)
+        {
+            ArgumentNullException.ThrowIfNull(layout);
+            if (layout.Domain != ERHIIndirectDomain.Compute)
+            {
+                throw new ArgumentException("A compute encoder requires a compute indirect layout.", nameof(layout));
+            }
+            throw new NotSupportedException($"{GetType().Name} does not implement layout-driven compute indirect execution.");
+        }
         public virtual void EndPass()
         {
             RHICommandBuffer commandBuffer = m_CommandBuffer ??
@@ -177,7 +194,6 @@ namespace SharpGPU
         public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct);
         public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable);
-        public abstract void ExecuteIndirectCommandBuffer(RHIRayTracingIndirectCommandBuffer indirectCmdBuffer);
         public virtual void EndPass()
         {
             RHICommandBuffer commandBuffer = m_CommandBuffer ??
@@ -1979,11 +1995,21 @@ namespace SharpGPU
                 $"{GetType().Name} does not implement indirect mesh dispatch.");
         }
 
-        public virtual void ExecuteIndirectCommandBuffer(RHIRasterIndirectCommandBuffer indirectCmdBuffer)
+        public virtual void ExecuteIndirect(
+            RHIIndirectCommandLayout layout,
+            RHIBuffer argumentsBuffer,
+            uint argumentsOffset,
+            uint maximumCommandCount,
+            RHIBuffer? countBuffer = null,
+            uint countOffset = 0)
         {
             ValidateDrawState();
-            throw new NotSupportedException(
-                $"{GetType().Name} does not implement raster indirect command buffer execution.");
+            ArgumentNullException.ThrowIfNull(layout);
+            if (layout.Domain != ERHIIndirectDomain.Raster)
+            {
+                throw new ArgumentException("A raster encoder requires a raster indirect layout.", nameof(layout));
+            }
+            throw new NotSupportedException($"{GetType().Name} does not implement layout-driven raster indirect execution.");
         }
 
         public virtual void EndPass()

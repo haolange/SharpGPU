@@ -556,24 +556,12 @@ namespace SharpGPU
             Capabilities.PipelineCache.NativeCache.Require("DX12 pipeline cache");
             return new Dx12PipelineCache(this);
         }
-
-        public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
+        public override RHIIndirectCommandLayout CreateIndirectCommandLayout(in RHIIndirectCommandLayoutDescriptor descriptor)
         {
-            Capabilities.IndirectCommandBuffer.Execution.Require("DX12 indirect command buffer");
-            return new Dx12ComputeIndirectCommandBuffer(this, descriptor);
+            ThrowIfDisposed();
+            return new Dx12IndirectCommandLayout(this, descriptor);
         }
 
-        public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor)
-        {
-            Capabilities.IndirectCommandBuffer.Execution.Require("DX12 indirect command buffer");
-            return new Dx12RayTracingIndirectCommandBuffer(this, descriptor);
-        }
-
-        public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
-        {
-            Capabilities.IndirectCommandBuffer.Execution.Require("DX12 indirect command buffer");
-            return new Dx12RasterIndirectCommandBuffer(this, descriptor);
-        }
 
         public override RHIMLPipeline CreateMLPipeline(in RHIMLPipelineDescriptor descriptor)
         {
@@ -1097,6 +1085,15 @@ namespace SharpGPU
                 nativeMemoryBudgetAvailable = false;
             }
 
+            RHICapability indirectCommandExecution = RHICapability.Available(
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.CoreApi,
+                ERHICapabilityProbeKind.ApiVersion,
+                "ID3D12GraphicsCommandList.ExecuteIndirect + command signature");
+            RHICapability indirectMeshDispatch = Probe(
+                isMeshShadingSupported,
+                "D3D12_FEATURE_D3D12_OPTIONS7.MeshShaderTier plus ExecuteIndirect DispatchMesh",
+                "Mesh indirect dispatch requires an available DX12 mesh-shader pipeline.");
             m_Capabilities = new RHIDeviceCapabilities(
                 raster: new RHIRasterCapabilities(
                     projectionStrategy: isFlipProjection ? ERHIProjectionStrategy.FlipY : ERHIProjectionStrategy.Native,
@@ -1227,6 +1224,17 @@ namespace SharpGPU
                         "DX12 tiled resources are unavailable on this adapter.",
                         tier: sparseBindingTier,
                         strategy: ERHICapabilityStrategy.CoreApi),
+                    gpuVirtualAddress: RHICapability.Available(
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.CoreApi,
+                        ERHICapabilityProbeKind.ApiVersion,
+                        "ID3D12Resource.GPUVirtualAddress"),
+                    sparseBufferBinding: Probe(
+                        isSparseBindingSupported,
+                        "D3D12_FEATURE_D3D12_OPTIONS.TiledResourcesTier + CreateReservedResource(buffer) + UpdateTileMappings",
+                        "DX12 sparse buffers are unavailable on this adapter.",
+                        tier: sparseBindingTier,
+                        strategy: ERHICapabilityStrategy.CoreApi),
                     residency: Probe(
                         true,
                         "ID3D12Device3.EnqueueMakeResident + ID3D12Device.Evict",
@@ -1310,12 +1318,7 @@ namespace SharpGPU
                         isWorkgraphSupported,
                         "D3D12_FEATURE_D3D12_OPTIONS21.WorkGraphsTier plus SharpGPU pipeline factory",
                         "Work Graphs are unavailable.")),
-                indirectCommandBuffer: new RHIIndirectCommandBufferCapabilities(
-                    execution: RHICapability.Available(
-                        ERHICapabilityTier.Tier1,
-                        ERHICapabilityStrategy.CoreApi,
-                        ERHICapabilityProbeKind.ApiVersion,
-                        "ID3D12GraphicsCommandList.ExecuteIndirect + command signature")),
+                indirectCommandBuffer: new RHIIndirectCommandBufferCapabilities(indirectCommandExecution, new RHIIndirectTokenCapabilities(indirectCommandExecution, indirectCommandExecution, indirectCommandExecution, indirectCommandExecution, indirectCommandExecution, indirectMeshDispatch)),
                 compute: new RHIComputeCapabilities(
                     waveOperationStrategy,
                     waveOperations: Probe(

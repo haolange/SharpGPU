@@ -27,6 +27,23 @@ namespace SharpGPU
                 ThrowIfDisposed(); return m_NativeMemory;
             }
         }
+        public override ulong GpuVirtualAddress
+        {
+            get
+            {
+                ThrowIfDisposed();
+                m_VulkanDevice.Capabilities.Memory.GpuVirtualAddress.Require(
+                    "Vulkan buffer device address");
+                VkBufferDeviceAddressInfo info = new()
+                {
+                    sType = VkStructureType.BufferDeviceAddressInfo,
+                    buffer = m_NativeBuffer,
+                };
+                return VulkanNative.vkGetBufferDeviceAddress(
+                    m_VulkanDevice.NativeDevice,
+                    &info);
+            }
+        }
 
         private VulkanDevice m_VulkanDevice;
         private VkBuffer m_NativeBuffer;

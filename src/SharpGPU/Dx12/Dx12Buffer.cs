@@ -21,7 +21,15 @@ namespace SharpGPU
                 ThrowIfDisposed(); return m_NativeResource;
             }
         }
+        public override ulong GpuVirtualAddress
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return m_NativeResource.GPUVirtualAddress;
+            }
 
+        }
         private Dx12Device m_Dx12Device;
         private Vortice.Direct3D12.ID3D12Resource m_NativeResource;
         private RHIHeapPlacement? m_Placement;

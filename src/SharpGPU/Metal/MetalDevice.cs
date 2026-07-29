@@ -575,27 +575,12 @@ namespace SharpGPU
             throw new NotSupportedException(
                 "Metal pipeline cache is not exposed by SharpGPU.");
         }
-
-        public override RHIComputeIndirectCommandBuffer CreateComputeIndirectCommandBuffer(in RHIComputeIndirectCommandBufferDescription descriptor)
+        public override RHIIndirectCommandLayout CreateIndirectCommandLayout(in RHIIndirectCommandLayoutDescriptor descriptor)
         {
             ThrowIfDisposed();
-            Capabilities.IndirectCommandBuffer.Execution.Require("Metal compute indirect command buffer");
-            return new MetalComputeIndirectCommandBuffer(this, descriptor);
+            return new MetalIndirectCommandLayout(this, descriptor);
         }
 
-        public override RHIRayTracingIndirectCommandBuffer CreateRayTracingIndirectCommandBuffer(in RHIRayTracingIndirectCommandBufferDescription descriptor)
-        {
-            ThrowIfDisposed();
-            Capabilities.IndirectCommandBuffer.Execution.Require("Metal ray-tracing indirect command buffer");
-            return new MetalRayTracingIndirectCommandBuffer(this, descriptor);
-        }
-
-        public override RHIRasterIndirectCommandBuffer CreateRasterIndirectCommandBuffer(in RHIRasterIndirectCommandBufferDescription descriptor)
-        {
-            ThrowIfDisposed();
-            Capabilities.IndirectCommandBuffer.Execution.Require("Metal raster indirect command buffer");
-            return new MetalRasterIndirectCommandBuffer(this, descriptor);
-        }
 
         public override bool TryToggleGpuCapture(string savedPath, string reason)
         {
@@ -733,6 +718,10 @@ namespace SharpGPU
                     ERHICapabilityLimitKind.MaximumGroupSharedMemoryBytes,
                     m_NativeDevice.MaxThreadgroupMemoryLength));
 
+            RHICapability layoutIndirectUnavailable = RHICapability.Unavailable(
+                "Metal layout-driven indirect execution requires the unimplemented stream-to-ICB lowering path.",
+                ERHICapabilityProbeKind.BackendContract,
+                "SharpGPU Metal layout-stream lowering");
             m_Capabilities = new RHIDeviceCapabilities(
                 raster: new RHIRasterCapabilities(
                     ERHIProjectionStrategy.FlipY,
@@ -877,6 +866,16 @@ namespace SharpGPU
                         "The Metal runtime does not expose placement sparse resources.",
                         strategy: ERHICapabilityStrategy.NativeSpecialized,
                         probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe),
+                    gpuVirtualAddress: Probe(
+                        m_SupportsMetal4,
+                        "MTLBuffer.gpuAddress",
+                        "Metal buffer GPU addresses require a Metal 4 device.",
+                        strategy: ERHICapabilityStrategy.CoreApi,
+                        probeKind: ERHICapabilityProbeKind.ApiVersion),
+                    sparseBufferBinding: RHICapability.Unavailable(
+                        "Metal sparse-buffer mapping is not implemented.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Metal sparse-buffer contract"),
                     residency: RHICapability.Unavailable(
                         "MTLResidencySet does not provide the explicit completion-fence contract required by SharpGPU.",
                         ERHICapabilityProbeKind.BackendContract,
@@ -963,12 +962,7 @@ namespace SharpGPU
                         "Metal Work Graph execution is not exposed by SharpGPU.",
                         ERHICapabilityProbeKind.BackendContract,
                         "SharpGPU Metal factory surface")),
-                indirectCommandBuffer: new RHIIndirectCommandBufferCapabilities(
-                    execution: RHICapability.Available(
-                        ERHICapabilityTier.Tier1,
-                        ERHICapabilityStrategy.NativeSpecialized,
-                        ERHICapabilityProbeKind.ApiVersion,
-                        "MTLIndirectCommandBuffer / ExecuteCommandsInBuffer")),
+                indirectCommandBuffer: new RHIIndirectCommandBufferCapabilities(layoutIndirectUnavailable, new RHIIndirectTokenCapabilities(layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable)),
                 compute: new RHIComputeCapabilities(
                     ERHIWaveOperationStrategy.Basic,
                     waveOperations: RHICapability.Available(

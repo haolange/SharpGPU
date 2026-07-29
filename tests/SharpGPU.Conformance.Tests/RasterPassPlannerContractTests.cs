@@ -1450,12 +1450,6 @@ public sealed class RHIRasterPassPlannerContractTests
             ValidateDrawState();
         }
 
-        public override void ExecuteIndirectCommandBuffer(
-            RHIRasterIndirectCommandBuffer indirectCmdBuffer)
-        {
-            ValidateDrawState();
-        }
-
         public override void EndPass()
         {
             ClearRasterPassState();
