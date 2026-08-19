@@ -269,13 +269,6 @@ namespace SharpGPU
         NativeLibrary
     }
 
-    public enum ERHIPresentationMaintenanceStrategy : byte
-    {
-        Unavailable,
-        PresentFence,
-        QueueIdle
-    }
-
     public enum ERHICapabilityProbeKind : byte
     {
         BackendContract,
@@ -677,57 +670,13 @@ namespace SharpGPU
     public sealed class RHIPresentationCapabilities
     {
         public RHICapability SwapChain { get; }
-        public RHICapability AcquireSignal { get; }
-        public RHICapability PresentWait { get; }
-        public RHICapability PresentCompletion { get; }
-        public RHICapability Maintenance { get; }
-        public ERHIPresentationMaintenanceStrategy MaintenanceStrategy { get; }
         public RHICapability Hdr { get; }
 
         public RHIPresentationCapabilities(
             RHICapability swapChain,
-            RHICapability acquireSignal,
-            RHICapability presentWait,
-            RHICapability presentCompletion,
-            RHICapability maintenance,
-            ERHIPresentationMaintenanceStrategy maintenanceStrategy,
             RHICapability hdr)
         {
-            if (!Enum.IsDefined(maintenanceStrategy))
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(maintenanceStrategy),
-                    maintenanceStrategy,
-                    "Unknown presentation maintenance strategy.");
-            }
-            bool maintenanceAvailable =
-                maintenance.Tier != ERHICapabilityTier.Unavailable;
-            if (maintenanceAvailable ==
-                (maintenanceStrategy ==
-                    ERHIPresentationMaintenanceStrategy.Unavailable))
-            {
-                throw new ArgumentException(
-                    maintenanceAvailable
-                        ? "Available presentation maintenance must name its exact drain strategy."
-                        : "Unavailable presentation maintenance cannot advertise a drain strategy.",
-                    nameof(maintenanceStrategy));
-            }
-            if (maintenanceStrategy ==
-                    ERHIPresentationMaintenanceStrategy.PresentFence &&
-                presentCompletion.Tier ==
-                    ERHICapabilityTier.Unavailable)
-            {
-                throw new ArgumentException(
-                    "PresentFence maintenance requires present-completion fence support.",
-                    nameof(presentCompletion));
-            }
-
             SwapChain = swapChain;
-            AcquireSignal = acquireSignal;
-            PresentWait = presentWait;
-            PresentCompletion = presentCompletion;
-            Maintenance = maintenance;
-            MaintenanceStrategy = maintenanceStrategy;
             Hdr = hdr;
         }
     }
@@ -906,12 +855,6 @@ namespace SharpGPU
                 new RHIPipelineCacheCapabilities(unavailable),
                 new RHIPresentationCapabilities(
                     swapChain: unavailable,
-                    acquireSignal: unavailable,
-                    presentWait: unavailable,
-                    presentCompletion: unavailable,
-                    maintenance: unavailable,
-                    maintenanceStrategy:
-                        ERHIPresentationMaintenanceStrategy.Unavailable,
                     hdr: unavailable),
                 new RHIRayTracingCapabilities(
                     pipeline: unavailable,

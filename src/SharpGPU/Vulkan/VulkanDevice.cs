@@ -1500,51 +1500,14 @@ namespace SharpGPU
                         "VkPipelineCache")),
                 presentation: new RHIPresentationCapabilities(
                     swapChain: Probe(
-                        m_SwapchainSupported,
-                        "VK_KHR_swapchain device-extension enumeration",
-                        "The Vulkan device does not expose VK_KHR_swapchain.",
-                        strategy: ERHICapabilityStrategy.NativeExtension,
-                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery),
-                    acquireSignal: Probe(
-                        m_SwapchainSupported,
-                        "VK_KHR_swapchain vkAcquireNextImageKHR semaphore/fence contract",
-                        "Vulkan acquisition synchronization requires VK_KHR_swapchain.",
-                        strategy: ERHICapabilityStrategy.NativeExtension,
-                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery),
-                    presentWait: Probe(
-                        m_SwapchainSupported,
-                        "VK_KHR_swapchain VkPresentInfoKHR wait-semaphore contract",
-                        "Vulkan presentation waits require VK_KHR_swapchain.",
-                        strategy: ERHICapabilityStrategy.NativeExtension,
-                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery),
-                    presentCompletion: Probe(
                         m_SwapchainSupported &&
                             m_SwapchainMaintenanceSupported,
-                        "VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR.swapchainMaintenance1 + VkSwapchainPresentFenceInfoKHR",
-                        "Vulkan present completion fences require VK_KHR_swapchain plus VK_KHR/EXT_swapchain_maintenance1.",
+                        "VK_KHR_swapchain plus VK_KHR/EXT_swapchain_maintenance1 present-completion fences",
+                        !m_SwapchainSupported
+                            ? "The Vulkan device does not expose VK_KHR_swapchain."
+                            : "Vulkan presentation requires VK_KHR/EXT_swapchain_maintenance1.",
                         strategy: ERHICapabilityStrategy.NativeExtension,
                         probeKind: ERHICapabilityProbeKind.NativeExtensionQuery),
-                    maintenance: Probe(
-                        m_SwapchainSupported,
-                        m_SwapchainMaintenanceSupported
-                            ? "VkSwapchainPresentFenceInfoKHR caller-drained present completion"
-                            : "VK_KHR_swapchain plus explicit caller vkQueueWaitIdle lifecycle drain",
-                        "Vulkan presentation maintenance requires VK_KHR_swapchain.",
-                        tier: ERHICapabilityTier.Tier1,
-                        strategy:
-                            m_SwapchainMaintenanceSupported
-                                ? ERHICapabilityStrategy.NativeExtension
-                                : ERHICapabilityStrategy.CoreApi,
-                        probeKind:
-                            m_SwapchainMaintenanceSupported
-                                ? ERHICapabilityProbeKind.NativeExtensionQuery
-                                : ERHICapabilityProbeKind.BackendContract),
-                    maintenanceStrategy:
-                        !m_SwapchainSupported
-                            ? ERHIPresentationMaintenanceStrategy.Unavailable
-                            : m_SwapchainMaintenanceSupported
-                                ? ERHIPresentationMaintenanceStrategy.PresentFence
-                                : ERHIPresentationMaintenanceStrategy.QueueIdle,
                     hdr: Probe(
                         false,
                         "Vulkan surface format/color-space probe",

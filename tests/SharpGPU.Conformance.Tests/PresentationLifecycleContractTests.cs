@@ -5,10 +5,11 @@ using Xunit;
 
 namespace SharpGPU.Conformance.Tests;
 
+[Trait("Category", "SharpGpuPortable")]
 public sealed class PresentationLifecycleContractTests
 {
     [Fact]
-    public void PresentationMaintenanceStrategy_ShouldBeExactAndFailClosed()
+    public void PresentationCapabilities_ShouldOnlyExposeSwapChainAndHdr()
     {
         RHICapability available = RHICapability.Available(
             ERHICapabilityTier.Tier1,
@@ -20,91 +21,26 @@ public sealed class PresentationLifecycleContractTests
             ERHICapabilityProbeKind.BackendContract,
             "presentation lifecycle contract test");
 
-        RHIPresentationCapabilities queueIdle =
-            new(
-                swapChain: available,
-                acquireSignal: available,
-                presentWait: available,
-                presentCompletion: unavailable,
-                maintenance: available,
-                maintenanceStrategy:
-                    ERHIPresentationMaintenanceStrategy.QueueIdle,
-                hdr: unavailable);
-        Assert.Equal(
-            ERHIPresentationMaintenanceStrategy.QueueIdle,
-            queueIdle.MaintenanceStrategy);
-
-        RHIPresentationCapabilities presentFence =
-            new(
-                swapChain: available,
-                acquireSignal: available,
-                presentWait: available,
-                presentCompletion: available,
-                maintenance: available,
-                maintenanceStrategy:
-                    ERHIPresentationMaintenanceStrategy.PresentFence,
-                hdr: unavailable);
-        Assert.Equal(
-            ERHIPresentationMaintenanceStrategy.PresentFence,
-            presentFence.MaintenanceStrategy);
-
-        Assert.Throws<ArgumentException>(
-            () => new RHIPresentationCapabilities(
-                available,
-                available,
-                available,
-                unavailable,
-                available,
-                ERHIPresentationMaintenanceStrategy.PresentFence,
-                unavailable));
-        Assert.Throws<ArgumentException>(
-            () => new RHIPresentationCapabilities(
-                available,
-                available,
-                available,
-                available,
-                available,
-                ERHIPresentationMaintenanceStrategy.Unavailable,
-                unavailable));
-        Assert.Throws<ArgumentException>(
-            () => new RHIPresentationCapabilities(
-                available,
-                available,
-                available,
-                available,
-                unavailable,
-                ERHIPresentationMaintenanceStrategy.QueueIdle,
-                unavailable));
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => new RHIPresentationCapabilities(
-                available,
-                available,
-                available,
-                available,
-                available,
-                (ERHIPresentationMaintenanceStrategy)byte.MaxValue,
-                unavailable));
-    }
-
-    [Fact]
-    public void WaitIdle_ShouldBeExplicitAndRejectUseAfterDispose()
-    {
-        using CountingCommandQueue queue = new();
-
-        queue.WaitIdle();
-
-        Assert.Equal(1, queue.WaitIdleCount);
-        Assert.Equal(0, queue.SubmitCount);
-
-        RHIQueueSubmitDescriptor descriptor =
-            new(completionFence: null);
-        queue.Submit(in descriptor);
-
-        Assert.Equal(1, queue.WaitIdleCount);
-        Assert.Equal(1, queue.SubmitCount);
-
-        queue.Dispose();
-        Assert.Throws<ObjectDisposedException>(() => queue.WaitIdle());
+        RHIPresentationCapabilities capabilities =
+            new(swapChain: available, hdr: unavailable);
+        Assert.Equal(ERHICapabilityTier.Tier1, capabilities.SwapChain.Tier);
+        Assert.Equal(ERHICapabilityTier.Unavailable, capabilities.Hdr.Tier);
+        Assert.Null(
+            typeof(RHIPresentationCapabilities).GetProperty("AcquireSignal"));
+        Assert.Null(
+            typeof(RHIPresentationCapabilities).GetProperty("PresentWait"));
+        Assert.Null(
+            typeof(RHIPresentationCapabilities).GetProperty(
+                "PresentCompletion"));
+        Assert.Null(
+            typeof(RHIPresentationCapabilities).GetProperty("Maintenance"));
+        Assert.Null(
+            typeof(RHIPresentationCapabilities).GetProperty(
+                "MaintenanceStrategy"));
+        Assert.Null(typeof(RHICommandQueue).GetMethod("WaitIdle"));
+        Assert.Null(
+            typeof(RHICommandQueue).Assembly.GetType(
+                "SharpGPU.ERHIPresentationMaintenanceStrategy"));
     }
 
     [Fact]
@@ -154,7 +90,7 @@ public sealed class PresentationLifecycleContractTests
     }
 
     [Fact]
-    public void QueueIdle_ShouldAppearOnlyInExplicitRendererLifecycleDrain()
+    public void PresentationSync_ShouldBeFenceOnlyWithoutWaitIdleOrCapabilityFork()
     {
         string root = FindRepositoryRoot();
         string sharpGpu = Path.Combine(
@@ -254,50 +190,24 @@ public sealed class PresentationLifecycleContractTests
             renderContext,
             "private void DrainPresentation()");
         Assert.Contains(
-            "ERHIPresentationMaintenanceStrategy.PresentFence",
+            "DrainFrameResources();",
             drainPresentation,
             StringComparison.Ordinal);
         Assert.Contains(
-            "ERHIPresentationMaintenanceStrategy.QueueIdle",
+            "DrainPresentCompletions();",
             drainPresentation,
             StringComparison.Ordinal);
-        Assert.Contains(
-            ".WaitIdle();",
-            drainPresentation,
-            StringComparison.Ordinal);
-        int presentFenceBranchStart = drainPresentation.IndexOf(
-            "case ERHIPresentationMaintenanceStrategy.PresentFence:",
-            StringComparison.Ordinal);
-        int queueIdleBranchStart = drainPresentation.IndexOf(
-            "case ERHIPresentationMaintenanceStrategy.QueueIdle:",
-            StringComparison.Ordinal);
-        int unavailableBranchStart = drainPresentation.IndexOf(
-            "case ERHIPresentationMaintenanceStrategy.Unavailable:",
-            StringComparison.Ordinal);
-        Assert.True(presentFenceBranchStart >= 0);
-        Assert.True(queueIdleBranchStart > presentFenceBranchStart);
-        Assert.True(unavailableBranchStart > queueIdleBranchStart);
-
-        string presentFenceBranch = drainPresentation[
-            presentFenceBranchStart..queueIdleBranchStart];
         Assert.DoesNotContain(
             "WaitIdle",
-            presentFenceBranch,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "DrainPresentCompletions();",
-            presentFenceBranch,
-            StringComparison.Ordinal);
-
-        string queueIdleBranch = drainPresentation[
-            queueIdleBranchStart..unavailableBranchStart];
-        Assert.Contains(
-            ".WaitIdle();",
-            queueIdleBranch,
+            drainPresentation,
             StringComparison.Ordinal);
         Assert.DoesNotContain(
-            "DrainPresentCompletions();",
-            queueIdleBranch,
+            "MaintenanceStrategy",
+            drainPresentation,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "QueueIdle",
+            drainPresentation,
             StringComparison.Ordinal);
 
         Assert.Equal(
@@ -305,6 +215,19 @@ public sealed class PresentationLifecycleContractTests
             CountOccurrences(
                 renderContext,
                 "DrainPresentation();"));
+
+        Assert.DoesNotContain(
+            "WaitIdle",
+            renderContext,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "QueueIdle",
+            renderContext,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "MaintenanceStrategy",
+            renderContext,
+            StringComparison.Ordinal);
 
         foreach (string path in Directory.EnumerateFiles(
                      sharpGpu,
@@ -339,9 +262,43 @@ public sealed class PresentationLifecycleContractTests
                 "Submit(in RHIQueueSubmitDescriptor descriptor)");
             Assert.DoesNotContain(
                 "WaitIdle",
+                File.ReadAllText(path),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "WaitIdle",
                 submit,
                 StringComparison.Ordinal);
         }
+
+        string dx12SwapChain = File.ReadAllText(
+            Path.Combine(sharpGpu, "Dx12", "Dx12SwapChain.cs"));
+        Assert.DoesNotContain(
+            "DXGI swapchain acquisition has no native",
+            dx12SwapChain,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "DXGI Present does not consume SharpGPU binary semaphores",
+            dx12SwapChain,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "WaitPresentation(",
+            dx12SwapChain,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "SignalPresentation(",
+            dx12SwapChain,
+            StringComparison.Ordinal);
+
+        string metalSwapChain = File.ReadAllText(
+            Path.Combine(sharpGpu, "Metal", "MetalSwapChain.cs"));
+        Assert.DoesNotContain(
+            "CAMetalLayer acquisition does not signal",
+            metalSwapChain,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "CAMetalDrawable Present does not consume RHI semaphores",
+            metalSwapChain,
+            StringComparison.Ordinal);
 
         string reclaim = ExtractMethodBody(
             renderContext,
@@ -564,7 +521,23 @@ public sealed class PresentationLifecycleContractTests
             presentation,
             StringComparison.Ordinal);
         Assert.Contains(
-            "? ERHIPresentationMaintenanceStrategy.Unavailable",
+            "m_SwapchainSupported &&",
+            presentation,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "m_SwapchainMaintenanceSupported",
+            presentation,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "swapchain_maintenance1",
+            presentation,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "QueueIdle",
+            presentation,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "vkQueueWaitIdle",
             presentation,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -823,29 +796,5 @@ public sealed class PresentationLifecycleContractTests
 
         throw new InvalidOperationException(
             "Failed to locate repository root from test output directory.");
-    }
-
-    private sealed class CountingCommandQueue : RHICommandQueue
-    {
-        public int SubmitCount { get; private set; }
-        public int WaitIdleCount { get; private set; }
-
-        public override ulong Frequency => 1;
-        protected override object DeviceIdentity => this;
-
-        public override RHICommandBuffer CreateCommandBuffer() =>
-            throw new NotSupportedException();
-
-        public override void Submit(
-            in RHIQueueSubmitDescriptor descriptor)
-        {
-            ++SubmitCount;
-        }
-
-        public override void WaitIdle()
-        {
-            ThrowIfDisposed();
-            ++WaitIdleCount;
-        }
     }
 }

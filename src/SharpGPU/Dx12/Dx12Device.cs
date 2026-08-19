@@ -1266,26 +1266,7 @@ namespace SharpGPU
                         ERHICapabilityTier.Tier1,
                         ERHICapabilityStrategy.CoreApi,
                         ERHICapabilityProbeKind.BackendContract,
-                        "DXGI flip-model swapchain"),
-                    acquireSignal: RHICapability.Unavailable(
-                        "DXGI acquisition does not signal a caller-owned native synchronization primitive.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "IDXGISwapChain current back-buffer index"),
-                    presentWait: RHICapability.Unavailable(
-                        "DXGI Present does not consume caller-owned GPU semaphores.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "IDXGISwapChain::Present"),
-                    presentCompletion: RHICapability.Unavailable(
-                        "A per-present native completion fence is not exposed by the current DXGI contract.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "IDXGISwapChain::Present"),
-                    maintenance: RHICapability.Available(
-                        ERHICapabilityTier.Tier1,
-                        ERHICapabilityStrategy.CoreApi,
-                        ERHICapabilityProbeKind.BackendContract,
-                        "explicit RHICommandQueue.WaitIdle before caller-owned IDXGISwapChain::ResizeBuffers"),
-                    maintenanceStrategy:
-                        ERHIPresentationMaintenanceStrategy.QueueIdle,
+                        "DXGI flip-model swapchain with queue-ordered acquire/present synchronization"),
                     hdr: Probe(
                         isHDRPresentSupported,
                         "DXGI output/color-space probe",

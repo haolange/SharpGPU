@@ -84,12 +84,6 @@ namespace SharpGPU
                 {
                     result = TerminalAcquireResult();
                 }
-                else if (descriptor.SignalSemaphore != null ||
-                    descriptor.CompletionFence != null)
-                {
-                    throw new NotSupportedException(
-                        "DXGI swapchain acquisition has no native semaphore/fence signal contract.");
-                }
                 else if (m_HasAcquiredImage)
                 {
                     throw new InvalidOperationException(
@@ -106,6 +100,9 @@ namespace SharpGPU
                     }
 
                     m_HasAcquiredImage = true;
+                    SignalAcquire(
+                        descriptor.SignalSemaphore,
+                        descriptor.CompletionFence);
                     result = RHISwapChainAcquireResult.Acquired(
                         m_Textures[imageIndex],
                         imageIndex);
@@ -324,15 +321,10 @@ namespace SharpGPU
                     throw new InvalidOperationException(
                         "Present requires one successfully acquired DX12 back buffer.");
                 }
-                else if (!descriptor.WaitSemaphores.IsEmpty ||
-                    descriptor.CompletionFence != null)
-                {
-                    throw new NotSupportedException(
-                        "DXGI Present does not consume SharpGPU binary semaphores " +
-                        "or expose a native per-present fence.");
-                }
                 else
                 {
+                    RequirePresentQueue().WaitPresentation(
+                        descriptor.WaitSemaphores.Span);
                     SharpGen.Runtime.Result nativeResult = m_NativeSwapChain.Present(
                         Dx12Utility.ConvertToDx12SyncInterval(
                             m_Descriptor.PresentMode),
@@ -369,6 +361,7 @@ namespace SharpGPU
                             ERHISwapChainStatus.Success);
                     }
 
+                    SignalPresentCompletion(descriptor.CompletionFence);
                     waitsConsumed = true;
                 }
 
@@ -424,6 +417,54 @@ namespace SharpGPU
                 }
                 throw;
             }
+        }
+
+        private Dx12CommandQueue RequirePresentQueue()
+        {
+            if (m_Descriptor.PresentQueue is not Dx12CommandQueue queue ||
+                !ReferenceEquals(queue.Dx12Device, m_Dx12Device))
+            {
+                throw new InvalidOperationException(
+                    "DX12 presentation requires a present queue from this device.");
+            }
+
+            return queue;
+        }
+
+        private void SignalAcquire(
+            RHISemaphore? signalSemaphore,
+            RHIFence? completionFence)
+        {
+            Dx12Semaphore? semaphore = null;
+            if (signalSemaphore != null)
+            {
+                semaphore = signalSemaphore as Dx12Semaphore ??
+                    throw new ArgumentException(
+                        "The acquire signal semaphore is not a DX12 semaphore.");
+            }
+
+            Dx12Fence? fence = null;
+            if (completionFence != null)
+            {
+                fence = completionFence as Dx12Fence ??
+                    throw new ArgumentException(
+                        "The acquire completion fence is not a DX12 fence.");
+            }
+
+            RequirePresentQueue().SignalPresentation(semaphore, fence);
+        }
+
+        private void SignalPresentCompletion(RHIFence? completionFence)
+        {
+            if (completionFence == null)
+            {
+                return;
+            }
+
+            Dx12Fence fence = completionFence as Dx12Fence ??
+                throw new ArgumentException(
+                    "The present completion fence is not a DX12 fence.");
+            RequirePresentQueue().SignalPresentation(semaphore: null, fence);
         }
 
         private void CreateDX12SwapChain(in RHISwapChainDescriptor descriptor)

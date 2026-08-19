@@ -900,33 +900,11 @@ namespace SharpGPU
                 presentation: new RHIPresentationCapabilities(
                     swapChain: Probe(
                         m_SupportsMetal4,
-                        "CAMetalLayer runtime on a Metal 4 device",
+                        "CAMetalLayer runtime on a Metal 4 device with queue-ordered acquire/present synchronization",
                         "Metal swapchain creation requires CAMetalLayer and Metal 4.",
                         ERHICapabilityTier.Tier1,
                         ERHICapabilityStrategy.CoreApi,
                         probeKind: ERHICapabilityProbeKind.ApiVersion),
-                    acquireSignal: RHICapability.Unavailable(
-                        "CAMetalLayer nextDrawable does not signal caller-owned RHI synchronization.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "CAMetalLayer acquisition contract"),
-                    presentWait: RHICapability.Unavailable(
-                        "CAMetalDrawable presentation does not consume caller-owned RHI semaphores.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "CAMetalDrawable presentation contract"),
-                    presentCompletion: Probe(
-                        m_SupportsMetal4,
-                        "CAMetalDrawable addPresentedHandler runtime contract",
-                        "Metal presentation completion callbacks require the Metal 4 runtime.",
-                        strategy: ERHICapabilityStrategy.NativeSpecialized,
-                        probeKind: ERHICapabilityProbeKind.ApiVersion),
-                    maintenance: Probe(
-                        m_SupportsMetal4,
-                        "caller-drained CAMetalLayer replacement",
-                        "Metal swapchain maintenance requires the Metal 4 runtime.",
-                        strategy: ERHICapabilityStrategy.CoreApi,
-                        probeKind: ERHICapabilityProbeKind.ApiVersion),
-                    maintenanceStrategy:
-                        ERHIPresentationMaintenanceStrategy.PresentFence,
                     hdr: RHICapability.Unavailable(
                         "SharpGPU does not yet expose the CAMetalLayer colorspace and extended-dynamic-range contract required for HDR presentation.",
                         ERHICapabilityProbeKind.BackendContract,

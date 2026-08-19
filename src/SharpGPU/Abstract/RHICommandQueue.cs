@@ -95,30 +95,6 @@ namespace SharpGPU
         public abstract RHICommandBuffer CreateCommandBuffer();
         public abstract void Submit(in RHIQueueSubmitDescriptor descriptor);
 
-        /// <summary>
-        /// Explicit caller-owned lifecycle drain. Submit, swapchain Dispose,
-        /// and backend recovery never invoke this method implicitly.
-        /// </summary>
-        public virtual void WaitIdle()
-        {
-            ThrowIfDisposed();
-            ThrowIfOwnerDeviceUnavailable();
-            try
-            {
-                throw new NotSupportedException(
-                    $"{GetType().Name} does not expose exact native queue idle completion.");
-            }
-            catch (RHIException exception)
-            {
-                if (exception.ErrorCode == ERHIErrorCode.DeviceLost &&
-                    DeviceIdentity is RHIDevice device)
-                {
-                    device.MarkDeviceLost(exception);
-                }
-                throw;
-            }
-        }
-
         public virtual void BindSparse(in RHISparseBindDescriptor descriptor)
         {
             ThrowIfDisposed();

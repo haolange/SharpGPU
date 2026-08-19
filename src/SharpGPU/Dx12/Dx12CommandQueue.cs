@@ -153,21 +153,45 @@ namespace SharpGPU
             }
         }
 
-        public override void WaitIdle()
+        internal void WaitPresentation(ReadOnlySpan<RHISemaphore> waits)
         {
-            using Dx12Fence completion = new(m_Dx12Device);
-            RHIQueueSubmitDescriptor descriptor =
-                new(completionFence: completion);
-            Submit(in descriptor);
-            ERHIFenceStatus status = completion.Wait();
-            if (status != ERHIFenceStatus.Success)
+            for (int i = 0; i < waits.Length; ++i)
             {
-                throw new RHIException(
-                    ERHIErrorCode.SynchronizationFailed,
-                    ERHIBackend.DirectX12,
-                    nativeCode: 0,
-                    $"DX12 queue lifecycle drain completed with '{status}'.",
-                    ERHIDeviceState.Operational);
+                if (waits[i] is not Dx12Semaphore semaphore)
+                {
+                    throw new ArgumentException(
+                        $"Wait semaphore at index {i} is not a DX12 semaphore.");
+                }
+
+                ulong waitValue = semaphore.LastSignaledValue;
+                if (waitValue == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Wait semaphore at index {i} has no native signal value.");
+                }
+
+                SharpGen.Runtime.Result waitResult =
+                    m_NativeCommandQueue.Wait(semaphore.NativeFence, waitValue);
+                Dx12Utility.CHECK_HR(waitResult);
+            }
+        }
+
+        internal void SignalPresentation(Dx12Semaphore? semaphore, Dx12Fence? fence)
+        {
+            if (semaphore != null)
+            {
+                ulong signalValue = semaphore.PrepareSignalValue();
+                SharpGen.Runtime.Result signalResult =
+                    m_NativeCommandQueue.Signal(semaphore.NativeFence, signalValue);
+                Dx12Utility.CHECK_HR(signalResult);
+            }
+
+            if (fence != null)
+            {
+                ulong signalValue = fence.PrepareSignalValue();
+                SharpGen.Runtime.Result signalResult =
+                    m_NativeCommandQueue.Signal(fence.NativeFence, signalValue);
+                Dx12Utility.CHECK_HR(signalResult);
             }
         }
 

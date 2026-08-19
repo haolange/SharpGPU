@@ -189,11 +189,7 @@ internal static class SharpGpuCapabilityReportFactory
                     name,
                     capability.Tier.ToString(),
                     capability.Strategy.ToString(),
-                    domainValue is RHIPresentationCapabilities presentation &&
-                        capabilityProperty.Name ==
-                            nameof(RHIPresentationCapabilities.Maintenance)
-                        ? presentation.MaintenanceStrategy.ToString()
-                        : null,
+                    null,
                     limits,
                     capability.UnavailableReason,
                     new SharpGpuCapabilityProbeReport(

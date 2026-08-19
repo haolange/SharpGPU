@@ -130,7 +130,8 @@ namespace SharpGPU.Conformance.Tests
                     () => _ = swapChain.ImageCount));
             Assert.Same(
                 diagnostic,
-                Assert.Throws<RHIException>(() => queue.WaitIdle()));
+                Assert.Throws<RHIException>(
+                    () => queue.Submit(new RHIQueueSubmitDescriptor())));
             Assert.Same(
                 diagnostic,
                 Assert.Throws<RHIException>(() => _ = fence.Status));
@@ -143,7 +144,6 @@ namespace SharpGPU.Conformance.Tests
                 Assert.Throws<RHIException>(() => device.CreateFence()));
 
             Assert.Equal(1, swapChain.ResizeCoreCount);
-            Assert.Equal(0, queue.WaitIdleCoreCount);
         }
 
         [Fact]
@@ -333,8 +333,6 @@ namespace SharpGPU.Conformance.Tests
         {
             private readonly ScriptedDevice m_Device;
 
-            internal int WaitIdleCoreCount { get; private set; }
-
             internal ScriptedCommandQueue(ScriptedDevice device)
             {
                 m_Device = device;
@@ -356,13 +354,6 @@ namespace SharpGPU.Conformance.Tests
                 ValidateSubmit(in descriptor);
                 ReserveSubmit(in descriptor);
                 CommitSubmit(in descriptor);
-            }
-
-            public override void WaitIdle()
-            {
-                ThrowIfDisposed();
-                m_Device.ThrowIfDeviceUnavailable();
-                ++WaitIdleCoreCount;
             }
         }
 

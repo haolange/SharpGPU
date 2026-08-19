@@ -472,13 +472,6 @@ namespace SharpGPU
                     m_TerminalStatus,
                     m_TerminalDiagnostic);
             }
-            if (descriptor.SignalSemaphore != null ||
-                descriptor.CompletionFence != null)
-            {
-                throw new NotSupportedException(
-                    "CAMetalLayer acquisition does not signal a " +
-                    "caller-owned semaphore or fence.");
-            }
             if (m_CurrentBackTexture != null)
             {
                 throw new InvalidOperationException(
@@ -515,6 +508,9 @@ namespace SharpGPU
                 in m_CurrentDrawable);
             m_BackTextureIndex =
                 (m_BackTextureIndex + 1) % m_ImageCount;
+            SignalAcquire(
+                descriptor.SignalSemaphore,
+                descriptor.CompletionFence);
             return RHISwapChainAcquireResult.Acquired(
                 m_CurrentBackTexture,
                 m_BackTextureIndex);
@@ -524,7 +520,7 @@ namespace SharpGPU
             in RHISwapChainResizeDescriptor descriptor)
         {
             m_MetalDevice.ThrowIfCommandQueueFailed();
-            m_MetalDevice.Capabilities.Presentation.Maintenance.Require("Metal swapchain resize");
+            m_MetalDevice.Capabilities.Presentation.SwapChain.Require("Metal swapchain resize");
             if (m_CurrentBackTexture != null)
             {
                 throw new InvalidOperationException(
@@ -637,18 +633,13 @@ namespace SharpGPU
                 throw new InvalidOperationException(
                     "Present requires one successfully acquired Metal drawable.");
             }
-            if (!descriptor.WaitSemaphores.IsEmpty)
-            {
-                throw new NotSupportedException(
-                    "CAMetalDrawable Present does not consume RHI semaphores.");
-            }
+            RequirePresentQueue().WaitPresentation(
+                descriptor.WaitSemaphores.Span);
 
             MetalFence? completionFence = null;
             ulong presentSignalValue = 0;
             if (descriptor.CompletionFence != null)
             {
-                m_MetalDevice.Capabilities.Presentation.PresentCompletion.Require(
-                    "Metal swapchain presentation completion");
                 if (descriptor.CompletionFence is not
                     MetalFence metalCompletionFence)
                 {
@@ -691,6 +682,49 @@ namespace SharpGPU
             // DrawableSize is in pixels. Keep layer.Frame in points via the UIKit/AppKit view.
             layer.DrawableSize = new CGSize(extent.x, extent.y);
             SyncLayerFrameFromSurface(layer, surfaceHandle);
+        }
+
+        private MetalCommandQueue RequirePresentQueue()
+        {
+            if (m_Descriptor.PresentQueue is not MetalCommandQueue queue ||
+                !ReferenceEquals(queue.MetalDevice, m_MetalDevice))
+            {
+                throw new InvalidOperationException(
+                    "Metal presentation requires a present queue from this device.");
+            }
+
+            return queue;
+        }
+
+        private static void SignalAcquire(
+            RHISemaphore? signalSemaphore,
+            RHIFence? completionFence)
+        {
+            if (signalSemaphore != null)
+            {
+                if (signalSemaphore is not MetalSemaphore semaphore)
+                {
+                    throw new ArgumentException(
+                        "The acquire signal semaphore is not a Metal semaphore.");
+                }
+
+                ulong signalValue = semaphore.PrepareSignalValue();
+                MTLSharedEvent nativeEvent = semaphore.NativeEvent;
+                nativeEvent.SignaledValue = signalValue;
+            }
+
+            if (completionFence != null)
+            {
+                if (completionFence is not MetalFence fence)
+                {
+                    throw new ArgumentException(
+                        "The acquire completion fence is not a Metal fence.");
+                }
+
+                ulong signalValue = fence.PrepareSignalValue();
+                MTLSharedEvent nativeEvent = fence.NativeEvent;
+                nativeEvent.SignaledValue = signalValue;
+            }
         }
 
         private void ValidateCreateDescriptor(

@@ -54,7 +54,7 @@ A Successful native capability probe is never a substitute for a Passed Qualifie
 | PipelineCache | `RHIDeviceCapabilities.PipelineCache.NativeCache`, `RHIPipelineCache` | Typed capability + API contract | cold/warm/restart native hit, typed corrupt/incompatible import, full-key non-collision | unavailable native cache strategy throws `NotSupportedException`; caller owns opaque blobs |
 | WorkGraph | `RHIDeviceCapabilities.WorkGraph.Execution`, `RHIWorkGraphPipeline`, `RHIWorkGraphEncoder` | Typed capability | native create/dispatch/readback on each reported strategy | factory/encoding throws `NotSupportedException` when unavailable |
 | RasterSubPass | `RHIRasterPassDescriptor`, `RHISubPassDescriptor`, `NextSubPass` | Typed capability + API contract | immutable planner tests and backend multi-subpass pixel/readback qualification | inexpressible access/attachment contracts fail before native encoding; no public layout/bindings type |
-| Presentation | `RHIDeviceCapabilities.Presentation`, swapchain acquire/present/resize typed status | Typed capability + API contract | matching-window minimize/resize/out-of-date/surface-lost/device-lost scenarios | HAL reports status and never performs hidden recreate or `WaitIdle` |
+| Presentation | `RHIDeviceCapabilities.Presentation.SwapChain`/`Hdr`, swapchain acquire/present/resize typed status plus fence/semaphore sync | Typed capability + API contract | matching-window minimize/resize/out-of-date/surface-lost/device-lost scenarios | HAL reports status and never performs hidden recreate or queue idle; acquire signal, present wait, and present completion are available whenever swapchain is |
 
 ## Contract Rules
 

@@ -40,6 +40,28 @@ namespace SharpGPU
             InitializeResidencySet();
         }
 
+        internal void WaitPresentation(ReadOnlySpan<RHISemaphore> waits)
+        {
+            m_MetalDevice.ThrowIfCommandQueueFailed();
+            for (int i = 0; i < waits.Length; ++i)
+            {
+                if (waits[i] is not MetalSemaphore semaphore)
+                {
+                    throw new ArgumentException(
+                        $"Wait semaphore at index {i} is not a Metal semaphore.");
+                }
+
+                ulong waitValue = semaphore.LastSignaledValue;
+                if (waitValue == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Wait semaphore at index {i} has no native signal value.");
+                }
+
+                m_NativeQueue4.WaitForEvent(semaphore.NativeEvent, waitValue);
+            }
+        }
+
         public override RHICommandBuffer CreateCommandBuffer()
         {
             m_MetalDevice.ThrowIfCommandQueueFailed();

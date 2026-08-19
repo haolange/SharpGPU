@@ -157,29 +157,6 @@ namespace SharpGPU
             }
         }
 
-        public override void WaitIdle()
-        {
-            VkResult result =
-                VulkanNative.vkQueueWaitIdle(m_NativeQueue);
-            if (result == VkResult.Success)
-            {
-                return;
-            }
-
-            ERHIDeviceState state =
-                result == VkResult.ErrorDeviceLost
-                    ? ERHIDeviceState.Lost
-                    : ERHIDeviceState.Operational;
-            throw new RHIException(
-                result == VkResult.ErrorDeviceLost
-                    ? ERHIErrorCode.DeviceLost
-                    : ERHIErrorCode.NativeFailure,
-                ERHIBackend.Vulkan,
-                (int)result,
-                $"vkQueueWaitIdle returned {result}.",
-                state);
-        }
-
         public override void BindSparse(in RHISparseBindDescriptor descriptor)
         {
             m_VulkanDevice.Capabilities.Memory.SparseBinding.Require(
