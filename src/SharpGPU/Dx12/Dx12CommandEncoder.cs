@@ -361,6 +361,7 @@ namespace SharpGPU
             Dx12CommandBuffer commandBuffer,
             in RHIBarrier barrier)
         {
+            ERHIPipelineType queuePipeline = commandBuffer.CommandQueue.PipelineType;
             Vortice.Direct3D12.ResourceBarrier nativeBarrier;
             switch (barrier.Kind)
             {
@@ -379,9 +380,11 @@ namespace SharpGPU
                             bufferBarrier.Resource,
                             0),
                         ConvertToResourceBufferStates(
-                            bufferBarrier.AccessBefore),
+                            bufferBarrier.AccessBefore,
+                            queuePipeline),
                         ConvertToResourceBufferStates(
-                            bufferBarrier.AccessAfter));
+                            bufferBarrier.AccessAfter,
+                            queuePipeline));
                     break;
                 }
 
@@ -396,10 +399,12 @@ namespace SharpGPU
                             0).NativeResource,
                         ConvertToResourceTextureStates(
                             textureBarrier.LayoutBefore,
-                            textureBarrier.AccessBefore),
+                            textureBarrier.AccessBefore,
+                            queuePipeline),
                         ConvertToResourceTextureStates(
                             textureBarrier.LayoutAfter,
-                            textureBarrier.AccessAfter));
+                            textureBarrier.AccessAfter,
+                            queuePipeline));
                     break;
                 }
 
@@ -417,6 +422,7 @@ namespace SharpGPU
             Dx12CommandBuffer commandBuffer,
             ReadOnlySpan<RHIBarrier> barriers)
         {
+            ERHIPipelineType queuePipeline = commandBuffer.CommandQueue.PipelineType;
             Vortice.Direct3D12.ResourceBarrier[] nativeBarriers = new Vortice.Direct3D12.ResourceBarrier[barriers.Length];
             int barrierCount = 0;
 
@@ -435,8 +441,8 @@ namespace SharpGPU
                     case ERHIBarrierKind.Buffer:
                     {
                         RHIBufferBarrier bufferBarrier = barrier.BufferBarrier;
-                        Vortice.Direct3D12.ResourceStates stateBefore = ConvertToResourceBufferStates(bufferBarrier.AccessBefore);
-                        Vortice.Direct3D12.ResourceStates stateAfter = ConvertToResourceBufferStates(bufferBarrier.AccessAfter);
+                        Vortice.Direct3D12.ResourceStates stateBefore = ConvertToResourceBufferStates(bufferBarrier.AccessBefore, queuePipeline);
+                        Vortice.Direct3D12.ResourceStates stateAfter = ConvertToResourceBufferStates(bufferBarrier.AccessAfter, queuePipeline);
                         nativeBarriers[barrierCount++] = Dx12ResourceBarrierUtil.InitTransition(
                             GetBufferResource(commandBuffer, bufferBarrier.Resource, i),
                             stateBefore,
@@ -447,8 +453,8 @@ namespace SharpGPU
                     case ERHIBarrierKind.Texture:
                     {
                         RHITextureBarrier textureBarrier = barrier.TextureBarrier;
-                        Vortice.Direct3D12.ResourceStates stateBefore = ConvertToResourceTextureStates(textureBarrier.LayoutBefore, textureBarrier.AccessBefore);
-                        Vortice.Direct3D12.ResourceStates stateAfter = ConvertToResourceTextureStates(textureBarrier.LayoutAfter, textureBarrier.AccessAfter);
+                        Vortice.Direct3D12.ResourceStates stateBefore = ConvertToResourceTextureStates(textureBarrier.LayoutBefore, textureBarrier.AccessBefore, queuePipeline);
+                        Vortice.Direct3D12.ResourceStates stateAfter = ConvertToResourceTextureStates(textureBarrier.LayoutAfter, textureBarrier.AccessAfter, queuePipeline);
                         nativeBarriers[barrierCount++] = Dx12ResourceBarrierUtil.InitTransition(
                             GetTexture(commandBuffer, textureBarrier.Resource, i).NativeResource,
                             stateBefore,
@@ -944,7 +950,9 @@ namespace SharpGPU
             }
         }
 
-        private static Vortice.Direct3D12.ResourceStates ConvertToResourceBufferStates(in ERHIAccessMask accessMask)
+        private static Vortice.Direct3D12.ResourceStates ConvertToResourceBufferStates(
+            in ERHIAccessMask accessMask,
+            in ERHIPipelineType queuePipeline)
         {
             if (accessMask == ERHIAccessMask.None)
             {
@@ -959,7 +967,7 @@ namespace SharpGPU
             if ((accessMask & ERHIAccessMask.VertexRead) != 0) result |= Vortice.Direct3D12.ResourceStates.VertexAndConstantBuffer;
             if ((accessMask & ERHIAccessMask.ConstantRead) != 0) result |= Vortice.Direct3D12.ResourceStates.VertexAndConstantBuffer;
             if ((accessMask & ERHIAccessMask.IndirectCommandRead) != 0) result |= Vortice.Direct3D12.ResourceStates.IndirectArgument;
-            if ((accessMask & ERHIAccessMask.ShaderRead) != 0 && !hasShaderWrite) result |= Vortice.Direct3D12.ResourceStates.PixelShaderResource | Vortice.Direct3D12.ResourceStates.NonPixelShaderResource;
+            if ((accessMask & ERHIAccessMask.ShaderRead) != 0 && !hasShaderWrite) result |= ConvertShaderReadState(queuePipeline);
             if ((accessMask & ERHIAccessMask.ShaderWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.UnorderedAccess;
             if ((accessMask & ERHIAccessMask.AccelStructRead) != 0) result |= Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure;
             if ((accessMask & ERHIAccessMask.AccelStructWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure;
@@ -967,10 +975,13 @@ namespace SharpGPU
             return result == 0 ? Vortice.Direct3D12.ResourceStates.Common : result;
         }
 
-        private static Vortice.Direct3D12.ResourceStates ConvertToResourceTextureStates(in ERHITextureLayout layout, in ERHIAccessMask accessMask)
+        private static Vortice.Direct3D12.ResourceStates ConvertToResourceTextureStates(
+            in ERHITextureLayout layout,
+            in ERHIAccessMask accessMask,
+            in ERHIPipelineType queuePipeline)
         {
-            Vortice.Direct3D12.ResourceStates layoutState = ConvertTextureLayoutToResourceState(layout);
-            Vortice.Direct3D12.ResourceStates accessState = ConvertTextureAccessToResourceState(accessMask);
+            Vortice.Direct3D12.ResourceStates layoutState = ConvertTextureLayoutToResourceState(layout, queuePipeline);
+            Vortice.Direct3D12.ResourceStates accessState = ConvertTextureAccessToResourceState(accessMask, queuePipeline);
 
             if (layoutState == Vortice.Direct3D12.ResourceStates.Common)
             {
@@ -985,7 +996,9 @@ namespace SharpGPU
             return layoutState | accessState;
         }
 
-        private static Vortice.Direct3D12.ResourceStates ConvertTextureLayoutToResourceState(in ERHITextureLayout layout)
+        private static Vortice.Direct3D12.ResourceStates ConvertTextureLayoutToResourceState(
+            in ERHITextureLayout layout,
+            in ERHIPipelineType queuePipeline)
         {
             switch (layout)
             {
@@ -1008,7 +1021,7 @@ namespace SharpGPU
                 case ERHITextureLayout.RenderTarget:
                     return Vortice.Direct3D12.ResourceStates.RenderTarget;
                 case ERHITextureLayout.ShaderReadOnly:
-                    return Vortice.Direct3D12.ResourceStates.PixelShaderResource | Vortice.Direct3D12.ResourceStates.NonPixelShaderResource;
+                    return ConvertShaderReadState(queuePipeline);
                 case ERHITextureLayout.General:
                     return Vortice.Direct3D12.ResourceStates.UnorderedAccess;
                 case ERHITextureLayout.ShadingRateSurface:
@@ -1019,7 +1032,9 @@ namespace SharpGPU
             }
         }
 
-        private static Vortice.Direct3D12.ResourceStates ConvertTextureAccessToResourceState(in ERHIAccessMask accessMask)
+        private static Vortice.Direct3D12.ResourceStates ConvertTextureAccessToResourceState(
+            in ERHIAccessMask accessMask,
+            in ERHIPipelineType queuePipeline)
         {
             Vortice.Direct3D12.ResourceStates result = 0;
             bool hasShaderWrite = (accessMask & ERHIAccessMask.ShaderWrite) != 0;
@@ -1031,12 +1046,22 @@ namespace SharpGPU
             if ((accessMask & ERHIAccessMask.DepthStencilWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.DepthWrite;
             if ((accessMask & ERHIAccessMask.RenderTargetRead) != 0) result |= Vortice.Direct3D12.ResourceStates.RenderTarget;
             if ((accessMask & ERHIAccessMask.RenderTargetWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.RenderTarget;
-            if ((accessMask & ERHIAccessMask.ShaderRead) != 0 && !hasShaderWrite) result |= Vortice.Direct3D12.ResourceStates.PixelShaderResource | Vortice.Direct3D12.ResourceStates.NonPixelShaderResource;
+            if ((accessMask & ERHIAccessMask.ShaderRead) != 0 && !hasShaderWrite) result |= ConvertShaderReadState(queuePipeline);
             if ((accessMask & ERHIAccessMask.ShaderWrite) != 0) result |= Vortice.Direct3D12.ResourceStates.UnorderedAccess;
             if ((accessMask & ERHIAccessMask.ShadingRateRead) != 0) result |= Vortice.Direct3D12.ResourceStates.ShadingRateSource;
             if ((accessMask & ERHIAccessMask.Present) != 0) result |= Vortice.Direct3D12.ResourceStates.Present;
             return result;
         }
+
+        private static Vortice.Direct3D12.ResourceStates ConvertShaderReadState(
+            in ERHIPipelineType queuePipeline) => queuePipeline switch
+        {
+            ERHIPipelineType.Compute => Vortice.Direct3D12.ResourceStates.NonPixelShaderResource,
+            ERHIPipelineType.Graphics => Vortice.Direct3D12.ResourceStates.PixelShaderResource
+                | Vortice.Direct3D12.ResourceStates.NonPixelShaderResource,
+            _ => throw new InvalidOperationException(
+                $"Queue pipeline {queuePipeline} cannot own a shader-resource state."),
+        };
 
         private static Vortice.Direct3D12.BarrierSync ConvertToBarrierSync(in ERHIPipelineType pipeline)
         {
