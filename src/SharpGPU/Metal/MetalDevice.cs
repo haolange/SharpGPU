@@ -362,6 +362,193 @@ namespace SharpGPU
             return new MetalTexture(this, descriptor);
         }
 
+        public override RHICapability QueryRasterAttachmentSupport(
+            in RHIRasterAttachmentSupportQuery query)
+        {
+            ThrowIfDisposed();
+            const string ProbeSource =
+                "MTLDevice.supportsTextureSampleCount + " +
+                "newTextureWithDescriptor runtime probe";
+
+            if (query.IsInput && query.IsOutput &&
+                Capabilities.Raster.FramebufferReadWrite.Tier ==
+                    ERHICapabilityTier.Unavailable)
+            {
+                return Capabilities.Raster.FramebufferReadWrite;
+            }
+            if (query.IsInput && !query.IsOutput &&
+                Capabilities.Raster.FramebufferLocalRead.Tier ==
+                    ERHICapabilityTier.Unavailable)
+            {
+                return Capabilities.Raster.FramebufferLocalRead;
+            }
+
+            ulong sampleCount = checked((ulong)query.SampleCount);
+            if (!m_NativeDevice.SupportsTextureSampleCount(sampleCount))
+            {
+                return RHICapability.Unavailable(
+                    $"Metal does not support {sampleCount}x MSAA.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+            if (query.Blend.BlendEnable &&
+                !IsKnownMetalBlendableFormat(query.Format))
+            {
+                return RHICapability.Unavailable(
+                    $"Metal format {query.Format} is not in SharpGPU's " +
+                    "qualified hardware-blendable format set.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    "SharpGPU Metal pixel-format capability table");
+            }
+
+            MTLPixelFormat pixelFormat;
+            try
+            {
+                pixelFormat =
+                    MetalUtility.ConvertToMetalPixelFormat(query.Format);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return RHICapability.Unavailable(
+                    $"Metal has no pixel-format mapping for {query.Format}.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    "SharpGPU Metal pixel-format lowering");
+            }
+
+            MTLTextureDescriptor descriptor =
+                MTLTextureDescriptor.Texture2DDescriptor(
+                    pixelFormat,
+                    1,
+                    1,
+                    false);
+            descriptor.TextureType = query.IsLayered
+                ? sampleCount == 1
+                    ? MTLTextureType.Type2DArray
+                    : MTLTextureType.Type2DMultisampleArray
+                : sampleCount == 1
+                    ? MTLTextureType.Type2D
+                    : MTLTextureType.Type2DMultisample;
+            descriptor.ArrayLength = 1;
+            descriptor.SampleCount = sampleCount;
+            descriptor.Usage = MTLTextureUsage.RenderTarget;
+            descriptor.StorageMode = MTLStorageMode.Private;
+            MTLTexture texture = default;
+            try
+            {
+                texture = m_NativeDevice.NewTexture(descriptor);
+                if (texture.NativePtr == IntPtr.Zero)
+                {
+                    return RHICapability.Unavailable(
+                        $"Metal rejected {query.Format} at {sampleCount}x " +
+                        "for render-target attachment usage.",
+                        ERHICapabilityProbeKind.RuntimeObjectProbe,
+                        ProbeSource);
+                }
+            }
+            finally
+            {
+                if (texture.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(texture);
+                }
+                if (descriptor.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(descriptor);
+                }
+            }
+
+            return RHICapability.Available(
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.NativeSpecialized,
+                ERHICapabilityProbeKind.RuntimeObjectProbe,
+                ProbeSource);
+        }
+
+        private static bool IsKnownMetalBlendableFormat(
+            ERHIPixelFormat format) =>
+            format is
+                ERHIPixelFormat.R8_UNorm or
+                ERHIPixelFormat.R8_SNorm or
+                ERHIPixelFormat.R16_Float or
+                ERHIPixelFormat.R8G8_UNorm or
+                ERHIPixelFormat.R8G8_SNorm or
+                ERHIPixelFormat.R16G16_Float or
+                ERHIPixelFormat.R8G8B8A8_UNorm or
+                ERHIPixelFormat.R8G8B8A8_UNorm_Srgb or
+                ERHIPixelFormat.R8G8B8A8_SNorm or
+                ERHIPixelFormat.B8G8R8A8_UNorm or
+                ERHIPixelFormat.B8G8R8A8_UNorm_Srgb or
+                ERHIPixelFormat.R10G10B10A2_UNorm or
+                ERHIPixelFormat.R11G11B10_Float or
+                ERHIPixelFormat.R16G16B16A16_Float;
+
+        public override RHIRasterAttachmentShaderAbi
+            QueryRasterAttachmentShaderAbi(
+                in RHIRasterAttachmentShaderAbiDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            MetalPipelineLayout pipelineLayout =
+                descriptor.PipelineLayout as MetalPipelineLayout ??
+                throw new ArgumentException(
+                    "Metal attachment shader ABI requires a Metal pipeline layout.",
+                    nameof(descriptor));
+            if (!ReferenceEquals(pipelineLayout.Device, this))
+            {
+                throw new ArgumentException(
+                    "Metal attachment shader ABI pipeline layout belongs to a different device.",
+                    nameof(descriptor));
+            }
+
+            RHIAttachmentInterfaceSignature signature =
+                descriptor.AttachmentInterface;
+            List<RHIRasterAttachmentShaderBinding> bindings = new();
+            for (int logicalAttachment = 0;
+                 logicalAttachment < signature.ColorAttachmentCount;
+                 ++logicalAttachment)
+            {
+                int inputSlot =
+                    RHIRasterAttachmentShaderAbiFactory.FindInputSlot(
+                        in signature,
+                        logicalAttachment);
+                int outputLocation =
+                    RHIRasterAttachmentShaderAbiFactory.FindOutputLocation(
+                        in signature,
+                        logicalAttachment);
+                if (inputSlot < 0 && outputLocation < 0)
+                {
+                    continue;
+                }
+                bool readWrite = inputSlot >= 0 && outputLocation >= 0;
+                RHIRawShaderBindingLocation input = default;
+                RHIRawShaderBindingLocation output = default;
+                if (inputSlot >= 0)
+                {
+                    int colorLocation = readWrite
+                        ? outputLocation
+                        : inputSlot;
+                    input = new RHIRawShaderBindingLocation(
+                        ERHIRawShaderBindingKind.ColorAttachment,
+                        checked((uint)colorLocation));
+                }
+                if (outputLocation >= 0)
+                {
+                    output = new RHIRawShaderBindingLocation(
+                        ERHIRawShaderBindingKind.ColorAttachment,
+                        checked((uint)outputLocation));
+                }
+                bindings.Add(new RHIRasterAttachmentShaderBinding(
+                    logicalAttachment,
+                    inputSlot,
+                    outputLocation,
+                    input,
+                    output));
+            }
+            return RHIRasterAttachmentShaderAbiFactory.Create(
+                BackendType,
+                in descriptor,
+                bindings.ToArray());
+        }
+
         public override RHITexture CreatePlacedTexture(
             RHIHeap heap,
             ulong heapOffset,
@@ -734,10 +921,10 @@ namespace SharpGPU
                         ERHICapabilityProbeKind.ApiVersion,
                         "Metal 4 fragment-stage writable resources",
                         rasterLimits),
-                    rasterOrderedAccess: Probe(
-                        m_RasterCapabilities.RasterOrderGroups,
-                        "MTLDevice.rasterOrderGroupsSupported",
-                        "Raster order groups are unavailable."),
+                    framebufferReadWrite: Probe(
+                        m_RasterCapabilities.FramebufferLocalRead,
+                        "Metal programmable blending / [[color(n)]] input",
+                        "The complete Metal framebuffer read/write mechanism is unavailable."),
                     anisotropicSampling: RHICapability.Available(
                         ERHICapabilityTier.Tier1,
                         ERHICapabilityStrategy.CoreApi,
@@ -753,11 +940,6 @@ namespace SharpGPU
                         "MTLLogicalToPhysicalColorAttachmentMap.setPhysicalIndex",
                         "The complete Metal framebuffer-local-read selector set is unavailable.",
                         limits: rasterLimits),
-                    sampledFeedback: Probe(
-                        false,
-                        "SharpGPU Metal sampled-feedback lowering",
-                        "Metal sampled feedback is unavailable until the backend provides exact texture-usage, hazard, and pipeline lowering.",
-                        probeKind: ERHICapabilityProbeKind.BackendContract),
                     drawIndirect: RHICapability.Available(
                         ERHICapabilityTier.Tier1,
                         ERHICapabilityStrategy.CoreApi,
@@ -1285,8 +1467,7 @@ namespace SharpGPU
             return MetalRasterCapabilities.FromSelectorProbes(
                 passMappingSelector,
                 mapEntrySelector,
-                encoderMappingSelector,
-                m_NativeDevice.RasterOrderGroupsSupported);
+                encoderMappingSelector);
         }
 
         private bool SafeSupportsFamily(in MTLGPUFamily family)

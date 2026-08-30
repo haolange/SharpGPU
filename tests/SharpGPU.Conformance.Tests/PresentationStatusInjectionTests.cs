@@ -476,6 +476,15 @@ namespace SharpGPU.Conformance.Tests
                 in RHITextureDescriptor descriptor) =>
                 Unsupported<RHITexture>();
 
+            public override RHICapability QueryRasterAttachmentSupport(
+                in RHIRasterAttachmentSupportQuery query) =>
+                Unsupported<RHICapability>();
+
+            public override RHIRasterAttachmentShaderAbi
+                QueryRasterAttachmentShaderAbi(
+                    in RHIRasterAttachmentShaderAbiDescriptor descriptor) =>
+                Unsupported<RHIRasterAttachmentShaderAbi>();
+
             public override RHISampler CreateSampler(
                 in RHISamplerDescriptor descriptor) =>
                 Unsupported<RHISampler>();

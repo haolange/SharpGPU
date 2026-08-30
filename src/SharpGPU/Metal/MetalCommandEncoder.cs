@@ -306,22 +306,6 @@ namespace SharpGPU
         }
     }
 
-    internal readonly struct MetalRasterOrderedBindingSnapshot
-    {
-        internal bool IsBound { get; }
-        internal MTLResourceID ResourceId { get; }
-        internal MTLAllocation ResidencyAllocation { get; }
-
-        internal MetalRasterOrderedBindingSnapshot(
-            in MTLResourceID resourceId,
-            in MTLAllocation residencyAllocation)
-        {
-            IsBound = resourceId._impl != 0;
-            ResourceId = resourceId;
-            ResidencyAllocation = residencyAllocation;
-        }
-    }
-
     internal enum MetalBindingPipelineType : byte
     {
         Compute = 0,
@@ -334,14 +318,8 @@ namespace SharpGPU
         bool UsesReservedRayFunctionTableSlots { get; }
 
         void ResetForPipeline(MetalPipelineLayout pipelineLayout);
-        void ResetForRasterPipeline(
-            MetalPipelineLayout pipelineLayout,
-            in MetalPrivateRasterBindingPlan privateRasterPlan);
         void SetBindingTable(MetalBindingTable resourceTable, in uint tableIndex);
         void SetRasterVertexBuffer(in uint slot, in ulong address, in ulong stride);
-        void SetRasterOrderedTextures(
-            ReadOnlySpan<MetalRasterOrderedBindingSnapshot> snapshots,
-            in byte activeMask);
 
         void CommitCompute(in MTL4ComputeCommandEncoder encoder);
         void CommitRaytracing(in MTL4ComputeCommandEncoder encoder, MetalFunctionTable? functionTable);
@@ -614,27 +592,8 @@ namespace SharpGPU
         {
         }
 
-        public virtual void ResetForRasterPipeline(
-            MetalPipelineLayout pipelineLayout,
-            in MetalPrivateRasterBindingPlan privateRasterPlan)
-        {
-            throw new InvalidOperationException(
-                $"{GetType().Name} does not support raster-private bindings.");
-        }
-
         public virtual void SetRasterVertexBuffer(in uint slot, in ulong address, in ulong stride)
         {
-        }
-
-        public virtual void SetRasterOrderedTextures(
-            ReadOnlySpan<MetalRasterOrderedBindingSnapshot> snapshots,
-            in byte activeMask)
-        {
-            if (activeMask != 0)
-            {
-                throw new InvalidOperationException(
-                    $"{GetType().Name} does not support raster-ordered texture bindings.");
-            }
         }
 
         protected virtual void DisposeBackend()
@@ -691,7 +650,6 @@ namespace SharpGPU
         private readonly SortedDictionary<uint, RasterVertexBinding> m_RasterVertexBindings;
         private readonly MetalCommandQueue? m_CommandQueue;
         private readonly MetalTransientNativeBatch m_NativeTransients;
-        private MetalPrivateRasterBindingPlan m_PrivateRasterPlan;
 
         private readonly struct RasterVertexBinding
         {
@@ -719,7 +677,6 @@ namespace SharpGPU
             m_NativeTransients =
                 nativeTransients ??
                 throw new ArgumentNullException(nameof(nativeTransients));
-            m_PrivateRasterPlan = default;
         }
 
         public override bool UsesReservedRayFunctionTableSlots => PipelineType == MetalBindingPipelineType.Raytracing;
@@ -727,22 +684,6 @@ namespace SharpGPU
         public override void ResetForPipeline(MetalPipelineLayout pipelineLayout)
         {
             base.ResetForPipeline(pipelineLayout);
-            m_PrivateRasterPlan = default;
-            ResetForPipelineBindings(pipelineLayout);
-        }
-
-        public override void ResetForRasterPipeline(
-            MetalPipelineLayout pipelineLayout,
-            in MetalPrivateRasterBindingPlan privateRasterPlan)
-        {
-            if (PipelineType != MetalBindingPipelineType.Raster)
-            {
-                throw new InvalidOperationException(
-                    "Raster-private bindings require a raster binding backend.");
-            }
-
-            base.ResetForPipeline(pipelineLayout);
-            m_PrivateRasterPlan = privateRasterPlan;
             ResetForPipelineBindings(pipelineLayout);
         }
 
@@ -862,76 +803,6 @@ namespace SharpGPU
             }
         }
 
-        public override void SetRasterOrderedTextures(
-            ReadOnlySpan<MetalRasterOrderedBindingSnapshot> snapshots,
-            in byte activeMask)
-        {
-            if (PipelineType != MetalBindingPipelineType.Raster)
-            {
-                throw new InvalidOperationException(
-                    "Raster-ordered bindings require a raster binding backend.");
-            }
-            if (activeMask != m_PrivateRasterPlan.RasterOrderedMask)
-            {
-                throw new InvalidOperationException(
-                    $"Active raster-ordered mask 0x{activeMask:X2} does not " +
-                    $"match the pipeline mask " +
-                    $"0x{m_PrivateRasterPlan.RasterOrderedMask:X2}.");
-            }
-            if (activeMask == 0)
-            {
-                return;
-            }
-            if (snapshots.Length < RHIAttachmentIndexArray.MaxAttachments)
-            {
-                throw new ArgumentException(
-                    "Metal raster-ordered snapshots must cover all logical attachment indices.",
-                    nameof(snapshots));
-            }
-
-            for (int logicalAttachment = 0;
-                 logicalAttachment < RHIAttachmentIndexArray.MaxAttachments;
-                 ++logicalAttachment)
-            {
-                byte logicalBit =
-                    checked((byte)(1 << logicalAttachment));
-                if ((activeMask & logicalBit) == 0)
-                {
-                    continue;
-                }
-
-                ref readonly MetalRasterOrderedBindingSnapshot snapshot =
-                    ref snapshots[logicalAttachment];
-                if (!snapshot.IsBound)
-                {
-                    throw new InvalidOperationException(
-                        $"Metal raster-ordered logical attachment {logicalAttachment} " +
-                        "was not captured at BeginRasterPass.");
-                }
-                uint nativeIndex =
-                    m_PrivateRasterPlan.GetRasterOrderedTextureIndex(
-                        logicalAttachment);
-                if (m_UsesReferenceBuffers)
-                {
-                    m_RootNativeArgumentTable.SetTexture(
-                        snapshot.ResourceId,
-                        nativeIndex);
-                }
-                else
-                {
-                    foreach (KeyValuePair<uint, MTL4ArgumentTable> pair in
-                             m_NativeArgumentTables)
-                    {
-                        pair.Value.SetTexture(
-                            snapshot.ResourceId,
-                            nativeIndex);
-                    }
-                }
-                m_CommandQueue?.AddResidencyAllocation(
-                    snapshot.ResidencyAllocation);
-            }
-        }
-
         public override void CommitCompute(in MTL4ComputeCommandEncoder encoder)
         {
             if (m_UsesReferenceBuffers)
@@ -1031,9 +902,6 @@ namespace SharpGPU
             if (PipelineType == MetalBindingPipelineType.Raster)
             {
                 maxBufferCount = Math.Max(maxBufferCount, MetalBufferBindingPlanner.MaxBufferBindCount);
-                maxTextureCount = Math.Max(
-                    maxTextureCount,
-                    m_PrivateRasterPlan.RequiredTextureBindingCount);
             }
 
             MTL4ArgumentTableDescriptor descriptor = MTL4ArgumentTableDescriptor.New();
@@ -1086,11 +954,7 @@ namespace SharpGPU
             MTL4ArgumentTableDescriptor descriptor = MTL4ArgumentTableDescriptor.New();
             descriptor.MaxBufferBindCount =
                 MetalBufferBindingPlanner.GetReservedBufferOnlyBindCount(PipelineType);
-            descriptor.MaxTextureBindCount = Math.Max(
-                1UL,
-                PipelineType == MetalBindingPipelineType.Raster
-                    ? m_PrivateRasterPlan.RequiredTextureBindingCount
-                    : 0UL);
+            descriptor.MaxTextureBindCount = 1UL;
             descriptor.MaxSamplerStateBindCount = 1;
             descriptor.InitializeBindings = true;
             descriptor.SupportAttributeStrides = supportsAttributeStrides;
@@ -1237,11 +1101,7 @@ namespace SharpGPU
 
             MTL4ArgumentTableDescriptor descriptor = MTL4ArgumentTableDescriptor.New();
             descriptor.MaxBufferBindCount = Math.Max(1UL, maxBufferCount);
-            descriptor.MaxTextureBindCount = Math.Max(
-                1UL,
-                PipelineType == MetalBindingPipelineType.Raster
-                    ? m_PrivateRasterPlan.RequiredTextureBindingCount
-                    : 0UL);
+            descriptor.MaxTextureBindCount = 1UL;
             descriptor.MaxSamplerStateBindCount = 1UL;
             descriptor.InitializeBindings = true;
             descriptor.SupportAttributeStrides = PipelineType == MetalBindingPipelineType.Raster;
@@ -2360,7 +2220,6 @@ internal readonly struct MetalRasterCapabilities
     {
         internal bool ColorOutputMapping { get; }
         internal bool FramebufferLocalRead { get; }
-        internal bool RasterOrderGroups { get; }
         internal bool PassMappingSelector { get; }
         internal bool MapEntrySelector { get; }
         internal bool EncoderMappingSelector { get; }
@@ -2368,14 +2227,12 @@ internal readonly struct MetalRasterCapabilities
         internal MetalRasterCapabilities(
             bool colorOutputMapping,
             bool framebufferLocalRead,
-            bool rasterOrderGroups,
             bool passMappingSelector = true,
             bool mapEntrySelector = true,
             bool encoderMappingSelector = true)
         {
             ColorOutputMapping = colorOutputMapping;
             FramebufferLocalRead = framebufferLocalRead;
-            RasterOrderGroups = rasterOrderGroups;
             PassMappingSelector = passMappingSelector;
             MapEntrySelector = mapEntrySelector;
             EncoderMappingSelector = encoderMappingSelector;
@@ -2384,8 +2241,7 @@ internal readonly struct MetalRasterCapabilities
         internal static MetalRasterCapabilities FromSelectorProbes(
             bool passMappingSelector,
             bool mapEntrySelector,
-            bool encoderMappingSelector,
-            bool rasterOrderGroups)
+            bool encoderMappingSelector)
         {
             bool completeMappingMechanism =
                 passMappingSelector &&
@@ -2394,7 +2250,6 @@ internal readonly struct MetalRasterCapabilities
             return new MetalRasterCapabilities(
                 colorOutputMapping: completeMappingMechanism,
                 framebufferLocalRead: completeMappingMechanism,
-                rasterOrderGroups,
                 passMappingSelector,
                 mapEntrySelector,
                 encoderMappingSelector);
@@ -2405,7 +2260,6 @@ internal readonly struct MetalRasterCapabilities
     {
         internal byte LocalInputMask { get; }
         internal byte OrdinaryOutputMask { get; }
-        internal byte RasterOrderedMask { get; }
         internal byte PreserveMask { get; }
         internal ERHISubPassFlags DepthStencilFlags { get; }
         internal bool HasLocalInputs => LocalInputMask != 0;
@@ -2422,20 +2276,17 @@ internal readonly struct MetalRasterCapabilities
         private readonly ulong[] m_PhysicalAttachmentsByMappingIndex;
 
         internal MetalRasterSubPassLowering(
-            in RHIRasterSubPassPlan plan,
-            byte passRasterOrderedMask)
+            in RHIRasterSubPassPlan plan)
         {
             RHIAttachmentInterfaceSignature attachmentInterface =
                 plan.AttachmentInterface;
             byte phaseRasterOrderedMask =
-                attachmentInterface.RasterOrderedReadWriteMask;
+                attachmentInterface.FramebufferReadWriteMask;
             LocalInputMask = checked((byte)(
                 attachmentInterface.ColorInputMask &
                 ~phaseRasterOrderedMask));
-            OrdinaryOutputMask = checked((byte)(
-                attachmentInterface.ColorOutputMask &
-                ~phaseRasterOrderedMask));
-            RasterOrderedMask = phaseRasterOrderedMask;
+            OrdinaryOutputMask =
+                attachmentInterface.ColorOutputMask;
             PreserveMask = plan.PreserveMask;
             DepthStencilFlags = attachmentInterface.DepthStencilFlags;
 
@@ -2492,26 +2343,6 @@ internal readonly struct MetalRasterCapabilities
                 if (logicalAttachment < 0)
                 {
                     continue;
-                }
-
-                if (IsMaskSet(
-                        phaseRasterOrderedMask,
-                        logicalAttachment))
-                {
-                    hasNonIdentityOutputMapping = true;
-                    continue;
-                }
-
-                if (IsMaskSet(
-                        passRasterOrderedMask,
-                        logicalAttachment))
-                {
-                    throw new NotSupportedException(
-                        $"Metal output location {outputLocation} targets " +
-                        $"logical attachment {logicalAttachment}, which is " +
-                        "raster-ordered in another phase. A Metal ROG " +
-                        "texture must never also be an ordinary color " +
-                        "attachment in the same render pass.");
                 }
 
                 m_OutputPhysicalAttachments[outputLocation] =
@@ -2598,9 +2429,7 @@ internal readonly struct MetalRasterCapabilities
     {
         internal bool RequiresColorAttachmentMapping { get; }
         internal bool RequiresFramebufferLocalRead { get; }
-        internal bool RequiresRasterOrderGroups { get; }
         internal byte OrdinaryAttachmentMask { get; }
-        internal byte RasterOrderedAttachmentMask { get; }
         internal ReadOnlyMemory<MetalRasterSubPassLowering> SubPasses =>
             m_SubPasses;
 
@@ -2609,19 +2438,14 @@ internal readonly struct MetalRasterCapabilities
         private MetalRasterPassLowering(
             bool requiresColorAttachmentMapping,
             bool requiresFramebufferLocalRead,
-            bool requiresRasterOrderGroups,
             byte ordinaryAttachmentMask,
-            byte rasterOrderedAttachmentMask,
             MetalRasterSubPassLowering[] subPasses)
         {
             RequiresColorAttachmentMapping =
                 requiresColorAttachmentMapping;
             RequiresFramebufferLocalRead =
                 requiresFramebufferLocalRead;
-            RequiresRasterOrderGroups = requiresRasterOrderGroups;
             OrdinaryAttachmentMask = ordinaryAttachmentMask;
-            RasterOrderedAttachmentMask =
-                rasterOrderedAttachmentMask;
             m_SubPasses = subPasses;
         }
 
@@ -2630,15 +2454,6 @@ internal readonly struct MetalRasterCapabilities
             in MetalRasterCapabilities capabilities)
         {
             ArgumentNullException.ThrowIfNull(plan);
-
-            byte passRasterOrderedMask = 0;
-            for (int i = 0; i < plan.SubPassCount; ++i)
-            {
-                passRasterOrderedMask |=
-                    plan.GetSubPass(i)
-                        .AttachmentInterface
-                        .RasterOrderedReadWriteMask;
-            }
 
             bool requiresOutputMapping = false;
             bool requiresFramebufferLocalRead = false;
@@ -2649,11 +2464,8 @@ internal readonly struct MetalRasterCapabilities
             {
                 ref readonly RHIRasterSubPassPlan subPass =
                     ref plan.GetSubPass(i);
-                ValidateMetalAccess(in subPass, i);
                 MetalRasterSubPassLowering lowering =
-                    new MetalRasterSubPassLowering(
-                        subPass,
-                        passRasterOrderedMask);
+                    new MetalRasterSubPassLowering(subPass);
                 subPasses[i] = lowering;
                 requiresOutputMapping |=
                     lowering.HasNonIdentityOutputMapping;
@@ -2665,9 +2477,6 @@ internal readonly struct MetalRasterCapabilities
                     lowering.PreserveMask));
             }
 
-            ordinaryAttachmentMask = checked((byte)(
-                ordinaryAttachmentMask &
-                ~passRasterOrderedMask));
             bool requiresMapping =
                 requiresOutputMapping ||
                 requiresFramebufferLocalRead;
@@ -2687,13 +2496,6 @@ internal readonly struct MetalRasterCapabilities
                     "reads, but the exact MSL [[color(n)]] attachment-read " +
                     "mechanism was not independently probed.");
             }
-            if (passRasterOrderedMask != 0 &&
-                !capabilities.RasterOrderGroups)
-            {
-                throw new NotSupportedException(
-                    "The Metal raster pass requires raster order groups, but " +
-                    "MTLDevice.rasterOrderGroupsSupported is false.");
-            }
             if (requiresMapping &&
                 (!capabilities.PassMappingSelector ||
                  !capabilities.MapEntrySelector ||
@@ -2708,25 +2510,8 @@ internal readonly struct MetalRasterCapabilities
             return new MetalRasterPassLowering(
                 requiresMapping,
                 requiresFramebufferLocalRead,
-                passRasterOrderedMask != 0,
                 ordinaryAttachmentMask,
-                passRasterOrderedMask,
                 subPasses);
-        }
-
-        private static void ValidateMetalAccess(
-            in RHIRasterSubPassPlan subPass,
-            int subPassIndex)
-        {
-            if (subPass.AttachmentInterface.SampledFeedbackMask != 0)
-            {
-                throw new NotSupportedException(
-                    $"Metal subpass {subPassIndex} cannot prove sampled " +
-                    "attachment feedback. SampledFeedback remains an " +
-                    "ordinary shader resource and has no private Metal " +
-                    "attachment binding until an exact native strategy is " +
-                    "qualified.");
-            }
         }
 
         private static void ValidateMemorylessAttachments(
@@ -3060,8 +2845,6 @@ internal readonly struct MetalRasterCapabilities
         private bool m_HasPendingPassDescriptor;
         private MetalRasterPassLowering? m_RasterLowering;
         private MTLLogicalToPhysicalColorAttachmentMap[] m_ColorAttachmentMaps;
-        private readonly MetalRasterOrderedBindingSnapshot[]
-            m_RasterOrderedBindings;
         private uint m_RenderTargetWidth;
         private uint m_RenderTargetHeight;
         private ERHISampleCount m_RasterSampleCount;
@@ -3080,9 +2863,6 @@ internal readonly struct MetalRasterCapabilities
             m_RasterLowering = null;
             m_ColorAttachmentMaps =
                 Array.Empty<MTLLogicalToPhysicalColorAttachmentMap>();
-            m_RasterOrderedBindings =
-                new MetalRasterOrderedBindingSnapshot[
-                    RHIAttachmentIndexArray.MaxAttachments];
             m_RenderTargetWidth = 0;
             m_RenderTargetHeight = 0;
             m_RasterSampleCount = ERHISampleCount.None;
@@ -3118,9 +2898,6 @@ internal readonly struct MetalRasterCapabilities
                 m_RenderTargetWidth = plan.Width;
                 m_RenderTargetHeight = plan.Height;
                 m_RasterSampleCount = plan.SampleCount;
-                CaptureRasterOrderedBindings(
-                    plan,
-                    m_RasterLowering.RasterOrderedAttachmentMask);
                 ReleaseColorAttachmentMaps();
                 m_ColorAttachmentMaps = CreateColorAttachmentMaps(
                     plan,
@@ -3129,7 +2906,6 @@ internal readonly struct MetalRasterCapabilities
             catch
             {
                 ReleaseColorAttachmentMaps();
-                Array.Clear(m_RasterOrderedBindings);
                 m_RasterLowering = null;
                 m_RenderTargetWidth = 0;
                 m_RenderTargetHeight = 0;
@@ -3418,9 +3194,7 @@ internal readonly struct MetalRasterCapabilities
             m_CachedPipeline = pipeline;
             MetalRasterPipeline metalPipeline = (MetalRasterPipeline)pipeline;
             MetalPipelineLayout pipelineLayout = pipeline.DescriptorInternal.PipelineLayout as MetalPipelineLayout ?? throw new InvalidOperationException("Raster pipeline layout must be a MetalPipelineLayout.");
-            ConfigureBindingBackend(
-                pipelineLayout,
-                metalPipeline.PrivateRasterBindingPlan);
+            ConfigureBindingBackend(pipelineLayout);
             EnsureMtl4RenderEncoder();
             ApplyPendingPassDebugGroup();
 
@@ -3621,7 +3395,6 @@ internal readonly struct MetalRasterCapabilities
             m_HasPendingPassDescriptor = false;
             m_RasterLowering = null;
             ReleaseColorAttachmentMaps();
-            Array.Clear(m_RasterOrderedBindings);
             m_RenderTargetWidth = 0;
             m_RenderTargetHeight = 0;
             m_RasterSampleCount = ERHISampleCount.None;
@@ -3635,8 +3408,7 @@ internal readonly struct MetalRasterCapabilities
         }
 
         private void ConfigureBindingBackend(
-            MetalPipelineLayout pipelineLayout,
-            in MetalPrivateRasterBindingPlan privateRasterPlan)
+            MetalPipelineLayout pipelineLayout)
         {
             MetalCommandBuffer commandBuffer = (MetalCommandBuffer)m_CommandBuffer!;
 
@@ -3651,18 +3423,7 @@ internal readonly struct MetalRasterCapabilities
                     queue);
             }
 
-            m_BindingBackend.ResetForRasterPipeline(
-                pipelineLayout,
-                privateRasterPlan);
-            MetalRasterPassLowering lowering =
-                m_RasterLowering ??
-                throw new InvalidOperationException(
-                    "Metal raster lowering is unavailable while setting a pipeline.");
-            ref readonly MetalRasterSubPassLowering subPass =
-                ref lowering.SubPasses.Span[m_CurrentSubPassIndex];
-            m_BindingBackend.SetRasterOrderedTextures(
-                m_RasterOrderedBindings,
-                subPass.RasterOrderedMask);
+            m_BindingBackend.ResetForPipeline(pipelineLayout);
         }
 
         private void EnsureMtl4RenderEncoder()
@@ -3912,92 +3673,6 @@ internal readonly struct MetalRasterCapabilities
             // transient batch. The managed wrappers carry no ownership.
             m_ColorAttachmentMaps =
                 Array.Empty<MTLLogicalToPhysicalColorAttachmentMap>();
-        }
-
-        private void CaptureRasterOrderedBindings(
-            RHIRasterPassPlan plan,
-            in byte rasterOrderedMask)
-        {
-            Array.Clear(m_RasterOrderedBindings);
-            if (rasterOrderedMask == 0)
-            {
-                return;
-            }
-
-            MetalCommandBuffer commandBuffer =
-                (MetalCommandBuffer)m_CommandBuffer!;
-            for (int logicalAttachment = 0;
-                 logicalAttachment < plan.ColorAttachmentCount;
-                 ++logicalAttachment)
-            {
-                byte logicalBit =
-                    checked((byte)(1 << logicalAttachment));
-                if ((rasterOrderedMask & logicalBit) == 0)
-                {
-                    continue;
-                }
-
-                ref readonly RHIColorAttachmentDescriptor attachment =
-                    ref plan.GetColorAttachment(logicalAttachment);
-                MetalTexture texture =
-                    attachment.RenderTarget as MetalTexture ??
-                    throw new ArgumentException(
-                        $"Metal raster-ordered attachment {logicalAttachment} " +
-                        "must be a MetalTexture.",
-                        nameof(plan));
-                MTLTexture nativeTexture = texture.NativeTexture;
-                MTLTexture boundTexture = nativeTexture;
-                RHITextureSubresourceRange range =
-                    attachment.SubresourceRange;
-                RHITextureDescriptor textureDescriptor =
-                    texture.Descriptor;
-                uint fullLayerCount =
-                    Math.Max(1u, textureDescriptor.Extent.z);
-                bool isFullView =
-                    range.BaseMipLevel == 0 &&
-                    range.MipLevelCount == textureDescriptor.MipCount &&
-                    range.BaseArrayLayer == 0 &&
-                    range.ArrayLayerCount == fullLayerCount;
-                if (!isFullView)
-                {
-                    boundTexture = nativeTexture.NewTextureView(
-                        MetalUtility.ConvertToMetalPixelFormat(
-                            textureDescriptor.Format),
-                        MetalUtility.ConvertToMetalTextureType(
-                            textureDescriptor.Dimension),
-                        new NSRange
-                        {
-                            location = range.BaseMipLevel,
-                            length = range.MipLevelCount
-                        },
-                        new NSRange
-                        {
-                            location = range.BaseArrayLayer,
-                            length = range.ArrayLayerCount
-                        });
-                    if (boundTexture.NativePtr == IntPtr.Zero)
-                    {
-                        throw new InvalidOperationException(
-                            $"Failed to create a Metal texture view for " +
-                            $"raster-ordered attachment {logicalAttachment}.");
-                    }
-                    try
-                    {
-                        commandBuffer.NativeTransientBatch.RetainOwnership(
-                            boundTexture.NativePtr);
-                    }
-                    catch
-                    {
-                        ObjectiveCRuntime.Release(boundTexture.NativePtr);
-                        throw;
-                    }
-                }
-
-                m_RasterOrderedBindings[logicalAttachment] =
-                    new MetalRasterOrderedBindingSnapshot(
-                        boundTexture.GpuResourceID,
-                        new MTLAllocation(nativeTexture.NativePtr));
-            }
         }
 
         private void ValidateFenceAndEncoder(

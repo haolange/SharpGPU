@@ -12,6 +12,41 @@ namespace SharpGPU.Conformance.Tests;
 
 public sealed class Dx12RasterSubpassQualifiedTests
 {
+    [Theory]
+    [InlineData(false, false, ERHISampleCount.None, "Texture2D")]
+    [InlineData(false, true, ERHISampleCount.None, "Texture2DArray")]
+    [InlineData(false, false, ERHISampleCount.Count4, "Texture2DMS")]
+    [InlineData(false, true, ERHISampleCount.Count4, "Texture2DMSArray")]
+    [InlineData(true, false, ERHISampleCount.None,
+        "RasterizerOrderedTexture2D")]
+    [InlineData(true, true, ERHISampleCount.None,
+        "RasterizerOrderedTexture2DArray")]
+    [Trait("Category", "SharpGpuPortable")]
+    public void RawAttachmentAbi_ChoosesExactTextureShape(
+        bool readWrite,
+        bool layered,
+        ERHISampleCount sampleCount,
+        string expected)
+    {
+        Assert.Equal(
+            expected,
+            Dx12Device.GetRawAttachmentTextureType(
+                readWrite,
+                layered,
+                sampleCount));
+    }
+
+    [Fact]
+    [Trait("Category", "SharpGpuPortable")]
+    public void RawAttachmentAbi_RejectsMultisampledRovShape()
+    {
+        Assert.Throws<NotSupportedException>(() =>
+            Dx12Device.GetRawAttachmentTextureType(
+                readWrite: true,
+                layered: false,
+                ERHISampleCount.Count2));
+    }
+
     [Fact]
     [Trait("Category", "SharpGpuPortable")]
     public void Lowering_FreezesPerPhaseTables_AndUsesExactPrivateAbiOffsets()
@@ -20,7 +55,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
             ERHIPixelFormat.B8G8R8A8_UNorm,
             ERHISampleCount.None,
             ERHITextureUsage.RenderTarget |
-                ERHITextureUsage.RasterizerOrdered);
+                ERHITextureUsage.UnorderedAccess);
         using PlannerTexture sampled = CreateTexture(
             ERHIPixelFormat.R8G8B8A8_UNorm,
             ERHISampleCount.None,
@@ -38,17 +73,15 @@ public sealed class Dx12RasterSubpassQualifiedTests
             {
                 Attachment(
                     ordered,
-                    ERHILoadAction.Load,
-                    ERHIRasterAttachmentAccess.RasterOrderedReadWrite),
+                    ERHILoadAction.Load),
                 Attachment(sampled, ERHILoadAction.Load),
                 Attachment(local, ERHILoadAction.Load),
             },
             SubPassDescriptors = new RHISubPassDescriptor[]
             {
                 SubPass(
-                    inputs: new[] { -1, 2, 0 },
-                    outputs: new[] { -1, 0 },
-                    sampledFeedback: new[] { -1, 1 }),
+                    inputs: new[] { -1, 2, 0, 1 },
+                    outputs: new[] { -1, 0 }),
                 SubPass(
                     inputs: new[] { 0, -1, 2 },
                     outputs: new[] { 1 }),
@@ -71,8 +104,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
             ref lowering.SubPasses.Span[0];
         Assert.Equal(new[] { -1, 0 }, first.OutputLogicalAttachments.ToArray());
         Assert.Equal(new[] { -1, -1 }, first.RenderTargetLogicalAttachments.ToArray());
-        Assert.Equal(new[] { -1, 2, -1 }, first.PrivateInputLogicalAttachments.ToArray());
-        Assert.Equal(new[] { -1, 1 }, first.SampledFeedbackLogicalAttachments.ToArray());
+        Assert.Equal(new[] { -1, 2, -1, 1 }, first.PrivateInputLogicalAttachments.ToArray());
         Assert.Equal(
             new[]
             {
@@ -80,10 +112,9 @@ public sealed class Dx12RasterSubpassQualifiedTests
                 ERHIPixelFormat.B8G8R8A8_UNorm,
             },
             first.OutputLocationFormats.ToArray());
-        Assert.Equal((byte)(1 << 2), first.PrivateShaderResourceMask);
+        Assert.Equal((byte)((1 << 1) | (1 << 2)), first.PrivateShaderResourceMask);
         Assert.Equal((byte)(1 << 0), first.RasterOrderedMask);
-        Assert.Equal((byte)(1 << 1),
-            checked((byte)(first.ShaderResourceMask & ~first.PrivateShaderResourceMask)));
+        Assert.Equal(first.ShaderResourceMask, first.PrivateShaderResourceMask);
 
         Assert.Equal(0,
             Dx12RasterPassLowering.GetPrivateInputDescriptorOffset(0, 0));
@@ -108,43 +139,6 @@ public sealed class Dx12RasterSubpassQualifiedTests
             out ArraySegment<int> outputBackingB));
         Assert.Same(outputBackingA.Array, outputBackingB.Array);
 
-        RHIRasterPassDescriptor sampledFeedbackOnlyDescriptor = new()
-        {
-            Name = "Dx12.Lowering.SampledFeedbackOrdinaryBinding",
-            ColorAttachments = new RHIColorAttachmentDescriptor[]
-            {
-                Attachment(sampled, ERHILoadAction.Load),
-                Attachment(local, ERHILoadAction.Load),
-            },
-            SubPassDescriptors = new RHISubPassDescriptor[]
-            {
-                SubPass(
-                    outputs: new[] { 1 },
-                    sampledFeedback: new[] { 0 }),
-            },
-        };
-        Dx12RasterPassLowering sampledFeedbackOnlyLowering =
-            Dx12RasterPassLowering.Compile(
-                RHIRasterPassPlanner.Compile(
-                    in sampledFeedbackOnlyDescriptor),
-                supportsNativeRenderPass: true,
-                supportsRasterOrderedViews: true,
-                usesEnhancedBarriers: true);
-        Assert.False(
-            sampledFeedbackOnlyLowering
-                .RequiresPrivateAttachmentTable);
-        ref readonly Dx12RasterSubPassLowering sampledFeedbackPhase =
-            ref sampledFeedbackOnlyLowering.SubPasses.Span[0];
-        Assert.Empty(
-            sampledFeedbackPhase.PrivateInputLogicalAttachments
-                .ToArray());
-        Assert.Equal(
-            new[] { 0 },
-            sampledFeedbackPhase.SampledFeedbackLogicalAttachments
-                .ToArray());
-        Assert.Equal((byte)0,
-            sampledFeedbackPhase.PrivateShaderResourceMask);
-
         Assert.True(MemoryMarshal.TryGetArray(
             first.PrivateInputLogicalAttachments,
             out ArraySegment<int> inputBackingA));
@@ -156,14 +150,75 @@ public sealed class Dx12RasterSubpassQualifiedTests
 
     [Fact]
     [Trait("Category", "SharpGpuPortable")]
+    public void Lowering_InfersOrderingButRequiresGenericWritableAllocation()
+    {
+        using PlannerTexture readOnlyAllocation = CreateTexture(
+            ERHIPixelFormat.R8G8B8A8_UNorm,
+            ERHISampleCount.None,
+            ERHITextureUsage.RenderTarget);
+        RHIRasterPassDescriptor readOnlyDescriptor = new()
+        {
+            Name = "Dx12.Lowering.ImplicitOrdering.ReadOnlyAllocation",
+            ColorAttachments = new RHIColorAttachmentDescriptor[]
+            {
+                Attachment(readOnlyAllocation, ERHILoadAction.Load),
+            },
+            SubPassDescriptors = new RHISubPassDescriptor[]
+            {
+                SubPass(inputs: new[] { 0 }, outputs: new[] { 0 }),
+            },
+        };
+        RHIRasterPassPlan readOnlyPlan =
+            RHIRasterPassPlanner.Compile(in readOnlyDescriptor);
+        NotSupportedException missingUsage =
+            Assert.Throws<NotSupportedException>(() =>
+                Dx12RasterPassLowering.Compile(
+                    readOnlyPlan,
+                    supportsNativeRenderPass: true,
+                    supportsRasterOrderedViews: true,
+                    usesEnhancedBarriers: true));
+        Assert.Contains(
+            nameof(ERHITextureUsage.UnorderedAccess),
+            missingUsage.Message,
+            StringComparison.Ordinal);
+
+        using PlannerTexture writableAllocation = CreateTexture(
+            ERHIPixelFormat.R8G8B8A8_UNorm,
+            ERHISampleCount.None,
+            ERHITextureUsage.RenderTarget |
+                ERHITextureUsage.UnorderedAccess);
+        RHIRasterPassDescriptor writableDescriptor = new()
+        {
+            Name = "Dx12.Lowering.ImplicitOrdering.WritableAllocation",
+            ColorAttachments = new RHIColorAttachmentDescriptor[]
+            {
+                Attachment(writableAllocation, ERHILoadAction.Load),
+            },
+            SubPassDescriptors = new RHISubPassDescriptor[]
+            {
+                SubPass(inputs: new[] { 0 }, outputs: new[] { 0 }),
+            },
+        };
+        RHIRasterPassPlan writablePlan =
+            RHIRasterPassPlanner.Compile(in writableDescriptor);
+        Dx12RasterPassLowering lowering =
+            Dx12RasterPassLowering.Compile(
+                writablePlan,
+                supportsNativeRenderPass: true,
+                supportsRasterOrderedViews: true,
+                usesEnhancedBarriers: true);
+        Assert.Equal((byte)1, lowering.SubPasses.Span[0].RasterOrderedMask);
+    }
+
+    [Fact]
+    [Trait("Category", "SharpGpuPortable")]
     public void Lowering_FailsClosed_ForUnrepresentableOutputAndRovContracts()
     {
         RHIAttachmentInterfaceSignature allHoleOutputs =
             new(
                 1,
                 RHIAttachmentIndexArray.Empty,
-                new RHIAttachmentIndexArray(new[] { -1 }),
-                RHIAttachmentIndexArray.Empty);
+                new RHIAttachmentIndexArray(new[] { -1 }));
         Assert.Throws<ArgumentException>(() =>
             Dx12RasterSubPassLowering.ResolveOutputLocationFormats(
                 in allHoleOutputs,
@@ -173,7 +228,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
             ERHIPixelFormat.R8G8B8A8_UNorm,
             ERHISampleCount.Count4,
             ERHITextureUsage.RenderTarget |
-                ERHITextureUsage.RasterizerOrdered,
+                ERHITextureUsage.UnorderedAccess,
             ERHITextureDimension.Texture2DMS);
         RHIRasterPassDescriptor descriptor = new()
         {
@@ -183,8 +238,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
             {
                 Attachment(
                     orderedMsaa,
-                    ERHILoadAction.Load,
-                    ERHIRasterAttachmentAccess.RasterOrderedReadWrite),
+                    ERHILoadAction.Load),
             },
             SubPassDescriptors = new RHISubPassDescriptor[]
             {
@@ -332,7 +386,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
         bool nativeRovSupported = nativeOptions.ROVsSupported;
         Assert.Equal(
             nativeRovSupported,
-            context.Device.Capabilities.Raster.RasterOrderedAccess.Tier !=
+            context.Device.Capabilities.Raster.FramebufferReadWrite.Tier !=
                 ERHICapabilityTier.Unavailable);
         Assert.True(
             nativeRovSupported,
@@ -340,11 +394,46 @@ public sealed class Dx12RasterSubpassQualifiedTests
             "override or lowering bypass is permitted.");
         Assert.NotEqual(
             ERHICapabilityTier.Unavailable,
-            context.Device.Capabilities.Raster.RasterOrderedAccess.Tier);
+            context.Device.Capabilities.Raster.FramebufferReadWrite.Tier);
         Assert.Equal(
             ERHICapabilityProbeKind.NativeFeatureQuery,
-            context.Device.Capabilities.Raster.RasterOrderedAccess
+            context.Device.Capabilities.Raster.FramebufferReadWrite
                 .Provenance.Kind);
+
+        RHIBlendDescriptor shaderOnlyBlend =
+            CreateDefaultRenderState().BlendState.BlendDescriptor0;
+        RHIRasterAttachmentSupportQuery shaderOnlyQuery = new(
+            ERHIPixelFormat.R8G8B8A8_UNorm,
+            ERHISampleCount.None,
+            isInput: true,
+            isOutput: true,
+            in shaderOnlyBlend);
+        Assert.NotEqual(
+            ERHICapabilityTier.Unavailable,
+            context.Device.QueryRasterAttachmentSupport(
+                in shaderOnlyQuery).Tier);
+
+        RHIBlendDescriptor doubleRmwBlend = shaderOnlyBlend;
+        doubleRmwBlend.BlendEnable = true;
+        doubleRmwBlend.SrcBlendColor = ERHIBlendMode.SrcAlpha;
+        doubleRmwBlend.DstBlendColor = ERHIBlendMode.OneMinusSrcAlpha;
+        RHIRasterAttachmentSupportQuery doubleRmwQuery = new(
+            ERHIPixelFormat.R8G8B8A8_UNorm,
+            ERHISampleCount.None,
+            isInput: true,
+            isOutput: true,
+            in doubleRmwBlend);
+        RHICapability doubleRmwSupport =
+            context.Device.QueryRasterAttachmentSupport(
+                in doubleRmwQuery);
+        Assert.Equal(
+            ERHICapabilityTier.Unavailable,
+            doubleRmwSupport.Tier);
+        Assert.Contains(
+            "hardware blend",
+            doubleRmwSupport.UnavailableReason,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.True(doubleRmwBlend.BlendEnable);
 
         context.ClearDebugMessages();
         RunSparseOutputDraw(context);
@@ -441,7 +530,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
             local.Device,
             ERHISampleCount.None,
             ERHITextureUsage.RenderTarget |
-                ERHITextureUsage.RasterizerOrdered);
+                ERHITextureUsage.UnorderedAccess);
         RHIRasterPassDescriptor privateAllocationPass = new()
         {
             Name = "Dx12.BeginRollback.PrivateDescriptorExhaustion",
@@ -449,9 +538,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
             {
                 GpuAttachment(
                     ordered,
-                    ERHILoadAction.Load,
-                    ERHIRasterAttachmentAccess
-                        .RasterOrderedReadWrite),
+                    ERHILoadAction.Load),
             },
             SubPassDescriptors = new RHISubPassDescriptor[]
             {
@@ -691,7 +778,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
             context.Device,
             ERHISampleCount.None,
             ERHITextureUsage.RenderTarget |
-                ERHITextureUsage.RasterizerOrdered |
+                ERHITextureUsage.UnorderedAccess |
                 ERHITextureUsage.CopySrc);
         using RHITexture intermediate = CreateGpuTexture(
             context.Device,
@@ -703,10 +790,7 @@ public sealed class Dx12RasterSubpassQualifiedTests
             Name = "Dx12.Rov.PhaseOrdering",
             ColorAttachments = new RHIColorAttachmentDescriptor[]
             {
-                GpuAttachment(
-                    ordered,
-                    access: ERHIRasterAttachmentAccess
-                        .RasterOrderedReadWrite),
+                GpuAttachment(ordered),
                 GpuAttachment(intermediate),
             },
             SubPassDescriptors = new RHISubPassDescriptor[]
@@ -1006,8 +1090,6 @@ public sealed class Dx12RasterSubpassQualifiedTests
     private static RHIColorAttachmentDescriptor GpuAttachment(
         RHITexture texture,
         ERHILoadAction loadAction = ERHILoadAction.Clear,
-        ERHIRasterAttachmentAccess access =
-            ERHIRasterAttachmentAccess.None,
         RHITexture? resolveTarget = null,
         ERHIStoreAction storeAction = ERHIStoreAction.Store)
     {
@@ -1016,7 +1098,6 @@ public sealed class Dx12RasterSubpassQualifiedTests
             RenderTarget = texture,
             LoadAction = loadAction,
             StoreAction = storeAction,
-            Access = access,
             ResolveTarget = resolveTarget,
             ClearValue = new float4(0, 0, 0, 1),
         };
@@ -1065,29 +1146,42 @@ public sealed class Dx12RasterSubpassQualifiedTests
             ShaderStageKind.Pixel,
             pixelEntry,
             pixelSource);
-        return device.CreateRasterPipeline(
-            new RHIRasterPipelineDescriptor
+        RHIRasterPipelineDescriptor descriptor = new()
+        {
+            SampleCount = sampleCount,
+            DepthFormat = depthFormat,
+            ColorFormats = logicalFormats,
+            AttachmentInterface = attachmentInterface,
+            PipelineLayout = layout,
+            FragmentFunction = pixel,
+            PrimitiveAssembler =
+                new RHIPrimitiveAssemblerDescriptor
+                {
+                    PrimitiveTopology =
+                        ERHIPrimitiveTopology.TriangleList,
+                    VertexAssembler =
+                        new RHIVertexAssemblerDescriptor(
+                            vertex,
+                            Array.Empty<
+                                RHIVertexLayoutDescriptor>()),
+                },
+            RenderState =
+                renderState ?? CreateDefaultRenderState(),
+        };
+        if (attachmentInterface.ColorInputMask != 0)
+        {
+            RHIRasterAttachmentShaderAbiDescriptor abiDescriptor = new()
             {
+                PipelineLayout = layout,
                 SampleCount = sampleCount,
-                DepthFormat = depthFormat,
                 ColorFormats = logicalFormats,
                 AttachmentInterface = attachmentInterface,
-                PipelineLayout = layout,
-                FragmentFunction = pixel,
-                PrimitiveAssembler =
-                    new RHIPrimitiveAssemblerDescriptor
-                    {
-                        PrimitiveTopology =
-                            ERHIPrimitiveTopology.TriangleList,
-                        VertexAssembler =
-                            new RHIVertexAssemblerDescriptor(
-                                vertex,
-                                Array.Empty<
-                                    RHIVertexLayoutDescriptor>()),
-                    },
-                RenderState =
-                    renderState ?? CreateDefaultRenderState(),
-            });
+            };
+            descriptor.AttachmentShaderAbiClaim = device
+                .QueryRasterAttachmentShaderAbi(in abiDescriptor)
+                .CreateClaim();
+        }
+        return device.CreateRasterPipeline(in descriptor);
     }
 
     private static RHIFunction CompileFunction(
@@ -1730,7 +1824,6 @@ void ps_main(PSIn input)
     private static RHISubPassDescriptor SubPass(
         int[]? inputs = null,
         int[]? outputs = null,
-        int[]? sampledFeedback = null,
         ERHISubPassFlags flags = ERHISubPassFlags.None)
     {
         return new RHISubPassDescriptor
@@ -1741,25 +1834,19 @@ void ps_main(PSIn input)
             ColorOutputs = outputs == null
                 ? RHIAttachmentIndexArray.Empty
                 : new RHIAttachmentIndexArray(outputs),
-            SampledFeedbackInputs = sampledFeedback == null
-                ? RHIAttachmentIndexArray.Empty
-                : new RHIAttachmentIndexArray(sampledFeedback),
             Flags = flags,
         };
     }
 
     private static RHIColorAttachmentDescriptor Attachment(
         RHITexture texture,
-        ERHILoadAction loadAction,
-        ERHIRasterAttachmentAccess access =
-            ERHIRasterAttachmentAccess.None)
+        ERHILoadAction loadAction)
     {
         return new RHIColorAttachmentDescriptor
         {
             RenderTarget = texture,
             LoadAction = loadAction,
             StoreAction = ERHIStoreAction.Store,
-            Access = access,
         };
     }
 

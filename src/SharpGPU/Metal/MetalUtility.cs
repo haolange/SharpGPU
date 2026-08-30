@@ -317,7 +317,7 @@ namespace SharpGPU
                 result |= MTLTextureUsage.ShaderRead;
             }
 
-            if ((flags & ((int)ERHITextureUsage.UnorderedAccess | (int)ERHITextureUsage.RasterizerOrdered)) != 0)
+            if ((flags & (int)ERHITextureUsage.UnorderedAccess) != 0)
             {
                 result |= MTLTextureUsage.ShaderWrite;
             }

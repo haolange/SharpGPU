@@ -708,9 +708,6 @@ namespace SharpGPU
         public EVulkanFeatureProvenance DynamicRenderingProvenance { get; }
         public EVulkanFeatureProvenance RenderPass2Provenance { get; }
         public EVulkanFeatureProvenance DynamicRenderingLocalReadQueryProvenance { get; }
-        public EVulkanFeatureProvenance AttachmentFeedbackLoopLayoutQueryProvenance { get; }
-        public EVulkanFeatureProvenance FragmentShaderPixelInterlockQueryProvenance { get; }
-        public EVulkanFeatureProvenance UnifiedImageLayoutsQueryProvenance { get; }
 
         private VulkanFeatureChainPlan(
             uint effectiveApiVersion,
@@ -725,10 +722,7 @@ namespace SharpGPU
             bool useCreateRenderPass2Extension,
             EVulkanFeatureProvenance dynamicRenderingProvenance,
             EVulkanFeatureProvenance renderPass2Provenance,
-            EVulkanFeatureProvenance dynamicRenderingLocalReadQueryProvenance,
-            EVulkanFeatureProvenance attachmentFeedbackLoopLayoutQueryProvenance,
-            EVulkanFeatureProvenance fragmentShaderPixelInterlockQueryProvenance,
-            EVulkanFeatureProvenance unifiedImageLayoutsQueryProvenance)
+            EVulkanFeatureProvenance dynamicRenderingLocalReadQueryProvenance)
         {
             EffectiveApiVersion = effectiveApiVersion;
             UseVulkan12Features = useVulkan12Features;
@@ -745,12 +739,6 @@ namespace SharpGPU
             RenderPass2Provenance = renderPass2Provenance;
             DynamicRenderingLocalReadQueryProvenance =
                 dynamicRenderingLocalReadQueryProvenance;
-            AttachmentFeedbackLoopLayoutQueryProvenance =
-                attachmentFeedbackLoopLayoutQueryProvenance;
-            FragmentShaderPixelInterlockQueryProvenance =
-                fragmentShaderPixelInterlockQueryProvenance;
-            UnifiedImageLayoutsQueryProvenance =
-                unifiedImageLayoutsQueryProvenance;
         }
 
         public static VulkanFeatureChainPlan Create(
@@ -760,10 +748,7 @@ namespace SharpGPU
             bool hasDynamicRenderingExtension,
             bool hasCreateRenderPass2Extension,
             bool hasSynchronization2Extension,
-            bool hasDynamicRenderingLocalReadExtension = false,
-            bool hasAttachmentFeedbackLoopLayoutExtension = false,
-            bool hasFragmentShaderInterlockExtension = false,
-            bool hasUnifiedImageLayoutsExtension = false)
+            bool hasDynamicRenderingLocalReadExtension = false)
         {
             ValidateInstanceApiVersion(instanceApiVersion);
             ValidatePhysicalDeviceApiVersion(physicalDeviceApiVersion);
@@ -822,19 +807,7 @@ namespace SharpGPU
                         ? EVulkanFeatureProvenance.Vulkan14Core
                         : hasDynamicRenderingLocalReadExtension
                             ? EVulkanFeatureProvenance.KhrExtension
-                            : EVulkanFeatureProvenance.Unavailable,
-                attachmentFeedbackLoopLayoutQueryProvenance:
-                    hasAttachmentFeedbackLoopLayoutExtension
-                        ? EVulkanFeatureProvenance.ExtExtension
-                        : EVulkanFeatureProvenance.Unavailable,
-                fragmentShaderPixelInterlockQueryProvenance:
-                    hasFragmentShaderInterlockExtension
-                        ? EVulkanFeatureProvenance.ExtExtension
-                        : EVulkanFeatureProvenance.Unavailable,
-                unifiedImageLayoutsQueryProvenance:
-                    hasUnifiedImageLayoutsExtension
-                        ? EVulkanFeatureProvenance.KhrExtension
-                        : EVulkanFeatureProvenance.Unavailable);
+                            : EVulkanFeatureProvenance.Unavailable);
         }
 
         private static void ValidateInstanceApiVersion(uint version)

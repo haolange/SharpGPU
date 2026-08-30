@@ -6,6 +6,7 @@ using Xunit;
 
 namespace SharpGPU.Conformance.Tests;
 
+[Trait("Category", "SharpGpuPortable")]
 public sealed class RHIRasterPassPlannerContractTests
 {
     [Fact]
@@ -228,30 +229,23 @@ public sealed class RHIRasterPassPlannerContractTests
     [Fact]
     public void Compile_DerivesInterfacePreserveAndTransitionMasks()
     {
-        using TestTexture ordered = CreateColorTexture(
-            usage: ERHITextureUsage.RenderTarget |
-                   ERHITextureUsage.RasterizerOrdered);
-        using TestTexture feedback = CreateColorTexture(
-            usage: ERHITextureUsage.RenderTarget |
-                   ERHITextureUsage.ShaderResource);
+        using TestTexture readWrite = CreateColorTexture();
+        using TestTexture inputOnly = CreateColorTexture();
         RHIRasterPassDescriptor descriptor = new RHIRasterPassDescriptor
         {
             ColorAttachments = new[]
             {
+                CreateColorAttachment(readWrite),
                 CreateColorAttachment(
-                    ordered,
-                    access: ERHIRasterAttachmentAccess.RasterOrderedReadWrite),
-                CreateColorAttachment(
-                    feedback,
+                    inputOnly,
                     loadAction: ERHILoadAction.Load),
             },
             SubPassDescriptors = new[]
             {
                 CreateSubPass(outputs: new[] { 0 }),
                 CreateSubPass(
-                    inputs: new[] { 0 },
-                    outputs: new[] { 0 },
-                    sampledFeedback: new[] { 1 }),
+                    inputs: new[] { 0, 1 },
+                    outputs: new[] { 0 }),
             },
         };
 
@@ -266,43 +260,102 @@ public sealed class RHIRasterPassPlannerContractTests
         Assert.Equal((byte)1, second.ReadWriteMask);
         Assert.Equal((byte)1, second.TransitionMask);
         Assert.Equal((byte)3, second.AvailableOnEntryMask);
-        Assert.Equal((byte)1, second.AttachmentInterface.ColorInputMask);
+        Assert.Equal((byte)3, second.AttachmentInterface.ColorInputMask);
         Assert.Equal((byte)1, second.AttachmentInterface.ColorOutputMask);
         Assert.Equal(
             (byte)1,
-            second.AttachmentInterface.RasterOrderedReadWriteMask);
-        Assert.Equal((byte)2, second.AttachmentInterface.SampledFeedbackMask);
+            second.AttachmentInterface.FramebufferReadWriteMask);
         Assert.Equal((byte)0, second.AttachmentInterface.LayeredAccessMask);
     }
+
+    [Theory]
+    [InlineData("RAW", false, true, true, false)]
+    [InlineData("WAR", true, false, false, true)]
+    [InlineData("WAW", false, true, false, true)]
+    public void Compile_TracksEveryCrossPhaseAttachmentHazard(
+        string hazard,
+        bool firstReads,
+        bool firstWrites,
+        bool secondReads,
+        bool secondWrites)
+    {
+        using TestTexture texture = CreateColorTexture();
+        RHIRasterPassDescriptor descriptor = new()
+        {
+            Name = $"Planner.{hazard}",
+            ColorAttachments = new[]
+            {
+                CreateColorAttachment(
+                    texture,
+                    loadAction: ERHILoadAction.Load),
+            },
+            SubPassDescriptors = new[]
+            {
+                CreateSubPass(
+                    inputs: firstReads ? new[] { 0 } : null,
+                    outputs: firstWrites ? new[] { 0 } : null),
+                CreateSubPass(
+                    inputs: secondReads ? new[] { 0 } : null,
+                    outputs: secondWrites ? new[] { 0 } : null),
+            },
+        };
+
+        RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
+        Assert.Equal((byte)0, plan.GetSubPass(0).TransitionMask);
+        Assert.Equal((byte)1, plan.GetSubPass(1).TransitionMask);
+        Assert.Equal((byte)0, plan.GetSubPass(1).ReadWriteMask);
+    }
+
+    [Fact]
+    public void Compile_SamePhaseOverlapIsRmwWithoutCrossPhaseTransition()
+    {
+        using TestTexture texture = CreateColorTexture();
+        RHIRasterPassDescriptor descriptor = new()
+        {
+            ColorAttachments = new[]
+            {
+                CreateColorAttachment(
+                    texture,
+                    loadAction: ERHILoadAction.Load),
+            },
+            SubPassDescriptors = new[]
+            {
+                CreateSubPass(
+                    inputs: new[] { 0 },
+                    outputs: new[] { 0 }),
+            },
+        };
+
+        ref readonly RHIRasterSubPassPlan subPass = ref
+            RHIRasterPassPlanner.Compile(in descriptor).GetSubPass(0);
+        Assert.Equal((byte)1, subPass.ReadWriteMask);
+        Assert.Equal((byte)1,
+            subPass.AttachmentInterface.FramebufferReadWriteMask);
+        Assert.Equal((byte)0, subPass.TransitionMask);
+    }
+
     [Fact]
     public void Compile_DerivesLayeredAccessOnlyForSpecialAttachmentReads()
     {
-        using TestTexture ordered = CreateColorTexture(
+        using TestTexture readWrite = CreateColorTexture(
             layers: 2,
-            usage: ERHITextureUsage.RenderTarget |
-                   ERHITextureUsage.RasterizerOrdered,
             dimension: ERHITextureDimension.Texture2DArray);
-        using TestTexture feedback = CreateColorTexture(
+        using TestTexture inputOnly = CreateColorTexture(
             layers: 2,
-            usage: ERHITextureUsage.RenderTarget |
-                   ERHITextureUsage.ShaderResource,
             dimension: ERHITextureDimension.Texture2DArray);
         RHIRasterPassDescriptor descriptor = new RHIRasterPassDescriptor
         {
             ArrayLength = 2,
             ColorAttachments = new[]
             {
-                CreateColorAttachment(
-                    ordered,
-                    access: ERHIRasterAttachmentAccess.RasterOrderedReadWrite),
-                CreateColorAttachment(feedback),
+                CreateColorAttachment(readWrite),
+                CreateColorAttachment(inputOnly),
             },
             SubPassDescriptors = new[]
             {
                 CreateSubPass(
-                    inputs: new[] { 0 },
-                    outputs: new[] { 0 },
-                    sampledFeedback: new[] { 1 }),
+                    inputs: new[] { 0, 1 },
+                    outputs: new[] { 0 }),
             },
         };
 
@@ -312,33 +365,29 @@ public sealed class RHIRasterPassPlannerContractTests
                 .AttachmentInterface;
 
         Assert.Equal((byte)3, signature.LayeredAccessMask);
-        Assert.Equal((byte)1, signature.RasterOrderedReadWriteMask);
-        Assert.Equal((byte)2, signature.SampledFeedbackMask);
+        Assert.Equal((byte)1, signature.FramebufferReadWriteMask);
     }
 
 
     [Fact]
-    public void Compile_PreservesSparseOrderedAttachmentSlots()
+    public void Compile_PreservesSparseInputAndOutputSlots()
     {
         using TestTexture output = CreateColorTexture();
-        using TestTexture sampled = CreateColorTexture(
-            usage: ERHITextureUsage.RenderTarget |
-                   ERHITextureUsage.ShaderResource);
+        using TestTexture unused = CreateColorTexture();
         using TestTexture input = CreateColorTexture();
         RHIRasterPassDescriptor descriptor = new RHIRasterPassDescriptor
         {
             ColorAttachments = new[]
             {
                 CreateColorAttachment(output),
-                CreateColorAttachment(sampled),
+                CreateColorAttachment(unused),
                 CreateColorAttachment(input),
             },
             SubPassDescriptors = new[]
             {
                 CreateSubPass(
                     inputs: new[] { -1, 2 },
-                    outputs: new[] { -1, 0 },
-                    sampledFeedback: new[] { -1, -1, 1 }),
+                    outputs: new[] { -1, 0 }),
             },
         };
 
@@ -348,17 +397,12 @@ public sealed class RHIRasterPassPlannerContractTests
 
         Assert.Equal(2, signature.ColorInputSlotCount);
         Assert.Equal(2, signature.ColorOutputLocationCount);
-        Assert.Equal(3, signature.SampledFeedbackSlotCount);
         Assert.Equal(-1, signature.GetColorInputLogicalAttachment(0));
         Assert.Equal(2, signature.GetColorInputLogicalAttachment(1));
         Assert.Equal(-1, signature.GetColorOutputLogicalAttachment(0));
         Assert.Equal(0, signature.GetColorOutputLogicalAttachment(1));
-        Assert.Equal(-1, signature.GetSampledFeedbackLogicalAttachment(0));
-        Assert.Equal(-1, signature.GetSampledFeedbackLogicalAttachment(1));
-        Assert.Equal(1, signature.GetSampledFeedbackLogicalAttachment(2));
         Assert.Equal((byte)4, signature.ColorInputMask);
         Assert.Equal((byte)1, signature.ColorOutputMask);
-        Assert.Equal((byte)2, signature.SampledFeedbackMask);
     }
 
     [Fact]
@@ -392,7 +436,7 @@ public sealed class RHIRasterPassPlannerContractTests
             ColorAttachments = attachments,
             SubPassDescriptors = new[]
             {
-                CreateSubPass(sampledFeedback: new[] { -1, 2 }),
+                CreateSubPass(inputs: new[] { -1, 2 }),
             },
         };
 
@@ -411,24 +455,19 @@ public sealed class RHIRasterPassPlannerContractTests
             new RHIAttachmentIndexArray(new[] { -1, 2 });
         RHIAttachmentIndexArray outputs =
             new RHIAttachmentIndexArray(new[] { 1, -1, 0 });
-        RHIAttachmentIndexArray sampled =
-            new RHIAttachmentIndexArray(new[] { -1, 3 });
         RHIAttachmentInterfaceSignature signature =
             new RHIAttachmentInterfaceSignature(
                 4,
                 inputs,
-                outputs,
-                sampled);
+                outputs);
 
         inputs[1] = 0;
         outputs[0] = 0;
-        sampled[1] = 0;
 
         Assert.Equal(2, signature.GetColorInputLogicalAttachment(1));
         Assert.Equal(1, signature.GetColorOutputLogicalAttachment(0));
         Assert.Equal(-1, signature.GetColorOutputLogicalAttachment(1));
         Assert.Equal(0, signature.GetColorOutputLogicalAttachment(2));
-        Assert.Equal(3, signature.GetSampledFeedbackLogicalAttachment(1));
         Assert.Equal(0, RHIAttachmentInterfaceSignature.GetPrivateInputAttachmentBinding(0));
         Assert.Equal(7, RHIAttachmentInterfaceSignature.GetPrivateInputAttachmentBinding(7));
         Assert.Throws<ArgumentOutOfRangeException>(
@@ -440,8 +479,7 @@ public sealed class RHIRasterPassPlannerContractTests
             new RHIAttachmentInterfaceSignature(
                 4,
                 new RHIAttachmentIndexArray(new[] { 2, -1 }),
-                new RHIAttachmentIndexArray(new[] { 1, -1, 0 }),
-                new RHIAttachmentIndexArray(new[] { -1, 3 }));
+                new RHIAttachmentIndexArray(new[] { 1, -1, 0 }));
         Assert.NotEqual(signature, reordered);
 
         RHIAttachmentInterfaceSignature dualSource =
@@ -449,7 +487,6 @@ public sealed class RHIRasterPassPlannerContractTests
                 2,
                 RHIAttachmentIndexArray.Empty,
                 new RHIAttachmentIndexArray(new[] { 1 }),
-                RHIAttachmentIndexArray.Empty,
                 usesDualSourceColor: true);
         Assert.Equal(1, dualSource.GetColorOutputLogicalAttachment(0, 0));
         Assert.Equal(1, dualSource.GetColorOutputLogicalAttachment(0, 1));
@@ -463,14 +500,12 @@ public sealed class RHIRasterPassPlannerContractTests
                 2,
                 RHIAttachmentIndexArray.Empty,
                 new RHIAttachmentIndexArray(new[] { -1, 1 }),
-                RHIAttachmentIndexArray.Empty,
                 usesDualSourceColor: true));
         Assert.Throws<ArgumentException>(
             () => _ = new RHIAttachmentInterfaceSignature(
                 2,
                 RHIAttachmentIndexArray.Empty,
                 new RHIAttachmentIndexArray(new[] { 0, 1 }),
-                RHIAttachmentIndexArray.Empty,
                 layeredAccessMask: 1));
 
         RHIAttachmentInterfaceSignature layered =
@@ -478,8 +513,7 @@ public sealed class RHIRasterPassPlannerContractTests
                 4,
                 new RHIAttachmentIndexArray(new[] { -1, 2 }),
                 new RHIAttachmentIndexArray(new[] { 1, -1, 0 }),
-                new RHIAttachmentIndexArray(new[] { -1, 3 }),
-                layeredAccessMask: 12);
+                layeredAccessMask: 4);
         Assert.False(signature.IsPassCompatibleWith(layered));
         Assert.False(layered.IsPassCompatibleWith(signature));
         Assert.NotEqual(signature, layered);
@@ -567,15 +601,13 @@ public sealed class RHIRasterPassPlannerContractTests
             () => _ = new RHIAttachmentInterfaceSignature(
                 1,
                 new RHIAttachmentIndexArray(new[] { 1 }),
-                RHIAttachmentIndexArray.Empty,
                 RHIAttachmentIndexArray.Empty));
         Assert.Throws<ArgumentException>(
             () => _ = new RHIAttachmentInterfaceSignature(
                 1,
-                new RHIAttachmentIndexArray(new[] { 0 }),
                 RHIAttachmentIndexArray.Empty,
                 RHIAttachmentIndexArray.Empty,
-                rasterOrderedReadWriteMask: 1));
+                layeredAccessMask: 1));
 
         ERHIPixelFormat[] sourceFormats = { ERHIPixelFormat.R8G8B8A8_UNorm };
         RHIRasterPipelineDescriptor sourceDescriptor =
@@ -626,8 +658,7 @@ public sealed class RHIRasterPassPlannerContractTests
                 attachmentInterface: new RHIAttachmentInterfaceSignature(
                     1,
                     new RHIAttachmentIndexArray(new[] { 0 }),
-                    new RHIAttachmentIndexArray(new[] { 0 }),
-                    RHIAttachmentIndexArray.Empty)));
+                    new RHIAttachmentIndexArray(new[] { 0 }))));
         Assert.Throws<ArgumentException>(() => encoder.SetPipeline(wrongInterface));
 
         compatible.Dispose();
@@ -989,8 +1020,26 @@ public sealed class RHIRasterPassPlannerContractTests
                     "Physical",
                     StringComparison.OrdinalIgnoreCase));
         Assert.NotNull(typeof(ERHISubPassFlags).GetCustomAttribute<FlagsAttribute>());
-        Assert.NotNull(
-            typeof(ERHIRasterAttachmentAccess).GetCustomAttribute<FlagsAttribute>());
+        Assert.Null(assembly.GetType("SharpGPU.ERHIRasterAttachmentAccess"));
+        Assert.DoesNotContain(
+            "RasterizerOrdered",
+            Enum.GetNames<ERHIBufferState>());
+        Assert.DoesNotContain(
+            "RasterizerOrdered",
+            Enum.GetNames<ERHITextureState>());
+        Assert.DoesNotContain(
+            "RasterizerOrdered",
+            Enum.GetNames<ERHIBufferUsage>());
+        Assert.DoesNotContain(
+            "RasterizerOrdered",
+            Enum.GetNames<ERHIBufferViewType>());
+        Assert.DoesNotContain(
+            "RasterizerOrdered",
+            Enum.GetNames<ERHITextureUsage>());
+        Assert.DoesNotContain(
+            "RasterizerOrdered",
+            Enum.GetNames<ERHITextureViewType>());
+        Assert.Null(colorAttachment.GetField("Access"));
     }
 
     private static bool ExposesForbiddenType(
@@ -1065,8 +1114,7 @@ public sealed class RHIRasterPassPlannerContractTests
     private static RHIColorAttachmentDescriptor CreateColorAttachment(
         RHITexture texture,
         RHITextureSubresourceRange subresourceRange = default,
-        ERHILoadAction loadAction = ERHILoadAction.Clear,
-        ERHIRasterAttachmentAccess access = ERHIRasterAttachmentAccess.None)
+        ERHILoadAction loadAction = ERHILoadAction.Clear)
     {
         return new RHIColorAttachmentDescriptor
         {
@@ -1074,7 +1122,6 @@ public sealed class RHIRasterPassPlannerContractTests
             SubresourceRange = subresourceRange,
             LoadAction = loadAction,
             StoreAction = ERHIStoreAction.Store,
-            Access = access,
         };
     }
 
@@ -1102,7 +1149,6 @@ public sealed class RHIRasterPassPlannerContractTests
     {
         return new RHIAttachmentInterfaceSignature(
             0,
-            RHIAttachmentIndexArray.Empty,
             RHIAttachmentIndexArray.Empty,
             RHIAttachmentIndexArray.Empty,
             depthStencilFlags: flags);
@@ -1138,7 +1184,6 @@ public sealed class RHIRasterPassPlannerContractTests
     private static RHISubPassDescriptor CreateSubPass(
         int[]? inputs = null,
         int[]? outputs = null,
-        int[]? sampledFeedback = null,
         ERHISubPassFlags flags = ERHISubPassFlags.None)
     {
         return new RHISubPassDescriptor
@@ -1150,9 +1195,6 @@ public sealed class RHIRasterPassPlannerContractTests
             ColorOutputs = outputs == null
                 ? RHIAttachmentIndexArray.Empty
                 : new RHIAttachmentIndexArray(outputs),
-            SampledFeedbackInputs = sampledFeedback == null
-                ? RHIAttachmentIndexArray.Empty
-                : new RHIAttachmentIndexArray(sampledFeedback),
         };
     }
 

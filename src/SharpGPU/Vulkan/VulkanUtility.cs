@@ -448,8 +448,7 @@ namespace SharpGPU
         }
 
         public static VkImageUsageFlags ConvertToVkImageUsage(
-            in ERHITextureUsage usage,
-            bool attachmentFeedbackLoopLayoutSupported = false)
+            in ERHITextureUsage usage)
         {
             VkImageUsageFlags result = 0;
 
@@ -464,21 +463,8 @@ namespace SharpGPU
                           VkImageUsageFlags.InputAttachment;
             if ((usage & ERHITextureUsage.ShaderResource) == ERHITextureUsage.ShaderResource)
                 result |= VkImageUsageFlags.Sampled;
-            if ((usage & (ERHITextureUsage.UnorderedAccess |
-                          ERHITextureUsage.RasterizerOrdered)) != 0)
+            if ((usage & ERHITextureUsage.UnorderedAccess) != 0)
                 result |= VkImageUsageFlags.Storage;
-            bool isFeedbackCandidate =
-                (usage & ERHITextureUsage.RenderTarget) ==
-                    ERHITextureUsage.RenderTarget &&
-                ((usage & ERHITextureUsage.ShaderResource) ==
-                     ERHITextureUsage.ShaderResource ||
-                 (usage & ERHITextureUsage.RasterizerOrdered) ==
-                     ERHITextureUsage.RasterizerOrdered);
-            if (attachmentFeedbackLoopLayoutSupported &&
-                isFeedbackCandidate)
-            {
-                result |= VkImageUsageFlags.AttachmentFeedbackLoopEXT;
-            }
 
             return result;
         }
@@ -2153,6 +2139,27 @@ internal static unsafe class VulkanNative
                     physicalDevice,
                     format,
                     formatProperties);
+        }
+
+        public static VkResult
+            vkGetPhysicalDeviceImageFormatProperties(
+                VkPhysicalDevice physicalDevice,
+                VkFormat format,
+                VkImageType imageType,
+                VkImageTiling tiling,
+                VkImageUsageFlags usage,
+                VkImageCreateFlags flags,
+                VkImageFormatProperties* imageFormatProperties)
+        {
+            return GetInstanceApi(physicalDevice)
+                .vkGetPhysicalDeviceImageFormatProperties(
+                    physicalDevice,
+                    format,
+                    imageType,
+                    tiling,
+                    usage,
+                    flags,
+                    imageFormatProperties);
         }
 
         public static void vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* memoryProperties)

@@ -275,25 +275,20 @@ public sealed class SharpGPUPipelineCacheContractTests
             new RHIAttachmentInterfaceSignature(
                 colorAttachmentCount: 1,
                 colorInputs: new RHIAttachmentIndexArray(new[] { 0 }),
-                colorOutputs: new RHIAttachmentIndexArray(new[] { 0 }),
-                sampledFeedbackInputs: RHIAttachmentIndexArray.Empty,
-                rasterOrderedReadWriteMask: 1);
+                colorOutputs: new RHIAttachmentIndexArray(new[] { 0 }));
         RHIRasterPipelineDescriptor layeredAttachment = differentAttachment;
         layeredAttachment.AttachmentInterface =
             new RHIAttachmentInterfaceSignature(
                 colorAttachmentCount: 1,
                 colorInputs: new RHIAttachmentIndexArray(new[] { 0 }),
                 colorOutputs: new RHIAttachmentIndexArray(new[] { 0 }),
-                sampledFeedbackInputs: RHIAttachmentIndexArray.Empty,
-                rasterOrderedReadWriteMask: 1,
                 layeredAccessMask: 1);
         RHIRasterPipelineDescriptor explicitDefaultAttachment = baseline;
         explicitDefaultAttachment.AttachmentInterface =
             new RHIAttachmentInterfaceSignature(
                 colorAttachmentCount: 1,
                 colorInputs: RHIAttachmentIndexArray.Empty,
-                colorOutputs: new RHIAttachmentIndexArray(new[] { 0 }),
-                sampledFeedbackInputs: RHIAttachmentIndexArray.Empty);
+                colorOutputs: new RHIAttachmentIndexArray(new[] { 0 }));
 
         RHIPipelineCacheIdentity identity = new(
             ERHIBackend.DirectX12,
@@ -356,21 +351,18 @@ public sealed class SharpGPUPipelineCacheContractTests
         ordered.AttachmentInterface = new RHIAttachmentInterfaceSignature(
             2,
             RHIAttachmentIndexArray.Empty,
-            new RHIAttachmentIndexArray(new[] { 0, 1 }),
-            RHIAttachmentIndexArray.Empty);
+            new RHIAttachmentIndexArray(new[] { 0, 1 }));
 
         RHIRasterPipelineDescriptor reordered = ordered;
         reordered.AttachmentInterface = new RHIAttachmentInterfaceSignature(
             2,
             RHIAttachmentIndexArray.Empty,
-            new RHIAttachmentIndexArray(new[] { 1, 0 }),
-            RHIAttachmentIndexArray.Empty);
+            new RHIAttachmentIndexArray(new[] { 1, 0 }));
         RHIRasterPipelineDescriptor sparse = ordered;
         sparse.AttachmentInterface = new RHIAttachmentInterfaceSignature(
             2,
             RHIAttachmentIndexArray.Empty,
-            new RHIAttachmentIndexArray(new[] { 0, -1, 1 }),
-            RHIAttachmentIndexArray.Empty);
+            new RHIAttachmentIndexArray(new[] { 0, -1, 1 }));
 
         RHIPipelineCacheIdentity identity = new(
             ERHIBackend.Vulkan,
@@ -385,6 +377,167 @@ public sealed class SharpGPUPipelineCacheContractTests
         Assert.NotEqual(
             orderedKey,
             RHIPipelineCacheKeyBuilder.CreateRasterKey(sparse, identity));
+    }
+
+    [Fact]
+    public void RasterAttachmentSupportQuery_PreservesExactLayeredBlendFacts()
+    {
+        RHIBlendDescriptor blend = new()
+        {
+            BlendEnable = true,
+            BlendOpColor = ERHIBlendOp.Add,
+            SrcBlendColor = ERHIBlendMode.SrcAlpha,
+            DstBlendColor = ERHIBlendMode.OneMinusSrcAlpha,
+            ColorWriteChannel = ERHIColorWriteChannel.All,
+        };
+        RHIRasterAttachmentSupportQuery query = new(
+            ERHIPixelFormat.R16G16B16A16_Float,
+            ERHISampleCount.Count4,
+            isInput: true,
+            isOutput: true,
+            in blend,
+            alphaToCoverage: true,
+            isLayered: true);
+
+        Assert.True(query.IsInput);
+        Assert.True(query.IsOutput);
+        Assert.True(query.IsLayered);
+        Assert.True(query.Blend.BlendEnable);
+        Assert.True(query.AlphaToCoverage);
+        Assert.Equal(ERHISampleCount.Count4, query.SampleCount);
+        Assert.Equal(
+            ERHIPixelFormat.R16G16B16A16_Float,
+            query.Format);
+        Assert.Throws<ArgumentException>(() =>
+            new RHIRasterAttachmentSupportQuery(
+                ERHIPixelFormat.R8G8B8A8_UNorm,
+                ERHISampleCount.None,
+                isInput: false,
+                isOutput: true,
+                in blend,
+                isLayered: true));
+    }
+
+    [Fact]
+    public void RasterAttachmentShaderAbi_IsVersionedHashedAndDefensivelyCopied()
+    {
+        using TestPipelineLayout layout = new(pushConstantSize: 16);
+        RHIAttachmentInterfaceSignature signature = new(
+            colorAttachmentCount: 3,
+            colorInputs: new RHIAttachmentIndexArray(new[] { 0, 2 }),
+            colorOutputs: new RHIAttachmentIndexArray(new[] { 2 }));
+        RHIRasterAttachmentShaderAbiDescriptor descriptor = new()
+        {
+            PipelineLayout = layout,
+            SampleCount = ERHISampleCount.None,
+            ColorFormats = new[]
+            {
+                ERHIPixelFormat.R8G8B8A8_UNorm,
+                ERHIPixelFormat.R16G16B16A16_Float,
+                ERHIPixelFormat.R32_UInt,
+            },
+            AttachmentInterface = signature,
+        };
+        RHIRasterAttachmentShaderBinding[] bindings =
+            CreateRawAttachmentBindings();
+
+        RHIRasterAttachmentShaderAbi abi =
+            RHIRasterAttachmentShaderAbiFactory.Create(
+                ERHIBackend.Vulkan,
+                in descriptor,
+                bindings);
+
+        Assert.Equal(
+            RHIRasterAttachmentShaderAbi.CurrentRevision,
+            abi.Revision);
+        Assert.Equal(64, abi.ContractHash.Length);
+        Assert.Equal(
+            abi.ContractHash,
+            Convert.ToHexString(Convert.FromHexString(abi.ContractHash)));
+        Assert.Equal(2, abi.Bindings.Length);
+        Assert.Equal(
+            ERHIRawShaderBindingKind.InputAttachment,
+            abi.GetBinding(0).Input.Kind);
+        Assert.Equal(
+            ERHIRawShaderBindingKind.UnorderedAccess,
+            abi.GetBinding(2).Output.Kind);
+
+        bindings[0] = default;
+        Assert.Equal(0, abi.GetBinding(0).LogicalAttachment);
+        RHIRasterAttachmentShaderAbi equivalent =
+            RHIRasterAttachmentShaderAbiFactory.Create(
+                ERHIBackend.Vulkan,
+                in descriptor,
+                CreateRawAttachmentBindings());
+        RHIRasterAttachmentShaderAbiDescriptor changedDescriptor =
+            descriptor;
+        changedDescriptor.ColorFormats =
+            (ERHIPixelFormat[])descriptor.ColorFormats.Clone();
+        changedDescriptor.ColorFormats[2] = ERHIPixelFormat.R32_SInt;
+        RHIRasterAttachmentShaderAbi changedFormat =
+            RHIRasterAttachmentShaderAbiFactory.Create(
+                ERHIBackend.Vulkan,
+                in changedDescriptor,
+                CreateRawAttachmentBindings());
+        Assert.Equal(abi.ContractHash, equivalent.ContractHash);
+        Assert.NotEqual(abi.ContractHash, changedFormat.ContractHash);
+        Assert.Equal(abi.CreateClaim(), equivalent.CreateClaim());
+        Assert.Null(
+            typeof(RHIRasterAttachmentShaderAbi).GetProperty(
+                "Target" + "Preamble",
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.Public));
+
+        Assert.Throws<ArgumentException>(() =>
+            RHIRasterAttachmentShaderAbiFactory.Create(
+                ERHIBackend.Vulkan,
+                in descriptor,
+                new[] { CreateRawAttachmentBindings()[0] }));
+    }
+
+    [Fact]
+    public void RasterAttachmentShaderAbiClaim_RejectsNonHexAndNormalizesCase()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new RHIRasterAttachmentShaderAbiClaim(
+                ERHIBackend.DirectX12,
+                RHIRasterAttachmentShaderAbi.CurrentRevision,
+                new string('G', 64)));
+
+        RHIRasterAttachmentShaderAbiClaim claim = new(
+            ERHIBackend.Metal,
+            RHIRasterAttachmentShaderAbi.CurrentRevision,
+            new string('a', 64));
+        Assert.Equal(new string('A', 64), claim.ContractHash);
+    }
+
+    private static RHIRasterAttachmentShaderBinding[]
+        CreateRawAttachmentBindings()
+    {
+        return new[]
+        {
+            new RHIRasterAttachmentShaderBinding(
+                logicalAttachment: 0,
+                inputSlot: 0,
+                outputLocation: -1,
+                new RHIRawShaderBindingLocation(
+                    ERHIRawShaderBindingKind.InputAttachment,
+                    index: 0,
+                    setOrSpace: 31),
+                default),
+            new RHIRasterAttachmentShaderBinding(
+                logicalAttachment: 2,
+                inputSlot: 1,
+                outputLocation: 0,
+                new RHIRawShaderBindingLocation(
+                    ERHIRawShaderBindingKind.UnorderedAccess,
+                    index: 2,
+                    setOrSpace: 31),
+                new RHIRawShaderBindingLocation(
+                    ERHIRawShaderBindingKind.UnorderedAccess,
+                    index: 2,
+                    setOrSpace: 31)),
+        };
     }
 
     private static RHIRasterPipelineDescriptor CreateRasterDescriptor(

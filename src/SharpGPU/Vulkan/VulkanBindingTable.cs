@@ -94,18 +94,11 @@ namespace SharpGPU
 
         internal VulkanDevice Device => m_VulkanDevice;
         internal VulkanBindingTableLayout Layout => m_Layout;
-        internal ulong DescriptorRevision =>
-            checked((ulong)Volatile.Read(
-                ref m_DescriptorRevision));
-
         private readonly VulkanDevice m_VulkanDevice;
         private readonly VulkanBindingTableLayout m_Layout;
         private readonly bool[] m_BoundStates;
-        private readonly VulkanSampledImageDescriptorFact[]
-            m_SampledImageFacts;
         private VulkanDescriptorSetLease m_Lease;
         private int m_MissingRequiredDescriptorCount;
-        private long m_DescriptorRevision;
 
         public VulkanBindingTable(
             VulkanDevice device,
@@ -138,9 +131,6 @@ namespace SharpGPU
             }
 
             m_BoundStates = new bool[m_Layout.Plan.DescriptorCount];
-            m_SampledImageFacts =
-                new VulkanSampledImageDescriptorFact[
-                    m_Layout.Plan.DescriptorCount];
             for (int bindingIndex = 0;
                 bindingIndex < m_Layout.Plan.BindInfos.Length;
                 ++bindingIndex)
@@ -310,16 +300,6 @@ namespace SharpGPU
                 && wasBound != isBound)
             {
                 m_MissingRequiredDescriptorCount += isBound ? -1 : 1;
-            }
-            UpdateSampledImageFact(
-                in binding,
-                arrayIndex,
-                in element,
-                isBound);
-            checked
-            {
-                Interlocked.Increment(
-                    ref m_DescriptorRevision);
             }
         }
 
@@ -597,252 +577,6 @@ namespace SharpGPU
                         + "is not supported by binding tables.");
             }
         }
-
-        internal VulkanDescriptorSetLease CloneForSampledFeedback(
-            ReadOnlySpan<VulkanSampledFeedbackAttachmentFact>
-                attachments,
-            out byte matchedAttachmentMask,
-            out ulong descriptorRevision)
-        {
-            ThrowIfDisposedAndLayout();
-            EnsureReadyForBinding();
-            if (attachments.Length == 0)
-            {
-                throw new ArgumentException(
-                    "A sampled-feedback clone requires at least one " +
-                    "attachment fact.",
-                    nameof(attachments));
-            }
-
-            descriptorRevision = DescriptorRevision;
-            VulkanDescriptorSetLease clone =
-                m_VulkanDevice.DescriptorPoolAllocator.Allocate(
-                    m_Layout);
-            try
-            {
-                CopyAllDescriptors(clone.Set);
-                matchedAttachmentMask = 0;
-                for (int bindingIndex = 0;
-                     bindingIndex <
-                        m_Layout.Plan.BindInfos.Length;
-                     ++bindingIndex)
-                {
-                    ref readonly VulkanBindInfo binding =
-                        ref m_Layout.Plan.BindInfos[
-                            bindingIndex];
-                    if (binding.NativeDescriptorType !=
-                        VkDescriptorType.SampledImage)
-                    {
-                        continue;
-                    }
-                    for (int arrayIndex = 0;
-                         (uint)arrayIndex < binding.Count;
-                         ++arrayIndex)
-                    {
-                        VulkanSampledImageDescriptorFact fact =
-                            m_SampledImageFacts[
-                                binding.StateOffset +
-                                arrayIndex];
-                        if (!fact.IsBound)
-                        {
-                            continue;
-                        }
-
-                        bool rewrite = false;
-                        for (int attachmentIndex = 0;
-                             attachmentIndex <
-                                attachments.Length;
-                             ++attachmentIndex)
-                        {
-                            ref readonly
-                                VulkanSampledFeedbackAttachmentFact
-                                attachment =
-                                    ref attachments[
-                                        attachmentIndex];
-                            RHITextureSubresourceRange factRange =
-                                fact.Range;
-                            RHITextureSubresourceRange attachmentRange =
-                                attachment.Range;
-                            EVulkanSampledFeedbackRangeRelation relation =
-                                VulkanSampledFeedbackRangeUtility.Classify(
-                                    fact.Image,
-                                    in factRange,
-                                    attachment.Image,
-                                    in attachmentRange);
-                            if (relation is
-                                EVulkanSampledFeedbackRangeRelation
-                                    .DifferentImage or
-                                EVulkanSampledFeedbackRangeRelation
-                                    .Disjoint)
-                            {
-                                continue;
-                            }
-                            if (relation ==
-                                EVulkanSampledFeedbackRangeRelation
-                                    .PartialOverlap)
-                            {
-                                throw new ArgumentException(
-                                    "A sampled-image descriptor partially " +
-                                    "overlaps a SampledFeedback " +
-                                    "attachment. Vulkan requires an exact " +
-                                    "aspect/mip/layer view match.");
-                            }
-                            rewrite = true;
-                            matchedAttachmentMask |=
-                                attachment.AttachmentMask;
-                        }
-                        if (rewrite)
-                        {
-                            RewriteSampledImageDescriptor(
-                                clone.Set,
-                                in binding,
-                                arrayIndex,
-                                in fact);
-                        }
-                    }
-                }
-
-                if (DescriptorRevision != descriptorRevision)
-                {
-                    throw new InvalidOperationException(
-                        "The Vulkan binding table changed while its " +
-                        "sampled-feedback descriptor clone was being " +
-                        "created. Rebind after external synchronization.");
-                }
-                return clone;
-            }
-            catch
-            {
-                m_VulkanDevice.DescriptorPoolAllocator.Free(
-                    in clone);
-                throw;
-            }
-        }
-
-        private void CopyAllDescriptors(
-            VkDescriptorSet destinationSet)
-        {
-            VulkanBindInfo[] bindings =
-                m_Layout.Plan.BindInfos;
-            VkCopyDescriptorSet* copies =
-                stackalloc VkCopyDescriptorSet[
-                    Math.Max(1, bindings.Length)];
-            for (int bindingIndex = 0;
-                 bindingIndex < bindings.Length;
-                 ++bindingIndex)
-            {
-                ref readonly VulkanBindInfo binding =
-                    ref bindings[bindingIndex];
-                copies[bindingIndex] =
-                    new VkCopyDescriptorSet
-                    {
-                        sType =
-                            VkStructureType.CopyDescriptorSet,
-                        srcSet = m_Lease.Set,
-                        srcBinding =
-                            binding.PhysicalBinding,
-                        srcArrayElement = 0,
-                        dstSet = destinationSet,
-                        dstBinding =
-                            binding.PhysicalBinding,
-                        dstArrayElement = 0,
-                        descriptorCount = binding.Count,
-                    };
-            }
-            VulkanNative.vkUpdateDescriptorSets(
-                m_VulkanDevice.NativeDevice,
-                0,
-                null,
-                checked((uint)bindings.Length),
-                bindings.Length == 0 ? null : copies);
-        }
-
-        private void RewriteSampledImageDescriptor(
-            VkDescriptorSet destinationSet,
-            in VulkanBindInfo binding,
-            int arrayIndex,
-            in VulkanSampledImageDescriptorFact fact)
-        {
-            VkDescriptorImageInfo imageInfo =
-                new VkDescriptorImageInfo
-                {
-                    imageView = fact.ImageView,
-                    imageLayout =
-                        VkImageLayout
-                            .AttachmentFeedbackLoopOptimalEXT,
-                };
-            VkWriteDescriptorSet write =
-                new VkWriteDescriptorSet
-                {
-                    sType =
-                        VkStructureType.WriteDescriptorSet,
-                    dstSet = destinationSet,
-                    dstBinding = binding.PhysicalBinding,
-                    dstArrayElement =
-                        checked((uint)arrayIndex),
-                    descriptorCount = 1,
-                    descriptorType =
-                        VkDescriptorType.SampledImage,
-                    pImageInfo = &imageInfo,
-                };
-            VulkanNative.vkUpdateDescriptorSets(
-                m_VulkanDevice.NativeDevice,
-                1,
-                &write,
-                0,
-                null);
-        }
-
-        private void UpdateSampledImageFact(
-            in VulkanBindInfo binding,
-            int arrayIndex,
-            in RHIBindingTableElement element,
-            bool isBound)
-        {
-            if (binding.NativeDescriptorType !=
-                VkDescriptorType.SampledImage)
-            {
-                return;
-            }
-            int stateIndex =
-                binding.StateOffset + arrayIndex;
-            if (!isBound)
-            {
-                m_SampledImageFacts[stateIndex] =
-                    default;
-                return;
-            }
-
-            VulkanTextureView view =
-                (VulkanTextureView)element.TextureView;
-            VulkanTexture texture = view.VulkanTexture;
-            RHITextureViewDescriptor descriptor =
-                view.Descriptor;
-            RHITextureSubresourceRange range =
-                VulkanTextureSubresourceRangeUtility.Normalize(
-                    texture.Descriptor,
-                    new RHITextureSubresourceRange
-                    {
-                        AspectMask =
-                            ERHITextureAspectMask.Color,
-                        BaseMipLevel =
-                            descriptor.BaseMipLevel,
-                        MipLevelCount =
-                            descriptor.MipCount,
-                        BaseArrayLayer =
-                            descriptor.BaseArraySlice,
-                        ArrayLayerCount =
-                            descriptor.ArrayCount == 0
-                                ? 1u
-                                : descriptor.ArrayCount,
-                    });
-            m_SampledImageFacts[stateIndex] =
-                new VulkanSampledImageDescriptorFact(
-                    texture.NativeImage,
-                    view.NativeImageView,
-                    in range);
-        }
-
 
         private void ThrowIfDisposedAndLayout()
         {

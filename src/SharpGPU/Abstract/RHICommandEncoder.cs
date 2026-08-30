@@ -273,7 +273,6 @@ namespace SharpGPU
         public float4 ClearValue;
         public ERHILoadAction LoadAction;
         public ERHIStoreAction StoreAction;
-        public ERHIRasterAttachmentAccess Access;
         public RHITexture RenderTarget;
         public RHITextureSubresourceRange ResolveSubresourceRange;
         public RHITexture? ResolveTarget;
@@ -391,16 +390,13 @@ namespace SharpGPU
 
         private readonly uint m_ColorInputs;
         private readonly uint m_ColorOutputs;
-        private readonly uint m_SampledFeedbackInputs;
 
         public byte ColorAttachmentCount { get; }
         public byte ColorInputSlotCount { get; }
         public byte ColorOutputLocationCount { get; }
-        public byte SampledFeedbackSlotCount { get; }
         public byte ColorInputMask { get; }
         public byte ColorOutputMask { get; }
-        public byte RasterOrderedReadWriteMask { get; }
-        public byte SampledFeedbackMask { get; }
+        public byte FramebufferReadWriteMask { get; }
         public byte LayeredAccessMask { get; }
         public ERHISubPassFlags DepthStencilFlags { get; }
         public bool UsesDualSourceColor { get; }
@@ -409,8 +405,6 @@ namespace SharpGPU
             int colorAttachmentCount,
             in RHIAttachmentIndexArray colorInputs,
             in RHIAttachmentIndexArray colorOutputs,
-            in RHIAttachmentIndexArray sampledFeedbackInputs,
-            byte rasterOrderedReadWriteMask = 0,
             ERHISubPassFlags depthStencilFlags = ERHISubPassFlags.None,
             bool usesDualSourceColor = false,
             byte layeredAccessMask = 0)
@@ -433,30 +427,10 @@ namespace SharpGPU
                 colorAttachmentCount,
                 nameof(colorOutputs),
                 out byte colorOutputMask);
-            uint packedSampledFeedbackInputs = PackOrderedSlots(
-                sampledFeedbackInputs,
-                colorAttachmentCount,
-                nameof(sampledFeedbackInputs),
-                out byte sampledFeedbackMask);
-            if ((rasterOrderedReadWriteMask & ~(colorInputMask & colorOutputMask)) != 0)
+            if ((layeredAccessMask & ~colorInputMask) != 0)
             {
                 throw new ArgumentException(
-                    "RasterOrderedReadWrite entries must appear in both ColorInputMask and ColorOutputMask.",
-                    nameof(rasterOrderedReadWriteMask));
-            }
-            if ((colorInputMask & sampledFeedbackMask) != 0)
-            {
-                throw new ArgumentException(
-                    "An attachment cannot be both a local color input and SampledFeedback.");
-            }
-            byte specialAccessMask = checked((byte)(
-                colorInputMask |
-                rasterOrderedReadWriteMask |
-                sampledFeedbackMask));
-            if ((layeredAccessMask & ~specialAccessMask) != 0)
-            {
-                throw new ArgumentException(
-                    "LayeredAccess entries must declare local input, RasterOrderedReadWrite, or SampledFeedback access.",
+                    "LayeredAccess entries must declare a color input.",
                     nameof(layeredAccessMask));
             }
 
@@ -480,16 +454,13 @@ namespace SharpGPU
 
             m_ColorInputs = packedColorInputs;
             m_ColorOutputs = packedColorOutputs;
-            m_SampledFeedbackInputs = packedSampledFeedbackInputs;
             ColorAttachmentCount = checked((byte)colorAttachmentCount);
             ColorInputSlotCount = checked((byte)colorInputs.Length);
             ColorOutputLocationCount = checked((byte)colorOutputs.Length);
-            SampledFeedbackSlotCount =
-                checked((byte)sampledFeedbackInputs.Length);
             ColorInputMask = colorInputMask;
             ColorOutputMask = colorOutputMask;
-            RasterOrderedReadWriteMask = rasterOrderedReadWriteMask;
-            SampledFeedbackMask = sampledFeedbackMask;
+            FramebufferReadWriteMask =
+                checked((byte)(colorInputMask & colorOutputMask));
             LayeredAccessMask = layeredAccessMask;
             DepthStencilFlags = depthStencilFlags;
             UsesDualSourceColor = usesDualSourceColor;
@@ -527,18 +498,6 @@ namespace SharpGPU
             return GetPackedSlot(m_ColorOutputs, outputLocation);
         }
 
-        public int GetSampledFeedbackLogicalAttachment(
-            int sampledFeedbackOrdinal)
-        {
-            ValidateOrderedSlot(
-                sampledFeedbackOrdinal,
-                SampledFeedbackSlotCount,
-                nameof(sampledFeedbackOrdinal));
-            return GetPackedSlot(
-                m_SampledFeedbackInputs,
-                sampledFeedbackOrdinal);
-        }
-
         internal static int GetPrivateInputAttachmentBinding(int inputIndex)
         {
             ValidatePrivateBindingOrdinal(inputIndex, nameof(inputIndex));
@@ -550,14 +509,11 @@ namespace SharpGPU
             return ColorAttachmentCount == other.ColorAttachmentCount &&
                 ColorInputSlotCount == other.ColorInputSlotCount &&
                 ColorOutputLocationCount == other.ColorOutputLocationCount &&
-                SampledFeedbackSlotCount == other.SampledFeedbackSlotCount &&
                 m_ColorInputs == other.m_ColorInputs &&
                 m_ColorOutputs == other.m_ColorOutputs &&
-                m_SampledFeedbackInputs == other.m_SampledFeedbackInputs &&
                 ColorInputMask == other.ColorInputMask &&
                 ColorOutputMask == other.ColorOutputMask &&
-                RasterOrderedReadWriteMask == other.RasterOrderedReadWriteMask &&
-                SampledFeedbackMask == other.SampledFeedbackMask &&
+                FramebufferReadWriteMask == other.FramebufferReadWriteMask &&
                 LayeredAccessMask == other.LayeredAccessMask &&
                 DepthStencilFlags == other.DepthStencilFlags &&
                 UsesDualSourceColor == other.UsesDualSourceColor;
@@ -572,11 +528,9 @@ namespace SharpGPU
             hash.Add(ColorAttachmentCount);
             hash.Add(ColorInputSlotCount);
             hash.Add(ColorOutputLocationCount);
-            hash.Add(SampledFeedbackSlotCount);
             hash.Add(m_ColorInputs);
             hash.Add(m_ColorOutputs);
-            hash.Add(m_SampledFeedbackInputs);
-            hash.Add(RasterOrderedReadWriteMask);
+            hash.Add(FramebufferReadWriteMask);
             hash.Add(LayeredAccessMask);
             hash.Add(DepthStencilFlags);
             hash.Add(UsesDualSourceColor);
@@ -596,8 +550,7 @@ namespace SharpGPU
             return $"Colors={ColorAttachmentCount}, " +
                 $"InputSlots={ColorInputSlotCount}/0x{ColorInputMask:X2}, " +
                 $"OutputLocations={ColorOutputLocationCount}/0x{ColorOutputMask:X2}, " +
-                $"RORW=0x{RasterOrderedReadWriteMask:X2}, " +
-                $"SampledFeedbackSlots={SampledFeedbackSlotCount}/0x{SampledFeedbackMask:X2}, " +
+                $"ReadWrite=0x{FramebufferReadWriteMask:X2}, " +
                 $"Layered=0x{LayeredAccessMask:X2}, " +
                 $"DS={DepthStencilFlags}, " +
                 $"DualSource={UsesDualSourceColor}";
@@ -621,7 +574,6 @@ namespace SharpGPU
                     colorAttachmentCount,
                     RHIAttachmentIndexArray.Empty,
                     outputs,
-                    RHIAttachmentIndexArray.Empty,
                     usesDualSourceColor: usesDualSourceColor);
             }
             if (ColorAttachmentCount != colorAttachmentCount)
@@ -645,13 +597,10 @@ namespace SharpGPU
                 ColorInputSlotCount == pipelineSignature.ColorInputSlotCount &&
                 ColorOutputLocationCount ==
                     pipelineSignature.ColorOutputLocationCount &&
-                SampledFeedbackSlotCount ==
-                    pipelineSignature.SampledFeedbackSlotCount &&
                 m_ColorInputs == pipelineSignature.m_ColorInputs &&
                 m_ColorOutputs == pipelineSignature.m_ColorOutputs &&
-                m_SampledFeedbackInputs ==
-                    pipelineSignature.m_SampledFeedbackInputs &&
-                RasterOrderedReadWriteMask == pipelineSignature.RasterOrderedReadWriteMask &&
+                FramebufferReadWriteMask ==
+                    pipelineSignature.FramebufferReadWriteMask &&
                 LayeredAccessMask == pipelineSignature.LayeredAccessMask &&
                 DepthStencilFlags == pipelineSignature.DepthStencilFlags &&
                 (!pipelineSignature.UsesDualSourceColor ||
@@ -752,7 +701,6 @@ namespace SharpGPU
         public ERHISubPassFlags Flags;
         public RHIAttachmentIndexArray ColorInputs;
         public RHIAttachmentIndexArray ColorOutputs;
-        public RHIAttachmentIndexArray SampledFeedbackInputs;
     }
 
     public struct RHIRasterPassDescriptor
@@ -915,8 +863,6 @@ namespace SharpGPU
 
     internal static class RHIRasterPassPlanner
     {
-        private const ERHIRasterAttachmentAccess KnownAttachmentAccess =
-            ERHIRasterAttachmentAccess.RasterOrderedReadWrite;
         private const ERHISubPassFlags KnownSubPassFlags =
             ERHISubPassFlags.ReadOnlyDepthStencil;
 
@@ -961,20 +907,6 @@ namespace SharpGPU
                 }
                 ValidateLoadAction(attachment.LoadAction, $"{parameterName}.LoadAction");
                 ValidateStoreAction(attachment.StoreAction, $"{parameterName}.StoreAction");
-                if ((attachment.Access & ~KnownAttachmentAccess) != 0)
-                {
-                    throw new ArgumentOutOfRangeException(
-                        nameof(descriptor),
-                        attachment.Access,
-                        $"{parameterName} contains an unknown raster attachment access qualifier.");
-                }
-                if ((attachment.Access & ERHIRasterAttachmentAccess.RasterOrderedReadWrite) != 0 &&
-                    (textureDescriptor.UsageFlag & ERHITextureUsage.RasterizerOrdered) == 0)
-                {
-                    throw new ArgumentException(
-                        $"{parameterName} declares RasterOrderedReadWrite but its texture lacks RasterizerOrdered usage.",
-                        nameof(descriptor));
-                }
 
                 attachment.SubresourceRange = NormalizeSubresourceRange(
                     attachment.SubresourceRange,
@@ -1148,7 +1080,6 @@ namespace SharpGPU
                         Flags = ERHISubPassFlags.None,
                         ColorInputs = RHIAttachmentIndexArray.Empty,
                         ColorOutputs = outputs,
-                        SampledFeedbackInputs = RHIAttachmentIndexArray.Empty,
                     },
                 };
             }
@@ -1161,7 +1092,6 @@ namespace SharpGPU
             byte declaredAttachmentMask =
                 RHIAttachmentInterfaceSignature.CreateDeclaredMask(colorAttachmentCount);
             byte initiallyAvailableMask = 0;
-            byte rasterOrderedAttachmentMask = 0;
             for (int i = 0; i < colorAttachmentCount; ++i)
             {
                 ref RHIColorAttachmentDescriptor attachment = ref colorAttachments[i];
@@ -1170,15 +1100,11 @@ namespace SharpGPU
                 {
                     initiallyAvailableMask |= checked((byte)(1 << i));
                 }
-                if ((attachment.Access & ERHIRasterAttachmentAccess.RasterOrderedReadWrite) != 0)
-                {
-                    rasterOrderedAttachmentMask |= checked((byte)(1 << i));
-                }
             }
 
             byte availableMask = initiallyAvailableMask;
             byte writtenMask = 0;
-            byte qualifiedRasterOrderedMask = 0;
+            byte readHistoryMask = 0;
             ERHISubPassFlags previousFlags = ERHISubPassFlags.None;
             for (int i = 0; i < subPassDescriptors.Length; ++i)
             {
@@ -1203,31 +1129,7 @@ namespace SharpGPU
                     subPass.ColorOutputs,
                     colorAttachmentCount,
                     $"Subpass {i} ColorOutputs");
-                byte sampledFeedbackMask = BuildAttachmentMask(
-                    subPass.SampledFeedbackInputs,
-                    colorAttachmentCount,
-                    $"Subpass {i} SampledFeedbackInputs");
-                if ((inputMask & sampledFeedbackMask) != 0)
-                {
-                    throw new ArgumentException(
-                        $"Subpass {i} declares the same attachment as both a local input and SampledFeedback.");
-                }
-                for (int attachmentIndex = 0;
-                     attachmentIndex < colorAttachmentCount;
-                     ++attachmentIndex)
-                {
-                    byte attachmentBit = checked((byte)(1 << attachmentIndex));
-                    if ((sampledFeedbackMask & attachmentBit) != 0 &&
-                        (colorAttachments[attachmentIndex].RenderTarget.Descriptor.UsageFlag &
-                         ERHITextureUsage.ShaderResource) == 0)
-                    {
-                        throw new ArgumentException(
-                            $"Subpass {i} SampledFeedback attachment {attachmentIndex} " +
-                            "was not created with ShaderResource usage.");
-                    }
-                }
-
-                byte readMask = checked((byte)(inputMask | sampledFeedbackMask));
+                byte readMask = inputMask;
                 byte readBeforeWriteMask = checked((byte)(readMask & ~availableMask));
                 if (readBeforeWriteMask != 0)
                 {
@@ -1236,25 +1138,21 @@ namespace SharpGPU
                         "Use Load/Clear or write the attachment in an earlier ordered subpass.");
                 }
 
-                byte readWriteMask = checked((byte)(inputMask & outputMask));
-                byte rasterOrderedReadWriteMask =
-                    checked((byte)(readWriteMask & rasterOrderedAttachmentMask));
                 byte layeredAccessMask = arrayLength > 1
-                    ? checked((byte)(
-                        inputMask |
-                        rasterOrderedReadWriteMask |
-                        sampledFeedbackMask))
+                    ? inputMask
                     : (byte)0;
-                qualifiedRasterOrderedMask |= rasterOrderedReadWriteMask;
-                byte transitionMask =
+                byte readAfterWriteOrWriteAfterWrite =
                     checked((byte)((readMask | outputMask) & writtenMask));
+                byte writeAfterRead =
+                    checked((byte)(outputMask & readHistoryMask));
+                byte transitionMask = checked((byte)(
+                    readAfterWriteOrWriteAfterWrite |
+                    writeAfterRead));
                 RHIAttachmentInterfaceSignature attachmentInterface =
                     new RHIAttachmentInterfaceSignature(
                         colorAttachmentCount,
                         subPass.ColorInputs,
                         subPass.ColorOutputs,
-                        subPass.SampledFeedbackInputs,
-                        rasterOrderedReadWriteMask,
                         subPass.Flags,
                         layeredAccessMask: layeredAccessMask);
 
@@ -1273,17 +1171,9 @@ namespace SharpGPU
                     requiresDepthStencilTransition: depthStencilTransition);
 
                 availableMask = checked((byte)(availableMask | outputMask));
+                readHistoryMask = checked((byte)(readHistoryMask | readMask));
                 writtenMask = checked((byte)(writtenMask | outputMask));
                 previousFlags = subPass.Flags;
-            }
-
-            byte unusedRasterOrderedMask =
-                checked((byte)(rasterOrderedAttachmentMask & ~qualifiedRasterOrderedMask));
-            if (unusedRasterOrderedMask != 0)
-            {
-                throw new ArgumentException(
-                    $"RasterOrderedReadWrite was declared for attachment mask 0x{unusedRasterOrderedMask:X2}, " +
-                    "but no subpass reads and writes those attachments.");
             }
 
             byte futureUseMask = 0;

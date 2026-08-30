@@ -363,6 +363,9 @@ namespace SharpGPU
             m_Descriptor =
                 RHIRasterPipelineContract.SnapshotAndValidate(
                     in descriptor);
+            RHIRasterPipelineContract.ValidateAttachmentSupport(
+                device,
+                in m_Descriptor);
             m_ShaderModules =
                 shaderModules ??
                 VulkanRasterShaderModuleSet.Create(
@@ -590,6 +593,11 @@ namespace SharpGPU
             VkPipelineColorBlendStateCreateInfo colorBlending = new VkPipelineColorBlendStateCreateInfo()
             {
                 sType = VkStructureType.PipelineColorBlendStateCreateInfo,
+                flags = descriptor.AttachmentInterface
+                    .FramebufferReadWriteMask != 0
+                        ? VkPipelineColorBlendStateCreateFlags
+                            .RasterizationOrderAttachmentAccessEXT
+                        : 0,
                 logicOpEnable = false,
                 attachmentCount =
                     checked((uint)colorBlendAttachmentCount),
@@ -681,9 +689,7 @@ namespace SharpGPU
                 layout = m_EffectiveNativePipelineLayout,
                 renderPass = compatibleRenderPass,
                 subpass = compatibleSubPass,
-                flags =
-                    VulkanRasterPipelineFlagUtility.Get(
-                        in m_Descriptor.AttachmentInterface),
+                flags = 0,
             };
 
             fixed (VkPipeline* pipelinePtr = &m_NativePipeline)
@@ -1061,40 +1067,33 @@ namespace SharpGPU
     internal readonly struct VulkanPrivateRasterBindingPlan
     {
         internal const uint InputAttachmentBindingBase = 0;
-        internal const uint RasterOrderedBindingBase = 8;
 
         internal uint DescriptorSet { get; }
         internal byte LocalInputMask { get; }
         internal byte LocalInputBindingMask { get; }
-        internal byte RasterOrderedMask { get; }
         internal uint InputAttachmentCount =>
             checked((uint)BitOperations.PopCount((uint)LocalInputBindingMask));
-        internal uint StorageImageCount =>
-            checked((uint)BitOperations.PopCount((uint)RasterOrderedMask));
         internal VulkanDescriptorPoolRequirements PoolRequirements =>
             new VulkanDescriptorPoolRequirements(
                 samplers: 0,
                 sampledImages: 0,
-                storageImages: StorageImageCount,
+                storageImages: 0,
                 uniformBuffers: 0,
                 storageBuffers: 0,
                 accelerationStructures: 0,
                 inputAttachments: InputAttachmentCount);
 
         internal bool HasPrivateBindings =>
-            LocalInputBindingMask != 0 ||
-            RasterOrderedMask != 0;
+            LocalInputBindingMask != 0;
 
         private VulkanPrivateRasterBindingPlan(
             uint descriptorSet,
             byte localInputMask,
-            byte localInputBindingMask,
-            byte rasterOrderedMask)
+            byte localInputBindingMask)
         {
             DescriptorSet = descriptorSet;
             LocalInputMask = localInputMask;
             LocalInputBindingMask = localInputBindingMask;
-            RasterOrderedMask = rasterOrderedMask;
         }
 
         internal bool UsesInputAttachmentBinding(int inputIndex)
@@ -1119,28 +1118,6 @@ namespace SharpGPU
             return checked(
                 InputAttachmentBindingBase +
                 checked((uint)inputIndex));
-        }
-
-        internal uint GetRasterOrderedBinding(
-            int logicalAttachment)
-        {
-            if ((uint)logicalAttachment >=
-                RHIAttachmentIndexArray.MaxAttachments)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(logicalAttachment));
-            }
-            byte bit =
-                checked((byte)(1 << logicalAttachment));
-            if ((RasterOrderedMask & bit) == 0)
-            {
-                throw new InvalidOperationException(
-                    $"Logical attachment {logicalAttachment} is not " +
-                    "raster-ordered in this pipeline.");
-            }
-            return checked(
-                RasterOrderedBindingBase +
-                checked((uint)logicalAttachment));
         }
 
         internal static uint GetPrivateAttachmentDescriptorSet(
@@ -1221,11 +1198,8 @@ namespace SharpGPU
                 GetPrivateAttachmentDescriptorSet(
                     ordinaryDescriptorSets);
 
-            byte rasterOrderedMask =
-                attachmentInterface.RasterOrderedReadWriteMask;
-            byte localInputMask = checked((byte)(
-                attachmentInterface.ColorInputMask &
-                ~rasterOrderedMask));
+            byte localInputMask =
+                attachmentInterface.ColorInputMask;
             byte localInputBindingMask = 0;
             for (int inputIndex = 0;
                  inputIndex < attachmentInterface.ColorInputSlotCount;
@@ -1234,9 +1208,7 @@ namespace SharpGPU
                 int logicalAttachment =
                     attachmentInterface.GetColorInputLogicalAttachment(
                         inputIndex);
-                if (logicalAttachment < 0 ||
-                    (rasterOrderedMask &
-                     (1 << logicalAttachment)) != 0)
+                if (logicalAttachment < 0)
                 {
                     continue;
                 }
@@ -1245,8 +1217,7 @@ namespace SharpGPU
             }
 
             bool hasPrivateBindings =
-                localInputBindingMask != 0 ||
-                rasterOrderedMask != 0;
+                localInputBindingMask != 0;
             if (hasPrivateBindings &&
                 privateDescriptorSet >= maximumBoundDescriptorSets)
             {
@@ -1260,8 +1231,7 @@ namespace SharpGPU
             return new VulkanPrivateRasterBindingPlan(
                 privateDescriptorSet,
                 localInputMask,
-                localInputBindingMask,
-                rasterOrderedMask);
+                localInputBindingMask);
         }
 
         internal static void ValidatePipelineLayoutIdentity(

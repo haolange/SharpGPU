@@ -57,15 +57,8 @@ namespace SharpGPU
             m_DynamicRenderingLocalReadDepthStencilAttachments;
         internal bool SupportsDynamicRenderingLocalReadMultisampled =>
             m_DynamicRenderingLocalReadMultisampledAttachments;
-        internal bool SupportsAttachmentFeedbackLoopLayout =>
-            m_AttachmentFeedbackLoopLayoutSupported;
-        internal bool SupportsFragmentShaderPixelInterlock => m_FragmentShaderPixelInterlockSupported;
-        internal bool SupportsFragmentStoresAndAtomics =>
-            m_FragmentStoresAndAtomicsSupported;
-        internal bool SupportsUnifiedImageLayouts => m_UnifiedImageLayoutsSupported;
-        internal EVulkanFeatureProvenance AttachmentFeedbackLoopLayoutProvenance => m_AttachmentFeedbackLoopLayoutProvenance;
-        internal EVulkanFeatureProvenance FragmentShaderPixelInterlockProvenance => m_FragmentShaderPixelInterlockProvenance;
-        internal EVulkanFeatureProvenance UnifiedImageLayoutsProvenance => m_UnifiedImageLayoutsProvenance;
+        internal bool SupportsRasterizationOrderAttachmentAccess =>
+            m_RasterizationOrderAttachmentAccessSupported;
         internal EVulkanFeatureProvenance DynamicRenderingLocalReadProvenance => m_DynamicRenderingLocalReadProvenance;
         internal EVulkanFeatureProvenance RenderPass2Provenance => m_RenderPass2Provenance;
         internal VulkanRasterCapabilities RasterCapabilities =>
@@ -75,10 +68,7 @@ namespace SharpGPU
                 m_DynamicRenderingLocalReadDepthStencilAttachments,
                 m_DynamicRenderingLocalReadMultisampledAttachments,
                 m_RenderPass2Supported,
-                m_AttachmentFeedbackLoopLayoutSupported,
-                m_FragmentShaderPixelInterlockSupported,
-                m_FragmentStoresAndAtomicsSupported,
-                m_UnifiedImageLayoutsSupported);
+                m_RasterizationOrderAttachmentAccessSupported);
         internal bool SupportsRenderPass2 => m_RenderPass2Supported;
         internal bool SupportsSeparateDepthStencilLayouts =>
             m_SeparateDepthStencilLayoutsSupported;
@@ -132,13 +122,7 @@ namespace SharpGPU
             m_DynamicRenderingLocalReadMultisampledAttachments;
         private bool
             m_DynamicRenderingLocalReadExtensionEnabled;
-        private bool m_AttachmentFeedbackLoopLayoutSupported;
-        private bool m_FragmentShaderPixelInterlockSupported;
-        private bool m_FragmentStoresAndAtomicsSupported;
-        private bool m_UnifiedImageLayoutsSupported;
-        private EVulkanFeatureProvenance m_AttachmentFeedbackLoopLayoutProvenance;
-        private EVulkanFeatureProvenance m_FragmentShaderPixelInterlockProvenance;
-        private EVulkanFeatureProvenance m_UnifiedImageLayoutsProvenance;
+        private bool m_RasterizationOrderAttachmentAccessSupported;
         private EVulkanFeatureProvenance m_DynamicRenderingLocalReadProvenance;
         private EVulkanFeatureProvenance m_RenderPass2Provenance;
         private bool m_RenderPass2Supported;
@@ -407,12 +391,9 @@ namespace SharpGPU
                     "VK_KHR_separate_depth_stencil_layouts");
             bool hasDynamicRenderingLocalReadExtension =
                 availableExtNames.Contains("VK_KHR_dynamic_rendering_local_read");
-            bool hasAttachmentFeedbackLoopLayoutExtension =
-                availableExtNames.Contains("VK_EXT_attachment_feedback_loop_layout");
-            bool hasFragmentShaderInterlockExtension =
-                availableExtNames.Contains("VK_EXT_fragment_shader_interlock");
-            bool hasUnifiedImageLayoutsExtension =
-                availableExtNames.Contains("VK_KHR_unified_image_layouts");
+            bool hasRasterizationOrderAttachmentAccessExtension =
+                availableExtNames.Contains(
+                    "VK_EXT_rasterization_order_attachment_access");
             bool hasMemoryBudgetExtension =
                 availableExtNames.Contains(VulkanMemoryBudgetUtility.ExtensionName);
             string? swapchainMaintenanceExtension =
@@ -432,10 +413,7 @@ namespace SharpGPU
                 hasDynamicRenderingExtension,
                 hasCreateRenderPass2Extension,
                 hasSynchronization2Extension,
-                hasDynamicRenderingLocalReadExtension,
-                hasAttachmentFeedbackLoopLayoutExtension,
-                hasFragmentShaderInterlockExtension,
-                hasUnifiedImageLayoutsExtension);
+                hasDynamicRenderingLocalReadExtension);
             m_EffectiveApiVersion = featureChainPlan.EffectiveApiVersion;
             VkPhysicalDeviceDepthStencilResolveProperties
                 depthStencilResolveProperties = new()
@@ -553,19 +531,12 @@ namespace SharpGPU
             {
                 sType = VkStructureType.PhysicalDeviceDynamicRenderingLocalReadFeatures,
             };
-
-            VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT attachmentFeedbackLoopLayoutFeaturesQuery = new()
-            {
-                sType = VkStructureType.PhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT,
-            };
-            VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT fragmentShaderInterlockFeaturesQuery = new()
-            {
-                sType = VkStructureType.PhysicalDeviceFragmentShaderInterlockFeaturesEXT,
-            };
-            VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR unifiedImageLayoutsFeaturesQuery = new()
-            {
-                sType = VkStructureType.PhysicalDeviceUnifiedImageLayoutsFeaturesKHR,
-            };
+            VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT
+                rasterizationOrderAttachmentAccessFeaturesQuery = new()
+                {
+                    sType = VkStructureType
+                        .PhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT,
+                };
             VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchainMaintenanceFeaturesQuery = new()
             {
                 sType = VkStructureType.PhysicalDeviceSwapchainMaintenance1FeaturesKHR,
@@ -643,21 +614,12 @@ namespace SharpGPU
                 featureQueryChain =
                     &dynamicRenderingLocalReadFeaturesQuery;
             }
-
-            if (hasAttachmentFeedbackLoopLayoutExtension)
+            if (hasRasterizationOrderAttachmentAccessExtension)
             {
-                attachmentFeedbackLoopLayoutFeaturesQuery.pNext = featureQueryChain;
-                featureQueryChain = &attachmentFeedbackLoopLayoutFeaturesQuery;
-            }
-            if (hasFragmentShaderInterlockExtension)
-            {
-                fragmentShaderInterlockFeaturesQuery.pNext = featureQueryChain;
-                featureQueryChain = &fragmentShaderInterlockFeaturesQuery;
-            }
-            if (hasUnifiedImageLayoutsExtension)
-            {
-                unifiedImageLayoutsFeaturesQuery.pNext = featureQueryChain;
-                featureQueryChain = &unifiedImageLayoutsFeaturesQuery;
+                rasterizationOrderAttachmentAccessFeaturesQuery.pNext =
+                    featureQueryChain;
+                featureQueryChain =
+                    &rasterizationOrderAttachmentAccessFeaturesQuery;
             }
             if (swapchainMaintenanceExtension != null)
             {
@@ -728,18 +690,10 @@ namespace SharpGPU
                                 .dynamicRenderingLocalRead,
                         _ => false,
                     };
-            bool attachmentFeedbackLoopLayoutFeatureSupported =
-                hasAttachmentFeedbackLoopLayoutExtension &&
-                attachmentFeedbackLoopLayoutFeaturesQuery.attachmentFeedbackLoopLayout;
-            bool fragmentShaderPixelInterlockFeatureSupported =
-                hasFragmentShaderInterlockExtension &&
-                fragmentShaderInterlockFeaturesQuery
-                    .fragmentShaderPixelInterlock;
-            bool fragmentStoresAndAtomicsSupported =
-                supportedCoreFeatures.fragmentStoresAndAtomics;
-            bool unifiedImageLayoutsFeatureSupported =
-                hasUnifiedImageLayoutsExtension &&
-                unifiedImageLayoutsFeaturesQuery.unifiedImageLayouts;
+            bool rasterizationOrderAttachmentAccessFeatureSupported =
+                hasRasterizationOrderAttachmentAccessExtension &&
+                rasterizationOrderAttachmentAccessFeaturesQuery
+                    .rasterizationOrderColorAttachmentAccess;
             bool swapchainMaintenanceFeatureSupported =
                 hasSwapchainExtension &&
                 swapchainMaintenanceExtension != null &&
@@ -804,17 +758,10 @@ namespace SharpGPU
                 deviceExtensions.Add(
                     "VK_KHR_dynamic_rendering_local_read");
             }
-            if (attachmentFeedbackLoopLayoutFeatureSupported)
+            if (rasterizationOrderAttachmentAccessFeatureSupported)
             {
-                deviceExtensions.Add("VK_EXT_attachment_feedback_loop_layout");
-            }
-            if (fragmentShaderPixelInterlockFeatureSupported)
-            {
-                deviceExtensions.Add("VK_EXT_fragment_shader_interlock");
-            }
-            if (unifiedImageLayoutsFeatureSupported)
-            {
-                deviceExtensions.Add("VK_KHR_unified_image_layouts");
+                deviceExtensions.Add(
+                    "VK_EXT_rasterization_order_attachment_access");
             }
 
             if (rtSupported)
@@ -931,22 +878,14 @@ namespace SharpGPU
                 sType = VkStructureType.PhysicalDeviceDynamicRenderingLocalReadFeatures,
                 dynamicRenderingLocalRead = dynamicRenderingLocalReadFeatureSupported,
             };
-
-            VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT attachmentFeedbackLoopLayoutFeatures = new()
-            {
-                sType = VkStructureType.PhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT,
-                attachmentFeedbackLoopLayout = attachmentFeedbackLoopLayoutFeatureSupported,
-            };
-            VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT fragmentShaderInterlockFeatures = new()
-            {
-                sType = VkStructureType.PhysicalDeviceFragmentShaderInterlockFeaturesEXT,
-                fragmentShaderPixelInterlock = fragmentShaderPixelInterlockFeatureSupported,
-            };
-            VkPhysicalDeviceUnifiedImageLayoutsFeaturesKHR unifiedImageLayoutsFeatures = new()
-            {
-                sType = VkStructureType.PhysicalDeviceUnifiedImageLayoutsFeaturesKHR,
-                unifiedImageLayouts = unifiedImageLayoutsFeatureSupported,
-            };
+            VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT
+                rasterizationOrderAttachmentAccessFeatures = new()
+                {
+                    sType = VkStructureType
+                        .PhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT,
+                    rasterizationOrderColorAttachmentAccess =
+                        rasterizationOrderAttachmentAccessFeatureSupported,
+                };
             VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR swapchainMaintenanceFeatures = new()
             {
                 sType = VkStructureType.PhysicalDeviceSwapchainMaintenance1FeaturesKHR,
@@ -998,20 +937,12 @@ namespace SharpGPU
                 dynamicRenderingLocalReadFeatures.pNext = pNextChain;
                 pNextChain = &dynamicRenderingLocalReadFeatures;
             }
-            if (attachmentFeedbackLoopLayoutFeatureSupported)
+            if (rasterizationOrderAttachmentAccessFeatureSupported)
             {
-                attachmentFeedbackLoopLayoutFeatures.pNext = pNextChain;
-                pNextChain = &attachmentFeedbackLoopLayoutFeatures;
-            }
-            if (fragmentShaderPixelInterlockFeatureSupported)
-            {
-                fragmentShaderInterlockFeatures.pNext = pNextChain;
-                pNextChain = &fragmentShaderInterlockFeatures;
-            }
-            if (unifiedImageLayoutsFeatureSupported)
-            {
-                unifiedImageLayoutsFeatures.pNext = pNextChain;
-                pNextChain = &unifiedImageLayoutsFeatures;
+                rasterizationOrderAttachmentAccessFeatures.pNext =
+                    pNextChain;
+                pNextChain =
+                    &rasterizationOrderAttachmentAccessFeatures;
             }
             if (swapchainMaintenanceFeatureSupported)
             {
@@ -1115,22 +1046,10 @@ namespace SharpGPU
                     .EnableDynamicRenderingLocalReadExtension;
             m_DynamicRenderingLocalReadProvenance =
                 featureChainPlan.DynamicRenderingLocalReadQueryProvenance;
+            m_RasterizationOrderAttachmentAccessSupported =
+                rasterizationOrderAttachmentAccessFeatureSupported;
             m_RenderPass2Provenance =
                 featureChainPlan.RenderPass2Provenance;
-            m_AttachmentFeedbackLoopLayoutSupported =
-                attachmentFeedbackLoopLayoutFeatureSupported;
-            m_FragmentShaderPixelInterlockSupported =
-                fragmentShaderPixelInterlockFeatureSupported;
-            m_FragmentStoresAndAtomicsSupported =
-                fragmentStoresAndAtomicsSupported;
-            m_UnifiedImageLayoutsSupported =
-                unifiedImageLayoutsFeatureSupported;
-            m_AttachmentFeedbackLoopLayoutProvenance =
-                featureChainPlan.AttachmentFeedbackLoopLayoutQueryProvenance;
-            m_FragmentShaderPixelInterlockProvenance =
-                featureChainPlan.FragmentShaderPixelInterlockQueryProvenance;
-            m_UnifiedImageLayoutsProvenance =
-                featureChainPlan.UnifiedImageLayoutsQueryProvenance;
             m_SeparateDepthStencilLayoutsSupported =
                 separateDepthStencilLayoutsSupported;
             m_SupportedDepthResolveModes =
@@ -1199,11 +1118,7 @@ namespace SharpGPU
                         m_DynamicRenderingSupported,
                         m_DynamicRenderingLocalReadSupported,
                         m_RenderPass2Supported);
-            bool hasSampledFeedbackLoweringRoute =
-                VulkanRasterCapabilityUtility
-                    .HasSampledFeedbackLoweringRoute(
-                        m_DynamicRenderingSupported,
-                        m_RenderPass2Supported);            static RHICapability Probe(
+            static RHICapability Probe(
                 bool available,
                 string source,
                 string unavailableReason,
@@ -1271,22 +1186,16 @@ namespace SharpGPU
                         "VkPhysicalDeviceFeatures.fragmentStoresAndAtomics",
                         "Fragment-stage storage writes are unavailable.",
                         capabilityLimits: rasterLimits),
-                    rasterOrderedAccess: Probe(
-                        m_DynamicRenderingSupported &&
-                            features.fragmentStoresAndAtomics &&
-                            m_FragmentShaderPixelInterlockSupported &&
-                            m_AttachmentFeedbackLoopLayoutSupported &&
-                            m_UnifiedImageLayoutsSupported,
-                        "dynamicRendering + VkPhysicalDeviceFeatures.fragmentStoresAndAtomics + VK_EXT_fragment_shader_interlock/fragmentShaderPixelInterlock + VK_EXT_attachment_feedback_loop_layout/attachmentFeedbackLoopLayout + VK_KHR_unified_image_layouts/unifiedImageLayouts",
-                        !m_DynamicRenderingSupported
-                            ? "Dynamic rendering is unavailable."
-                            : !features.fragmentStoresAndAtomics
-                            ? "VkPhysicalDeviceFeatures.fragmentStoresAndAtomics is false."
-                            : !m_FragmentShaderPixelInterlockSupported
-                                ? "VK_EXT_fragment_shader_interlock or fragmentShaderPixelInterlock is unavailable."
-                                : !m_AttachmentFeedbackLoopLayoutSupported
-                                    ? "VK_EXT_attachment_feedback_loop_layout or attachmentFeedbackLoopLayout is unavailable."
-                                    : "VK_KHR_unified_image_layouts or unifiedImageLayouts is unavailable.",
+                    framebufferReadWrite: Probe(
+                        hasDynamicRenderingLocalReadRoute &&
+                            m_RasterizationOrderAttachmentAccessSupported,
+                        "framebuffer local-read lowering + " +
+                        "VK_EXT_rasterization_order_attachment_access/" +
+                        "rasterizationOrderColorAttachmentAccess",
+                        !hasDynamicRenderingLocalReadRoute
+                            ? "No framebuffer-local input attachment route is available."
+                            : "VK_EXT_rasterization_order_attachment_access " +
+                              "or rasterizationOrderColorAttachmentAccess is unavailable.",
                         strategy: ERHICapabilityStrategy.NativeExtension,
                         probeKind: ERHICapabilityProbeKind.NativeExtensionQuery),
                     anisotropicSampling: Probe(
@@ -1341,23 +1250,6 @@ namespace SharpGPU
                                     EVulkanFeatureProvenance.KhrExtension
                                     ? ERHICapabilityProbeKind.NativeExtensionQuery
                                     : ERHICapabilityProbeKind.ApiVersion),
-                    sampledFeedback: Probe(
-                        m_AttachmentFeedbackLoopLayoutSupported &&
-                            hasSampledFeedbackLoweringRoute,
-                        m_AttachmentFeedbackLoopLayoutSupported
-                            ? m_DynamicRenderingSupported
-                                ? "VK_EXT_attachment_feedback_loop_layout extension + attachmentFeedbackLoopLayout feature + dynamic rendering lowering; color-attachment SampledFeedback ABI only"
-                                : "VK_EXT_attachment_feedback_loop_layout extension + attachmentFeedbackLoopLayout feature + RenderPass2 lowering; color-attachment SampledFeedback ABI only"
-                            : "VK_EXT_attachment_feedback_loop_layout attachmentFeedbackLoopLayout feature query",
-                        !m_AttachmentFeedbackLoopLayoutSupported
-                            ? m_AttachmentFeedbackLoopLayoutProvenance ==
-                                EVulkanFeatureProvenance.Unavailable
-                                ? "VK_EXT_attachment_feedback_loop_layout is not exposed by this device."
-                                : "VK_EXT_attachment_feedback_loop_layout is exposed, but attachmentFeedbackLoopLayout is false."
-                            : "attachmentFeedbackLoopLayout is available, but neither dynamic rendering nor RenderPass2 can lower SampledFeedback.",
-                        strategy: ERHICapabilityStrategy.NativeExtension,
-                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery,
-                        capabilityLimits: rasterLimits),
                     drawIndirect: Probe(
                         features.drawIndirectFirstInstance,
                         "VkPhysicalDeviceFeatures.drawIndirectFirstInstance",
@@ -1754,6 +1646,156 @@ namespace SharpGPU
         {
             ThrowIfDisposed();
             return new VulkanTexture(this, descriptor);
+        }
+
+        public override RHICapability QueryRasterAttachmentSupport(
+            in RHIRasterAttachmentSupportQuery query)
+        {
+            ThrowIfDisposed();
+            const string ProbeSource =
+                "vkGetPhysicalDeviceFormatProperties + " +
+                "vkGetPhysicalDeviceImageFormatProperties";
+
+            if (query.IsInput && query.IsOutput &&
+                Capabilities.Raster.FramebufferReadWrite.Tier ==
+                    ERHICapabilityTier.Unavailable)
+            {
+                return Capabilities.Raster.FramebufferReadWrite;
+            }
+            if (query.IsInput &&
+                Capabilities.Raster.FramebufferLocalRead.Tier ==
+                    ERHICapabilityTier.Unavailable)
+            {
+                return Capabilities.Raster.FramebufferLocalRead;
+            }
+
+            VkFormat format =
+                VulkanUtility.ConvertToVkFormat(query.Format);
+            VkFormatProperties formatProperties = default;
+            VulkanNative.vkGetPhysicalDeviceFormatProperties(
+                m_PhysicalDevice,
+                format,
+                &formatProperties);
+            VkFormatFeatureFlags requiredFeatures =
+                VkFormatFeatureFlags.ColorAttachment;
+            if (query.IsOutput && query.Blend.BlendEnable)
+            {
+                requiredFeatures |=
+                    VkFormatFeatureFlags.ColorAttachmentBlend;
+            }
+            if ((formatProperties.optimalTilingFeatures &
+                 requiredFeatures) != requiredFeatures)
+            {
+                return RHICapability.Unavailable(
+                    $"Vulkan format {format} lacks required optimal-tiling " +
+                    $"features {requiredFeatures}.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            VkImageUsageFlags usage =
+                VkImageUsageFlags.ColorAttachment;
+            if (query.IsInput)
+            {
+                usage |= VkImageUsageFlags.InputAttachment;
+            }
+            VkImageFormatProperties imageProperties = default;
+            VkResult result =
+                VulkanNative.vkGetPhysicalDeviceImageFormatProperties(
+                    m_PhysicalDevice,
+                    format,
+                    VkImageType.Image2D,
+                    VkImageTiling.Optimal,
+                    usage,
+                    0,
+                    &imageProperties);
+            if (result != VkResult.Success)
+            {
+                return RHICapability.Unavailable(
+                    $"Vulkan rejected {format} for image usage {usage}: " +
+                    $"{result}.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+            VkSampleCountFlags sampleCount =
+                VulkanUtility.ConvertToVkSampleCount(query.SampleCount);
+            if ((imageProperties.sampleCounts & sampleCount) == 0)
+            {
+                return RHICapability.Unavailable(
+                    $"Vulkan format {format} with usage {usage} does not " +
+                    $"support {query.SampleCount}.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            return RHICapability.Available(
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.NativeSpecialized,
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                ProbeSource);
+        }
+
+        public override RHIRasterAttachmentShaderAbi
+            QueryRasterAttachmentShaderAbi(
+                in RHIRasterAttachmentShaderAbiDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            VulkanPipelineLayout pipelineLayout =
+                descriptor.PipelineLayout as VulkanPipelineLayout ??
+                throw new ArgumentException(
+                    "Vulkan attachment shader ABI requires a Vulkan pipeline layout.",
+                    nameof(descriptor));
+            VulkanPrivateRasterBindingPlan plan =
+                VulkanPrivatePipelineLayoutBuilder.CompilePlan(
+                    this,
+                    pipelineLayout,
+                    in descriptor.AttachmentInterface);
+            RHIAttachmentInterfaceSignature signature =
+                descriptor.AttachmentInterface;
+            List<RHIRasterAttachmentShaderBinding> bindings = new();
+            for (int logicalAttachment = 0;
+                 logicalAttachment < signature.ColorAttachmentCount;
+                 ++logicalAttachment)
+            {
+                int inputSlot =
+                    RHIRasterAttachmentShaderAbiFactory.FindInputSlot(
+                        in signature,
+                        logicalAttachment);
+                int outputLocation =
+                    RHIRasterAttachmentShaderAbiFactory.FindOutputLocation(
+                        in signature,
+                        logicalAttachment);
+                if (inputSlot < 0 && outputLocation < 0)
+                {
+                    continue;
+                }
+                RHIRawShaderBindingLocation input = default;
+                RHIRawShaderBindingLocation output = default;
+                if (inputSlot >= 0)
+                {
+                    uint binding = plan.GetInputAttachmentBinding(inputSlot);
+                    input = new RHIRawShaderBindingLocation(
+                        ERHIRawShaderBindingKind.InputAttachment,
+                        binding,
+                        plan.DescriptorSet);
+                }
+                if (outputLocation >= 0)
+                {
+                    output = new RHIRawShaderBindingLocation(
+                        ERHIRawShaderBindingKind.ColorAttachment,
+                        checked((uint)outputLocation));
+                }
+                bindings.Add(new RHIRasterAttachmentShaderBinding(
+                    logicalAttachment,
+                    inputSlot,
+                    outputLocation,
+                    input,
+                    output));
+            }
+            return RHIRasterAttachmentShaderAbiFactory.Create(
+                BackendType,
+                in descriptor,
+                bindings.ToArray());
         }
 
         public override RHITexture CreatePlacedTexture(

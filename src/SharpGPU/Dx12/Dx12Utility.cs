@@ -939,7 +939,6 @@ namespace SharpGPU
             stateRules.Add(ERHITextureUsage.DepthStencil, Vortice.Direct3D12.ResourceFlags.AllowDepthStencil);
             stateRules.Add(ERHITextureUsage.RenderTarget, Vortice.Direct3D12.ResourceFlags.AllowRenderTarget);
             stateRules.Add(ERHITextureUsage.UnorderedAccess, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess);
-            stateRules.Add(ERHITextureUsage.RasterizerOrdered, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess);
 
             Vortice.Direct3D12.ResourceFlags result = Vortice.Direct3D12.ResourceFlags.None;
             foreach (KeyValuePair<ERHITextureUsage, Vortice.Direct3D12.ResourceFlags> rule in stateRules)
@@ -2127,7 +2126,7 @@ namespace SharpGPU
 
         internal static bool IsUnorderedAccessTexture(in ERHITextureUsage textureFlag)
         {
-            return (textureFlag & (ERHITextureUsage.UnorderedAccess | ERHITextureUsage.RasterizerOrdered)) != 0;
+            return (textureFlag & ERHITextureUsage.UnorderedAccess) != 0;
         }
 
         internal static void FillTexture2DSRV(ref Vortice.Direct3D12.Texture2DShaderResourceView srv, in RHITextureViewDescriptor descriptor, in ERHITextureDimension dimension)

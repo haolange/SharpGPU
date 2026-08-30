@@ -22,20 +22,14 @@ public sealed class VulkanRasterSubpassPlannerTests
             dynamicRenderingLocalReadDepthStencil: true,
             dynamicRenderingLocalReadMultisampled: true,
             renderPass2: true,
-            attachmentFeedbackLoopLayout: true,
-            orderedFragmentPixelInterlock: true,
-            fragmentStoresAndAtomics: true,
-            unifiedImageLayouts: true);
+            rasterizationOrderAttachmentAccess: true);
         VulkanRasterCapabilities renderPassOnly = new(
             dynamicRendering: true,
             dynamicRenderingLocalRead: false,
             dynamicRenderingLocalReadDepthStencil: false,
             dynamicRenderingLocalReadMultisampled: false,
             renderPass2: true,
-            attachmentFeedbackLoopLayout: true,
-            orderedFragmentPixelInterlock: true,
-            fragmentStoresAndAtomics: true,
-            unifiedImageLayouts: true);
+            rasterizationOrderAttachmentAccess: true);
 
         Assert.Equal(
             EVulkanRasterPassStrategy.DynamicRenderingLocalRead,
@@ -75,10 +69,7 @@ public sealed class VulkanRasterSubpassPlannerTests
             dynamicRenderingLocalReadDepthStencil: false,
             dynamicRenderingLocalReadMultisampled: false,
             renderPass2: true,
-            attachmentFeedbackLoopLayout: false,
-            orderedFragmentPixelInterlock: false,
-            fragmentStoresAndAtomics: true,
-            unifiedImageLayouts: false);
+            rasterizationOrderAttachmentAccess: false);
         VulkanRasterPassLowering lowering =
             VulkanRasterPassLowering.Compile(plan, in renderPassOnly);
 
@@ -105,39 +96,28 @@ public sealed class VulkanRasterSubpassPlannerTests
 
     [Fact]
     [Trait("Category", "SharpGpuPortable")]
-    public void SampledFeedbackIsOrdinaryBindingAndRequiresExactCapability()
+    public void FramebufferReadWriteRequiresRoaaAndNeverUsesFeedbackLoopLayout()
     {
-        using TestTexture output = CreateColorTexture();
-        using TestTexture sampled = CreateColorTexture();
+        using TestTexture readWrite = CreateColorTexture();
         RHIRasterPassPlan plan = Compile(
-            new[]
-            {
-                CreateAttachment(output),
-                CreateAttachment(sampled),
-            },
+            new[] { CreateAttachment(readWrite) },
             CreateSubPass(
-                outputs: new[] { 0 },
-                sampled: new[] { -1, 1 }));
+                inputs: new[] { 0 },
+                outputs: new[] { 0 }));
         VulkanRasterCapabilities supported = new(
             dynamicRendering: true,
             dynamicRenderingLocalRead: true,
             dynamicRenderingLocalReadDepthStencil: true,
             dynamicRenderingLocalReadMultisampled: true,
             renderPass2: true,
-            attachmentFeedbackLoopLayout: true,
-            orderedFragmentPixelInterlock: true,
-            fragmentStoresAndAtomics: true,
-            unifiedImageLayouts: true);
+            rasterizationOrderAttachmentAccess: true);
         VulkanRasterCapabilities unsupported = new(
             dynamicRendering: true,
             dynamicRenderingLocalRead: true,
             dynamicRenderingLocalReadDepthStencil: true,
             dynamicRenderingLocalReadMultisampled: true,
             renderPass2: true,
-            attachmentFeedbackLoopLayout: false,
-            orderedFragmentPixelInterlock: true,
-            fragmentStoresAndAtomics: true,
-            unifiedImageLayouts: true);
+            rasterizationOrderAttachmentAccess: false);
 
         VulkanRasterCapabilities noLoweringRoute = new(
             dynamicRendering: false,
@@ -145,20 +125,16 @@ public sealed class VulkanRasterSubpassPlannerTests
             dynamicRenderingLocalReadDepthStencil: false,
             dynamicRenderingLocalReadMultisampled: false,
             renderPass2: false,
-            attachmentFeedbackLoopLayout: true,
-            orderedFragmentPixelInterlock: true,
-            fragmentStoresAndAtomics: true,
-            unifiedImageLayouts: true);
+            rasterizationOrderAttachmentAccess: true);
 
         VulkanRasterPassLowering lowering =
             VulkanRasterPassLowering.Compile(plan, in supported);
 
-        Assert.False(lowering.RequiresPrivateAttachmentTable);
-        Assert.True(lowering.UsesAttachmentFeedbackLoopLayout);
+        Assert.True(lowering.RequiresPrivateAttachmentTable);
+        Assert.Equal((byte)1, lowering.SubPasses.Span[0].RasterOrderedMask);
         Assert.Equal(
-            1,
-            lowering.SubPasses.Span[0]
-                .GetSampledFeedbackLogicalAttachment(1));
+            EVulkanRasterAttachmentScopeLayout.RenderingLocalRead,
+            lowering.AttachmentScopeLayouts.Span[0]);
         Assert.Throws<NotSupportedException>(
             () => VulkanRasterPassLowering.Compile(plan, in unsupported));
         Assert.Throws<NotSupportedException>(
@@ -190,8 +166,7 @@ public sealed class VulkanRasterSubpassPlannerTests
 
     private static RHISubPassDescriptor CreateSubPass(
         int[]? inputs = null,
-        int[]? outputs = null,
-        int[]? sampled = null) =>
+        int[]? outputs = null) =>
         new()
         {
             ColorInputs = inputs == null
@@ -200,9 +175,6 @@ public sealed class VulkanRasterSubpassPlannerTests
             ColorOutputs = outputs == null
                 ? RHIAttachmentIndexArray.Empty
                 : new RHIAttachmentIndexArray(outputs),
-            SampledFeedbackInputs = sampled == null
-                ? RHIAttachmentIndexArray.Empty
-                : new RHIAttachmentIndexArray(sampled),
         };
 
     private static TestTexture CreateColorTexture() =>

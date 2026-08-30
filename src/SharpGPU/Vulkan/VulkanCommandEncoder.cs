@@ -1213,8 +1213,6 @@ internal enum EVulkanRasterPassStrategy
     {
         ColorAttachment = 0,
         RenderingLocalRead = 1,
-        AttachmentFeedbackLoop = 2,
-        GeneralStorage = 3,
     }
 
     [Flags]
@@ -1222,8 +1220,6 @@ internal enum EVulkanRasterPassStrategy
     {
         None = 0,
         FramebufferByRegion = 1 << 0,
-        FeedbackLoopByRegion = 1 << 1,
-        OrderedStorageByRegion = 1 << 2,
     }
 
     internal readonly struct VulkanRasterCapabilities
@@ -1233,10 +1229,7 @@ internal enum EVulkanRasterPassStrategy
         internal bool DynamicRenderingLocalReadDepthStencil { get; }
         internal bool DynamicRenderingLocalReadMultisampled { get; }
         internal bool RenderPass2 { get; }
-        internal bool AttachmentFeedbackLoopLayout { get; }
-        internal bool OrderedFragmentPixelInterlock { get; }
-        internal bool FragmentStoresAndAtomics { get; }
-        internal bool UnifiedImageLayouts { get; }
+        internal bool RasterizationOrderAttachmentAccess { get; }
 
         internal VulkanRasterCapabilities(
             bool dynamicRendering,
@@ -1244,10 +1237,7 @@ internal enum EVulkanRasterPassStrategy
             bool dynamicRenderingLocalReadDepthStencil,
             bool dynamicRenderingLocalReadMultisampled,
             bool renderPass2,
-            bool attachmentFeedbackLoopLayout,
-            bool orderedFragmentPixelInterlock,
-            bool fragmentStoresAndAtomics,
-            bool unifiedImageLayouts)
+            bool rasterizationOrderAttachmentAccess)
         {
             DynamicRendering = dynamicRendering;
             DynamicRenderingLocalRead = dynamicRenderingLocalRead;
@@ -1256,12 +1246,8 @@ internal enum EVulkanRasterPassStrategy
             DynamicRenderingLocalReadMultisampled =
                 dynamicRenderingLocalReadMultisampled;
             RenderPass2 = renderPass2;
-            AttachmentFeedbackLoopLayout =
-                attachmentFeedbackLoopLayout;
-            OrderedFragmentPixelInterlock =
-                orderedFragmentPixelInterlock;
-            FragmentStoresAndAtomics = fragmentStoresAndAtomics;
-            UnifiedImageLayouts = unifiedImageLayouts;
+            RasterizationOrderAttachmentAccess =
+                rasterizationOrderAttachmentAccess;
         }
     }
 
@@ -1286,7 +1272,6 @@ internal enum EVulkanRasterPassStrategy
     internal readonly struct VulkanRasterSubPassLowering
     {
         internal byte LocalInputMask { get; }
-        internal byte SampledInputMask { get; }
         internal byte OutputMask { get; }
         internal byte DeclaredOutputMask { get; }
         internal byte RasterOrderedMask { get; }
@@ -1294,18 +1279,13 @@ internal enum EVulkanRasterPassStrategy
         internal byte TransitionMask { get; }
         internal ERHISubPassFlags DepthStencilFlags { get; }
         internal bool HasNonIdentityOutputMapping { get; }
-        internal bool RequiresFeedbackLoopLayout =>
-            SampledInputMask != 0;
         internal int ColorInputSlotCount =>
             m_ColorInputLogicalAttachments.Length;
         internal int ColorOutputLocationCount =>
             m_ColorOutputLogicalAttachments.Length;
-        internal int SampledFeedbackSlotCount =>
-            m_SampledFeedbackLogicalAttachments.Length;
 
         private readonly int[] m_ColorInputLogicalAttachments;
         private readonly int[] m_ColorOutputLogicalAttachments;
-        private readonly int[] m_SampledFeedbackLogicalAttachments;
         private readonly int[] m_OutputLocationsByPhysicalAttachment;
         private readonly int[] m_InputIndicesByPhysicalAttachment;
 
@@ -1315,17 +1295,11 @@ internal enum EVulkanRasterPassStrategy
             RHIAttachmentInterfaceSignature attachmentInterface =
                 plan.AttachmentInterface;
             RasterOrderedMask =
-                attachmentInterface.RasterOrderedReadWriteMask;
-            LocalInputMask = checked((byte)(
-                attachmentInterface.ColorInputMask &
-                ~RasterOrderedMask));
-            SampledInputMask =
-                attachmentInterface.SampledFeedbackMask;
+                attachmentInterface.FramebufferReadWriteMask;
+            LocalInputMask = attachmentInterface.ColorInputMask;
             DeclaredOutputMask =
                 attachmentInterface.ColorOutputMask;
-            OutputMask = checked((byte)(
-                attachmentInterface.ColorOutputMask &
-                ~RasterOrderedMask));
+            OutputMask = attachmentInterface.ColorOutputMask;
             PreserveMask = plan.PreserveMask;
             TransitionMask = plan.TransitionMask;
             DepthStencilFlags =
@@ -1335,8 +1309,6 @@ internal enum EVulkanRasterPassStrategy
                 new int[attachmentInterface.ColorInputSlotCount];
             m_ColorOutputLogicalAttachments =
                 new int[attachmentInterface.ColorOutputLocationCount];
-            m_SampledFeedbackLogicalAttachments =
-                new int[attachmentInterface.SampledFeedbackSlotCount];
             m_OutputLocationsByPhysicalAttachment =
                 new int[attachmentInterface.ColorAttachmentCount];
             m_InputIndicesByPhysicalAttachment =
@@ -1358,14 +1330,6 @@ internal enum EVulkanRasterPassStrategy
                 int logicalAttachment =
                     attachmentInterface.GetColorInputLogicalAttachment(
                         inputIndex);
-                if (IsRasterOrdered(
-                        logicalAttachment,
-                        RasterOrderedMask))
-                {
-                    logicalAttachment =
-                        RHIAttachmentInterfaceSignature
-                            .UnboundLogicalAttachment;
-                }
                 m_ColorInputLogicalAttachments[inputIndex] =
                     logicalAttachment;
                 if (logicalAttachment >= 0)
@@ -1384,14 +1348,6 @@ internal enum EVulkanRasterPassStrategy
                 int logicalAttachment =
                     attachmentInterface.GetColorOutputLogicalAttachment(
                         outputLocation);
-                if (IsRasterOrdered(
-                        logicalAttachment,
-                        RasterOrderedMask))
-                {
-                    logicalAttachment =
-                        RHIAttachmentInterfaceSignature
-                            .UnboundLogicalAttachment;
-                }
                 m_ColorOutputLogicalAttachments[outputLocation] =
                     logicalAttachment;
                 hasNonIdentityOutputMapping |=
@@ -1404,18 +1360,6 @@ internal enum EVulkanRasterPassStrategy
             }
             HasNonIdentityOutputMapping =
                 hasNonIdentityOutputMapping;
-
-            for (int sampledOrdinal = 0;
-                 sampledOrdinal <
-                    m_SampledFeedbackLogicalAttachments.Length;
-                 ++sampledOrdinal)
-            {
-                m_SampledFeedbackLogicalAttachments[
-                    sampledOrdinal] =
-                        attachmentInterface
-                            .GetSampledFeedbackLogicalAttachment(
-                                sampledOrdinal);
-            }
         }
 
         internal int GetColorInputLogicalAttachment(int inputIndex)
@@ -1439,19 +1383,6 @@ internal enum EVulkanRasterPassStrategy
                     nameof(outputLocation));
             }
             return m_ColorOutputLogicalAttachments[outputLocation];
-        }
-
-        internal int GetSampledFeedbackLogicalAttachment(
-            int sampledOrdinal)
-        {
-            if ((uint)sampledOrdinal >=
-                (uint)m_SampledFeedbackLogicalAttachments.Length)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(sampledOrdinal));
-            }
-            return m_SampledFeedbackLogicalAttachments[
-                sampledOrdinal];
         }
 
         internal int GetOutputLocationForPhysicalAttachment(
@@ -1480,14 +1411,6 @@ internal enum EVulkanRasterPassStrategy
                 physicalAttachment];
         }
 
-        private static bool IsRasterOrdered(
-            int logicalAttachment,
-            byte rasterOrderedMask)
-        {
-            return logicalAttachment >= 0 &&
-                (rasterOrderedMask &
-                 (1 << logicalAttachment)) != 0;
-        }
     }
 
     internal sealed class VulkanRasterPassLowering
@@ -1499,9 +1422,6 @@ internal enum EVulkanRasterPassStrategy
             Strategy ==
                 EVulkanRasterPassStrategy.DynamicRenderingLocalRead;
         internal bool RequiresPrivateAttachmentTable { get; }
-        internal bool UsesAttachmentFeedbackLoopLayout { get; }
-        internal bool UsesSampledFeedback { get; }
-        internal bool UsesOrderedFragmentInterlock { get; }
         internal ReadOnlyMemory<VulkanRasterSubPassLowering> SubPasses =>
             m_SubPasses;
         internal ReadOnlyMemory<VulkanRasterPhaseBarrierPlan>
@@ -1517,9 +1437,6 @@ internal enum EVulkanRasterPassStrategy
         private VulkanRasterPassLowering(
             EVulkanRasterPassStrategy strategy,
             bool requiresPrivateAttachmentTable,
-            bool usesAttachmentFeedbackLoopLayout,
-            bool usesSampledFeedback,
-            bool usesOrderedFragmentInterlock,
             VulkanRasterSubPassLowering[] subPasses,
             VulkanRasterPhaseBarrierPlan[] phaseBarriers,
             EVulkanRasterAttachmentScopeLayout[]
@@ -1528,11 +1445,6 @@ internal enum EVulkanRasterPassStrategy
             Strategy = strategy;
             RequiresPrivateAttachmentTable =
                 requiresPrivateAttachmentTable;
-            UsesAttachmentFeedbackLoopLayout =
-                usesAttachmentFeedbackLoopLayout;
-            UsesSampledFeedback = usesSampledFeedback;
-            UsesOrderedFragmentInterlock =
-                usesOrderedFragmentInterlock;
             m_SubPasses = subPasses;
             m_PhaseBarriers = phaseBarriers;
             m_AttachmentScopeLayouts = attachmentScopeLayouts;
@@ -1547,12 +1459,9 @@ internal enum EVulkanRasterPassStrategy
             ArgumentNullException.ThrowIfNull(plan);
 
             bool hasLocalRead = false;
-            bool hasSampledFeedback = false;
             bool hasRasterOrderedAccess = false;
             bool requiresAttachmentMapping = false;
             byte passLocalReadMask = 0;
-            byte passSampledFeedbackMask = 0;
-            byte passRasterOrderedMask = 0;
             VulkanRasterSubPassLowering[] subPasses =
                 new VulkanRasterSubPassLowering[plan.SubPassCount];
             for (int i = 0; i < subPasses.Length; ++i)
@@ -1563,18 +1472,12 @@ internal enum EVulkanRasterPassStrategy
                     new VulkanRasterSubPassLowering(subPass);
                 subPasses[i] = lowering;
                 hasLocalRead |= lowering.LocalInputMask != 0;
-                hasSampledFeedback |=
-                    lowering.SampledInputMask != 0;
                 hasRasterOrderedAccess |=
                     lowering.RasterOrderedMask != 0;
                 requiresAttachmentMapping |=
                     lowering.LocalInputMask != 0 ||
                     lowering.HasNonIdentityOutputMapping;
                 passLocalReadMask |= lowering.LocalInputMask;
-                passSampledFeedbackMask |=
-                    lowering.SampledInputMask;
-                passRasterOrderedMask |=
-                    lowering.RasterOrderedMask;
             }
 
             ValidateInitialDepthStencilReadOnlyContract(
@@ -1582,12 +1485,7 @@ internal enum EVulkanRasterPassStrategy
                 subPasses[0]);
             ValidateExactCapabilities(
                 in capabilities,
-                hasSampledFeedback,
                 hasRasterOrderedAccess);
-            ValidateNoCrossMechanismAlias(
-                passLocalReadMask,
-                passSampledFeedbackMask,
-                passRasterOrderedMask);
 
             bool supportsExactDynamicLocalRead =
                 capabilities.DynamicRenderingLocalRead &&
@@ -1609,18 +1507,11 @@ internal enum EVulkanRasterPassStrategy
             EVulkanRasterAttachmentScopeLayout[] layouts =
                 CompileScopeLayouts(
                     plan.ColorAttachmentCount,
-                    passLocalReadMask,
-                    passSampledFeedbackMask,
-                    passRasterOrderedMask);
+                    passLocalReadMask);
             return new VulkanRasterPassLowering(
                 strategy,
                 requiresPrivateAttachmentTable:
-                    hasLocalRead || hasRasterOrderedAccess,
-                usesAttachmentFeedbackLoopLayout:
-                    hasSampledFeedback || hasRasterOrderedAccess,
-                usesSampledFeedback: hasSampledFeedback,
-                usesOrderedFragmentInterlock:
-                    hasRasterOrderedAccess,
+                    hasLocalRead,
                 subPasses,
                 barriers,
                 layouts);
@@ -1656,47 +1547,16 @@ internal enum EVulkanRasterPassStrategy
 
         private static void ValidateExactCapabilities(
             in VulkanRasterCapabilities capabilities,
-            bool hasSampledFeedback,
             bool hasRasterOrderedAccess)
         {
-            if (hasSampledFeedback &&
-                !capabilities.AttachmentFeedbackLoopLayout)
-            {
-                throw new NotSupportedException(
-                    "The raster pass declares SampledFeedback, but " +
-                    "VK_EXT_attachment_feedback_loop_layout is unavailable.");
-            }
             if (hasRasterOrderedAccess &&
-                (!capabilities.DynamicRendering ||
-                 !capabilities.OrderedFragmentPixelInterlock ||
-                 !capabilities.FragmentStoresAndAtomics ||
-                 !capabilities.AttachmentFeedbackLoopLayout ||
-                 !capabilities.UnifiedImageLayouts))
+                !capabilities.RasterizationOrderAttachmentAccess)
             {
                 throw new NotSupportedException(
-                    "The raster pass declares RasterOrderedReadWrite, but " +
-                    "the exact Vulkan path requires " +
-                    "dynamic rendering, VK_KHR_unified_image_layouts, " +
-                    "VK_EXT_attachment_feedback_loop_layout, " +
-                    "VK_EXT_fragment_shader_interlock, " +
-                    "fragmentStoresAndAtomics, and their required features.");
-            }
-        }
-
-        private static void ValidateNoCrossMechanismAlias(
-            byte passLocalReadMask,
-            byte passSampledFeedbackMask,
-            byte passRasterOrderedMask)
-        {
-            byte rasterOrderedAliasMask = checked((byte)(
-                passRasterOrderedMask &
-                (passLocalReadMask | passSampledFeedbackMask)));
-            if (rasterOrderedAliasMask != 0)
-            {
-                throw new NotSupportedException(
-                    "A Vulkan raster attachment cannot switch between " +
-                    "RasterOrderedReadWrite storage access and local/sampled " +
-                    "attachment access inside one native render scope.");
+                    "The raster pass reads and writes the same color " +
+                    "attachment in one phase, but " +
+                    "VK_EXT_rasterization_order_attachment_access and " +
+                    "rasterizationOrderColorAttachmentAccess are unavailable.");
             }
         }
 
@@ -1707,54 +1567,20 @@ internal enum EVulkanRasterPassStrategy
             VulkanRasterPhaseBarrierPlan[] barriers =
                 new VulkanRasterPhaseBarrierPlan[
                     Math.Max(0, subPasses.Length - 1)];
-            byte priorWriteMask = subPasses.Length == 0
-                ? (byte)0
-                : subPasses[0].DeclaredOutputMask;
-            byte priorOrderedStorageMask = subPasses.Length == 0
-                ? (byte)0
-                : subPasses[0].RasterOrderedMask;
             for (int destinationIndex = 1;
                  destinationIndex < subPasses.Length;
                  ++destinationIndex)
             {
                 ref readonly VulkanRasterSubPassLowering destination =
                     ref subPasses[destinationIndex];
-                byte localReadMask = checked((byte)(
-                    priorWriteMask &
-                    destination.LocalInputMask));
-                byte feedbackLoopMask = checked((byte)(
-                    priorWriteMask &
-                    destination.SampledInputMask));
-                byte orderedStorageMask = checked((byte)(
-                    priorOrderedStorageMask &
-                    destination.RasterOrderedMask));
-                EVulkanRasterPhaseBarrierKind kind =
-                    EVulkanRasterPhaseBarrierKind.None;
-                if (localReadMask != 0)
-                {
-                    kind |= EVulkanRasterPhaseBarrierKind
-                        .FramebufferByRegion;
-                }
-                if (feedbackLoopMask != 0)
-                {
-                    kind |= EVulkanRasterPhaseBarrierKind
-                        .FeedbackLoopByRegion;
-                }
-                if (orderedStorageMask != 0)
-                {
-                    kind |= EVulkanRasterPhaseBarrierKind
-                        .OrderedStorageByRegion;
-                }
+                byte transitionMask = destination.TransitionMask;
+                EVulkanRasterPhaseBarrierKind kind = transitionMask != 0
+                    ? EVulkanRasterPhaseBarrierKind.FramebufferByRegion
+                    : EVulkanRasterPhaseBarrierKind.None;
                 barriers[destinationIndex - 1] =
                     new VulkanRasterPhaseBarrierPlan(
                         kind,
-                        checked((byte)(
-                            localReadMask |
-                            feedbackLoopMask |
-                            orderedStorageMask)));
-                priorWriteMask |= destination.DeclaredOutputMask;
-                priorOrderedStorageMask |=
-                    destination.RasterOrderedMask;
+                        transitionMask);
             }
             return barriers;
         }
@@ -1762,9 +1588,7 @@ internal enum EVulkanRasterPassStrategy
         private static EVulkanRasterAttachmentScopeLayout[]
             CompileScopeLayouts(
                 int colorAttachmentCount,
-                byte passLocalReadMask,
-                byte passSampledFeedbackMask,
-                byte passRasterOrderedMask)
+                byte passLocalReadMask)
         {
             EVulkanRasterAttachmentScopeLayout[] layouts =
                 new EVulkanRasterAttachmentScopeLayout[
@@ -1775,19 +1599,7 @@ internal enum EVulkanRasterPassStrategy
             {
                 byte bit =
                     checked((byte)(1 << logicalAttachment));
-                if ((passRasterOrderedMask & bit) != 0)
-                {
-                    layouts[logicalAttachment] =
-                        EVulkanRasterAttachmentScopeLayout
-                            .GeneralStorage;
-                }
-                else if ((passSampledFeedbackMask & bit) != 0)
-                {
-                    layouts[logicalAttachment] =
-                        EVulkanRasterAttachmentScopeLayout
-                            .AttachmentFeedbackLoop;
-                }
-                else if ((passLocalReadMask & bit) != 0)
+                if ((passLocalReadMask & bit) != 0)
                 {
                     layouts[logicalAttachment] =
                         EVulkanRasterAttachmentScopeLayout
@@ -1813,16 +1625,6 @@ internal enum EVulkanRasterPassStrategy
             switch (forcedStrategy)
             {
                 case EVulkanRasterPassForcedStrategy.Auto:
-                    // RasterOrderedReadWrite uses a storage-image binding in
-                    // GENERAL plus VkAttachmentFeedbackLoopInfoEXT on the
-                    // dynamic-rendering attachment. It has no local-input
-                    // attachment semantic, so dynamic-local-read would add a
-                    // needless device requirement and must not be selected.
-                    if (hasRasterOrderedAccess &&
-                        capabilities.DynamicRendering)
-                    {
-                        return EVulkanRasterPassStrategy.DynamicRendering;
-                    }
                     if (!requiresAttachmentMapping &&
                         capabilities.DynamicRendering)
                     {
@@ -1835,8 +1637,7 @@ internal enum EVulkanRasterPassStrategy
                         return EVulkanRasterPassStrategy
                             .DynamicRenderingLocalRead;
                     }
-                    if (!hasRasterOrderedAccess &&
-                        capabilities.RenderPass2)
+                    if (capabilities.RenderPass2)
                     {
                         return EVulkanRasterPassStrategy
                             .NativeRenderPass2;
@@ -1854,15 +1655,6 @@ internal enum EVulkanRasterPassStrategy
                     break;
 
                 case EVulkanRasterPassForcedStrategy.NativeRenderPass2:
-                    if (hasRasterOrderedAccess)
-                    {
-                        throw new NotSupportedException(
-                            "The exact Vulkan RasterOrderedReadWrite path " +
-                            "requires VkAttachmentFeedbackLoopInfoEXT on a " +
-                            "dynamic-rendering attachment while the storage " +
-                            "descriptor remains in GENERAL; RenderPass2 " +
-                            "cannot express that combination.");
-                    }
                     if (capabilities.RenderPass2)
                     {
                         return EVulkanRasterPassStrategy
@@ -1903,7 +1695,7 @@ internal enum EVulkanRasterPassStrategy
             {
                 throw new ArgumentException(
                     "A Vulkan private descriptor layout requires at least " +
-                    "one input-attachment or raster-ordered binding.",
+                    "one input-attachment binding.",
                     nameof(plan));
             }
             ValidateLimits(device.DescriptorLimits, in plan);
@@ -1912,7 +1704,7 @@ internal enum EVulkanRasterPassStrategy
             Plan = plan;
             VkDescriptorSetLayoutBinding* bindings =
                 stackalloc VkDescriptorSetLayoutBinding[
-                    RHIAttachmentIndexArray.MaxAttachments * 2];
+                    RHIAttachmentIndexArray.MaxAttachments];
             int bindingCount = 0;
             for (int inputIndex = 0;
                  inputIndex < RHIAttachmentIndexArray.MaxAttachments;
@@ -1933,30 +1725,6 @@ internal enum EVulkanRasterPassStrategy
                         stageFlags = VkShaderStageFlags.Fragment,
                     };
             }
-            for (int logicalAttachment = 0;
-                 logicalAttachment <
-                    RHIAttachmentIndexArray.MaxAttachments;
-                 ++logicalAttachment)
-            {
-                byte bit =
-                    checked((byte)(1 << logicalAttachment));
-                if ((plan.RasterOrderedMask & bit) == 0)
-                {
-                    continue;
-                }
-                bindings[bindingCount++] =
-                    new VkDescriptorSetLayoutBinding
-                    {
-                        binding =
-                            plan.GetRasterOrderedBinding(
-                                logicalAttachment),
-                        descriptorType =
-                            VkDescriptorType.StorageImage,
-                        descriptorCount = 1,
-                        stageFlags = VkShaderStageFlags.Fragment,
-                    };
-            }
-
             VkDescriptorSetLayoutCreateInfo createInfo =
                 new VkDescriptorSetLayoutCreateInfo
                 {
@@ -2004,16 +1772,6 @@ internal enum EVulkanRasterPassStrategy
                 throw new NotSupportedException(
                     $"Vulkan private raster input-attachment count " +
                     $"{plan.InputAttachmentCount} exceeds the device " +
-                    "descriptor limits.");
-            }
-            if (plan.StorageImageCount >
-                    limits.MaximumStorageImagesPerSet ||
-                plan.StorageImageCount >
-                    limits.MaximumStorageImagesPerStage)
-            {
-                throw new NotSupportedException(
-                    $"Vulkan private raster storage-image count " +
-                    $"{plan.StorageImageCount} exceeds the device " +
                     "descriptor limits.");
             }
         }
@@ -2125,8 +1883,6 @@ internal enum EVulkanRasterPassStrategy
             Array.Fill(outputs, AttachmentUnused);
             Array.Fill(inputs, AttachmentUnused);
 
-            byte rasterOrderedMask =
-                signature.RasterOrderedReadWriteMask;
             bool requiresMapping = false;
             for (int outputLocation = 0;
                  outputLocation <
@@ -2136,14 +1892,6 @@ internal enum EVulkanRasterPassStrategy
                 int logicalAttachment =
                     signature.GetColorOutputLogicalAttachment(
                         outputLocation);
-                if (IsRasterOrdered(
-                        logicalAttachment,
-                        rasterOrderedMask))
-                {
-                    logicalAttachment =
-                        RHIAttachmentInterfaceSignature
-                            .UnboundLogicalAttachment;
-                }
                 if (logicalAttachment >= 0)
                 {
                     outputs[logicalAttachment] =
@@ -2161,14 +1909,6 @@ internal enum EVulkanRasterPassStrategy
                 int logicalAttachment =
                     signature.GetColorInputLogicalAttachment(
                         inputIndex);
-                if (IsRasterOrdered(
-                        logicalAttachment,
-                        rasterOrderedMask))
-                {
-                    logicalAttachment =
-                        RHIAttachmentInterfaceSignature
-                            .UnboundLogicalAttachment;
-                }
                 if (logicalAttachment >= 0)
                 {
                     inputs[logicalAttachment] =
@@ -2253,12 +1993,6 @@ internal enum EVulkanRasterPassStrategy
             }
         }
 
-        private static bool IsRasterOrdered(
-            int logicalAttachment,
-            byte rasterOrderedMask) =>
-            logicalAttachment >= 0 &&
-            (rasterOrderedMask &
-             (1 << logicalAttachment)) != 0;
     }
 
 
@@ -2271,55 +2005,40 @@ internal enum EVulkanRasterPassStrategy
             m_ColorAttachmentsByLocation;
         internal ReadOnlyMemory<int> ResolveAttachmentsByLocation =>
             m_ResolveAttachmentsByLocation;
-        internal ReadOnlyMemory<int> SampledFeedbackAttachments =>
-            m_SampledFeedbackAttachments;
         internal ReadOnlyMemory<int> PreserveAttachments =>
             m_PreserveAttachments;
         internal ERHISubPassFlags DepthStencilFlags { get; }
         internal bool ResolvesDepthStencil { get; }
-        internal bool UsesAttachmentFeedbackLoopLayout =>
-            m_SampledFeedbackAttachments.Length != 0;
-        internal bool UsesOrderedFragmentInterlock { get; }
-        internal byte RasterOrderedMask { get; }
+        internal byte FramebufferReadWriteMask { get; }
         internal byte InputMask { get; }
         internal byte OutputMask { get; }
-        internal byte SampledFeedbackMask { get; }
-        internal byte OrdinaryReadWriteMask =>
-            checked((byte)(InputMask & OutputMask));
 
         private readonly int[] m_InputAttachmentsByIndex;
         private readonly int[] m_ColorAttachmentsByLocation;
         private readonly int[] m_ResolveAttachmentsByLocation;
-        private readonly int[] m_SampledFeedbackAttachments;
         private readonly int[] m_PreserveAttachments;
 
         internal VulkanRenderPass2SubPassDescription(
             int[] inputAttachmentsByIndex,
             int[] colorAttachmentsByLocation,
             int[] resolveAttachmentsByLocation,
-            int[] sampledFeedbackAttachments,
             int[] preserveAttachments,
             ERHISubPassFlags depthStencilFlags,
             bool resolvesDepthStencil,
-            byte rasterOrderedMask)
+            byte framebufferReadWriteMask)
         {
             m_InputAttachmentsByIndex = inputAttachmentsByIndex;
             m_ColorAttachmentsByLocation =
                 colorAttachmentsByLocation;
             m_ResolveAttachmentsByLocation =
                 resolveAttachmentsByLocation;
-            m_SampledFeedbackAttachments =
-                sampledFeedbackAttachments;
             m_PreserveAttachments = preserveAttachments;
             DepthStencilFlags = depthStencilFlags;
             ResolvesDepthStencil = resolvesDepthStencil;
-            RasterOrderedMask = rasterOrderedMask;
-            UsesOrderedFragmentInterlock =
-                rasterOrderedMask != 0;
+            FramebufferReadWriteMask =
+                framebufferReadWriteMask;
             InputMask = BuildMask(inputAttachmentsByIndex);
             OutputMask = BuildMask(colorAttachmentsByLocation);
-            SampledFeedbackMask =
-                BuildMask(sampledFeedbackAttachments);
         }
 
         private static byte BuildMask(ReadOnlySpan<int> attachments)
@@ -2485,29 +2204,12 @@ internal enum EVulkanRasterPassStrategy
                     }
                 }
 
-                int[] sampledFeedback =
-                    new int[
-                        loweringSubPass.SampledFeedbackSlotCount];
-                for (int sampledOrdinal = 0;
-                     sampledOrdinal < sampledFeedback.Length;
-                     ++sampledOrdinal)
-                {
-                    sampledFeedback[sampledOrdinal] =
-                        loweringSubPass
-                            .GetSampledFeedbackLogicalAttachment(
-                                sampledOrdinal);
-                }
-
                 byte nativeReferenceMask = checked((byte)(
                     loweringSubPass.LocalInputMask |
                     loweringSubPass.OutputMask));
-                byte descriptorAttachmentMask = checked((byte)(
-                    loweringSubPass.SampledInputMask |
-                    loweringSubPass.RasterOrderedMask));
                 byte preserveMask = checked((byte)(
-                    planSubPass.PreserveMask |
-                    (descriptorAttachmentMask &
-                     ~nativeReferenceMask)));
+                    planSubPass.PreserveMask &
+                    ~nativeReferenceMask));
                 List<int> preserves =
                     new List<int>(plan.ColorAttachmentCount);
                 for (int logicalAttachment = 0;
@@ -2526,7 +2228,6 @@ internal enum EVulkanRasterPassStrategy
                         inputs,
                         colors,
                         resolves,
-                        sampledFeedback,
                         preserves.ToArray(),
                         loweringSubPass.DepthStencilFlags,
                         depthStencilResolveAttachmentIndex >= 0 &&
@@ -2740,16 +2441,11 @@ internal enum EVulkanRasterPassStrategy
             ReadOnlySpan<VulkanRenderPass2SubPassDescription> subPasses =
                 description.SubPasses.Span;
             byte bit = checked((byte)(1 << logicalAttachment));
-            if ((subPasses[subPassIndex].OrdinaryReadWriteMask &
+            if ((subPasses[subPassIndex]
+                    .FramebufferReadWriteMask &
                  bit) != 0)
             {
                 return VkImageLayout.General;
-            }
-            if ((subPasses[subPassIndex].SampledFeedbackMask &
-                 bit) != 0)
-            {
-                return VkImageLayout
-                    .AttachmentFeedbackLoopOptimalEXT;
             }
             return inputReference
                 ? VkImageLayout.ShaderReadOnlyOptimal
@@ -3102,28 +2798,23 @@ internal enum EVulkanRasterPassStrategy
                 {
                     VulkanRenderPass2SubPassDescription destination =
                         subPasses[destinationIndex];
-                    byte destinationColorAccessMask =
-                        checked((byte)(
-                            destination.InputMask |
-                            destination.OutputMask |
-                            destination.SampledFeedbackMask));
-                    byte colorHazardMask =
-                        checked((byte)(
-                            source.OutputMask &
-                            destinationColorAccessMask));
                     bool selfDependency =
                         sourceIndex == destinationIndex;
-                    bool ordinaryReadWrite =
+                    byte readAfterWriteMask = checked((byte)(
+                        source.OutputMask &
+                        (destination.InputMask |
+                         destination.OutputMask)));
+                    byte writeAfterReadMask = checked((byte)(
+                        source.InputMask &
+                        destination.OutputMask));
+                    bool framebufferReadWrite =
                         selfDependency &&
-                        source.OrdinaryReadWriteMask != 0;
-                    bool sampledFeedback =
-                        (colorHazardMask &
-                         destination.SampledFeedbackMask) != 0;
+                        source.FramebufferReadWriteMask != 0;
                     bool colorHazard =
                         selfDependency
-                            ? ordinaryReadWrite ||
-                              sampledFeedback
-                            : colorHazardMask != 0;
+                            ? framebufferReadWrite
+                            : (readAfterWriteMask |
+                               writeAfterReadMask) != 0;
                     bool depthStencilHazard =
                         !selfDependency &&
                         plan.HasDepthStencilAttachment &&
@@ -3140,23 +2831,36 @@ internal enum EVulkanRasterPassStrategy
                     VkAccessFlags destinationAccess = 0;
                     if (colorHazard)
                     {
-                        sourceStages |=
-                            VkPipelineStageFlags
-                                .ColorAttachmentOutput;
-                        sourceAccess |=
-                            VkAccessFlags.ColorAttachmentWrite;
-                        if ((colorHazardMask &
-                             (destination.InputMask |
-                              destination.SampledFeedbackMask)) != 0)
+                        if (readAfterWriteMask != 0 ||
+                            framebufferReadWrite)
+                        {
+                            sourceStages |=
+                                VkPipelineStageFlags
+                                    .ColorAttachmentOutput;
+                            sourceAccess |=
+                                VkAccessFlags
+                                    .ColorAttachmentWrite;
+                        }
+                        if (writeAfterReadMask != 0)
+                        {
+                            sourceStages |=
+                                VkPipelineStageFlags.FragmentShader;
+                            sourceAccess |=
+                                VkAccessFlags.InputAttachmentRead;
+                        }
+                        if ((readAfterWriteMask &
+                             destination.InputMask) != 0 ||
+                            framebufferReadWrite)
                         {
                             destinationStages |=
                                 VkPipelineStageFlags.FragmentShader;
                             destinationAccess |=
-                                VkAccessFlags.InputAttachmentRead |
-                                VkAccessFlags.ShaderRead;
+                                VkAccessFlags.InputAttachmentRead;
                         }
-                        if ((colorHazardMask &
-                             destination.OutputMask) != 0)
+                        if (((readAfterWriteMask |
+                              writeAfterReadMask) &
+                             destination.OutputMask) != 0 ||
+                            framebufferReadWrite)
                         {
                             destinationStages |=
                                 VkPipelineStageFlags
@@ -3184,13 +2888,6 @@ internal enum EVulkanRasterPassStrategy
                                 .DepthStencilAttachmentWrite;
                     }
 
-                    VkDependencyFlags flags =
-                        VkDependencyFlags.ByRegion;
-                    if (sampledFeedback)
-                    {
-                        flags |=
-                            VkDependencyFlags.FeedbackLoopEXT;
-                    }
                     dependencies[dependencyCount++] =
                         new VkSubpassDependency2
                         {
@@ -3204,7 +2901,8 @@ internal enum EVulkanRasterPassStrategy
                             dstStageMask = destinationStages,
                             srcAccessMask = sourceAccess,
                             dstAccessMask = destinationAccess,
-                            dependencyFlags = flags,
+                            dependencyFlags =
+                                VkDependencyFlags.ByRegion,
                         };
                 }
             }
@@ -3635,115 +3333,8 @@ internal enum EVulkanRasterPassStrategy
         }
     }
 
-internal readonly struct VulkanSampledFeedbackAttachmentFact
-    {
-        internal VkImage Image { get; }
-        internal RHITextureSubresourceRange Range { get; }
-        internal byte AttachmentMask { get; }
-
-        internal VulkanSampledFeedbackAttachmentFact(
-            VkImage image,
-            in RHITextureSubresourceRange range,
-            byte attachmentMask)
-        {
-            Image = image;
-            Range = range;
-            AttachmentMask = attachmentMask;
-        }
-    }
-
-    internal readonly struct VulkanSampledImageDescriptorFact
-    {
-        internal bool IsBound { get; }
-        internal VkImage Image { get; }
-        internal VkImageView ImageView { get; }
-        internal RHITextureSubresourceRange Range { get; }
-
-        internal VulkanSampledImageDescriptorFact(
-            VkImage image,
-            VkImageView imageView,
-            in RHITextureSubresourceRange range)
-        {
-            IsBound = true;
-            Image = image;
-            ImageView = imageView;
-            Range = range;
-        }
-    }
-
-
-
-    internal enum EVulkanSampledFeedbackRangeRelation : byte
-    {
-        DifferentImage = 0,
-        Disjoint = 1,
-        Exact = 2,
-        PartialOverlap = 3,
-    }
-
-    internal static class VulkanSampledFeedbackRangeUtility
-    {
-        internal static EVulkanSampledFeedbackRangeRelation Classify(
-            VkImage sampledImage,
-            in RHITextureSubresourceRange sampledRange,
-            VkImage attachmentImage,
-            in RHITextureSubresourceRange attachmentRange)
-        {
-            if (sampledImage.Handle != attachmentImage.Handle)
-            {
-                return EVulkanSampledFeedbackRangeRelation.DifferentImage;
-            }
-
-            if (!RangesOverlap(in sampledRange, in attachmentRange))
-            {
-                return EVulkanSampledFeedbackRangeRelation.Disjoint;
-            }
-
-            return RangesEqual(in sampledRange, in attachmentRange)
-                ? EVulkanSampledFeedbackRangeRelation.Exact
-                : EVulkanSampledFeedbackRangeRelation.PartialOverlap;
-        }
-
-        private static bool RangesEqual(
-            in RHITextureSubresourceRange left,
-            in RHITextureSubresourceRange right) =>
-            left.AspectMask == right.AspectMask &&
-            left.BaseMipLevel == right.BaseMipLevel &&
-            left.MipLevelCount == right.MipLevelCount &&
-            left.BaseArrayLayer == right.BaseArrayLayer &&
-            left.ArrayLayerCount == right.ArrayLayerCount;
-
-        private static bool RangesOverlap(
-            in RHITextureSubresourceRange left,
-            in RHITextureSubresourceRange right) =>
-            (left.AspectMask & right.AspectMask) != 0 &&
-            IntervalsOverlap(
-                left.BaseMipLevel,
-                left.MipLevelCount,
-                right.BaseMipLevel,
-                right.MipLevelCount) &&
-            IntervalsOverlap(
-                left.BaseArrayLayer,
-                left.ArrayLayerCount,
-                right.BaseArrayLayer,
-                right.ArrayLayerCount);
-
-        private static bool IntervalsOverlap(
-            uint leftStart,
-            uint leftCount,
-            uint rightStart,
-            uint rightCount) =>
-            (ulong)leftStart + leftCount > rightStart &&
-            (ulong)rightStart + rightCount > leftStart;
-    }
-
     internal static class VulkanRasterCapabilityUtility
     {
-        internal static bool HasSampledFeedbackLoweringRoute(
-            bool dynamicRendering,
-            bool renderPass2) =>
-            dynamicRendering || renderPass2;
-
         internal static bool HasFramebufferLocalReadLoweringRoute(
             bool dynamicRendering,
             bool dynamicRenderingLocalRead,
@@ -3751,38 +3342,6 @@ internal readonly struct VulkanSampledFeedbackAttachmentFact
             (dynamicRendering && dynamicRenderingLocalRead) ||
             renderPass2;
     }
-    internal static class VulkanRasterPipelineFlagUtility
-    {
-        internal static VkPipelineCreateFlags Get(
-            in RHIAttachmentInterfaceSignature signature) =>
-            (signature.SampledFeedbackMask |
-             signature.RasterOrderedReadWriteMask) != 0
-                ? VkPipelineCreateFlags.ColorAttachmentFeedbackLoopEXT
-                : 0;
-    }
-
-    internal static class VulkanRasterFeedbackLoopUtility
-    {
-        internal static bool TryCreateAttachmentInfo(
-            EVulkanRasterAttachmentScopeLayout scopeLayout,
-            out VkAttachmentFeedbackLoopInfoEXT info)
-        {
-            if (scopeLayout !=
-                EVulkanRasterAttachmentScopeLayout.GeneralStorage)
-            {
-                info = default;
-                return false;
-            }
-
-            info = new VkAttachmentFeedbackLoopInfoEXT
-            {
-                sType = VkStructureType.AttachmentFeedbackLoopInfoEXT,
-                feedbackLoopEnable = true,
-            };
-            return true;
-        }
-    }
-
     internal static class VulkanDepthStencilBarrierUtility
     {
         internal static ERHITextureAspectMask GetNativeAspectMask(
@@ -4411,12 +3970,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
         private VkRenderingAttachmentInfo* m_ColorAttachmentInfos;
         private VkRenderingAttachmentInfo* m_DepthAttachmentInfo;
         private VkRenderingAttachmentInfo* m_StencilAttachmentInfo;
-        private VulkanSampledFeedbackAttachmentFact[]?
-            m_SampledFeedbackAttachments;
-        private WeakReference<VulkanBindingTable>?[]?
-            m_BoundFeedbackTables;
-        private ulong[]? m_BoundFeedbackRevisions;
-        private byte[]? m_BoundFeedbackMasks;
         private IVulkanRasterNativePipeline? m_ActiveNativePipeline;
         private bool m_RenderingActive;
 
@@ -4453,15 +4006,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                     plan,
                     in capabilities,
                     VulkanRasterStrategyDiagnostics.ForcedStrategy);
-                InitializeSampledFeedbackState(
-                    plan,
-                    m_Lowering,
-                    device);
-                ValidateRasterOrderedAttachmentStorageFormats(
-                    plan,
-                    m_Lowering,
-                    device);
-
 #if DEBUG
                 PushDebugGroup(plan.Name);
 #endif
@@ -4510,10 +4054,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             m_ColorAttachmentInfos = null;
             m_DepthAttachmentInfo = null;
             m_StencilAttachmentInfo = null;
-            m_SampledFeedbackAttachments = null;
-            m_BoundFeedbackTables = null;
-            m_BoundFeedbackRevisions = null;
-            m_BoundFeedbackMasks = null;
             m_PassDescriptor = default;
             m_CurrentSubPassIndex = 0;
         }
@@ -4598,7 +4138,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                     "This Vulkan raster pipeline has no native dynamic " +
                     "variant; bind it inside a compatible RenderPass2 pass.");
             }
-            ClearBoundSampledFeedbackTables();
             m_CachedPipeline = publicPipeline;
             m_ActiveNativePipeline = nativePipeline;
             VulkanNative.vkCmdBindPipeline(
@@ -4628,41 +4167,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                     tableIndex);
             VkDescriptorSet descriptorSet =
                 table.NativeDescriptorSet;
-            byte requiredMask =
-                RequireActiveLowering().SubPasses.Span[
-                    m_CurrentSubPassIndex].SampledInputMask;
-            if (requiredMask != 0)
-            {
-                VulkanSampledFeedbackAttachmentFact[] attachments =
-                    m_SampledFeedbackAttachments
-                    ?? throw new InvalidOperationException(
-                        "The Vulkan sampled-feedback attachment facts " +
-                        "are unavailable.");
-                VulkanDescriptorSetLease clone =
-                    table.CloneForSampledFeedback(
-                        attachments,
-                        out byte matchedMask,
-                        out ulong descriptorRevision);
-                using VulkanDescriptorSetLeaseTransaction transaction =
-                    new(
-                        in clone,
-                        value =>
-                            GetDevice().DescriptorPoolAllocator.Free(
-                                in value));
-                transaction.Commit(
-                    m_VulkanCommandBuffer
-                        .RegisterTransientDescriptorSetLease);
-                descriptorSet = clone.Set;
-                RecordSampledFeedbackTable(
-                    tableIndex,
-                    table,
-                    descriptorRevision,
-                    checked((byte)(matchedMask & requiredMask)));
-            }
-            else
-            {
-                ClearBoundSampledFeedbackTable(tableIndex);
-            }
             VulkanNative.vkCmdBindDescriptorSets(
                 m_VulkanCommandBuffer.NativeCommandBuffer,
                 VkPipelineBindPoint.Graphics,
@@ -4979,10 +4483,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             m_ColorAttachmentInfos = null;
             m_DepthAttachmentInfo = null;
             m_StencilAttachmentInfo = null;
-            m_SampledFeedbackAttachments = null;
-            m_BoundFeedbackTables = null;
-            m_BoundFeedbackRevisions = null;
-            m_BoundFeedbackMasks = null;
             m_PassDescriptor = default;
             commandBuffer.MarkEncoderEndFromEncoder();
             ClearRasterPassState();
@@ -5088,9 +4588,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                     (nuint)sizeof(VkRenderingAttachmentInfo));
             m_VulkanCommandBuffer.RegisterTransientAllocation(
                 m_ColorAttachmentInfos);
-            VkAttachmentFeedbackLoopInfoEXT* feedbackLoopInfos =
-                stackalloc VkAttachmentFeedbackLoopInfoEXT[
-                    Math.Max(1, colorCount)];
             for (int colorIndex = 0;
                  colorIndex < colorCount;
                  ++colorIndex)
@@ -5116,19 +4613,12 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                     attachment.ClearValue.z;
                 clearValue.color.float32[3] =
                     attachment.ClearValue.w;
-                bool hasOrderedFeedbackLoop =
-                    VulkanRasterFeedbackLoopUtility.TryCreateAttachmentInfo(
-                        scopeLayout,
-                        out feedbackLoopInfos[colorIndex]);
                 m_ColorAttachmentInfos[colorIndex] =
                     new VkRenderingAttachmentInfo
                     {
                         sType =
                             VkStructureType.RenderingAttachmentInfo,
-                        pNext =
-                            hasOrderedFeedbackLoop
-                                ? &feedbackLoopInfos[colorIndex]
-                                : null,
+                        pNext = null,
                         imageView = m_ColorViews![colorIndex],
                         imageLayout =
                             ConvertScopeLayout(scopeLayout),
@@ -5297,12 +4787,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                 m_VulkanCommandBuffer.NativeCommandBuffer,
                 &renderingInfo,
                 device.UseDynamicRenderingKhrCommands);
-            for (int colorIndex = 0;
-                 colorIndex < colorCount;
-                 ++colorIndex)
-            {
-                m_ColorAttachmentInfos[colorIndex].pNext = null;
-            }
         }
         private void BeginRenderPass2(
             RHIRasterPassPlan plan,
@@ -5535,9 +5019,8 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                         lowering.AttachmentScopeLayouts
                             .Span[colorIndex]);
                 if (lowering.UsesRenderPass2 &&
-                    destinationLayout is
-                        VkImageLayout.RenderingLocalRead or
-                        VkImageLayout.AttachmentFeedbackLoopOptimalEXT)
+                    destinationLayout ==
+                        VkImageLayout.RenderingLocalRead)
                 {
                     destinationLayout =
                         VkImageLayout.ColorAttachmentOptimal;
@@ -5790,9 +5273,8 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                         lowering.AttachmentScopeLayouts
                             .Span[colorIndex]);
                 if (lowering.UsesRenderPass2 &&
-                    sourceLayout is
-                        VkImageLayout.RenderingLocalRead or
-                        VkImageLayout.AttachmentFeedbackLoopOptimalEXT)
+                    sourceLayout ==
+                        VkImageLayout.RenderingLocalRead)
                 {
                     sourceLayout =
                         VkImageLayout.ColorAttachmentOptimal;
@@ -6203,10 +5685,10 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
 
             VkWriteDescriptorSet* writes =
                 stackalloc VkWriteDescriptorSet[
-                    RHIAttachmentIndexArray.MaxAttachments * 2];
+                    RHIAttachmentIndexArray.MaxAttachments];
             VkDescriptorImageInfo* images =
                 stackalloc VkDescriptorImageInfo[
-                    RHIAttachmentIndexArray.MaxAttachments * 2];
+                    RHIAttachmentIndexArray.MaxAttachments];
             int writeCount = 0;
             VulkanRasterSubPassLowering subPass =
                 RequireActiveLowering().SubPasses.Span[
@@ -6252,41 +5734,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                     };
                 ++writeCount;
             }
-            for (int logicalAttachment = 0;
-                 logicalAttachment <
-                    RHIAttachmentIndexArray.MaxAttachments;
-                 ++logicalAttachment)
-            {
-                byte bit =
-                    checked((byte)(1 << logicalAttachment));
-                if ((bindingPlan.RasterOrderedMask & bit) == 0)
-                {
-                    continue;
-                }
-                images[writeCount] =
-                    new VkDescriptorImageInfo
-                    {
-                        imageView =
-                            m_ColorViews![logicalAttachment],
-                        imageLayout = VkImageLayout.General,
-                    };
-                writes[writeCount] =
-                    new VkWriteDescriptorSet
-                    {
-                        sType =
-                            VkStructureType.WriteDescriptorSet,
-                        dstSet = lease.Set,
-                        dstBinding =
-                            bindingPlan.GetRasterOrderedBinding(
-                                logicalAttachment),
-                        descriptorCount = 1,
-                        descriptorType =
-                            VkDescriptorType.StorageImage,
-                        pImageInfo = &images[writeCount],
-                    };
-                ++writeCount;
-            }
-
             VulkanNative.vkUpdateDescriptorSets(
                 device.NativeDevice,
                 checked((uint)writeCount),
@@ -6311,14 +5758,13 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
         private VkImageLayout GetRenderPassInputLayout(
             int logicalAttachment)
         {
-            EVulkanRasterAttachmentScopeLayout scope =
-                RequireActiveLowering().AttachmentScopeLayouts.Span[
-                    logicalAttachment];
-            return scope ==
-                EVulkanRasterAttachmentScopeLayout
-                    .AttachmentFeedbackLoop
-                ? VkImageLayout
-                    .AttachmentFeedbackLoopOptimalEXT
+            VulkanRasterSubPassLowering subPass =
+                RequireActiveLowering().SubPasses.Span[
+                    m_CurrentSubPassIndex];
+            byte bit =
+                checked((byte)(1 << logicalAttachment));
+            return (subPass.RasterOrderedMask & bit) != 0
+                ? VkImageLayout.General
                 : VkImageLayout.ShaderReadOnlyOptimal;
         }
 
@@ -6338,242 +5784,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             ?? throw new InvalidOperationException(
                 "The Vulkan raster pass is not active.");
 
-        private static void
-            ValidateRasterOrderedAttachmentStorageFormats(
-                RHIRasterPassPlan plan,
-                VulkanRasterPassLowering lowering,
-                VulkanDevice device)
-        {
-            byte rasterOrderedMask = 0;
-            ReadOnlySpan<VulkanRasterSubPassLowering> subPasses =
-                lowering.SubPasses.Span;
-            for (int subPassIndex = 0;
-                 subPassIndex < subPasses.Length;
-                 ++subPassIndex)
-            {
-                rasterOrderedMask |=
-                    subPasses[subPassIndex].RasterOrderedMask;
-            }
-            if (rasterOrderedMask == 0)
-            {
-                return;
-            }
-
-            for (int logicalAttachment = 0;
-                 logicalAttachment < plan.ColorAttachmentCount;
-                 ++logicalAttachment)
-            {
-                byte bit =
-                    checked((byte)(1 << logicalAttachment));
-                if ((rasterOrderedMask & bit) == 0)
-                {
-                    continue;
-                }
-                ref readonly RHIColorAttachmentDescriptor attachment =
-                    ref plan.GetColorAttachment(logicalAttachment);
-                if (attachment.RenderTarget is not
-                    VulkanTexture texture)
-                {
-                    throw new ArgumentException(
-                        "Vulkan RasterOrderedReadWrite attachments must " +
-                        "belong to Vulkan.",
-                        nameof(plan));
-                }
-                if ((texture.Descriptor.UsageFlag &
-                     ERHITextureUsage.RasterizerOrdered) == 0)
-                {
-                    throw new ArgumentException(
-                        $"Vulkan RasterOrderedReadWrite attachment " +
-                        $"{logicalAttachment} lacks canonical " +
-                        "RasterizerOrdered texture usage.",
-                        nameof(plan));
-                }
-                VkImageUsageFlags nativeUsage =
-                    VulkanUtility.ConvertToVkImageUsage(
-                        texture.Descriptor.UsageFlag,
-                        device.SupportsAttachmentFeedbackLoopLayout);
-                if ((nativeUsage & VkImageUsageFlags.Storage) == 0)
-                {
-                    throw new InvalidOperationException(
-                        $"Vulkan RasterOrderedReadWrite attachment " +
-                        $"{logicalAttachment} was not created with " +
-                        "VK_IMAGE_USAGE_STORAGE_BIT.");
-                }
-                if (texture.Descriptor.SampleCount !=
-                    ERHISampleCount.None)
-                {
-                    throw new NotSupportedException(
-                        $"Vulkan RasterOrderedReadWrite attachment " +
-                        $"{logicalAttachment} is multisampled. The " +
-                        "current exact storage-image ABI is single-sample.");
-                }
-
-                VkFormat format =
-                    VulkanUtility.ConvertToVkFormat(
-                        texture.Descriptor.Format);
-                VkFormatProperties formatProperties = default;
-                VulkanNative.vkGetPhysicalDeviceFormatProperties(
-                    device.NativePhysicalDevice,
-                    format,
-                    &formatProperties);
-                if ((formatProperties.optimalTilingFeatures &
-                     VkFormatFeatureFlags.StorageImage) == 0)
-                {
-                    throw new NotSupportedException(
-                        $"Vulkan format {format} for " +
-                        $"RasterOrderedReadWrite attachment " +
-                        $"{logicalAttachment} lacks optimal-tiling " +
-                        "VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT.");
-                }
-            }
-        }
-        private void InitializeSampledFeedbackState(
-            RHIRasterPassPlan plan,
-            VulkanRasterPassLowering lowering,
-            VulkanDevice device)
-        {
-            if (!lowering.UsesSampledFeedback)
-            {
-                m_SampledFeedbackAttachments = null;
-                m_BoundFeedbackTables = null;
-                m_BoundFeedbackRevisions = null;
-                m_BoundFeedbackMasks = null;
-                return;
-            }
-
-            byte passFeedbackMask = 0;
-            ReadOnlySpan<VulkanRasterSubPassLowering> subPasses =
-                lowering.SubPasses.Span;
-            for (int subPassIndex = 0;
-                 subPassIndex < subPasses.Length;
-                 ++subPassIndex)
-            {
-                passFeedbackMask |=
-                    subPasses[subPassIndex].SampledInputMask;
-            }
-
-            int attachmentCount =
-                System.Numerics.BitOperations.PopCount(
-                    (uint)passFeedbackMask);
-            VulkanSampledFeedbackAttachmentFact[] attachments =
-                new VulkanSampledFeedbackAttachmentFact[
-                    attachmentCount];
-            int factIndex = 0;
-            for (int logicalAttachment = 0;
-                 logicalAttachment < plan.ColorAttachmentCount;
-                 ++logicalAttachment)
-            {
-                byte bit =
-                    checked((byte)(1 << logicalAttachment));
-                if ((passFeedbackMask & bit) == 0)
-                {
-                    continue;
-                }
-                ref readonly RHIColorAttachmentDescriptor attachment =
-                    ref plan.GetColorAttachment(logicalAttachment);
-                if (attachment.RenderTarget is not
-                    VulkanTexture texture)
-                {
-                    throw new ArgumentException(
-                        "Vulkan sampled-feedback attachments must " +
-                        "belong to Vulkan.",
-                        nameof(plan));
-                }
-                ERHITextureUsage requiredUsage =
-                    ERHITextureUsage.RenderTarget |
-                    ERHITextureUsage.ShaderResource;
-                if ((texture.Descriptor.UsageFlag & requiredUsage) !=
-                    requiredUsage)
-                {
-                    throw new ArgumentException(
-                        $"Vulkan SampledFeedback attachment " +
-                        $"{logicalAttachment} requires both RenderTarget " +
-                        "and ShaderResource texture usage.",
-                        nameof(plan));
-                }
-                RHITextureSubresourceRange normalizedRange =
-                    VulkanTextureSubresourceRangeUtility.Normalize(
-                        texture.Descriptor,
-                        in attachment.SubresourceRange);
-                attachments[factIndex++] =
-                    new VulkanSampledFeedbackAttachmentFact(
-                        texture.NativeImage,
-                        in normalizedRange,
-                        bit);
-            }
-
-            int maximumBoundSets =
-                checked((int)device.DescriptorLimits.MaximumBoundSets);
-            m_SampledFeedbackAttachments = attachments;
-            m_BoundFeedbackTables =
-                new WeakReference<VulkanBindingTable>?[
-                    maximumBoundSets];
-            m_BoundFeedbackRevisions =
-                new ulong[maximumBoundSets];
-            m_BoundFeedbackMasks =
-                new byte[maximumBoundSets];
-        }
-
-        private void RecordSampledFeedbackTable(
-            uint tableIndex,
-            VulkanBindingTable table,
-            ulong descriptorRevision,
-            byte matchedMask)
-        {
-            WeakReference<VulkanBindingTable>?[] tables =
-                m_BoundFeedbackTables
-                ?? throw new InvalidOperationException(
-                    "The Vulkan sampled-feedback table state is " +
-                    "unavailable.");
-            if (tableIndex >= (uint)tables.Length)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(tableIndex),
-                    tableIndex,
-                    "The descriptor-set index exceeds the Vulkan " +
-                    "device limit.");
-            }
-            int index = checked((int)tableIndex);
-            tables[index] =
-                new WeakReference<VulkanBindingTable>(table);
-            m_BoundFeedbackRevisions![index] =
-                descriptorRevision;
-            m_BoundFeedbackMasks![index] = matchedMask;
-        }
-
-        private void ClearBoundSampledFeedbackTable(
-            uint tableIndex)
-        {
-            WeakReference<VulkanBindingTable>?[]? tables =
-                m_BoundFeedbackTables;
-            if (tables == null)
-            {
-                return;
-            }
-            if (tableIndex >= (uint)tables.Length)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(tableIndex),
-                    tableIndex,
-                    "The descriptor-set index exceeds the Vulkan " +
-                    "device limit.");
-            }
-            int index = checked((int)tableIndex);
-            tables[index] = null;
-            m_BoundFeedbackRevisions![index] = 0;
-            m_BoundFeedbackMasks![index] = 0;
-        }
-
-        private void ClearBoundSampledFeedbackTables()
-        {
-            if (m_BoundFeedbackTables != null)
-            {
-                Array.Clear(m_BoundFeedbackTables);
-                Array.Clear(m_BoundFeedbackRevisions!);
-                Array.Clear(m_BoundFeedbackMasks!);
-            }
-        }
-
         private void RequireBoundPipeline()
         {
             if (m_ActiveNativePipeline == null)
@@ -6581,65 +5791,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                 throw new InvalidOperationException(
                     "A compatible Vulkan raster pipeline must be " +
                     "bound before drawing.");
-            }
-            RequireSampledFeedbackBindings();
-        }
-
-        private void RequireSampledFeedbackBindings()
-        {
-            byte requiredMask =
-                RequireActiveLowering().SubPasses.Span[
-                    m_CurrentSubPassIndex].SampledInputMask;
-            if (requiredMask == 0)
-            {
-                return;
-            }
-
-            WeakReference<VulkanBindingTable>?[] tables =
-                m_BoundFeedbackTables
-                ?? throw new InvalidOperationException(
-                    "The Vulkan sampled-feedback table state is " +
-                    "unavailable.");
-            byte coveredMask = 0;
-            for (int index = 0; index < tables.Length; ++index)
-            {
-                byte tableMask =
-                    checked((byte)(
-                        m_BoundFeedbackMasks![index] &
-                        requiredMask));
-                if (tableMask == 0)
-                {
-                    continue;
-                }
-                WeakReference<VulkanBindingTable>? weakTable =
-                    tables[index];
-                if (weakTable == null ||
-                    !weakTable.TryGetTarget(
-                        out VulkanBindingTable? table))
-                {
-                    throw new ObjectDisposedException(
-                        $"VulkanBindingTable[{index}]",
-                        "A SampledFeedback binding table is no " +
-                        "longer alive; rebind a live table.");
-                }
-                table.EnsureReadyForBinding();
-                if (table.DescriptorRevision !=
-                    m_BoundFeedbackRevisions![index])
-                {
-                    throw new InvalidOperationException(
-                        $"Vulkan SampledFeedback binding table {index} " +
-                        "changed after binding. Rebind it before Draw.");
-                }
-                coveredMask |= tableMask;
-            }
-            if ((coveredMask & requiredMask) != requiredMask)
-            {
-                byte missingMask =
-                    checked((byte)(requiredMask & ~coveredMask));
-                throw new InvalidOperationException(
-                    $"Vulkan SampledFeedback attachments 0x" +
-                    $"{missingMask:X2} are not covered by exact sampled-" +
-                    "image descriptor bindings in the current subpass.");
             }
         }
 
@@ -6653,13 +5804,6 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                 EVulkanRasterAttachmentScopeLayout
                     .RenderingLocalRead =>
                     VkImageLayout.RenderingLocalRead,
-                EVulkanRasterAttachmentScopeLayout
-                    .AttachmentFeedbackLoop =>
-                    VkImageLayout
-                        .AttachmentFeedbackLoopOptimalEXT,
-                EVulkanRasterAttachmentScopeLayout
-                    .GeneralStorage =>
-                    VkImageLayout.General,
                 _ => throw new ArgumentOutOfRangeException(
                     nameof(layout),
                     layout,

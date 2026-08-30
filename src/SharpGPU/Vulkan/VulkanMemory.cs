@@ -83,8 +83,7 @@ namespace SharpGPU
                 samples = VulkanUtility.ConvertToVkSampleCount(descriptor.SampleCount),
                 tiling = VkImageTiling.Optimal,
                 usage = VulkanUtility.ConvertToVkImageUsage(
-                    descriptor.UsageFlag,
-                    device.SupportsAttachmentFeedbackLoopLayout),
+                    descriptor.UsageFlag),
                 sharingMode = VkSharingMode.Exclusive,
                 initialLayout = VkImageLayout.Undefined,
             };

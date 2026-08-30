@@ -95,6 +95,26 @@ public sealed class SharpGPUFeatureReportTests
         Assert.DoesNotContain("\"TimestampQueries\": true", json, StringComparison.Ordinal);
         Assert.Contains("\"Capabilities\":", json, StringComparison.Ordinal);
         Assert.Contains("\"Scenarios\":", json, StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Raster.FramebufferReadWrite\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "\"Name\": \"Raster.RasterOrderedAccess\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "\"Name\": \"Raster.SampledFeedback\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "attachment_feedback_loop",
+            json,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "fragmentShaderPixelInterlock",
+            json,
+            StringComparison.Ordinal);
         File.WriteAllText(path, json);
         m_Output.WriteLine(path);
 

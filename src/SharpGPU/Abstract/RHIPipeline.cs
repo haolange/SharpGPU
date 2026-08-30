@@ -210,6 +210,11 @@ namespace SharpGPU
         public ERHIPixelFormat DepthFormat;
         public ERHIPixelFormat[] ColorFormats;
         public RHIAttachmentInterfaceSignature AttachmentInterface;
+        /// <summary>
+        /// Optional for output-only pipelines and required when the fragment
+        /// shader consumes color attachment inputs.
+        /// </summary>
+        public RHIRasterAttachmentShaderAbiClaim? AttachmentShaderAbiClaim;
         public RHIRenderStateDescriptor RenderState;
         public RHIFunction? FragmentFunction;
         public RHIPipelineLayout? PipelineLayout;
@@ -521,7 +526,149 @@ namespace SharpGPU
             return false;
         }
 
-        private static RHIBlendDescriptor GetBlendDescriptor(
+        internal static void ValidateAttachmentSupport(
+            RHIDevice device,
+            in RHIRasterPipelineDescriptor descriptor)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+            RHIAttachmentInterfaceSignature attachmentInterface =
+                descriptor.AttachmentInterface;
+            for (int logicalAttachment = 0;
+                 logicalAttachment <
+                    attachmentInterface.ColorAttachmentCount;
+                 ++logicalAttachment)
+            {
+                byte bit =
+                    checked((byte)(1 << logicalAttachment));
+                bool isInput =
+                    (attachmentInterface.ColorInputMask & bit) != 0;
+                bool isOutput =
+                    (attachmentInterface.ColorOutputMask & bit) != 0;
+                if (!isInput && !isOutput)
+                {
+                    continue;
+                }
+
+                RHIBlendDescriptor blend = default;
+                if (isOutput)
+                {
+                    int outputLocation =
+                        FindOutputLocation(
+                            in attachmentInterface,
+                            logicalAttachment);
+                    int blendIndex =
+                        descriptor.RenderState.BlendState
+                            .IndependentBlend
+                            ? outputLocation
+                            : 0;
+                    blend = GetBlendDescriptor(
+                        in descriptor.RenderState.BlendState,
+                        blendIndex);
+                }
+                RHIRasterAttachmentSupportQuery query = new(
+                    descriptor.ColorFormats[logicalAttachment],
+                    descriptor.SampleCount,
+                    isInput,
+                    isOutput,
+                    in blend,
+                    alphaToCoverage: descriptor.RenderState.BlendState
+                        .AlphaToCoverage,
+                    isLayered:
+                        (attachmentInterface.LayeredAccessMask & bit) != 0);
+                RHICapability support =
+                    device.QueryRasterAttachmentSupport(in query);
+                if (support.Tier == ERHICapabilityTier.Unavailable)
+                {
+                    throw new NotSupportedException(
+                        $"{device.BackendType} cannot express logical " +
+                        $"color attachment {logicalAttachment} " +
+                        $"(Input={isInput}, Output={isOutput}, " +
+                        $"Layered={query.IsLayered}, " +
+                        $"Format={query.Format}, Samples={query.SampleCount}, " +
+                        $"Blend={query.Blend.BlendEnable}, " +
+                        $"AlphaToCoverage={query.AlphaToCoverage}): " +
+                        support.UnavailableReason);
+                }
+            }
+
+            ValidateAttachmentShaderAbi(device, in descriptor);
+        }
+
+        internal static void ValidateAttachmentShaderAbi(
+            RHIDevice device,
+            in RHIRasterPipelineDescriptor descriptor)
+        {
+            RHIAttachmentInterfaceSignature attachmentInterface =
+                descriptor.AttachmentInterface;
+            RHIRasterAttachmentShaderAbiClaim? claim =
+                descriptor.AttachmentShaderAbiClaim;
+            bool requiresClaim = attachmentInterface.ColorInputMask != 0;
+            if (!requiresClaim && !claim.HasValue)
+            {
+                return;
+            }
+            if (descriptor.FragmentFunction == null)
+            {
+                throw new ArgumentException(
+                    "A raster attachment input requires a fragment function.",
+                    nameof(descriptor));
+            }
+            if (!claim.HasValue)
+            {
+                throw new InvalidOperationException(
+                    "The raster pipeline does not claim the versioned SharpGPU attachment shader ABI required by its Inputs declaration.");
+            }
+            RHIPipelineLayout pipelineLayout =
+                descriptor.PipelineLayout ??
+                throw new ArgumentException(
+                    "Raster attachment shader ABI validation requires a pipeline layout.",
+                    nameof(descriptor));
+            RHIRasterAttachmentShaderAbiDescriptor abiDescriptor = new()
+            {
+                PipelineLayout = pipelineLayout,
+                SampleCount = descriptor.SampleCount,
+                ColorFormats = descriptor.ColorFormats,
+                AttachmentInterface = attachmentInterface,
+            };
+            RHIRasterAttachmentShaderAbi expected =
+                device.QueryRasterAttachmentShaderAbi(in abiDescriptor);
+            RHIRasterAttachmentShaderAbiClaim expectedClaim =
+                expected.CreateClaim();
+            if (claim.Value != expectedClaim)
+            {
+                throw new InvalidOperationException(
+                    $"The raster pipeline attachment shader ABI claim " +
+                    $"({claim.Value.Backend}/v{claim.Value.Revision}/" +
+                    $"{claim.Value.ContractHash}) does not match the " +
+                    $"pipeline contract ({expectedClaim.Backend}/" +
+                    $"v{expectedClaim.Revision}/" +
+                    $"{expectedClaim.ContractHash}).");
+            }
+        }
+
+        private static int FindOutputLocation(
+            in RHIAttachmentInterfaceSignature attachmentInterface,
+            int logicalAttachment)
+        {
+            for (int outputLocation = 0;
+                 outputLocation <
+                    attachmentInterface.ColorOutputLocationCount;
+                 ++outputLocation)
+            {
+                if (attachmentInterface
+                        .GetColorOutputLogicalAttachment(
+                            outputLocation) ==
+                    logicalAttachment)
+                {
+                    return outputLocation;
+                }
+            }
+            throw new InvalidOperationException(
+                $"Logical attachment {logicalAttachment} is marked as an " +
+                "output but has no output location.");
+        }
+
+        internal static RHIBlendDescriptor GetBlendDescriptor(
             in RHIBlendStateDescriptor blendState,
             int index)
         {
@@ -803,6 +950,25 @@ namespace SharpGPU
     }
     #endregion
 
+    #region MLBinaryHash
+    internal static class RHIMLBinaryHash
+    {
+        internal static ulong ComputeContentHash(ReadOnlySpan<byte> payload)
+        {
+            const ulong offsetBasis = 0xCBF29CE484222325UL;
+            const ulong prime = 0x100000001B3UL;
+            ulong hash = offsetBasis;
+            for (int i = 0; i < payload.Length; ++i)
+            {
+                hash ^= payload[i];
+                hash *= prime;
+            }
+
+            return hash;
+        }
+    }
+    #endregion
+
     #region MLBinary
     public enum ERHIMLBinaryFormat : byte
     {
@@ -967,8 +1133,8 @@ namespace SharpGPU
 
     internal readonly struct RHIPipelineCacheIdentity
     {
-        public const uint CurrentSchemaRevision = 1;
-        public const uint CurrentPipelineAbiRevision = 4;
+        public const uint CurrentSchemaRevision = 3;
+        public const uint CurrentPipelineAbiRevision = 7;
 
         public ERHIBackend Backend { get; }
         public uint VendorId { get; }
@@ -1278,18 +1444,19 @@ namespace SharpGPU
                 writer.Write(
                     attachment.GetColorOutputLogicalAttachment(outputLocation));
             }
-            writer.Write(attachment.SampledFeedbackSlotCount);
-            for (int sampledOrdinal = 0;
-                 sampledOrdinal < attachment.SampledFeedbackSlotCount;
-                 ++sampledOrdinal)
-            {
-                writer.Write(
-                    attachment.GetSampledFeedbackLogicalAttachment(sampledOrdinal));
-            }
-            writer.Write(attachment.RasterOrderedReadWriteMask);
+            writer.Write(attachment.FramebufferReadWriteMask);
             writer.Write(attachment.LayeredAccessMask);
             writer.Write((byte)attachment.DepthStencilFlags);
             writer.Write(attachment.UsesDualSourceColor);
+            writer.Write(snapshot.AttachmentShaderAbiClaim.HasValue);
+            if (snapshot.AttachmentShaderAbiClaim.HasValue)
+            {
+                RHIRasterAttachmentShaderAbiClaim claim =
+                    snapshot.AttachmentShaderAbiClaim.Value;
+                writer.Write((byte)claim.Backend);
+                writer.Write(claim.Revision);
+                writer.Write(claim.ContractHash);
+            }
 
             WriteRenderState(writer, snapshot.RenderState);
             WritePrimitiveAssembler(writer, snapshot.PrimitiveAssembler);

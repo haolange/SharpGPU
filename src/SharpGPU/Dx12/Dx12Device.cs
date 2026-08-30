@@ -295,6 +295,243 @@ namespace SharpGPU
             return new Dx12Texture(this, descriptor);
         }
 
+        public override RHICapability QueryRasterAttachmentSupport(
+            in RHIRasterAttachmentSupportQuery query)
+        {
+            ThrowIfDisposed();
+            const string ProbeSource =
+                "ID3D12Device.CheckFeatureSupport(FORMAT_SUPPORT) + " +
+                "CheckMultisampleQualityLevels + ROVsSupported";
+
+            Vortice.DXGI.Format format =
+                Dx12Utility.ConvertToDx12ViewFormat(query.Format);
+            if (!NativeDevice.CheckFormatSupport(
+                    format,
+                    out Vortice.Direct3D12.FormatSupport1 support1,
+                    out Vortice.Direct3D12.FormatSupport2 support2))
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 did not report format support for {query.Format}.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            if (query.IsInput && query.IsOutput)
+            {
+                RHICapability framebufferReadWrite =
+                    Capabilities.Raster.FramebufferReadWrite;
+                if (framebufferReadWrite.Tier ==
+                    ERHICapabilityTier.Unavailable)
+                {
+                    return framebufferReadWrite;
+                }
+                if (query.SampleCount != ERHISampleCount.None)
+                {
+                    return RHICapability.Unavailable(
+                        "DX12 framebuffer read/write uses a rasterizer-" +
+                        "ordered texture and cannot represent multisampling.",
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        ProbeSource);
+                }
+                if (query.Blend.BlendEnable ||
+                    query.AlphaToCoverage)
+                {
+                    return RHICapability.Unavailable(
+                        "DX12 cannot apply fixed-function hardware blend or " +
+                        "alpha-to-coverage to " +
+                        "a rasterizer-ordered attachment without changing " +
+                        "the requested shader-visible RMW semantics.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU DX12 exact framebuffer read/write lowering");
+                }
+                if (query.Blend.ColorWriteChannel !=
+                    ERHIColorWriteChannel.All)
+                {
+                    return RHICapability.Unavailable(
+                        "DX12 rasterizer-ordered attachment writes cannot " +
+                        "apply an output-merger color write mask exactly.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU DX12 exact framebuffer read/write lowering");
+                }
+                Vortice.Direct3D12.FormatSupport2 required =
+                    Vortice.Direct3D12.FormatSupport2
+                        .UnorderedAccessViewTypedLoad |
+                    Vortice.Direct3D12.FormatSupport2
+                        .UnorderedAccessViewTypedStore;
+                if ((support1 &
+                     Vortice.Direct3D12.FormatSupport1
+                        .TypedUnorderedAccessView) == 0 ||
+                    (support2 & required) != required)
+                {
+                    return RHICapability.Unavailable(
+                        $"DX12 format {query.Format} lacks typed UAV " +
+                        "load/store support required by framebuffer read/write.",
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        ProbeSource);
+                }
+            }
+            else
+            {
+                if (query.IsInput &&
+                    (support1 &
+                     Vortice.Direct3D12.FormatSupport1.ShaderLoad) == 0)
+                {
+                    return RHICapability.Unavailable(
+                        $"DX12 format {query.Format} lacks shader-load support.",
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        ProbeSource);
+                }
+                if (query.IsOutput &&
+                    (support1 &
+                     Vortice.Direct3D12.FormatSupport1.RenderTarget) == 0)
+                {
+                    return RHICapability.Unavailable(
+                        $"DX12 format {query.Format} is not render-target capable.",
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        ProbeSource);
+                }
+                if (query.IsOutput &&
+                    query.Blend.BlendEnable &&
+                    (support1 &
+                     Vortice.Direct3D12.FormatSupport1.Blendable) == 0)
+                {
+                    return RHICapability.Unavailable(
+                        $"DX12 format {query.Format} is not hardware-blendable.",
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        ProbeSource);
+                }
+                uint sampleCount = checked((uint)query.SampleCount);
+                if (sampleCount > 1 &&
+                    NativeDevice.CheckMultisampleQualityLevels(
+                        format,
+                        sampleCount) == 0)
+                {
+                    return RHICapability.Unavailable(
+                        $"DX12 format {query.Format} does not support " +
+                        $"{sampleCount}x MSAA.",
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        ProbeSource);
+                }
+            }
+
+            return RHICapability.Available(
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.NativeSpecialized,
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                ProbeSource);
+        }
+
+        public override RHIRasterAttachmentShaderAbi
+            QueryRasterAttachmentShaderAbi(
+                in RHIRasterAttachmentShaderAbiDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            Dx12PipelineLayout pipelineLayout =
+                descriptor.PipelineLayout as Dx12PipelineLayout ??
+                throw new ArgumentException(
+                    "DX12 attachment shader ABI requires a DX12 pipeline layout.",
+                    nameof(descriptor));
+            if (!ReferenceEquals(pipelineLayout.Device, this))
+            {
+                throw new ArgumentException(
+                    "DX12 attachment shader ABI pipeline layout belongs to a different device.",
+                    nameof(descriptor));
+            }
+
+            RHIAttachmentInterfaceSignature signature =
+                descriptor.AttachmentInterface;
+            List<RHIRasterAttachmentShaderBinding> bindings = new();
+            for (int logicalAttachment = 0;
+                 logicalAttachment < signature.ColorAttachmentCount;
+                 ++logicalAttachment)
+            {
+                int inputSlot =
+                    RHIRasterAttachmentShaderAbiFactory.FindInputSlot(
+                        in signature,
+                        logicalAttachment);
+                int outputLocation =
+                    RHIRasterAttachmentShaderAbiFactory.FindOutputLocation(
+                        in signature,
+                        logicalAttachment);
+                if (inputSlot < 0 && outputLocation < 0)
+                {
+                    continue;
+                }
+
+                RHIRawShaderBindingLocation input = default;
+                RHIRawShaderBindingLocation output = default;
+                bool readWrite = inputSlot >= 0 && outputLocation >= 0;
+                if (readWrite)
+                {
+                    if (descriptor.SampleCount != ERHISampleCount.None)
+                    {
+                        throw new NotSupportedException(
+                            "DX12 framebuffer read/write cannot represent " +
+                            "multisampling.");
+                    }
+                    RHIRawShaderBindingLocation location = new(
+                        ERHIRawShaderBindingKind.UnorderedAccess,
+                        checked((uint)logicalAttachment),
+                        Dx12PipelineLayoutPlan.AttachmentRegisterSpace);
+                    input = location;
+                    output = location;
+                }
+                else
+                {
+                    if (inputSlot >= 0)
+                    {
+                        input = new RHIRawShaderBindingLocation(
+                            ERHIRawShaderBindingKind.ShaderResource,
+                            checked((uint)inputSlot),
+                            Dx12PipelineLayoutPlan.AttachmentRegisterSpace);
+                    }
+                    if (outputLocation >= 0)
+                    {
+                        output = new RHIRawShaderBindingLocation(
+                            ERHIRawShaderBindingKind.ColorAttachment,
+                            checked((uint)outputLocation));
+                    }
+                }
+                bindings.Add(new RHIRasterAttachmentShaderBinding(
+                    logicalAttachment,
+                    inputSlot,
+                    outputLocation,
+                    input,
+                    output));
+            }
+
+            return RHIRasterAttachmentShaderAbiFactory.Create(
+                BackendType,
+                in descriptor,
+                bindings.ToArray());
+        }
+
+        internal static string GetRawAttachmentTextureType(
+            bool readWrite,
+            bool layered,
+            ERHISampleCount sampleCount)
+        {
+            if (readWrite)
+            {
+                if (sampleCount != ERHISampleCount.None)
+                {
+                    throw new NotSupportedException(
+                        "DX12 rasterizer-ordered attachment shader ABI " +
+                        "cannot represent multisampling.");
+                }
+                return layered
+                    ? "RasterizerOrderedTexture2DArray"
+                    : "RasterizerOrderedTexture2D";
+            }
+            return sampleCount == ERHISampleCount.None
+                ? layered
+                    ? "Texture2DArray"
+                    : "Texture2D"
+                : layered
+                    ? "Texture2DMSArray"
+                    : "Texture2DMS";
+        }
+
         public override RHITexture CreatePlacedTexture(
             RHIHeap heap,
             ulong heapOffset,
@@ -1105,10 +1342,11 @@ namespace SharpGPU
                         "D3D12 pixel-shader UAV contract",
                         "Pixel-shader storage writes are unavailable.",
                         limits: rasterLimits),
-                    rasterOrderedAccess: Probe(
+                    framebufferReadWrite: Probe(
                         isRasterizerOrderedSupported,
                         "D3D12_FEATURE_D3D12_OPTIONS.ROVsSupported",
-                        "Rasterizer-ordered views are unavailable or not lowered by SharpGPU."),
+                        "Framebuffer read/write is unavailable because " +
+                        "rasterizer-ordered views are unsupported."),
                     anisotropicSampling: Probe(
                         isAnisotropyTextureSupported,
                         "D3D12 sampler contract",
@@ -1121,10 +1359,6 @@ namespace SharpGPU
                         isFramebufferLocalReadLoweringSupported,
                         "DX12 OM multipass + private attachment SRV lowering",
                         "Framebuffer-local reads cannot be lowered by the current DX12 adapter."),
-                    sampledFeedback: Probe(
-                        false,
-                        "SharpGPU DX12 sampled-feedback lowering",
-                        "DX12 has no exact attachment feedback-loop layout mechanism exposed by this backend."),
                     drawIndirect: Probe(
                         isDrawIndirectSupported,
                         "ID3D12GraphicsCommandList.ExecuteIndirect",

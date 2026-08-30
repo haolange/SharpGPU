@@ -827,6 +827,9 @@ namespace SharpGPU
             Dx12PipelineCache? pipelineCache)
         {
             m_Descriptor = RHIRasterPipelineContract.SnapshotAndValidate(in descriptor);
+            RHIRasterPipelineContract.ValidateAttachmentSupport(
+                device,
+                in m_Descriptor);
             if (descriptor.PrimitiveAssembler.PrimitiveType == ERHIPrimitiveType.Mesh)
             {
                 device.Capabilities.Mesh.Shader.Require(
@@ -1368,25 +1371,6 @@ namespace SharpGPU
                 Outputs = outputs ?? Array.Empty<RHIMLTensorDescriptor>(),
                 Ops = ops ?? Array.Empty<RHIMLOpDescriptor>(),
             };
-        }
-    }
-    #endregion
-
-    #region MLBinaryHash
-    internal static class RHIMLBinaryHash
-    {
-        internal static ulong ComputeContentHash(ReadOnlySpan<byte> payload)
-        {
-            const ulong offsetBasis = 0xCBF29CE484222325UL;
-            const ulong prime = 0x100000001B3UL;
-            ulong hash = offsetBasis;
-            for (int i = 0; i < payload.Length; ++i)
-            {
-                hash ^= payload[i];
-                hash *= prime;
-            }
-
-            return hash;
         }
     }
     #endregion

@@ -11,8 +11,7 @@ public sealed class MetalRasterSubpassLoweringTests
     private static readonly MetalRasterCapabilities s_AllCapabilities =
         new(
             colorOutputMapping: true,
-            framebufferLocalRead: true,
-            rasterOrderGroups: true);
+            framebufferLocalRead: true);
 
     [Fact]
     [Trait("Category", "SharpGpuPortable")]
@@ -97,8 +96,7 @@ public sealed class MetalRasterSubpassLoweringTests
         MetalRasterCapabilities noLocalRead =
             new(
                 colorOutputMapping: true,
-                framebufferLocalRead: false,
-                rasterOrderGroups: true);
+                framebufferLocalRead: false);
         Assert.Throws<NotSupportedException>(
             () => MetalRasterPassLowering.Compile(
                 localRead,
@@ -114,8 +112,7 @@ public sealed class MetalRasterSubpassLoweringTests
         MetalRasterCapabilities noOutputMapping =
             new(
                 colorOutputMapping: false,
-                framebufferLocalRead: true,
-                rasterOrderGroups: true);
+                framebufferLocalRead: true);
         Assert.Throws<NotSupportedException>(
             () => MetalRasterPassLowering.Compile(
                 outputMapping,
@@ -124,17 +121,13 @@ public sealed class MetalRasterSubpassLoweringTests
 
     [Fact]
     [Trait("Category", "SharpGpuPortable")]
-    public void RasterOrderedTextureIsNotAnOrdinaryColorAttachment()
+    public void FramebufferReadWriteRemainsAnOrdinaryColorAttachment()
     {
-        using TestTexture ordered = CreateColorTexture(
-            ERHITextureUsage.RenderTarget |
-            ERHITextureUsage.RasterizerOrdered);
+        using TestTexture readWrite = CreateColorTexture();
         RHIRasterPassPlan plan = Compile(
             new[]
             {
-                CreateAttachment(
-                    ordered,
-                    ERHIRasterAttachmentAccess.RasterOrderedReadWrite),
+                CreateAttachment(readWrite),
             },
             CreateSubPass(
                 inputs: new[] { 0 },
@@ -147,42 +140,12 @@ public sealed class MetalRasterSubpassLoweringTests
         MetalRasterSubPassLowering phase =
             lowering.SubPasses.Span[0];
 
-        Assert.True(lowering.RequiresRasterOrderGroups);
-        Assert.Equal(0, lowering.OrdinaryAttachmentMask);
-        Assert.Equal(1, lowering.RasterOrderedAttachmentMask);
+        Assert.False(lowering.RequiresFramebufferLocalRead);
+        Assert.False(lowering.RequiresColorAttachmentMapping);
+        Assert.Equal(1, lowering.OrdinaryAttachmentMask);
         Assert.Equal(0, phase.LocalInputMask);
-        Assert.Equal(0, phase.OrdinaryOutputMask);
-        Assert.Equal(1, phase.RasterOrderedMask);
-        Assert.Equal(
-            ulong.MaxValue,
-            phase.GetPhysicalOutputAttachmentIndex(0));
-    }
-
-    [Fact]
-    [Trait("Category", "SharpGpuPortable")]
-    public void SampledFeedbackNeverCreatesPrivateMetalBinding()
-    {
-        using TestTexture input = CreateColorTexture();
-        using TestTexture output = CreateColorTexture();
-        RHIRasterPassPlan plan = Compile(
-            new[]
-            {
-                CreateAttachment(input),
-                CreateAttachment(output),
-            },
-            CreateSubPass(
-                outputs: new[] { 1 },
-                sampled: new[] { 0 }));
-
-        NotSupportedException error =
-            Assert.Throws<NotSupportedException>(
-                () => MetalRasterPassLowering.Compile(
-                    plan,
-                    in s_AllCapabilities));
-        Assert.Contains(
-            "no private Metal attachment binding",
-            error.Message,
-            StringComparison.Ordinal);
+        Assert.Equal(1, phase.OrdinaryOutputMask);
+        Assert.Equal(0ul, phase.GetPhysicalOutputAttachmentIndex(0));
     }
 
     [Fact]
@@ -217,12 +180,10 @@ public sealed class MetalRasterSubpassLoweringTests
             MetalRasterCapabilities.FromSelectorProbes(
                 passMappingSelector: true,
                 mapEntrySelector: true,
-                encoderMappingSelector: false,
-                rasterOrderGroups: true);
+                encoderMappingSelector: false);
 
         Assert.False(capabilities.ColorOutputMapping);
         Assert.False(capabilities.FramebufferLocalRead);
-        Assert.True(capabilities.RasterOrderGroups);
         Assert.False(capabilities.EncoderMappingSelector);
     }
 
@@ -313,9 +274,7 @@ public sealed class MetalRasterSubpassLoweringTests
     }
 
     private static RHIColorAttachmentDescriptor CreateAttachment(
-        RHITexture texture,
-        ERHIRasterAttachmentAccess access =
-            ERHIRasterAttachmentAccess.None) =>
+        RHITexture texture) =>
         new()
         {
             RenderTarget = texture,
@@ -323,13 +282,11 @@ public sealed class MetalRasterSubpassLoweringTests
                 RHITextureSubresourceRange.Whole(),
             LoadAction = ERHILoadAction.Load,
             StoreAction = ERHIStoreAction.Store,
-            Access = access,
         };
 
     private static RHISubPassDescriptor CreateSubPass(
         int[]? inputs = null,
-        int[]? outputs = null,
-        int[]? sampled = null) =>
+        int[]? outputs = null) =>
         new()
         {
             ColorInputs = inputs is null
@@ -338,9 +295,6 @@ public sealed class MetalRasterSubpassLoweringTests
             ColorOutputs = outputs is null
                 ? RHIAttachmentIndexArray.Empty
                 : new RHIAttachmentIndexArray(outputs),
-            SampledFeedbackInputs = sampled is null
-                ? RHIAttachmentIndexArray.Empty
-                : new RHIAttachmentIndexArray(sampled),
         };
 
     private static TestTexture CreateColorTexture(

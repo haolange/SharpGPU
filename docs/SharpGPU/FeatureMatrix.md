@@ -15,11 +15,11 @@ documented exception/status model.
 
 | Platform | Artifact | Current status |
 |---|---|---|
-| Windows x64 | `docs/Artifacts/SharpGPU/feature-report-win-x64.json` | W12 regenerated schema revision 2 (no absolute workspace paths) |
-| Android ARM64 | `docs/Artifacts/SharpGPU/feature-report-android-arm64.json` | W12 generated after API30/ARM64/Adreno650 device qualification; DirectStorage=NotApplicable; not a full-Android certification |
+| Windows x64 | `docs/Artifacts/SharpGPU/feature-report-win-x64.json` | Current ADR-0064 schema-revision-2 capability report regenerated on 2026-08-30; the report is not a substitute for the separately blocked Windows/Vulkan qualified gates |
+| Android ARM64 | `docs/Artifacts/SharpGPU/feature-report-android-arm64.json` | Historical pre-ADR-0064 API30/ARM64/Adreno650 lifecycle evidence only; current attachment qualification is unverified |
 | Linux x64 | none (do not invent placeholders) | `BLOCKED_PLATFORM` / Unverified until matching-host Vulkan qualification passes (`P13-LINUX`) |
-| macOS ARM64 | `docs/Artifacts/SharpGPU/feature-report-macos-arm64.json` | P13-MACOS regenerated schema revision 2 on Apple M3 Max (Metal/Vulkan Passed; DX12 NotApplicable; no absolute workspace paths) |
-| iOS/iPadOS ARM64 | `docs/Artifacts/SharpGPU/feature-report-ios-arm64.json` | P13-IOS regenerated schema revision 2 on physical iPhone 17 Pro (Metal install/lifecycle Passed; remote orientation Unverified; DirectStorage NotApplicable; no device serials) |
+| macOS ARM64 | none (current report name intentionally absent) | Historical bytes are preserved as `docs/Artifacts/SharpGPU/historical-pre-adr0064-feature-report-macos-arm64.json`; a matching Apple host must regenerate the current report |
+| iOS/iPadOS ARM64 | `docs/Artifacts/SharpGPU/feature-report-ios-arm64.json` | Historical pre-ADR-0064 physical-device lifecycle evidence only; current attachment qualification is unverified |
 
 ## Hard Gate Categories (RFC-0021)
 
@@ -53,6 +53,7 @@ A Successful native capability probe is never a substitute for a Passed Qualifie
 | StorageQueue | `RHIDeviceCapabilities.Storage.NativeGpuFileIo`, `RHIStorageQueue` | Typed capability + API contract | DX12 DirectStorage file → GPU-local buffer/texture → fence → readback under `SharpGpuDirectStorageQualified` | non-native backends and missing DirectStorage support throw `NotSupportedException`; no FileStream/map/staging queue fallback |
 | PipelineCache | `RHIDeviceCapabilities.PipelineCache.NativeCache`, `RHIPipelineCache` | Typed capability + API contract | cold/warm/restart native hit, typed corrupt/incompatible import, full-key non-collision | unavailable native cache strategy throws `NotSupportedException`; caller owns opaque blobs |
 | WorkGraph | `RHIDeviceCapabilities.WorkGraph.Execution`, `RHIWorkGraphPipeline`, `RHIWorkGraphEncoder` | Typed capability | native create/dispatch/readback on each reported strategy | factory/encoding throws `NotSupportedException` when unavailable |
+| FramebufferReadWrite | `RHIDeviceCapabilities.Raster.FramebufferReadWrite`, `QueryRasterAttachmentSupport`, `RHIAttachmentShaderAbi` | Typed capability + API contract | same-phase `Inputs ∩ Outputs`, exact format/sample/layer/blend query, Raw ABI revision/hash claim, and backend lowering qualification | unsupported combinations fail before pipeline creation; hardware blend is never silently disabled or rewritten |
 | RasterSubPass | `RHIRasterPassDescriptor`, `RHISubPassDescriptor`, `NextSubPass` | Typed capability + API contract | immutable planner tests and backend multi-subpass pixel/readback qualification | inexpressible access/attachment contracts fail before native encoding; no public layout/bindings type |
 | Presentation | `RHIDeviceCapabilities.Presentation.SwapChain`/`Hdr`, swapchain acquire/present/resize typed status plus fence/semaphore sync | Typed capability + API contract | matching-window minimize/resize/out-of-date/surface-lost/device-lost scenarios | HAL reports status and never performs hidden recreate or queue idle; acquire signal, present wait, and present completion are available whenever swapchain is |
 
@@ -64,6 +65,8 @@ A Successful native capability probe is never a substitute for a Passed Qualifie
   qualification reports.
 - Unknown enums, illegal combinations, and capability/factory disagreement
   fail closed.
+- Fixed-function blend is orthogonal to attachment read/write. The exact
+  combination either executes unchanged or is rejected.
 - A `Qualified` category may not skip, silently return, or use a CPU fallback.
 
 `SharpGPUFeatureMatrixDocumentationTests` guards the public row names. Runtime

@@ -501,13 +501,6 @@ namespace SharpGPU
         ReadOnlyDepthStencil = ReadOnlyDepth | ReadOnlyStencil
     }
 
-    [System.Flags]
-    public enum ERHIRasterAttachmentAccess : byte
-    {
-        None = 0,
-        RasterOrderedReadWrite = 1 << 0
-    }
-
     public enum ERHILoadAction : byte
     {
         Load,
@@ -553,7 +546,6 @@ namespace SharpGPU
         IndirectArgument = 0x20,
         ShaderResource = 0x40,
         UnorderedAccess = 0x80,
-        RasterizerOrdered = 0x100,
         AccelStructRead = 0x200,
         AccelStructWrite = 0x400,
         AccelStructBuildInput = 0x800,
@@ -574,7 +566,6 @@ namespace SharpGPU
         RenderTarget = 0x80,
         ShaderResource = 0x100,
         UnorderedAccess = 0x200,
-        RasterizerOrdered = 0x400,
         ShadingRateSurface = 0x800,
         Pending
     }
@@ -590,7 +581,6 @@ namespace SharpGPU
         IndirectBuffer = 0x40,
         ShaderResource = 0x80,
         UnorderedAccess = 0x100,
-        RasterizerOrdered = 0x200,
         Pending
     }
 
@@ -600,7 +590,6 @@ namespace SharpGPU
         UniformBuffer,
         ShaderResource,
         UnorderedAccess,
-        RasterizerOrdered,
         Pending
     }
 
@@ -613,7 +602,6 @@ namespace SharpGPU
         ResolveTarget = 0x10,
         ShaderResource = 0x20,
         UnorderedAccess = 0x40,
-        RasterizerOrdered = 0x80,
         Pending
     }
 
@@ -621,7 +609,6 @@ namespace SharpGPU
     {
         ShaderResource,
         UnorderedAccess,
-        RasterizerOrdered,
         Pending
     }
 

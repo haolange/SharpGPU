@@ -32,60 +32,6 @@ public sealed class VulkanRasterW6ConvergenceTests
 
     [Fact]
     [Trait("Category", "SharpGpuPortable")]
-    public void SampledFeedbackRangeClassification_IsExactAndFailClosed()
-    {
-        VkImage image = new(17);
-        RHITextureSubresourceRange exact = Range(
-            ERHITextureAspectMask.Color,
-            mip: 1,
-            mipCount: 2,
-            layer: 3,
-            layerCount: 2);
-        RHITextureSubresourceRange partialMip = Range(
-            ERHITextureAspectMask.Color,
-            mip: 2,
-            mipCount: 1,
-            layer: 3,
-            layerCount: 2);
-        RHITextureSubresourceRange disjointLayer = Range(
-            ERHITextureAspectMask.Color,
-            mip: 1,
-            mipCount: 2,
-            layer: 8,
-            layerCount: 1);
-
-        Assert.Equal(
-            EVulkanSampledFeedbackRangeRelation.Exact,
-            VulkanSampledFeedbackRangeUtility.Classify(
-                image,
-                in exact,
-                image,
-                in exact));
-        Assert.Equal(
-            EVulkanSampledFeedbackRangeRelation.PartialOverlap,
-            VulkanSampledFeedbackRangeUtility.Classify(
-                image,
-                in partialMip,
-                image,
-                in exact));
-        Assert.Equal(
-            EVulkanSampledFeedbackRangeRelation.Disjoint,
-            VulkanSampledFeedbackRangeUtility.Classify(
-                image,
-                in disjointLayer,
-                image,
-                in exact));
-        Assert.Equal(
-            EVulkanSampledFeedbackRangeRelation.DifferentImage,
-            VulkanSampledFeedbackRangeUtility.Classify(
-                new VkImage(18),
-                in exact,
-                image,
-                in exact));
-    }
-
-    [Fact]
-    [Trait("Category", "SharpGpuPortable")]
     public void CombinedDepthStencilBarrier_ExpandsOnlyWhenNativeLayoutRequiresIt()
     {
         Assert.Equal(
@@ -107,25 +53,6 @@ public sealed class VulkanRasterW6ConvergenceTests
                 supportsSeparateDepthStencilLayouts: false,
                 ERHIPixelFormat.D32_Float,
                 ERHITextureAspectMask.Depth));
-    }
-
-    [Fact]
-    [Trait("Category", "SharpGpuPortable")]
-    public void SampledFeedbackPipeline_UsesNamedColorFeedbackFlagOnly()
-    {
-        RHIAttachmentInterfaceSignature ordinary =
-            CreateSignature(outputs: new[] { 0 });
-        RHIAttachmentInterfaceSignature feedback =
-            CreateSignature(
-                outputs: new[] { 0 },
-                sampledFeedback: new[] { 0 });
-
-        Assert.Equal(
-            (VkPipelineCreateFlags)0,
-            VulkanRasterPipelineFlagUtility.Get(in ordinary));
-        Assert.Equal(
-            VkPipelineCreateFlags.ColorAttachmentFeedbackLoopEXT,
-            VulkanRasterPipelineFlagUtility.Get(in feedback));
     }
 
     [Fact]
@@ -229,76 +156,6 @@ public sealed class VulkanRasterW6ConvergenceTests
                 in capabilities));
     }
 
-    [Fact]
-    [Trait("Category", "SharpGpuPortable")]
-    public void RenderPass2Description_DeclaresFeedbackOnlyInOwningPhase()
-    {
-        using TestTexture color = new(
-            new RHITextureDescriptor
-            {
-                Extent = new uint3(4, 4, 1),
-                MipCount = 1,
-                Dimension = ERHITextureDimension.Texture2D,
-                Format = ERHIPixelFormat.R8G8B8A8_UNorm,
-                SampleCount = ERHISampleCount.None,
-                StorageMode = ERHIStorageMode.GPULocal,
-                UsageFlag =
-                    ERHITextureUsage.RenderTarget |
-                    ERHITextureUsage.ShaderResource,
-            });
-        RHIRasterPassDescriptor descriptor = new()
-        {
-            ColorAttachments = new[]
-            {
-                new RHIColorAttachmentDescriptor
-                {
-                    RenderTarget = color,
-                    LoadAction = ERHILoadAction.Load,
-                    StoreAction = ERHIStoreAction.Store,
-                },
-            },
-            SubPassDescriptors = new[]
-            {
-                new RHISubPassDescriptor
-                {
-                    ColorOutputs =
-                        new RHIAttachmentIndexArray(new[] { 0 }),
-                },
-                new RHISubPassDescriptor
-                {
-                    ColorOutputs =
-                        new RHIAttachmentIndexArray(new[] { 0 }),
-                    SampledFeedbackInputs =
-                        new RHIAttachmentIndexArray(new[] { 0 }),
-                },
-            },
-        };
-        RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
-        VulkanRasterCapabilities capabilities =
-            new(
-                dynamicRendering: false,
-                dynamicRenderingLocalRead: false,
-                dynamicRenderingLocalReadDepthStencil: false,
-                dynamicRenderingLocalReadMultisampled: false,
-                renderPass2: true,
-                attachmentFeedbackLoopLayout: true,
-                orderedFragmentPixelInterlock: true,
-            fragmentStoresAndAtomics: true,
-            unifiedImageLayouts: true);
-        VulkanRasterPassLowering lowering =
-            VulkanRasterPassLowering.Compile(plan, in capabilities);
-        VulkanRenderPass2Description description =
-            VulkanRenderPass2Description.Compile(plan, lowering);
-
-        Assert.Empty(
-            description.SubPasses.Span[0]
-                .SampledFeedbackAttachments.ToArray());
-        Assert.Equal(
-            new[] { 0 },
-            description.SubPasses.Span[1]
-                .SampledFeedbackAttachments.ToArray());
-    }
-
     private static VulkanRasterCapabilities AllRasterCapabilities() =>
         new(
             dynamicRendering: true,
@@ -306,30 +163,11 @@ public sealed class VulkanRasterW6ConvergenceTests
             dynamicRenderingLocalReadDepthStencil: true,
             dynamicRenderingLocalReadMultisampled: true,
             renderPass2: true,
-            attachmentFeedbackLoopLayout: true,
-            orderedFragmentPixelInterlock: true,
-            fragmentStoresAndAtomics: true,
-            unifiedImageLayouts: true);
-
-    private static RHITextureSubresourceRange Range(
-        ERHITextureAspectMask aspect,
-        uint mip,
-        uint mipCount,
-        uint layer,
-        uint layerCount) =>
-        new()
-        {
-            AspectMask = aspect,
-            BaseMipLevel = mip,
-            MipLevelCount = mipCount,
-            BaseArrayLayer = layer,
-            ArrayLayerCount = layerCount,
-        };
+            rasterizationOrderAttachmentAccess: true);
 
     private static RHIAttachmentInterfaceSignature CreateSignature(
         int[]? inputs = null,
-        int[]? outputs = null,
-        int[]? sampledFeedback = null) =>
+        int[]? outputs = null) =>
         new(
             colorAttachmentCount: 1,
             inputs == null
@@ -337,11 +175,7 @@ public sealed class VulkanRasterW6ConvergenceTests
                 : new RHIAttachmentIndexArray(inputs),
             outputs == null
                 ? RHIAttachmentIndexArray.Empty
-                : new RHIAttachmentIndexArray(outputs),
-            sampledFeedback == null
-                ? RHIAttachmentIndexArray.Empty
-                : new RHIAttachmentIndexArray(sampledFeedback),
-            rasterOrderedReadWriteMask: 0);
+                : new RHIAttachmentIndexArray(outputs));
 
     private sealed class TestTexture : RHITexture
     {

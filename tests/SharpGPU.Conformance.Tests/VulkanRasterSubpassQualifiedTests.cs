@@ -18,9 +18,7 @@ public sealed class VulkanRasterSubpassQualifiedTests
             hasDynamicRenderingExtension: false,
             hasCreateRenderPass2Extension: false,
             hasSynchronization2Extension: false,
-            hasDynamicRenderingLocalReadExtension: true,
-            hasAttachmentFeedbackLoopLayoutExtension: true,
-            hasFragmentShaderInterlockExtension: true);
+            hasDynamicRenderingLocalReadExtension: true);
 
         Assert.Equal(
             VulkanUtility.Version(1, 4, 0),
@@ -40,12 +38,6 @@ public sealed class VulkanRasterSubpassQualifiedTests
         Assert.True(plan.EnableDynamicRenderingLocalReadExtension);
         Assert.False(
             plan.UseDynamicRenderingLocalReadExtensionFeatureStruct);
-        Assert.Equal(
-            EVulkanFeatureProvenance.ExtExtension,
-            plan.AttachmentFeedbackLoopLayoutQueryProvenance);
-        Assert.Equal(
-            EVulkanFeatureProvenance.ExtExtension,
-            plan.FragmentShaderPixelInterlockQueryProvenance);
     }
 
     [Fact]
@@ -118,7 +110,7 @@ public sealed class VulkanRasterSubpassQualifiedTests
 
     [Fact]
     [Trait("Category", "SharpGpuPortable")]
-    public void PrivateBindings_PreserveInputHolesAndExcludeSampledFeedback()
+    public void PrivateBindings_PreserveInputHolesAndIncludeReadWriteInputs()
     {
         RHIAttachmentInterfaceSignature signature = CreateSignature(
             colorAttachmentCount: 6,
@@ -133,9 +125,7 @@ public sealed class VulkanRasterSubpassQualifiedTests
             {
                 RHIAttachmentInterfaceSignature.UnboundLogicalAttachment,
                 4,
-            },
-            sampledFeedback: new[] { 5 },
-            rasterOrderedMask: 1 << 4);
+            });
 
         VulkanPrivateRasterBindingPlan plan =
             VulkanPrivateRasterBindingPlan.Compile(
@@ -144,31 +134,27 @@ public sealed class VulkanRasterSubpassQualifiedTests
                 in signature);
 
         Assert.Equal(3u, plan.DescriptorSet);
-        Assert.Equal(1 << 2, plan.LocalInputMask);
-        Assert.Equal(1 << 3, plan.LocalInputBindingMask);
-        Assert.Equal(1 << 4, plan.RasterOrderedMask);
-        Assert.Equal(1u, plan.InputAttachmentCount);
-        Assert.Equal(1u, plan.StorageImageCount);
+        Assert.Equal((1 << 2) | (1 << 4), plan.LocalInputMask);
+        Assert.Equal((1 << 1) | (1 << 3), plan.LocalInputBindingMask);
+        Assert.Equal(2u, plan.InputAttachmentCount);
         Assert.False(plan.UsesInputAttachmentBinding(0));
-        Assert.False(plan.UsesInputAttachmentBinding(1));
+        Assert.True(plan.UsesInputAttachmentBinding(1));
         Assert.False(plan.UsesInputAttachmentBinding(2));
         Assert.True(plan.UsesInputAttachmentBinding(3));
+        Assert.Equal(1u, plan.GetInputAttachmentBinding(1));
         Assert.Equal(3u, plan.GetInputAttachmentBinding(3));
-        Assert.Equal(12u, plan.GetRasterOrderedBinding(4));
-        Assert.Equal(1u, plan.PoolRequirements.InputAttachments);
-        Assert.Equal(1u, plan.PoolRequirements.StorageImages);
+        Assert.Equal(2u, plan.PoolRequirements.InputAttachments);
+        Assert.Equal(0u, plan.PoolRequirements.StorageImages);
     }
 
     [Fact]
     [Trait("Category", "SharpGpuPortable")]
-    public void SampledFeedbackOnly_UsesNoPrivateDescriptor()
+    public void OutputOnly_UsesNoPrivateDescriptor()
     {
         RHIAttachmentInterfaceSignature signature = CreateSignature(
             colorAttachmentCount: 3,
             inputs: Array.Empty<int>(),
-            outputs: new[] { 0 },
-            sampledFeedback: new[] { 2 },
-            rasterOrderedMask: 0);
+            outputs: new[] { 0 });
 
         VulkanPrivateRasterBindingPlan plan =
             VulkanPrivateRasterBindingPlan.Compile(
@@ -178,7 +164,6 @@ public sealed class VulkanRasterSubpassQualifiedTests
 
         Assert.False(plan.HasPrivateBindings);
         Assert.Equal(0u, plan.InputAttachmentCount);
-        Assert.Equal(0u, plan.StorageImageCount);
         Assert.Equal(0u, plan.PoolRequirements.InputAttachments);
         Assert.Equal(0u, plan.PoolRequirements.StorageImages);
     }
@@ -227,22 +212,16 @@ public sealed class VulkanRasterSubpassQualifiedTests
     private static RHIAttachmentInterfaceSignature CreateSignature(
         int colorAttachmentCount,
         int[] inputs,
-        int[] outputs,
-        int[] sampledFeedback,
-        int rasterOrderedMask)
+        int[] outputs)
     {
         RHIAttachmentIndexArray inputSlots =
             CreateSlots(inputs);
         RHIAttachmentIndexArray outputSlots =
             CreateSlots(outputs);
-        RHIAttachmentIndexArray sampledSlots =
-            CreateSlots(sampledFeedback);
         return new RHIAttachmentInterfaceSignature(
             colorAttachmentCount,
             inputSlots,
-            outputSlots,
-            sampledSlots,
-            checked((byte)rasterOrderedMask));
+            outputSlots);
     }
 
     private static RHIAttachmentIndexArray CreateSlots(

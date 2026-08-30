@@ -26,6 +26,7 @@ public sealed class SharpGPUFeatureMatrixDocumentationTests
             "StorageQueue",
             "PipelineCache",
             "WorkGraph",
+            "FramebufferReadWrite",
         };
 
         foreach (string row in requiredRows)

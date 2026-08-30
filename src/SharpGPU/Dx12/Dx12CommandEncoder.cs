@@ -1248,7 +1248,6 @@ namespace SharpGPU
                                              | ERHIBufferState.IndirectArgument
                                              | ERHIBufferState.ShaderResource
                                              | ERHIBufferState.UnorderedAccess
-                                             | ERHIBufferState.RasterizerOrdered
                                              | ERHIBufferState.AccelStructRead
                                              | ERHIBufferState.AccelStructWrite
                                              | ERHIBufferState.AccelStructBuildInput
@@ -1273,8 +1272,7 @@ namespace SharpGPU
                                     | ERHIBufferState.ConstantBuffer
                                     | ERHIBufferState.IndirectArgument
                                     | ERHIBufferState.ShaderResource
-                                    | ERHIBufferState.UnorderedAccess
-                                    | ERHIBufferState.RasterizerOrdered;
+                                    | ERHIBufferState.UnorderedAccess;
                     break;
 
                 case ERHIPipelineType.Graphics:
@@ -1305,7 +1303,6 @@ namespace SharpGPU
                                               | ERHITextureState.RenderTarget
                                               | ERHITextureState.ShaderResource
                                               | ERHITextureState.UnorderedAccess
-                                              | ERHITextureState.RasterizerOrdered
                                               | ERHITextureState.ShadingRateSurface;
 
             ERHITextureState unknownBits = state & ~allKnownStates;
@@ -1325,8 +1322,7 @@ namespace SharpGPU
                     allowedStates = ERHITextureState.CopySrc
                                     | ERHITextureState.CopyDst
                                     | ERHITextureState.ShaderResource
-                                    | ERHITextureState.UnorderedAccess
-                                    | ERHITextureState.RasterizerOrdered;
+                                    | ERHITextureState.UnorderedAccess;
                     break;
 
                 case ERHIPipelineType.Graphics:
@@ -1352,7 +1348,7 @@ namespace SharpGPU
             }
 
             Vortice.Direct3D12.BarrierAccess result = 0;
-            bool hasShaderWrite = (state & ERHIBufferState.UnorderedAccess) != 0 || (state & ERHIBufferState.RasterizerOrdered) != 0;
+            bool hasShaderWrite = (state & ERHIBufferState.UnorderedAccess) != 0;
 
             if ((state & ERHIBufferState.CopyDst) != 0) result |= Vortice.Direct3D12.BarrierAccess.CopyDestination;
             if ((state & ERHIBufferState.CopySrc) != 0) result |= Vortice.Direct3D12.BarrierAccess.CopySource;
@@ -1362,7 +1358,6 @@ namespace SharpGPU
             if ((state & ERHIBufferState.IndirectArgument) != 0) result |= Vortice.Direct3D12.BarrierAccess.IndirectArgument;
             if ((state & ERHIBufferState.ShaderResource) != 0 && !hasShaderWrite) result |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
             if ((state & ERHIBufferState.UnorderedAccess) != 0) result |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
-            if ((state & ERHIBufferState.RasterizerOrdered) != 0) result |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
             if ((state & ERHIBufferState.AccelStructRead) != 0) result |= Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureRead;
             if ((state & ERHIBufferState.AccelStructWrite) != 0) result |= Vortice.Direct3D12.BarrierAccess.RaytracingAccelerationStructureWrite;
             if ((state & ERHIBufferState.AccelStructBuildInput) != 0) result |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
@@ -1379,7 +1374,7 @@ namespace SharpGPU
             }
 
             Vortice.Direct3D12.BarrierAccess result = 0;
-            bool hasShaderWrite = (state & ERHITextureState.UnorderedAccess) != 0 || (state & ERHITextureState.RasterizerOrdered) != 0;
+            bool hasShaderWrite = (state & ERHITextureState.UnorderedAccess) != 0;
 
             if ((state & ERHITextureState.CopyDst) != 0) result |= Vortice.Direct3D12.BarrierAccess.CopyDestination;
             if ((state & ERHITextureState.CopySrc) != 0) result |= Vortice.Direct3D12.BarrierAccess.CopySource;
@@ -1390,7 +1385,6 @@ namespace SharpGPU
             if ((state & ERHITextureState.RenderTarget) != 0) result |= Vortice.Direct3D12.BarrierAccess.RenderTarget;
             if ((state & ERHITextureState.ShaderResource) != 0 && !hasShaderWrite) result |= Vortice.Direct3D12.BarrierAccess.ShaderResource;
             if ((state & ERHITextureState.UnorderedAccess) != 0) result |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
-            if ((state & ERHITextureState.RasterizerOrdered) != 0) result |= Vortice.Direct3D12.BarrierAccess.UnorderedAccess;
             if ((state & ERHITextureState.ShadingRateSurface) != 0) result |= Vortice.Direct3D12.BarrierAccess.ShadingRateSource;
 
             return result == 0 ? Vortice.Direct3D12.BarrierAccess.NoAccess : result;
@@ -1407,7 +1401,7 @@ namespace SharpGPU
             if ((state & ERHITextureState.RenderTarget) != 0) return Vortice.Direct3D12.BarrierLayout.RenderTarget;
             if ((state & ERHITextureState.DepthWrite) != 0) return Vortice.Direct3D12.BarrierLayout.DepthStencilWrite;
             if ((state & ERHITextureState.DepthRead) != 0) return Vortice.Direct3D12.BarrierLayout.DepthStencilRead;
-            if ((state & ERHITextureState.UnorderedAccess) != 0 || (state & ERHITextureState.RasterizerOrdered) != 0)
+            if ((state & ERHITextureState.UnorderedAccess) != 0)
             {
                 switch (queuePipeline)
                 {
@@ -2112,7 +2106,7 @@ namespace SharpGPU
             m_Lowering = Dx12RasterPassLowering.Compile(
                 plan,
                 dx12Device.NativeRenderPass.Tier != ERHICapabilityTier.Unavailable,
-                dx12Device.Capabilities.Raster.RasterOrderedAccess.Tier !=
+                dx12Device.Capabilities.Raster.FramebufferReadWrite.Tier !=
                     ERHICapabilityTier.Unavailable,
                 dx12Device.EnhancedBarriers.Tier != ERHICapabilityTier.Unavailable);
             try
@@ -4551,8 +4545,6 @@ internal enum EDx12RasterPassStrategy
             m_OutputLogicalAttachments;
         internal ReadOnlyMemory<int> PrivateInputLogicalAttachments =>
             m_PrivateInputLogicalAttachments;
-        internal ReadOnlyMemory<int> SampledFeedbackLogicalAttachments =>
-            m_SampledFeedbackLogicalAttachments;
         internal ReadOnlyMemory<ERHIPixelFormat> OutputLocationFormats =>
             m_OutputLocationFormats;
         internal bool HasSparseOutputLocations { get; }
@@ -4560,7 +4552,6 @@ internal enum EDx12RasterPassStrategy
         private readonly int[] m_RenderTargetLogicalAttachments;
         private readonly int[] m_OutputLogicalAttachments;
         private readonly int[] m_PrivateInputLogicalAttachments;
-        private readonly int[] m_SampledFeedbackLogicalAttachments;
         private readonly ERHIPixelFormat[] m_OutputLocationFormats;
 
         internal Dx12RasterSubPassLowering(
@@ -4570,13 +4561,12 @@ internal enum EDx12RasterPassStrategy
             RHIAttachmentInterfaceSignature attachmentInterface =
                 plan.AttachmentInterface;
             byte rasterOrderedMask =
-                attachmentInterface.RasterOrderedReadWriteMask;
+                attachmentInterface.FramebufferReadWriteMask;
             RenderTargetMask = checked((byte)(
                 attachmentInterface.ColorOutputMask &
                 ~rasterOrderedMask));
             ShaderResourceMask = checked((byte)(
-                (attachmentInterface.ColorInputMask |
-                 attachmentInterface.SampledFeedbackMask) &
+                attachmentInterface.ColorInputMask &
                 ~rasterOrderedMask));
             RasterOrderedMask = rasterOrderedMask;
             PrivateShaderResourceMask = checked((byte)(
@@ -4641,18 +4631,6 @@ internal enum EDx12RasterPassStrategy
                     logicalAttachment;
             }
 
-            m_SampledFeedbackLogicalAttachments =
-                new int[attachmentInterface.SampledFeedbackSlotCount];
-            for (int sampledOrdinal = 0;
-                 sampledOrdinal <
-                    m_SampledFeedbackLogicalAttachments.Length;
-                 ++sampledOrdinal)
-            {
-                m_SampledFeedbackLogicalAttachments[sampledOrdinal] =
-                    attachmentInterface
-                        .GetSampledFeedbackLogicalAttachment(
-                            sampledOrdinal);
-            }
         }
 
         internal int GetRenderTargetLogicalAttachment(
@@ -4664,10 +4642,6 @@ internal enum EDx12RasterPassStrategy
 
         internal int GetPrivateInputLogicalAttachment(int inputIndex) =>
             m_PrivateInputLogicalAttachments[inputIndex];
-
-        internal int GetSampledFeedbackLogicalAttachment(
-            int sampledOrdinal) =>
-            m_SampledFeedbackLogicalAttachments[sampledOrdinal];
 
         internal bool HasIdentityOutputMapping(int logicalAttachmentCount)
         {
@@ -4813,6 +4787,7 @@ internal enum EDx12RasterPassStrategy
 
             bool hasAttachmentReads = false;
             bool hasRasterOrderedAccess = false;
+            byte framebufferReadWriteMask = 0;
             bool requiresPrivateAttachmentTable = false;
             Span<ERHIPixelFormat> logicalAttachmentFormats =
                 stackalloc ERHIPixelFormat[
@@ -4831,7 +4806,6 @@ internal enum EDx12RasterPassStrategy
             {
                 ref readonly RHIRasterSubPassPlan subPass =
                     ref plan.GetSubPass(i);
-                ValidateAccessModel(in subPass, i);
                 Dx12RasterSubPassLowering lowering =
                     new Dx12RasterSubPassLowering(
                         subPass,
@@ -4843,6 +4817,7 @@ internal enum EDx12RasterPassStrategy
                     lowering.ShaderResourceMask != 0 ||
                     lowering.RasterOrderedMask != 0;
                 hasRasterOrderedAccess |= lowering.RasterOrderedMask != 0;
+                framebufferReadWriteMask |= lowering.RasterOrderedMask;
                 requiresPrivateAttachmentTable |=
                     lowering.PrivateShaderResourceMask != 0 ||
                     lowering.RasterOrderedMask != 0;
@@ -4860,7 +4835,40 @@ internal enum EDx12RasterPassStrategy
                 throw new NotSupportedException(
                     "The DX12 attachment ABI exposes exact " +
                     "RasterizerOrderedTexture2D/Texture2DArray access only; " +
-                    "multisampled RasterOrderedReadWrite is unsupported.");
+                    "multisampled framebuffer read/write is unsupported.");
+            }
+            for (int logicalAttachment = 0;
+                 logicalAttachment < plan.ColorAttachmentCount;
+                 ++logicalAttachment)
+            {
+                if ((framebufferReadWriteMask &
+                     (1 << logicalAttachment)) == 0)
+                {
+                    continue;
+                }
+                ERHITextureDimension dimension =
+                    plan.GetColorAttachment(logicalAttachment)
+                        .RenderTarget.Descriptor.Dimension;
+                if (dimension != ERHITextureDimension.Texture2D &&
+                    dimension != ERHITextureDimension.Texture2DArray)
+                {
+                    throw new NotSupportedException(
+                        $"DX12 framebuffer read/write attachment " +
+                        $"{logicalAttachment} uses {dimension}; the exact " +
+                        "raw ABI supports only Texture2D and Texture2DArray.");
+                }
+                ERHITextureUsage usage =
+                    plan.GetColorAttachment(logicalAttachment)
+                        .RenderTarget.Descriptor.UsageFlag;
+                if ((usage & ERHITextureUsage.UnorderedAccess) == 0)
+                {
+                    throw new NotSupportedException(
+                        $"DX12 framebuffer read/write attachment " +
+                        $"{logicalAttachment} must be created with the " +
+                        "backend-neutral UnorderedAccess allocation usage. " +
+                        "Fragment ordering remains implicit in the same-phase " +
+                        "Inputs/Outputs overlap; no public ROV mode is required.");
+                }
             }
 
             EDx12RasterPassStrategy strategy =
@@ -4931,63 +4939,6 @@ internal enum EDx12RasterPassStrategy
             }
         }
 
-        private static void ValidateAccessModel(
-            in RHIRasterSubPassPlan subPass,
-            int subPassIndex)
-        {
-            RHIAttachmentInterfaceSignature attachmentInterface =
-                subPass.AttachmentInterface;
-            for (int inputIndex = 0;
-                 inputIndex < attachmentInterface.ColorInputSlotCount;
-                 ++inputIndex)
-            {
-                int logicalAttachment =
-                    attachmentInterface.GetColorInputLogicalAttachment(
-                        inputIndex);
-                if (logicalAttachment < 0)
-                {
-                    continue;
-                }
-
-                byte bit = checked((byte)(1 << logicalAttachment));
-                bool isOutput =
-                    (attachmentInterface.ColorOutputMask & bit) != 0;
-                bool isRasterOrdered =
-                    (attachmentInterface.RasterOrderedReadWriteMask &
-                     bit) != 0;
-                if (isOutput && !isRasterOrdered)
-                {
-                    throw new NotSupportedException(
-                        $"DX12 subpass {subPassIndex} reads and writes logical " +
-                        $"attachment {logicalAttachment} in one phase without " +
-                        "the exact RasterOrderedReadWrite qualifier.");
-                }
-            }
-
-            for (int sampledOrdinal = 0;
-                 sampledOrdinal <
-                    attachmentInterface.SampledFeedbackSlotCount;
-                 ++sampledOrdinal)
-            {
-                int logicalAttachment =
-                    attachmentInterface
-                        .GetSampledFeedbackLogicalAttachment(
-                            sampledOrdinal);
-                if (logicalAttachment < 0)
-                {
-                    continue;
-                }
-                byte bit = checked((byte)(1 << logicalAttachment));
-                if ((attachmentInterface.ColorOutputMask & bit) != 0)
-                {
-                    throw new NotSupportedException(
-                        $"DX12 subpass {subPassIndex} cannot sample and render " +
-                        $"to logical attachment {logicalAttachment} in one " +
-                        "phase. Use a phase boundary or an exact " +
-                        "RasterOrderedReadWrite attachment.");
-                }
-            }
-        }
     }
 
     /// <summary>

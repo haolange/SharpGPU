@@ -68,6 +68,80 @@ namespace SharpGPU
         public string DecimalValue => String.Format("0x{0:X}", IntValue);
     }
 
+    /// <summary>
+    /// Describes one exact color attachment pipeline combination. Input plus
+    /// output denotes framebuffer read/write; blend remains orthogonal.
+    /// </summary>
+    public readonly struct RHIRasterAttachmentSupportQuery
+    {
+        /// <summary>Gets the logical color format.</summary>
+        public ERHIPixelFormat Format { get; }
+        /// <summary>Gets the exact raster sample count.</summary>
+        public ERHISampleCount SampleCount { get; }
+        /// <summary>Gets whether the attachment is a shader input.</summary>
+        public bool IsInput { get; }
+        /// <summary>Gets whether the attachment is a shader output.</summary>
+        public bool IsOutput { get; }
+        /// <summary>Gets whether input access uses layered attachment shape.</summary>
+        public bool IsLayered { get; }
+        /// <summary>Gets the unchanged fixed-function blend state.</summary>
+        public RHIBlendDescriptor Blend { get; }
+        /// <summary>Gets the unchanged alpha-to-coverage state.</summary>
+        public bool AlphaToCoverage { get; }
+
+        /// <summary>Creates a validated exact attachment support query.</summary>
+        public RHIRasterAttachmentSupportQuery(
+            ERHIPixelFormat format,
+            ERHISampleCount sampleCount,
+            bool isInput,
+            bool isOutput,
+            in RHIBlendDescriptor blend,
+            bool alphaToCoverage = false,
+            bool isLayered = false)
+        {
+            if (!isInput && !isOutput)
+            {
+                throw new ArgumentException(
+                    "A raster attachment support query must be an input, " +
+                    "an output, or both.");
+            }
+            if (isLayered && !isInput)
+            {
+                throw new ArgumentException(
+                    "Layered raster attachment access requires an input declaration.",
+                    nameof(isLayered));
+            }
+            if (format == ERHIPixelFormat.Unknown ||
+                RHIBarrierUtility.InferAspectMask(format) !=
+                    ERHITextureAspectMask.Color)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(format),
+                    format,
+                    "Raster attachment support queries require a color format.");
+            }
+            if (sampleCount is not (
+                    ERHISampleCount.None or
+                    ERHISampleCount.Count2 or
+                    ERHISampleCount.Count4 or
+                    ERHISampleCount.Count8))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(sampleCount),
+                    sampleCount,
+                    "Raster attachment support queries require a concrete sample count.");
+            }
+
+            Format = format;
+            SampleCount = sampleCount;
+            IsInput = isInput;
+            IsOutput = isOutput;
+            IsLayered = isLayered;
+            Blend = blend;
+            AlphaToCoverage = alphaToCoverage;
+        }
+    }
+
     public abstract class RHIDevice : Disposal
     {
         public string? Name => m_Name;
@@ -198,6 +272,19 @@ namespace SharpGPU
             throw new NotSupportedException($"{BackendType} does not expose placed buffers.");
         }
         public abstract RHITexture CreateTexture(in RHITextureDescriptor descriptor);
+        /// <summary>
+        /// Queries whether this device can express an exact attachment,
+        /// sampling, and blend combination without semantic fallback.
+        /// </summary>
+        public abstract RHICapability QueryRasterAttachmentSupport(
+            in RHIRasterAttachmentSupportQuery query);
+        /// <summary>
+        /// Queries the versioned target shader ABI for a logical attachment
+        /// interface. SharpShader is not required to consume this contract.
+        /// </summary>
+        public abstract RHIRasterAttachmentShaderAbi
+            QueryRasterAttachmentShaderAbi(
+                in RHIRasterAttachmentShaderAbiDescriptor descriptor);
         public virtual RHITexture CreatePlacedTexture(
             RHIHeap heap,
             ulong heapOffset,
@@ -517,11 +604,10 @@ namespace SharpGPU
         public ERHIDepthValueRange DepthValueRange { get; }
         public ERHIMultiviewStrategy MultiviewStrategy { get; }
         public RHICapability PixelShaderStorageWrites { get; }
-        public RHICapability RasterOrderedAccess { get; }
+        public RHICapability FramebufferReadWrite { get; }
         public RHICapability AnisotropicSampling { get; }
         public RHICapability DepthAttachmentRead { get; }
         public RHICapability FramebufferLocalRead { get; }
-        public RHICapability SampledFeedback { get; }
         public RHICapability DrawIndirect { get; }
         public RHICapability MultiDrawIndirect { get; }
         public RHICapability VariableRateShading { get; }
@@ -536,11 +622,10 @@ namespace SharpGPU
             ERHIDepthValueRange depthValueRange,
             ERHIMultiviewStrategy multiviewStrategy,
             RHICapability pixelShaderStorageWrites,
-            RHICapability rasterOrderedAccess,
+            RHICapability framebufferReadWrite,
             RHICapability anisotropicSampling,
             RHICapability depthAttachmentRead,
             RHICapability framebufferLocalRead,
-            RHICapability sampledFeedback,
             RHICapability drawIndirect,
             RHICapability multiDrawIndirect,
             RHICapability variableRateShading,
@@ -554,11 +639,10 @@ namespace SharpGPU
             DepthValueRange = depthValueRange;
             MultiviewStrategy = multiviewStrategy;
             PixelShaderStorageWrites = pixelShaderStorageWrites;
-            RasterOrderedAccess = rasterOrderedAccess;
+            FramebufferReadWrite = framebufferReadWrite;
             AnisotropicSampling = anisotropicSampling;
             DepthAttachmentRead = depthAttachmentRead;
             FramebufferLocalRead = framebufferLocalRead;
-            SampledFeedback = sampledFeedback;
             DrawIndirect = drawIndirect;
             MultiDrawIndirect = multiDrawIndirect;
             VariableRateShading = variableRateShading;
@@ -818,12 +902,11 @@ namespace SharpGPU
                     depthValueRange: ERHIDepthValueRange.Pending,
                     multiviewStrategy: ERHIMultiviewStrategy.Pending,
                     pixelShaderStorageWrites: unavailable,
-                    rasterOrderedAccess: unavailable,
+                    framebufferReadWrite: unavailable,
                     anisotropicSampling: unavailable,
                     depthAttachmentRead: unavailable,
                     framebufferLocalRead: unavailable,
                     drawIndirect: unavailable,
-                    sampledFeedback: unavailable,
                     multiDrawIndirect: unavailable,
                     variableRateShading: unavailable,
                     hiddenSurfaceRemoval: unavailable,

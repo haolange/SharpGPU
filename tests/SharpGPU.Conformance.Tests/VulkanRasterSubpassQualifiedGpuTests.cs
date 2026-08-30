@@ -52,13 +52,9 @@ public sealed class VulkanRasterSubpassQualifiedGpuTests
             vulkanDevice.SupportsRenderPass2,
             "RTX 5090 qualification requires RenderPass2.");
         Assert.True(
-            vulkanDevice.SupportsAttachmentFeedbackLoopLayout,
+            vulkanDevice.SupportsRasterizationOrderAttachmentAccess,
             "RTX 5090 qualification requires the exact " +
-            "VK_EXT_attachment_feedback_loop_layout feature.");
-        Assert.True(
-            vulkanDevice.SupportsFragmentShaderPixelInterlock,
-            "RTX 5090 qualification requires the exact " +
-            "VK_EXT_fragment_shader_interlock pixel feature.");
+            "VK_EXT_rasterization_order_attachment_access feature.");
         Assert.True(
             vulkanDevice.DynamicRenderingLocalReadProvenance is
                 EVulkanFeatureProvenance.Vulkan14Core or
@@ -66,23 +62,17 @@ public sealed class VulkanRasterSubpassQualifiedGpuTests
             "Dynamic-rendering local-read must come from Vulkan 1.4 core or " +
             "VK_KHR_dynamic_rendering_local_read.");
         Assert.Equal(
-            EVulkanFeatureProvenance.ExtExtension,
-            vulkanDevice.AttachmentFeedbackLoopLayoutProvenance);
-        Assert.Equal(
-            EVulkanFeatureProvenance.ExtExtension,
-            vulkanDevice.FragmentShaderPixelInterlockProvenance);
-        Assert.Equal(
             EVulkanFeatureProvenance.Vulkan12Core,
             vulkanDevice.RenderPass2Provenance);
         Assert.NotEqual(
             ERHICapabilityTier.Unavailable,
-            device.Capabilities.Raster.SampledFeedback.Tier);
+            device.Capabilities.Raster.FramebufferReadWrite.Tier);
         Assert.Equal(
             ERHICapabilityProbeKind.NativeExtensionQuery,
-            device.Capabilities.Raster.SampledFeedback.Provenance.Kind);
+            device.Capabilities.Raster.FramebufferReadWrite.Provenance.Kind);
         Assert.Contains(
-            "VK_EXT_attachment_feedback_loop_layout",
-            device.Capabilities.Raster.SampledFeedback.Provenance.Source,
+            "VK_EXT_rasterization_order_attachment_access",
+            device.Capabilities.Raster.FramebufferReadWrite.Provenance.Source,
             StringComparison.Ordinal);
 
         using VulkanValidationCollector validation =
@@ -266,8 +256,6 @@ public sealed class VulkanRasterSubpassQualifiedGpuTests
             ColorOutputs = outputs == null
                 ? RHIAttachmentIndexArray.Empty
                 : new RHIAttachmentIndexArray(outputs),
-            SampledFeedbackInputs =
-                RHIAttachmentIndexArray.Empty,
         };
 
     private static RHIRasterPipeline CreateRasterPipeline(
@@ -285,7 +273,7 @@ public sealed class VulkanRasterSubpassQualifiedGpuTests
             ShaderStageKind.Pixel,
             fragmentEntry,
             fragmentSource);
-        return device.CreateRasterPipeline(
+        RHIRasterPipelineDescriptor pipelineDescriptor =
             new RHIRasterPipelineDescriptor
             {
                 SampleCount = ERHISampleCount.None,
@@ -306,7 +294,21 @@ public sealed class VulkanRasterSubpassQualifiedGpuTests
                                     RHIVertexLayoutDescriptor>()),
                     },
                 RenderState = CreateDefaultRenderState(),
-            });
+            };
+        if (attachmentInterface.ColorInputMask != 0)
+        {
+            RHIRasterAttachmentShaderAbiDescriptor abiDescriptor = new()
+            {
+                PipelineLayout = layout,
+                SampleCount = ERHISampleCount.None,
+                ColorFormats = colorFormats,
+                AttachmentInterface = attachmentInterface,
+            };
+            pipelineDescriptor.AttachmentShaderAbiClaim =
+                device.QueryRasterAttachmentShaderAbi(in abiDescriptor)
+                    .CreateClaim();
+        }
+        return device.CreateRasterPipeline(in pipelineDescriptor);
     }
 
     private static RHIFunction CompileFunction(
