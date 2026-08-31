@@ -608,16 +608,24 @@ namespace SharpGPU
             };
 
             // Dynamic state
-            VkDynamicState* dynamicStates = stackalloc VkDynamicState[4];
+            bool fragmentShadingRateDynamic =
+                m_VulkanDevice.Capabilities.Raster.VariableRateShadingPerDraw.Tier !=
+                    ERHICapabilityTier.Unavailable;
+            int dynamicStateCount = fragmentShadingRateDynamic ? 5 : 4;
+            VkDynamicState* dynamicStates = stackalloc VkDynamicState[5];
             dynamicStates[0] = VkDynamicState.Viewport;
             dynamicStates[1] = VkDynamicState.Scissor;
             dynamicStates[2] = VkDynamicState.StencilReference;
             dynamicStates[3] = VkDynamicState.BlendConstants;
+            if (fragmentShadingRateDynamic)
+            {
+                dynamicStates[4] = VkDynamicState.FragmentShadingRateKHR;
+            }
 
             VkPipelineDynamicStateCreateInfo dynamicState = new VkPipelineDynamicStateCreateInfo()
             {
                 sType = VkStructureType.PipelineDynamicStateCreateInfo,
-                dynamicStateCount = 4,
+                dynamicStateCount = checked((uint)dynamicStateCount),
                 pDynamicStates = dynamicStates,
             };
 

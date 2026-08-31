@@ -155,6 +155,35 @@ public sealed class MetalHalContractTests
     }
 
     [Fact]
+    public void Metal_BeginPass_WithShadingRateTexture_ShouldFailClosedAndAllowRetry()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        using MetalTestContext context = MetalTestContext.Create();
+        using RHITexture renderTarget = CreateRenderTarget(context.Device);
+        using RHITexture shadingRateTexture = CreateRenderTarget(context.Device);
+        using RHICommandBuffer commandBuffer = context.Queue.CreateCommandBuffer();
+        commandBuffer.Begin("Metal.VRS.Attachment.FailClosed");
+
+        NotSupportedException error = Assert.Throws<NotSupportedException>(
+            () => commandBuffer.BeginRasterPass(
+                CreateColorOnlyRasterPassDescriptor(renderTarget, shadingRateTexture)));
+        Assert.Contains(
+            MetalRasterPassBeginGuard.VariableRateShadingAttachmentCapabilityName,
+            error.Message,
+            StringComparison.Ordinal);
+
+        RHIRasterEncoder encoder = commandBuffer.BeginRasterPass(
+            CreateColorOnlyRasterPassDescriptor(renderTarget, shadingRateTexture: null));
+        Assert.NotNull(encoder);
+        commandBuffer.EndRasterPass();
+        commandBuffer.End();
+    }
+
+    [Fact]
     public void Metal_BgraOffscreenRasterSmoke_ShouldWriteFragmentColor()
     {
         if (!OperatingSystem.IsMacOS())
@@ -354,6 +383,38 @@ public sealed class MetalHalContractTests
                 FrontFace = keepStencilFace,
                 BackFace = keepStencilFace,
             },
+        };
+    }
+
+    private static RHIRasterPassDescriptor CreateColorOnlyRasterPassDescriptor(
+        RHITexture target,
+        RHITexture? shadingRateTexture)
+    {
+        return new RHIRasterPassDescriptor
+        {
+            Name = "VrsAttachmentContract",
+            ArrayLength = 1,
+            SampleCount = ERHISampleCount.None,
+            ShadingRateTexture = shadingRateTexture,
+            ColorAttachments = new[]
+            {
+                new RHIColorAttachmentDescriptor
+                {
+                    SubresourceRange = new RHITextureSubresourceRange
+                    {
+                        BaseMipLevel = 0,
+                        MipLevelCount = 1,
+                        BaseArrayLayer = 0,
+                        ArrayLayerCount = 1,
+                        AspectMask = ERHITextureAspectMask.Color,
+                    },
+                    ClearValue = new float4(0, 0, 0, 1),
+                    LoadAction = ERHILoadAction.Clear,
+                    StoreAction = ERHIStoreAction.Store,
+                    RenderTarget = target,
+                },
+            },
+            SubPassDescriptors = Memory<RHISubPassDescriptor>.Empty,
         };
     }
 

@@ -391,7 +391,15 @@ namespace SharpGPU
         MemoryHeapCount,
         MaximumRootConstantBytes,
         RootConstantAlignmentBytes,
-        SupportedRootConstantStageMask
+        SupportedRootConstantStageMask,
+        ShadingRateAttachmentTileWidthMin,
+        ShadingRateAttachmentTileHeightMin,
+        ShadingRateAttachmentTileWidthMax,
+        ShadingRateAttachmentTileHeightMax,
+        // Bit mask of supported ERHIShadingRate values: 1UL << (byte)rate. Pending is never set.
+        SupportedShadingRateMask,
+        // Bit mask of supported ERHIShadingRateCombiner values: 1UL << (byte)combiner. Pending is never set.
+        SupportedShadingRateCombinerMask
     }
 
     public enum ERHIProjectionStrategy : byte
@@ -610,7 +618,10 @@ namespace SharpGPU
         public RHICapability FramebufferLocalRead { get; }
         public RHICapability DrawIndirect { get; }
         public RHICapability MultiDrawIndirect { get; }
-        public RHICapability VariableRateShading { get; }
+        public RHICapability VariableRateShadingPerDraw { get; }
+        public RHICapability VariableRateShadingPerPrimitive { get; }
+        public RHICapability VariableRateShadingAttachment { get; }
+        public RHICapability VariableRateShadingCombiners { get; }
         public RHICapability HiddenSurfaceRemoval { get; }
         public RHICapability BarycentricCoordinates { get; }
         public RHICapability ProgrammableSamplePositions { get; }
@@ -628,7 +639,10 @@ namespace SharpGPU
             RHICapability framebufferLocalRead,
             RHICapability drawIndirect,
             RHICapability multiDrawIndirect,
-            RHICapability variableRateShading,
+            RHICapability variableRateShadingPerDraw,
+            RHICapability variableRateShadingPerPrimitive,
+            RHICapability variableRateShadingAttachment,
+            RHICapability variableRateShadingCombiners,
             RHICapability hiddenSurfaceRemoval,
             RHICapability barycentricCoordinates,
             RHICapability programmableSamplePositions,
@@ -645,7 +659,10 @@ namespace SharpGPU
             FramebufferLocalRead = framebufferLocalRead;
             DrawIndirect = drawIndirect;
             MultiDrawIndirect = multiDrawIndirect;
-            VariableRateShading = variableRateShading;
+            VariableRateShadingPerDraw = variableRateShadingPerDraw;
+            VariableRateShadingPerPrimitive = variableRateShadingPerPrimitive;
+            VariableRateShadingAttachment = variableRateShadingAttachment;
+            VariableRateShadingCombiners = variableRateShadingCombiners;
             HiddenSurfaceRemoval = hiddenSurfaceRemoval;
             BarycentricCoordinates = barycentricCoordinates;
             ProgrammableSamplePositions = programmableSamplePositions;
@@ -908,7 +925,10 @@ namespace SharpGPU
                     framebufferLocalRead: unavailable,
                     drawIndirect: unavailable,
                     multiDrawIndirect: unavailable,
-                    variableRateShading: unavailable,
+                    variableRateShadingPerDraw: unavailable,
+                    variableRateShadingPerPrimitive: unavailable,
+                    variableRateShadingAttachment: unavailable,
+                    variableRateShadingCombiners: unavailable,
                     hiddenSurfaceRemoval: unavailable,
                     barycentricCoordinates: unavailable,
                     programmableSamplePositions: unavailable,

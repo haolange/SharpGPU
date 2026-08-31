@@ -45,6 +45,27 @@ namespace SharpGPU
         }
     }
 
+    internal static class MetalRasterPassBeginGuard
+    {
+        internal const string VariableRateShadingAttachmentCapabilityName =
+            "Metal variable-rate shading attachments";
+
+        internal static void RejectUnsupportedAttachment(
+            in RHIRasterPassDescriptor descriptor,
+            in RHICapability variableRateShadingAttachment)
+        {
+            if (descriptor.ShadingRateTexture == null)
+            {
+                return;
+            }
+
+            variableRateShadingAttachment.Require(
+                VariableRateShadingAttachmentCapabilityName);
+            throw new NotSupportedException(
+                "Variable-rate shading attachments are not exposed by the Metal backend.");
+        }
+    }
+
     internal static class MetalBarrierHelper
     {
         // TODO: ThirdParty SharpMetal bindings still expose pre-Metal4 barrier APIs.
@@ -2876,16 +2897,20 @@ internal readonly struct MetalRasterCapabilities
                 throw new InvalidOperationException("A raster pass is already active on this encoder.");
             }
 
+            MetalCommandBuffer commandBuffer =
+                (MetalCommandBuffer)m_CommandBuffer!;
+            MetalDevice device =
+                ((MetalCommandQueue)commandBuffer.CommandQueue).MetalDevice;
+            MetalRasterPassBeginGuard.RejectUnsupportedAttachment(
+                in descriptor,
+                device.Capabilities.Raster.VariableRateShadingAttachment);
+
             RHIRasterPassPlan plan = RHIRasterPassPlanner.Compile(in descriptor);
             m_RasterPassPlan = plan;
             m_CurrentSubPassIndex = 0;
             m_PipelineSubPassIndex = -1;
             m_CachedPipeline = null;
 
-            MetalCommandBuffer commandBuffer =
-                (MetalCommandBuffer)m_CommandBuffer!;
-            MetalDevice device =
-                ((MetalCommandQueue)commandBuffer.CommandQueue).MetalDevice;
             MetalTransientNativeBatch nativeTransients =
                 commandBuffer.NativeTransientBatch;
             int transientCheckpoint =
@@ -3265,6 +3290,11 @@ internal readonly struct MetalRasterCapabilities
 
         public override void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner)
         {
+            _ = shadingRate;
+            _ = shadingRateCombiner;
+            MetalDevice device = ((MetalCommandQueue)((MetalCommandBuffer)m_CommandBuffer!).CommandQueue).MetalDevice;
+            device.Capabilities.Raster.VariableRateShadingPerDraw.Require("Metal variable-rate shading");
+            throw new NotSupportedException("Variable-rate shading is not exposed by the Metal backend.");
         }
 
         public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)

@@ -260,6 +260,104 @@ public sealed class MetalRasterSubpassLoweringTests
             "barrier emission");
     }
 
+    [Fact]
+    [Trait("Category", "SharpGpuPortable")]
+    public void VariableRateShadingAttachmentRejection_DoesNotWritePassState()
+    {
+        using TestTexture shadingRate = CreateColorTexture();
+        using TestTexture color = CreateColorTexture();
+        RHICapability attachment = CreateUnavailableVariableRateShadingAttachment();
+        RHIRasterPassPlan? plan = null;
+
+        NotSupportedException error = Assert.Throws<NotSupportedException>(
+            () =>
+            {
+                MetalRasterPassBeginGuard.RejectUnsupportedAttachment(
+                    new RHIRasterPassDescriptor
+                    {
+                        ColorAttachments = new[] { CreateAttachment(color) },
+                        ShadingRateTexture = shadingRate,
+                    },
+                    in attachment);
+                plan = Compile(
+                    new[] { CreateAttachment(color) });
+            });
+
+        Assert.Null(plan);
+        Assert.Contains(
+            MetalRasterPassBeginGuard.VariableRateShadingAttachmentCapabilityName,
+            error.Message,
+            StringComparison.Ordinal);
+
+        MetalRasterPassBeginGuard.RejectUnsupportedAttachment(
+            new RHIRasterPassDescriptor
+            {
+                ColorAttachments = new[] { CreateAttachment(color) },
+            },
+            in attachment);
+        plan = Compile(new[] { CreateAttachment(color) });
+        Assert.NotNull(plan);
+    }
+
+    [Fact]
+    [Trait("Category", "SharpGpuPortable")]
+    public void VariableRateShadingAttachmentGuard_AllowsRetryAfterFailClosedReject()
+    {
+        using TestTexture shadingRate = CreateColorTexture();
+        using TestTexture color = CreateColorTexture();
+        RHICapability attachment = CreateUnavailableVariableRateShadingAttachment();
+        GuardedMetalRasterBeginSequence sequence = new();
+
+        Assert.Throws<NotSupportedException>(
+            () => sequence.Begin(
+                new RHIRasterPassDescriptor
+                {
+                    ColorAttachments = new[] { CreateAttachment(color) },
+                    ShadingRateTexture = shadingRate,
+                },
+                in attachment));
+        Assert.False(sequence.HasActivePass);
+
+        sequence.Begin(
+            new RHIRasterPassDescriptor
+            {
+                ColorAttachments = new[] { CreateAttachment(color) },
+            },
+            in attachment);
+        Assert.True(sequence.HasActivePass);
+    }
+
+    private static RHICapability CreateUnavailableVariableRateShadingAttachment()
+    {
+        return RHICapability.Unavailable(
+            "Variable-rate shading is not exposed by the Metal backend.",
+            ERHICapabilityProbeKind.BackendContract,
+            "SharpGPU Metal variable-rate rasterization lowering");
+    }
+
+    private sealed class GuardedMetalRasterBeginSequence
+    {
+        private RHIRasterPassPlan? m_RasterPassPlan;
+
+        internal bool HasActivePass => m_RasterPassPlan != null;
+
+        internal void Begin(
+            in RHIRasterPassDescriptor descriptor,
+            in RHICapability variableRateShadingAttachment)
+        {
+            if (m_RasterPassPlan != null)
+            {
+                throw new InvalidOperationException(
+                    "A raster pass is already active on this encoder.");
+            }
+
+            MetalRasterPassBeginGuard.RejectUnsupportedAttachment(
+                in descriptor,
+                in variableRateShadingAttachment);
+            m_RasterPassPlan = RHIRasterPassPlanner.Compile(in descriptor);
+        }
+    }
+
     private static RHIRasterPassPlan Compile(
         RHIColorAttachmentDescriptor[] attachments,
         params RHISubPassDescriptor[] subPasses)

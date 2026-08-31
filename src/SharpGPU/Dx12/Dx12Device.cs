@@ -1067,7 +1067,6 @@ namespace SharpGPU
             bool isDrawMultiIndirectSupported = true;
             bool isRaytracingSupported = false;
             bool isRaytracingInlineSupported = false;
-            bool isVariableRateShadingSupported = true;
             bool isHiddenSurfaceRemovalSupported = false;
             bool isBarycentricCoordSupported = false;
             bool isProgrammableSamplePositionSupported = false;
@@ -1219,6 +1218,69 @@ namespace SharpGPU
                     break;
             }
 
+            // check variable-rate shading level
+            bool isVariableRateShadingPerDrawSupported = false;
+            bool isVariableRateShadingPerPrimitiveSupported = false;
+            bool isVariableRateShadingAttachmentSupported = false;
+            bool isVariableRateShadingCombinersSupported = false;
+            ERHICapabilityTier variableRateShadingPerDrawTier = ERHICapabilityTier.Unavailable;
+            ERHICapabilityTier variableRateShadingPerPrimitiveTier = ERHICapabilityTier.Unavailable;
+            ERHICapabilityTier variableRateShadingAttachmentTier = ERHICapabilityTier.Unavailable;
+            ERHICapabilityTier variableRateShadingCombinersTier = ERHICapabilityTier.Unavailable;
+            switch (featureOptions6.VariableShadingRateTier)
+            {
+                case Vortice.Direct3D12.VariableShadingRateTier.Tier1:
+                    isVariableRateShadingPerDrawSupported = true;
+                    variableRateShadingPerDrawTier = ERHICapabilityTier.Tier1;
+                    break;
+
+                case Vortice.Direct3D12.VariableShadingRateTier.Tier2:
+                    isVariableRateShadingPerDrawSupported = true;
+                    isVariableRateShadingPerPrimitiveSupported = true;
+                    isVariableRateShadingAttachmentSupported = true;
+                    isVariableRateShadingCombinersSupported = true;
+                    variableRateShadingPerDrawTier = ERHICapabilityTier.Tier2;
+                    variableRateShadingPerPrimitiveTier = ERHICapabilityTier.Tier2;
+                    variableRateShadingAttachmentTier = ERHICapabilityTier.Tier2;
+                    variableRateShadingCombinersTier = ERHICapabilityTier.Tier2;
+                    break;
+
+                case Vortice.Direct3D12.VariableShadingRateTier.NotSupported:
+                    isVariableRateShadingPerDrawSupported = false;
+                    isVariableRateShadingPerPrimitiveSupported = false;
+                    isVariableRateShadingAttachmentSupported = false;
+                    isVariableRateShadingCombinersSupported = false;
+                    break;
+            }
+
+            // These masks are meaningful only when the matching VRS capability is Available.
+            ulong supportedShadingRateMask = 0;
+            ulong supportedShadingRateCombinerMask = 0;
+            if (featureOptions6.VariableShadingRateTier !=
+                Vortice.Direct3D12.VariableShadingRateTier.NotSupported)
+            {
+                supportedShadingRateMask =
+                    (1UL << (byte)ERHIShadingRate.Rate1x1) |
+                    (1UL << (byte)ERHIShadingRate.Rate1x2) |
+                    (1UL << (byte)ERHIShadingRate.Rate2x1) |
+                    (1UL << (byte)ERHIShadingRate.Rate2x2);
+                if (featureOptions6.AdditionalShadingRatesSupported)
+                {
+                    supportedShadingRateMask |=
+                        (1UL << (byte)ERHIShadingRate.Rate2x4) |
+                        (1UL << (byte)ERHIShadingRate.Rate4x2) |
+                        (1UL << (byte)ERHIShadingRate.Rate4x4);
+                }
+
+                supportedShadingRateCombinerMask =
+                    (1UL << (byte)ERHIShadingRateCombiner.Min) |
+                    (1UL << (byte)ERHIShadingRateCombiner.Max) |
+                    (1UL << (byte)ERHIShadingRateCombiner.Sum) |
+                    (1UL << (byte)ERHIShadingRateCombiner.Override) |
+                    (1UL << (byte)ERHIShadingRateCombiner.Passthrough);
+            }
+            uint shadingRateImageTileSize = featureOptions6.ShadingRateImageTileSize;
+
             // check render pass level
             switch (featureOptions5.RenderPassesTier)
             {
@@ -1367,10 +1429,53 @@ namespace SharpGPU
                         isDrawMultiIndirectSupported,
                         "ID3D12GraphicsCommandList.ExecuteIndirect",
                         "Multi-draw indirect is unavailable."),
-                    variableRateShading: Probe(
-                        isVariableRateShadingSupported,
+                    variableRateShadingPerDraw: Probe(
+                        isVariableRateShadingPerDrawSupported,
                         "D3D12_FEATURE_D3D12_OPTIONS6.VariableShadingRateTier",
-                        "Variable-rate shading is unavailable."),
+                        "Variable-rate shading per draw is unavailable.",
+                        tier: variableRateShadingPerDrawTier,
+                        limits: new RHICapabilityLimits(
+                            new RHICapabilityLimit(
+                                ERHICapabilityLimitKind.SupportedShadingRateMask,
+                                supportedShadingRateMask))),
+                    variableRateShadingPerPrimitive: Probe(
+                        isVariableRateShadingPerPrimitiveSupported,
+                        "D3D12_FEATURE_D3D12_OPTIONS6.VariableShadingRateTier",
+                        "Variable-rate shading per primitive requires D3D12 variable shading rate tier 2.",
+                        tier: variableRateShadingPerPrimitiveTier),
+                    variableRateShadingAttachment: Probe(
+                        isVariableRateShadingAttachmentSupported,
+                        "D3D12_FEATURE_D3D12_OPTIONS6.VariableShadingRateTier",
+                        "Variable-rate shading attachments require D3D12 variable shading rate tier 2.",
+                        tier: variableRateShadingAttachmentTier,
+                        limits: new RHICapabilityLimits(
+                            new RHICapabilityLimit(
+                                ERHICapabilityLimitKind.ShadingRateAttachmentTileWidthMin,
+                                shadingRateImageTileSize),
+                            new RHICapabilityLimit(
+                                ERHICapabilityLimitKind.ShadingRateAttachmentTileHeightMin,
+                                shadingRateImageTileSize),
+                            new RHICapabilityLimit(
+                                ERHICapabilityLimitKind.ShadingRateAttachmentTileWidthMax,
+                                shadingRateImageTileSize),
+                            new RHICapabilityLimit(
+                                ERHICapabilityLimitKind.ShadingRateAttachmentTileHeightMax,
+                                shadingRateImageTileSize))),
+                    // Combiners means multiple shading-rate sources can be combined.
+                    // Tier 1 has only the per-draw source, so Combiners is Unavailable;
+                    // SetShadingRate(rate, Passthrough) remains the valid single-source path.
+                    variableRateShadingCombiners: Probe(
+                        isVariableRateShadingCombinersSupported,
+                        "D3D12_FEATURE_D3D12_OPTIONS6.VariableShadingRateTier",
+                        featureOptions6.VariableShadingRateTier ==
+                            Vortice.Direct3D12.VariableShadingRateTier.Tier1
+                            ? "Variable-rate shading combiners require D3D12 variable shading rate tier 2 because tier 1 exposes only a single per-draw shading-rate source."
+                            : "Variable-rate shading combiners require D3D12 variable shading rate tier 2.",
+                        tier: variableRateShadingCombinersTier,
+                        limits: new RHICapabilityLimits(
+                            new RHICapabilityLimit(
+                                ERHICapabilityLimitKind.SupportedShadingRateCombinerMask,
+                                supportedShadingRateCombinerMask))),
                     hiddenSurfaceRemoval: Probe(
                         isHiddenSurfaceRemovalSupported,
                         "SharpGPU DX12 raster lowering",

@@ -108,6 +108,26 @@ public sealed class SharpGPUFeatureReportTests
             json,
             StringComparison.Ordinal);
         Assert.DoesNotContain(
+            "\"Name\": \"Raster.VariableRateShading\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Raster.VariableRateShadingPerDraw\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Raster.VariableRateShadingPerPrimitive\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Raster.VariableRateShadingAttachment\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Raster.VariableRateShadingCombiners\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
             "attachment_feedback_loop",
             json,
             StringComparison.OrdinalIgnoreCase);

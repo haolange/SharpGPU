@@ -2054,6 +2054,7 @@ namespace SharpGPU
         private ERHITextureLayout m_DepthStencilLayout;
         private Vortice.Direct3D12.RenderPassRenderTargetDescription[] m_NativeRenderPassColorDescriptions;
         private Vortice.Direct3D12.RenderPassDepthStencilDescription? m_NativeRenderPassDepthStencilDescription;
+        private readonly Vortice.Direct3D12.ShadingRateCombiner[] m_ShadingRateCombiners;
 
         public Dx12RasterEncoder(Dx12CommandBuffer cmdBuffer)
         {
@@ -2067,6 +2068,7 @@ namespace SharpGPU
             m_IsNativeRenderPassActive = false;
             m_NativeRenderPassColorDescriptions = Array.Empty<Vortice.Direct3D12.RenderPassRenderTargetDescription>();
             m_NativeRenderPassDepthStencilDescription = null;
+            m_ShadingRateCombiners = new Vortice.Direct3D12.ShadingRateCombiner[2];
         }
 
         internal override void BeginPass(in RHIRasterPassDescriptor descriptor)
@@ -2149,6 +2151,8 @@ namespace SharpGPU
 
                 if (descriptor.ShadingRateTexture != null)
                 {
+                    dx12Device.Capabilities.Raster.VariableRateShadingAttachment.Require(
+                        "DX12 variable-rate shading attachment");
                     Dx12Texture dx12Texture = Dx12EncoderGuards.RequireTexture(descriptor.ShadingRateTexture);
                     dx12CommandBuffer.NativeCommandList.RSSetShadingRateImage(dx12Texture.NativeResource);
                 }
@@ -3631,10 +3635,55 @@ namespace SharpGPU
 
         public override void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner)
         {
-            Vortice.Direct3D12.ShadingRateCombiner nativeShadingRateCombiner = Dx12Utility.ConvertToDx12ShadingRateCombiner(shadingRateCombiner);
-            Vortice.Direct3D12.ShadingRateCombiner[] shadingRateCombiners = new[] { nativeShadingRateCombiner, nativeShadingRateCombiner };
+            Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
+            RHIRasterCapabilities raster = dx12Device.Capabilities.Raster;
+            raster.VariableRateShadingPerDraw.Require("DX12 variable-rate shading");
+            if (!raster.VariableRateShadingPerDraw.Limits.TryGetValue(
+                    ERHICapabilityLimitKind.SupportedShadingRateMask,
+                    out ulong supportedShadingRateMask) ||
+                (supportedShadingRateMask & (1UL << (byte)shadingRate)) == 0)
+            {
+                throw new NotSupportedException(
+                    $"Shading rate {shadingRate} is not supported by this DX12 device.");
+            }
+            // Combiners capability describes multi-source combination, not whether a
+            // combiner argument may be passed. Passthrough remains valid when Unavailable.
+            if (shadingRateCombiner != ERHIShadingRateCombiner.Passthrough)
+            {
+                raster.VariableRateShadingCombiners.Require(
+                    "DX12 variable-rate shading combiners");
+                if (!raster.VariableRateShadingCombiners.Limits.TryGetValue(
+                        ERHICapabilityLimitKind.SupportedShadingRateCombinerMask,
+                        out ulong supportedCombinerMask) ||
+                    (supportedCombinerMask & (1UL << (byte)shadingRateCombiner)) == 0)
+                {
+                    throw new NotSupportedException(
+                        $"Shading rate combiner {shadingRateCombiner} is not supported by this DX12 device.");
+                }
+            }
+
+            Vortice.Direct3D12.ShadingRateCombiner nativeShadingRateCombiner =
+                Dx12Utility.ConvertToDx12ShadingRateCombiner(shadingRateCombiner);
+            // combiners[0] combines per-draw rate with per-primitive rate. D3D12
+            // has no primitive source when PerPrimitive is unavailable, so this
+            // slot must remain Passthrough.
+            m_ShadingRateCombiners[0] =
+                raster.VariableRateShadingPerPrimitive.Tier !=
+                    ERHICapabilityTier.Unavailable
+                    ? nativeShadingRateCombiner
+                    : Vortice.Direct3D12.ShadingRateCombiner.Passthrough;
+            // combiners[1] combines the result with the shading-rate image
+            // (attachment). D3D12 has no attachment source when Attachment is
+            // unavailable, so this slot must remain Passthrough.
+            m_ShadingRateCombiners[1] =
+                raster.VariableRateShadingAttachment.Tier !=
+                    ERHICapabilityTier.Unavailable
+                    ? nativeShadingRateCombiner
+                    : Vortice.Direct3D12.ShadingRateCombiner.Passthrough;
             Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-            dx12CommandBuffer.NativeCommandList.RSSetShadingRate(Dx12Utility.ConvertToDx12ShadingRate(shadingRate), shadingRateCombiners);
+            dx12CommandBuffer.NativeCommandList.RSSetShadingRate(
+                Dx12Utility.ConvertToDx12ShadingRate(shadingRate),
+                m_ShadingRateCombiners);
         }
 
         public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)

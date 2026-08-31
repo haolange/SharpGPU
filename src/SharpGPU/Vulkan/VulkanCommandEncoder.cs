@@ -3864,10 +3864,28 @@ internal enum EVulkanRasterPassStrategy
 
         public override void SetShadingRate(in ERHIShadingRate shadingRate, in ERHIShadingRateCombiner shadingRateCombiner)
         {
-            // TODO: Enable only when bound pipeline declares VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR.
-            // Calling vkCmdSetFragmentShadingRateKHR unconditionally causes validation failures for static pipelines.
-            _ = shadingRate;
-            _ = shadingRateCombiner;
+            VulkanDevice device = VulkanEncoderGuards.RequireDevice(m_CommandBuffer);
+            RHIRasterCapabilities raster = device.Capabilities.Raster;
+            VulkanVariableRateShadingCommandPolicy.ValidateSetShadingRate(
+                raster.VariableRateShadingPerDraw,
+                raster.VariableRateShadingCombiners,
+                shadingRate,
+                shadingRateCombiner);
+
+            VkExtent2D fragmentSize = VulkanUtility.ConvertToVkFragmentExtent(shadingRate);
+            VkFragmentShadingRateCombinerOpKHR* combinerOps =
+                stackalloc VkFragmentShadingRateCombinerOpKHR[2];
+            VulkanVariableRateShadingCommandPolicy.ResolveCombinerOps(
+                raster.VariableRateShadingPerPrimitive,
+                raster.VariableRateShadingAttachment,
+                shadingRateCombiner,
+                out combinerOps[0],
+                out combinerOps[1]);
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanNative.vkCmdSetFragmentShadingRateKHR(
+                vkCmdBuf.NativeCommandBuffer,
+                &fragmentSize,
+                combinerOps);
         }
 
         public override void Draw(in uint vertexCount, in uint instanceCount, in uint firstVertex, in uint firstInstance)
@@ -4000,6 +4018,14 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             m_ActiveNativePipeline = null;
             try
             {
+                if (m_PassDescriptor.ShadingRateTexture != null)
+                {
+                    device.Capabilities.Raster.VariableRateShadingAttachment.Require(
+                        "Vulkan fragment shading rate attachment");
+                    throw new NotSupportedException(
+                        "SharpGPU Vulkan raster lowering has not bound a fragment shading rate attachment.");
+                }
+
                 VulkanRasterCapabilities capabilities =
                     device.RasterCapabilities;
                 m_Lowering = VulkanRasterPassLowering.Compile(

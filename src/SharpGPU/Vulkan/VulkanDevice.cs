@@ -106,7 +106,17 @@ namespace SharpGPU
         private bool m_RaytracingSupported;
         private bool m_RaytracingInlineSupported;
         private bool m_MeshShadingSupported;
-        private bool m_VariableRateShadingSupported;
+        private bool m_FragmentShadingRateExtensionPresent;
+        private bool m_VariableRateShadingPerDrawSupported;
+        private bool m_VariableRateShadingPerPrimitiveSupported;
+        private bool m_VariableRateShadingAttachmentHardwareSupported;
+        private bool m_FragmentShadingRateNonTrivialCombinerOps;
+        private bool m_FragmentShadingRateEnumerationComplete;
+        private ulong m_SupportedShadingRateMask;
+        private uint m_MinFragmentShadingRateAttachmentTexelWidth;
+        private uint m_MinFragmentShadingRateAttachmentTexelHeight;
+        private uint m_MaxFragmentShadingRateAttachmentTexelWidth;
+        private uint m_MaxFragmentShadingRateAttachmentTexelHeight;
         private bool m_UseSynchronization2;
         private bool m_UseSynchronization2KhrCommand;
         private bool m_ShaderAtomicInt64Supported;
@@ -433,6 +443,24 @@ namespace SharpGPU
             bool hasDepthStencilResolveMechanism =
                 featureChainPlan.UseVulkan12Features ||
                 hasDepthStencilResolveExtension;
+            // Queried fields include maxFragmentSize plus
+            // min/maxFragmentShadingRateAttachmentTexelSize. Attachment
+            // limits are mapped below; they stay unpublished while Attachment
+            // is Unavailable because FromProbe(false, ...) discards limits.
+            VkPhysicalDeviceFragmentShadingRatePropertiesKHR
+                fragmentShadingRateProperties = new()
+                {
+                    sType =
+                        VkStructureType
+                            .PhysicalDeviceFragmentShadingRatePropertiesKHR,
+                };
+            if (hasFragmentShadingRate)
+            {
+                fragmentShadingRateProperties.pNext =
+                    rasterPropertiesChain;
+                rasterPropertiesChain =
+                    &fragmentShadingRateProperties;
+            }
             if (hasDepthStencilResolveMechanism)
             {
                 depthStencilResolveProperties.pNext =
@@ -703,7 +731,19 @@ namespace SharpGPU
             bool rtQueryFeatureSupported = hasRTQuery && rtQueryFeaturesQuery.rayQuery;
             bool meshShaderFeatureSupported = hasMeshShader && meshFeaturesQuery.meshShader;
             bool taskShaderFeatureSupported = hasMeshShader && meshFeaturesQuery.taskShader;
-            bool fragmentShadingRateFeatureSupported = hasFragmentShadingRate && vrsFeaturesQuery.pipelineFragmentShadingRate;
+            bool fragmentShadingRatePerDrawSupported =
+                hasFragmentShadingRate && vrsFeaturesQuery.pipelineFragmentShadingRate;
+            bool fragmentShadingRatePerPrimitiveSupported =
+                hasFragmentShadingRate && vrsFeaturesQuery.primitiveFragmentShadingRate;
+            bool fragmentShadingRateAttachmentSupported =
+                hasFragmentShadingRate && vrsFeaturesQuery.attachmentFragmentShadingRate;
+            bool fragmentShadingRateFeatureSupported =
+                fragmentShadingRatePerDrawSupported ||
+                fragmentShadingRatePerPrimitiveSupported ||
+                fragmentShadingRateAttachmentSupported;
+            bool fragmentShadingRateNonTrivialCombinerOps =
+                hasFragmentShadingRate &&
+                fragmentShadingRateProperties.fragmentShadingRateNonTrivialCombinerOps;
             bool useDescriptorIndexingExtension =
                 descriptorIndexingExtension && descriptorIndexingFeatureSupported;
             bool useDynamicRenderingExtension =
@@ -989,7 +1029,9 @@ namespace SharpGPU
             if (vrsSupported)
             {
                 vrsFeatures.sType = VkStructureType.PhysicalDeviceFragmentShadingRateFeaturesKHR;
-                vrsFeatures.pipelineFragmentShadingRate = true;
+                vrsFeatures.pipelineFragmentShadingRate = fragmentShadingRatePerDrawSupported;
+                vrsFeatures.primitiveFragmentShadingRate = fragmentShadingRatePerPrimitiveSupported;
+                vrsFeatures.attachmentFragmentShadingRate = fragmentShadingRateAttachmentSupported;
                 vrsFeatures.pNext = pNextChain;
                 pNextChain = &vrsFeatures;
             }
@@ -1026,7 +1068,37 @@ namespace SharpGPU
             m_RaytracingSupported = rtSupported;
             m_RaytracingInlineSupported = rtInlineSupported;
             m_MeshShadingSupported = meshSupported;
-            m_VariableRateShadingSupported = vrsSupported;
+            m_FragmentShadingRateExtensionPresent = hasFragmentShadingRate;
+            m_VariableRateShadingPerDrawSupported = fragmentShadingRatePerDrawSupported;
+            m_VariableRateShadingPerPrimitiveSupported = fragmentShadingRatePerPrimitiveSupported;
+            m_VariableRateShadingAttachmentHardwareSupported = fragmentShadingRateAttachmentSupported;
+            m_FragmentShadingRateNonTrivialCombinerOps = fragmentShadingRateNonTrivialCombinerOps;
+            // maxFragmentSize is informational only; the supported set comes from
+            // vkGetPhysicalDeviceFragmentShadingRatesKHR.
+            VulkanFragmentShadingRateMaskQuery rateEnumeration =
+                QuerySupportedFragmentShadingRateMask(hasFragmentShadingRate);
+            m_FragmentShadingRateEnumerationComplete = rateEnumeration.IsComplete;
+            m_SupportedShadingRateMask = rateEnumeration.SupportedMask;
+            m_MinFragmentShadingRateAttachmentTexelWidth =
+                hasFragmentShadingRate
+                    ? fragmentShadingRateProperties
+                        .minFragmentShadingRateAttachmentTexelSize.width
+                    : 0;
+            m_MinFragmentShadingRateAttachmentTexelHeight =
+                hasFragmentShadingRate
+                    ? fragmentShadingRateProperties
+                        .minFragmentShadingRateAttachmentTexelSize.height
+                    : 0;
+            m_MaxFragmentShadingRateAttachmentTexelWidth =
+                hasFragmentShadingRate
+                    ? fragmentShadingRateProperties
+                        .maxFragmentShadingRateAttachmentTexelSize.width
+                    : 0;
+            m_MaxFragmentShadingRateAttachmentTexelHeight =
+                hasFragmentShadingRate
+                    ? fragmentShadingRateProperties
+                        .maxFragmentShadingRateAttachmentTexelSize.height
+                    : 0;
             m_UseSynchronization2 = useSynchronization2;
             m_UseSynchronization2KhrCommand = useSynchronization2Extension;
             m_DynamicRenderingSupported = dynamicRenderingFeatureSupported;
@@ -1097,6 +1169,56 @@ namespace SharpGPU
 
             // Create command queues
             CreateCommandQueues(actualComputeQueueCount, actualTransferQueueCount, actualGraphicsQueueCount);
+        }
+
+        private VulkanFragmentShadingRateMaskQuery QuerySupportedFragmentShadingRateMask(
+            bool hasFragmentShadingRate)
+        {
+            return VulkanFragmentShadingRateEnumeration.QuerySupportedMask(
+                hasFragmentShadingRate,
+                new PhysicalDeviceFragmentShadingRateQuery(m_PhysicalDevice));
+        }
+
+        private readonly unsafe struct PhysicalDeviceFragmentShadingRateQuery :
+            IVulkanFragmentShadingRateQuery
+        {
+            private readonly VkPhysicalDevice m_PhysicalDevice;
+
+            public PhysicalDeviceFragmentShadingRateQuery(
+                VkPhysicalDevice physicalDevice)
+            {
+                m_PhysicalDevice = physicalDevice;
+            }
+
+            public VkResult QueryCount(out uint count)
+            {
+                uint queriedCount = 0;
+                VkResult result =
+                    VulkanNative.vkGetPhysicalDeviceFragmentShadingRatesKHR(
+                        m_PhysicalDevice,
+                        &queriedCount,
+                        null);
+                count = queriedCount;
+                return result;
+            }
+
+            public VkResult QueryFetch(
+                Span<VkPhysicalDeviceFragmentShadingRateKHR> destination,
+                out uint writtenCount)
+            {
+                writtenCount = (uint)destination.Length;
+                fixed (VkPhysicalDeviceFragmentShadingRateKHR* ratesPtr = destination)
+                {
+                    uint returnedCount = writtenCount;
+                    VkResult result =
+                        VulkanNative.vkGetPhysicalDeviceFragmentShadingRatesKHR(
+                            m_PhysicalDevice,
+                            &returnedCount,
+                            ratesPtr);
+                    writtenCount = returnedCount;
+                    return result;
+                }
+            }
         }
 
         private void UpdateDeviceFeatures()
@@ -1175,6 +1297,20 @@ namespace SharpGPU
                 "Vulkan layout-driven indirect execution requires VK_EXT_device_generated_commands lowering.",
                 ERHICapabilityProbeKind.BackendContract,
                 "SharpGPU Vulkan VK_EXT_device_generated_commands lowering");
+            VulkanVariableRateShadingCapabilities variableRateShadingCapabilities =
+                VulkanVariableRateShadingCapabilityFactory.Create(
+                    new VulkanVariableRateShadingProbeState(
+                        m_FragmentShadingRateExtensionPresent,
+                        m_VariableRateShadingPerDrawSupported,
+                        m_VariableRateShadingPerPrimitiveSupported,
+                        m_VariableRateShadingAttachmentHardwareSupported,
+                        m_FragmentShadingRateNonTrivialCombinerOps,
+                        m_FragmentShadingRateEnumerationComplete,
+                        m_SupportedShadingRateMask,
+                        m_MinFragmentShadingRateAttachmentTexelWidth,
+                        m_MinFragmentShadingRateAttachmentTexelHeight,
+                        m_MaxFragmentShadingRateAttachmentTexelWidth,
+                        m_MaxFragmentShadingRateAttachmentTexelHeight));
             m_Capabilities = new RHIDeviceCapabilities(
                 raster: new RHIRasterCapabilities(
                     ERHIProjectionStrategy.FlipY,
@@ -1258,12 +1394,21 @@ namespace SharpGPU
                         features.multiDrawIndirect,
                         "VkPhysicalDeviceFeatures.multiDrawIndirect",
                         "Multi-draw indirect is unavailable."),
-                    variableRateShading: Probe(
-                        m_VariableRateShadingSupported,
-                        "VK_KHR_fragment_shading_rate feature query",
-                        "Fragment shading rate is unavailable.",
-                        strategy: ERHICapabilityStrategy.NativeExtension,
-                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery),
+                    variableRateShadingPerDraw:
+                        variableRateShadingCapabilities.PerDraw,
+                    variableRateShadingPerPrimitive:
+                        variableRateShadingCapabilities.PerPrimitive,
+                    // Tile-size limits are mapped so attachment lowering can publish them later.
+                    // FromProbe(false, ...) discards limits while Attachment is Unavailable.
+                    // Hardware support and SharpGPU lowering are independent: a device
+                    // without attachmentFragmentShadingRate is a feature miss, not a
+                    // lowering gap.
+                    variableRateShadingAttachment:
+                        variableRateShadingCapabilities.Attachment,
+                    // Combiners availability follows executable second sources:
+                    // primitive feature+lowering, or attachment lowering when bound.
+                    variableRateShadingCombiners:
+                        variableRateShadingCapabilities.Combiners,
                     hiddenSurfaceRemoval: Probe(
                         false,
                         "SharpGPU Vulkan raster lowering",
@@ -2219,6 +2364,509 @@ namespace SharpGPU
             uint messageTypes,
             IntPtr callbackData,
             IntPtr userData);
+    }
+
+    internal interface IVulkanFragmentShadingRateQuery
+    {
+        VkResult QueryCount(out uint count);
+        VkResult QueryFetch(
+            Span<VkPhysicalDeviceFragmentShadingRateKHR> destination,
+            out uint writtenCount);
+    }
+
+    internal readonly struct VulkanFragmentShadingRateMaskQuery
+    {
+        public bool IsComplete { get; }
+        public ulong SupportedMask { get; }
+
+        private VulkanFragmentShadingRateMaskQuery(
+            bool isComplete,
+            ulong supportedMask)
+        {
+            IsComplete = isComplete;
+            SupportedMask = supportedMask;
+        }
+
+        public static VulkanFragmentShadingRateMaskQuery Complete(ulong supportedMask)
+        {
+            return new VulkanFragmentShadingRateMaskQuery(true, supportedMask);
+        }
+
+        public static VulkanFragmentShadingRateMaskQuery CompleteEmpty()
+        {
+            return new VulkanFragmentShadingRateMaskQuery(true, 0);
+        }
+
+        public static VulkanFragmentShadingRateMaskQuery Unreliable()
+        {
+            return new VulkanFragmentShadingRateMaskQuery(false, 0);
+        }
+    }
+
+    internal static class VulkanFragmentShadingRateEnumeration
+    {
+        internal const int MaxFetchAttempts = 2;
+        internal const int MaxEnumeratedRateCount = 256;
+        internal const string UnstableCompleteRateListReason =
+            "vkGetPhysicalDeviceFragmentShadingRatesKHR did not return a stable complete rate list.";
+        internal const string MissingRequired1x1RateReason =
+            "vkGetPhysicalDeviceFragmentShadingRatesKHR stable list did not include required 1x1 rate.";
+        internal const string FragmentShadingRatesQuerySource =
+            "vkGetPhysicalDeviceFragmentShadingRatesKHR";
+        internal const ulong Required1x1ShadingRateBit =
+            1UL << (byte)ERHIShadingRate.Rate1x1;
+
+        internal static bool TryGetSafeCount(uint count, out int safeCount)
+        {
+            if (count > (uint)int.MaxValue ||
+                count > (uint)MaxEnumeratedRateCount)
+            {
+                safeCount = 0;
+                return false;
+            }
+
+            safeCount = (int)count;
+            return true;
+        }
+
+        internal static bool IsStableCompleteResult(
+            VkResult result,
+            uint returnedCount,
+            in int capacity)
+        {
+            return result == VkResult.Success &&
+                returnedCount <= (uint)capacity;
+        }
+
+        internal static bool IsIncompleteOrTruncated(
+            VkResult result,
+            uint returnedCount,
+            in int capacity)
+        {
+            return result == VkResult.Incomplete ||
+                returnedCount > (uint)capacity;
+        }
+
+        // Callers must pass a stable complete enumeration. Unknown sizes are
+        // skipped; Pending is never written into the published mask.
+        internal static ulong BuildSupportedShadingRateMask(
+            ReadOnlySpan<VkExtent2D> fragmentSizes)
+        {
+            ulong mask = 0;
+            for (int i = 0; i < fragmentSizes.Length; ++i)
+            {
+                if (VulkanUtility.TryMapVkFragmentSizeToShadingRate(
+                    fragmentSizes[i],
+                    out ERHIShadingRate shadingRate) &&
+                    shadingRate != ERHIShadingRate.Pending)
+                {
+                    mask |= 1UL << (byte)shadingRate;
+                }
+            }
+
+            return mask;
+        }
+
+        internal static bool ContainsRequired1x1Rate(ulong supportedShadingRateMask)
+        {
+            return (supportedShadingRateMask & Required1x1ShadingRateBit) != 0;
+        }
+
+        internal static VulkanFragmentShadingRateMaskQuery QuerySupportedMask<TQuery>(
+            bool hasFragmentShadingRate,
+            TQuery query)
+            where TQuery : IVulkanFragmentShadingRateQuery
+        {
+            if (!hasFragmentShadingRate)
+            {
+                // Meaningful only when VariableRateShadingPerDraw is Available.
+                // No VK_KHR_fragment_shading_rate query means no supported-rate evidence.
+                return VulkanFragmentShadingRateMaskQuery.CompleteEmpty();
+            }
+
+            if (!TryQuerySafeCount(query, out uint count, out int safeCount))
+            {
+                return VulkanFragmentShadingRateMaskQuery.Unreliable();
+            }
+
+            if (count == 0)
+            {
+                // Zero is a legal complete list: no enumerated fragment sizes.
+                return VulkanFragmentShadingRateMaskQuery.CompleteEmpty();
+            }
+
+            for (int attempt = 0; attempt < MaxFetchAttempts; ++attempt)
+            {
+                int capacity = safeCount;
+                VkPhysicalDeviceFragmentShadingRateKHR[] rates =
+                    new VkPhysicalDeviceFragmentShadingRateKHR[capacity];
+                for (int i = 0; i < capacity; ++i)
+                {
+                    rates[i] = new VkPhysicalDeviceFragmentShadingRateKHR
+                    {
+                        sType =
+                            VkStructureType
+                                .PhysicalDeviceFragmentShadingRateKHR,
+                    };
+                }
+
+                VkResult result = query.QueryFetch(rates, out uint returnedCount);
+                if (IsStableCompleteResult(result, returnedCount, capacity))
+                {
+                    VkExtent2D[] fragmentSizes = new VkExtent2D[returnedCount];
+                    for (uint i = 0; i < returnedCount; ++i)
+                    {
+                        fragmentSizes[i] = rates[i].fragmentSize;
+                    }
+
+                    return VulkanFragmentShadingRateMaskQuery.Complete(
+                        BuildSupportedShadingRateMask(fragmentSizes));
+                }
+
+                if (!IsIncompleteOrTruncated(result, returnedCount, capacity) ||
+                    attempt + 1 >= MaxFetchAttempts)
+                {
+                    return VulkanFragmentShadingRateMaskQuery.Unreliable();
+                }
+
+                // VK_INCOMPLETE overwrites the count with the number of
+                // structures actually written, not the required capacity.
+                // Re-run the count-only query before any retry allocation.
+                if (!TryQuerySafeCount(query, out count, out safeCount) ||
+                    count == 0)
+                {
+                    return VulkanFragmentShadingRateMaskQuery.Unreliable();
+                }
+            }
+
+            return VulkanFragmentShadingRateMaskQuery.Unreliable();
+        }
+
+        private static bool TryQuerySafeCount<TQuery>(
+            TQuery query,
+            out uint count,
+            out int safeCount)
+            where TQuery : IVulkanFragmentShadingRateQuery
+        {
+            safeCount = 0;
+            VkResult countResult = query.QueryCount(out uint queriedCount);
+            if (countResult != VkResult.Success)
+            {
+                // Capability probe must not fail device create. Incomplete or
+                // any other native result is not a stable complete rate list.
+                count = 0;
+                return false;
+            }
+
+            if (queriedCount == 0)
+            {
+                count = 0;
+                return true;
+            }
+
+            if (!TryGetSafeCount(queriedCount, out safeCount))
+            {
+                count = 0;
+                return false;
+            }
+
+            count = queriedCount;
+            return true;
+        }
+    }
+
+    internal readonly struct VulkanVariableRateShadingProbeState
+    {
+        public bool ExtensionPresent { get; }
+        public bool PerDrawSupported { get; }
+        public bool PerPrimitiveSupported { get; }
+        public bool AttachmentHardwareSupported { get; }
+        public bool NonTrivialCombinerOps { get; }
+        public bool RateEnumerationComplete { get; }
+        public ulong SupportedShadingRateMask { get; }
+        public uint MinAttachmentTileWidth { get; }
+        public uint MinAttachmentTileHeight { get; }
+        public uint MaxAttachmentTileWidth { get; }
+        public uint MaxAttachmentTileHeight { get; }
+
+        public VulkanVariableRateShadingProbeState(
+            in bool extensionPresent,
+            in bool perDrawSupported,
+            in bool perPrimitiveSupported,
+            in bool attachmentHardwareSupported,
+            in bool nonTrivialCombinerOps,
+            in bool rateEnumerationComplete,
+            in ulong supportedShadingRateMask,
+            in uint minAttachmentTileWidth,
+            in uint minAttachmentTileHeight,
+            in uint maxAttachmentTileWidth,
+            in uint maxAttachmentTileHeight)
+        {
+            ExtensionPresent = extensionPresent;
+            PerDrawSupported = perDrawSupported;
+            PerPrimitiveSupported = perPrimitiveSupported;
+            AttachmentHardwareSupported = attachmentHardwareSupported;
+            NonTrivialCombinerOps = nonTrivialCombinerOps;
+            RateEnumerationComplete = rateEnumerationComplete;
+            SupportedShadingRateMask = supportedShadingRateMask;
+            MinAttachmentTileWidth = minAttachmentTileWidth;
+            MinAttachmentTileHeight = minAttachmentTileHeight;
+            MaxAttachmentTileWidth = maxAttachmentTileWidth;
+            MaxAttachmentTileHeight = maxAttachmentTileHeight;
+        }
+    }
+
+    internal readonly struct VulkanVariableRateShadingCapabilities
+    {
+        public RHICapability PerDraw { get; }
+        public RHICapability PerPrimitive { get; }
+        public RHICapability Attachment { get; }
+        public RHICapability Combiners { get; }
+
+        public VulkanVariableRateShadingCapabilities(
+            in RHICapability perDraw,
+            in RHICapability perPrimitive,
+            in RHICapability attachment,
+            in RHICapability combiners)
+        {
+            PerDraw = perDraw;
+            PerPrimitive = perPrimitive;
+            Attachment = attachment;
+            Combiners = combiners;
+        }
+    }
+
+    internal static class VulkanVariableRateShadingCapabilityFactory
+    {
+        internal const string ExtensionPresenceQuerySource =
+            "VK_KHR_fragment_shading_rate extension presence query";
+        internal const string ExtensionUnsupportedReason =
+            "VK_KHR_fragment_shading_rate is not supported by this physical device.";
+        internal const string PipelineFragmentShadingRateSource =
+            "VkPhysicalDeviceFragmentShadingRateFeaturesKHR.pipelineFragmentShadingRate";
+        internal const string PrimitiveFragmentShadingRateSource =
+            "VkPhysicalDeviceFragmentShadingRateFeaturesKHR.primitiveFragmentShadingRate";
+        internal const string AttachmentFragmentShadingRateSource =
+            "VkPhysicalDeviceFragmentShadingRateFeaturesKHR.attachmentFragmentShadingRate";
+        internal const string RasterLoweringSource =
+            "SharpGPU Vulkan raster lowering";
+        internal const string CombinableFeatureFieldsSource =
+            "VkPhysicalDeviceFragmentShadingRateFeaturesKHR.primitiveFragmentShadingRate+attachmentFragmentShadingRate";
+        internal const string CombinersBothFeaturesUnsupportedReason =
+            "VkPhysicalDeviceFragmentShadingRateFeaturesKHR.primitiveFragmentShadingRate and attachmentFragmentShadingRate are both false; this physical device has no combinable second shading-rate source.";
+        internal const string CombinersAttachmentLoweringUnboundReason =
+            "This physical device supports attachmentFragmentShadingRate, but SharpGPU Vulkan raster lowering has not bound a fragment shading rate attachment, so there is no combinable second source.";
+
+        public static VulkanVariableRateShadingCapabilities Create(
+            in VulkanVariableRateShadingProbeState state)
+        {
+            if (!state.ExtensionPresent)
+            {
+                RHICapability extensionMissing = RHICapability.FromProbe(
+                    false,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeExtension,
+                    ERHICapabilityProbeKind.NativeExtensionQuery,
+                    ExtensionPresenceQuerySource,
+                    ExtensionUnsupportedReason);
+                return new VulkanVariableRateShadingCapabilities(
+                    extensionMissing,
+                    extensionMissing,
+                    extensionMissing,
+                    extensionMissing);
+            }
+
+            RHICapability perDraw = CreatePerDraw(in state);
+            RHICapability perPrimitive = RHICapability.FromProbe(
+                state.PerPrimitiveSupported,
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.NativeExtension,
+                ERHICapabilityProbeKind.NativeExtensionQuery,
+                PrimitiveFragmentShadingRateSource,
+                "VkPhysicalDeviceFragmentShadingRateFeaturesKHR.primitiveFragmentShadingRate is false.");
+            RHICapability attachment = RHICapability.FromProbe(
+                false,
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.NativeExtension,
+                state.AttachmentHardwareSupported
+                    ? ERHICapabilityProbeKind.BackendContract
+                    : ERHICapabilityProbeKind.NativeExtensionQuery,
+                state.AttachmentHardwareSupported
+                    ? RasterLoweringSource
+                    : AttachmentFragmentShadingRateSource,
+                state.AttachmentHardwareSupported
+                    ? "SharpGPU Vulkan raster lowering has not bound a fragment shading rate attachment."
+                    : "VkPhysicalDeviceFragmentShadingRateFeaturesKHR.attachmentFragmentShadingRate is false.",
+                new RHICapabilityLimits(
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.ShadingRateAttachmentTileWidthMin,
+                        state.MinAttachmentTileWidth),
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.ShadingRateAttachmentTileHeightMin,
+                        state.MinAttachmentTileHeight),
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.ShadingRateAttachmentTileWidthMax,
+                        state.MaxAttachmentTileWidth),
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.ShadingRateAttachmentTileHeightMax,
+                        state.MaxAttachmentTileHeight)));
+            return new VulkanVariableRateShadingCapabilities(
+                perDraw,
+                perPrimitive,
+                attachment,
+                CreateCombiners(in state));
+        }
+
+        private static RHICapability CreatePerDraw(
+            in VulkanVariableRateShadingProbeState state)
+        {
+            if (!state.PerDrawSupported)
+            {
+                return RHICapability.FromProbe(
+                    false,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeExtension,
+                    ERHICapabilityProbeKind.NativeExtensionQuery,
+                    PipelineFragmentShadingRateSource,
+                    "VkPhysicalDeviceFragmentShadingRateFeaturesKHR.pipelineFragmentShadingRate is false.");
+            }
+
+            if (!state.RateEnumerationComplete)
+            {
+                return RHICapability.FromProbe(
+                    false,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeExtension,
+                    ERHICapabilityProbeKind.NativeExtensionQuery,
+                    VulkanFragmentShadingRateEnumeration.FragmentShadingRatesQuerySource,
+                    VulkanFragmentShadingRateEnumeration.UnstableCompleteRateListReason);
+            }
+
+            if (!VulkanFragmentShadingRateEnumeration.ContainsRequired1x1Rate(
+                state.SupportedShadingRateMask))
+            {
+                return RHICapability.FromProbe(
+                    false,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeExtension,
+                    ERHICapabilityProbeKind.NativeExtensionQuery,
+                    VulkanFragmentShadingRateEnumeration.FragmentShadingRatesQuerySource,
+                    VulkanFragmentShadingRateEnumeration.MissingRequired1x1RateReason);
+            }
+
+            return RHICapability.FromProbe(
+                true,
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.NativeExtension,
+                ERHICapabilityProbeKind.NativeExtensionQuery,
+                PipelineFragmentShadingRateSource,
+                "VkPhysicalDeviceFragmentShadingRateFeaturesKHR.pipelineFragmentShadingRate is false.",
+                new RHICapabilityLimits(
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.SupportedShadingRateMask,
+                        state.SupportedShadingRateMask)));
+        }
+
+        private static RHICapability CreateCombiners(
+            in VulkanVariableRateShadingProbeState state)
+        {
+            RHICapabilityLimits combinerLimits = new RHICapabilityLimits(
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.SupportedShadingRateCombinerMask,
+                    (1UL << (byte)ERHIShadingRateCombiner.Passthrough) |
+                    (1UL << (byte)ERHIShadingRateCombiner.Override) |
+                    (state.NonTrivialCombinerOps
+                        ? (1UL << (byte)ERHIShadingRateCombiner.Min) |
+                          (1UL << (byte)ERHIShadingRateCombiner.Max)
+                        : 0UL)));
+
+            // Primitive fragment shading rate is already lowered by SetShadingRate.
+            // No additional SharpGPU primitive-lowering constraint exists today.
+            if (state.PerPrimitiveSupported)
+            {
+                return RHICapability.FromProbe(
+                    true,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeExtension,
+                    ERHICapabilityProbeKind.NativeExtensionQuery,
+                    PrimitiveFragmentShadingRateSource,
+                    "VkPhysicalDeviceFragmentShadingRateFeaturesKHR.primitiveFragmentShadingRate is false.",
+                    combinerLimits);
+            }
+
+            if (!state.AttachmentHardwareSupported)
+            {
+                return RHICapability.FromProbe(
+                    false,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeExtension,
+                    ERHICapabilityProbeKind.NativeExtensionQuery,
+                    CombinableFeatureFieldsSource,
+                    CombinersBothFeaturesUnsupportedReason);
+            }
+
+            return RHICapability.FromProbe(
+                false,
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.NativeExtension,
+                ERHICapabilityProbeKind.BackendContract,
+                RasterLoweringSource,
+                CombinersAttachmentLoweringUnboundReason);
+        }
+    }
+
+    internal static class VulkanVariableRateShadingCommandPolicy
+    {
+        internal const string PerDrawCapabilityName = "Vulkan variable-rate shading";
+        internal const string CombinersCapabilityName =
+            "Vulkan variable-rate shading combiners";
+
+        internal static void ValidateSetShadingRate(
+            in RHICapability perDraw,
+            in RHICapability combiners,
+            ERHIShadingRate shadingRate,
+            ERHIShadingRateCombiner combiner)
+        {
+            perDraw.Require(PerDrawCapabilityName);
+            if (!perDraw.Limits.TryGetValue(
+                    ERHICapabilityLimitKind.SupportedShadingRateMask,
+                    out ulong supportedShadingRateMask) ||
+                (supportedShadingRateMask & (1UL << (byte)shadingRate)) == 0)
+            {
+                throw new NotSupportedException(
+                    $"Shading rate {shadingRate} is not supported by this Vulkan device.");
+            }
+
+            if (combiner != ERHIShadingRateCombiner.Passthrough)
+            {
+                combiners.Require(CombinersCapabilityName);
+                if (!combiners.Limits.TryGetValue(
+                        ERHICapabilityLimitKind.SupportedShadingRateCombinerMask,
+                        out ulong supportedCombinerMask) ||
+                    (supportedCombinerMask & (1UL << (byte)combiner)) == 0)
+                {
+                    throw new NotSupportedException(
+                        $"Shading rate combiner {combiner} is not supported by this Vulkan device.");
+                }
+            }
+        }
+
+        internal static void ResolveCombinerOps(
+            in RHICapability perPrimitive,
+            in RHICapability attachment,
+            ERHIShadingRateCombiner combiner,
+            out VkFragmentShadingRateCombinerOpKHR pipelineWithPrimitive,
+            out VkFragmentShadingRateCombinerOpKHR resultWithAttachment)
+        {
+            pipelineWithPrimitive =
+                perPrimitive.Tier != ERHICapabilityTier.Unavailable
+                    ? VulkanUtility.ConvertToVkShadingRateCombiner(combiner)
+                    : VkFragmentShadingRateCombinerOpKHR.Keep;
+            resultWithAttachment =
+                attachment.Tier != ERHICapabilityTier.Unavailable
+                    ? VulkanUtility.ConvertToVkShadingRateCombiner(combiner)
+                    : VkFragmentShadingRateCombinerOpKHR.Keep;
+        }
     }
 }
 

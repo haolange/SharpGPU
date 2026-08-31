@@ -1229,8 +1229,55 @@ namespace SharpGPU
                 case ERHIShadingRate.Rate4x4:
                     return new VkExtent2D() { width = 4, height = 4 };
                 default:
-                    return new VkExtent2D() { width = 1, height = 1 };
+                    throw new ArgumentOutOfRangeException(
+                        nameof(shadingRate),
+                        shadingRate,
+                        "Unsupported Vulkan shading rate.");
             }
+        }
+
+        public static bool TryMapVkFragmentSizeToShadingRate(
+            in VkExtent2D fragmentSize,
+            out ERHIShadingRate shadingRate)
+        {
+            if (fragmentSize.width == 1 && fragmentSize.height == 1)
+            {
+                shadingRate = ERHIShadingRate.Rate1x1;
+                return true;
+            }
+            if (fragmentSize.width == 1 && fragmentSize.height == 2)
+            {
+                shadingRate = ERHIShadingRate.Rate1x2;
+                return true;
+            }
+            if (fragmentSize.width == 2 && fragmentSize.height == 1)
+            {
+                shadingRate = ERHIShadingRate.Rate2x1;
+                return true;
+            }
+            if (fragmentSize.width == 2 && fragmentSize.height == 2)
+            {
+                shadingRate = ERHIShadingRate.Rate2x2;
+                return true;
+            }
+            if (fragmentSize.width == 2 && fragmentSize.height == 4)
+            {
+                shadingRate = ERHIShadingRate.Rate2x4;
+                return true;
+            }
+            if (fragmentSize.width == 4 && fragmentSize.height == 2)
+            {
+                shadingRate = ERHIShadingRate.Rate4x2;
+                return true;
+            }
+            if (fragmentSize.width == 4 && fragmentSize.height == 4)
+            {
+                shadingRate = ERHIShadingRate.Rate4x4;
+                return true;
+            }
+
+            shadingRate = default;
+            return false;
         }
 
         public static VkFragmentShadingRateCombinerOpKHR ConvertToVkShadingRateCombiner(in ERHIShadingRateCombiner combiner)
@@ -1245,8 +1292,12 @@ namespace SharpGPU
                     return VkFragmentShadingRateCombinerOpKHR.Replace;
                 case ERHIShadingRateCombiner.Passthrough:
                     return VkFragmentShadingRateCombinerOpKHR.Keep;
+                case ERHIShadingRateCombiner.Sum:
+                    throw new NotSupportedException(
+                        "Vulkan fragment shading rate has no Sum combiner.");
                 default:
-                    return VkFragmentShadingRateCombinerOpKHR.Keep;
+                    throw new NotSupportedException(
+                        $"Shading rate combiner {combiner} is not supported by Vulkan.");
             }
         }
 
@@ -2127,6 +2178,17 @@ internal static unsafe class VulkanNative
         public static void vkGetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* features)
         {
             GetInstanceApi(physicalDevice).vkGetPhysicalDeviceFeatures2(physicalDevice, features);
+        }
+
+        public static VkResult vkGetPhysicalDeviceFragmentShadingRatesKHR(
+            VkPhysicalDevice physicalDevice,
+            uint* fragmentShadingRateCount,
+            VkPhysicalDeviceFragmentShadingRateKHR* fragmentShadingRates)
+        {
+            return GetInstanceApi(physicalDevice).vkGetPhysicalDeviceFragmentShadingRatesKHR(
+                physicalDevice,
+                fragmentShadingRateCount,
+                fragmentShadingRates);
         }
 
         public static void vkGetPhysicalDeviceFormatProperties(

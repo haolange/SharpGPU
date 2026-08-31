@@ -950,10 +950,26 @@ namespace SharpGPU
                         ERHICapabilityStrategy.CoreApi,
                         ERHICapabilityProbeKind.ApiVersion,
                         "Metal indirect command buffers"),
-                    variableRateShading: Probe(
+                    variableRateShadingPerDraw: Probe(
                         false,
                         "SharpGPU Metal variable-rate rasterization lowering",
-                        "Variable-rate shading is not exposed by the Metal backend."),
+                        "Variable-rate shading is not exposed by the Metal backend.",
+                        probeKind: ERHICapabilityProbeKind.BackendContract),
+                    variableRateShadingPerPrimitive: Probe(
+                        false,
+                        "SharpGPU Metal variable-rate rasterization lowering",
+                        "Variable-rate shading is not exposed by the Metal backend.",
+                        probeKind: ERHICapabilityProbeKind.BackendContract),
+                    variableRateShadingAttachment: Probe(
+                        false,
+                        "SharpGPU Metal variable-rate rasterization lowering",
+                        "Variable-rate shading is not exposed by the Metal backend.",
+                        probeKind: ERHICapabilityProbeKind.BackendContract),
+                    variableRateShadingCombiners: Probe(
+                        false,
+                        "SharpGPU Metal variable-rate rasterization lowering",
+                        "Variable-rate shading is not exposed by the Metal backend.",
+                        probeKind: ERHICapabilityProbeKind.BackendContract),
                     hiddenSurfaceRemoval: Probe(
                         false,
                         "SharpGPU Metal raster lowering",

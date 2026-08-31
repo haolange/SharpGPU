@@ -1,12 +1,36 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 using SharpGPU;
+#if SHARPGPU_ENABLE_DX12
+using Vortice.Direct3D12;
+#endif
 using Xunit;
 
 namespace SharpGPU.Conformance.Tests;
 
 public sealed class SharpGPUFeatureContractMatrixTests
 {
+    [Fact]
+    [Trait("Category", "SharpGpuPortable")]
+    public void VariableRateShading_PerDrawUnavailable_SetShadingRateFailClosedWithoutDevice()
+    {
+        RHICapability perDraw = RHICapability.Unavailable(
+            "per-draw variable-rate shading is unavailable.",
+            ERHICapabilityProbeKind.NativeExtensionQuery,
+            "portable VRS SetShadingRate guard");
+        RHICapability combiners = RHICapability.Unavailable(
+            "combiners unused when per-draw is unavailable.",
+            ERHICapabilityProbeKind.NativeExtensionQuery,
+            "portable VRS SetShadingRate guard");
+
+        Assert.Throws<NotSupportedException>(
+            () => VulkanVariableRateShadingCommandPolicy.ValidateSetShadingRate(
+                perDraw,
+                combiners,
+                ERHIShadingRate.Rate1x1,
+                ERHIShadingRateCombiner.Passthrough));
+    }
+
 #if SHARPGPU_ENABLE_DX12
     [Fact]
     public void Dx12_TimestampQuery_ShouldCreateExecuteSubmitAndReadback()
@@ -253,6 +277,383 @@ public sealed class SharpGPUFeatureContractMatrixTests
     }
 #endif
 
+#if SHARPGPU_METAL_QUALIFICATION_HOST
+    [Fact]
+    [Trait("Category", "SharpGpuMetalQualified")]
+    public void Metal_VariableRateShading_ShouldReportUnavailable()
+    {
+        Assert.True(
+            OperatingSystem.IsMacOS(),
+            "SharpGpuMetalQualified requires a Metal qualification host.");
+        Assert.True(
+            RHIInstance.IsBackendSupported(
+                ERHIBackend.Metal,
+                out string backendReason),
+            backendReason);
+
+        using RHIInstance instance = RHIInstance.Create(new RHIInstanceDescriptor
+        {
+            Backend = ERHIBackend.Metal,
+            EnableDebugLayer = false,
+            EnableValidation = false,
+            ComputeQueueRequestCount = 0,
+            TransferQueueRequestCount = 0,
+            GraphicsQueueRequestCount = 1,
+        });
+        Assert.NotNull(instance);
+        Assert.True(instance.DeviceCount > 0);
+
+        for (int i = 0; i < instance.DeviceCount; ++i)
+        {
+            RHIRasterCapabilities raster = instance.GetDevice(i).Capabilities.Raster;
+            Assert.Equal(ERHICapabilityTier.Unavailable, raster.VariableRateShadingPerDraw.Tier);
+            Assert.Equal(ERHICapabilityTier.Unavailable, raster.VariableRateShadingPerPrimitive.Tier);
+            Assert.Equal(ERHICapabilityTier.Unavailable, raster.VariableRateShadingAttachment.Tier);
+            Assert.Equal(ERHICapabilityTier.Unavailable, raster.VariableRateShadingCombiners.Tier);
+            Assert.Equal(
+                ERHICapabilityProbeKind.BackendContract,
+                raster.VariableRateShadingPerDraw.Provenance.Kind);
+            Assert.Equal(
+                ERHICapabilityProbeKind.BackendContract,
+                raster.VariableRateShadingPerPrimitive.Provenance.Kind);
+            Assert.Equal(
+                ERHICapabilityProbeKind.BackendContract,
+                raster.VariableRateShadingAttachment.Provenance.Kind);
+            Assert.Equal(
+                ERHICapabilityProbeKind.BackendContract,
+                raster.VariableRateShadingCombiners.Provenance.Kind);
+            AssertVariableRateShadingInvariants(raster, ERHIBackend.Metal);
+        }
+    }
+#endif
+
+#if SHARPGPU_ENABLE_DX12
+    [Fact]
+    [Trait("Category", "SharpGpuWindowsQualified")]
+    public void Dx12_VariableRateShading_ShouldUseOptions6ProbeWithoutContradictions()
+    {
+        Assert.True(
+            OperatingSystem.IsWindows(),
+            "SharpGpuWindowsQualified requires a Windows qualification host.");
+        Assert.True(
+            RHIInstance.IsBackendSupported(
+                ERHIBackend.DirectX12,
+                out string backendReason),
+            backendReason);
+
+        using RHIInstance instance = RHIInstance.Create(new RHIInstanceDescriptor
+        {
+            Backend = ERHIBackend.DirectX12,
+            SurfaceKind = ERHINativeSurfaceKind.Headless,
+            EnableDebugLayer = false,
+            EnableValidation = false,
+            ComputeQueueRequestCount = 0,
+            TransferQueueRequestCount = 0,
+            GraphicsQueueRequestCount = 1,
+        });
+        Assert.NotNull(instance);
+        Assert.True(instance.DeviceCount > 0);
+
+        const string options6Source = "D3D12_FEATURE_D3D12_OPTIONS6.VariableShadingRateTier";
+        for (int i = 0; i < instance.DeviceCount; ++i)
+        {
+            RHIRasterCapabilities raster = instance.GetDevice(i).Capabilities.Raster;
+            Assert.Equal(options6Source, raster.VariableRateShadingPerDraw.Provenance.Source);
+            Assert.Equal(options6Source, raster.VariableRateShadingPerPrimitive.Provenance.Source);
+            Assert.Equal(options6Source, raster.VariableRateShadingAttachment.Provenance.Source);
+            Assert.Equal(options6Source, raster.VariableRateShadingCombiners.Provenance.Source);
+            Assert.Equal(
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                raster.VariableRateShadingPerDraw.Provenance.Kind);
+            Assert.Equal(
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                raster.VariableRateShadingPerPrimitive.Provenance.Kind);
+            Assert.Equal(
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                raster.VariableRateShadingAttachment.Provenance.Kind);
+            Assert.Equal(
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                raster.VariableRateShadingCombiners.Provenance.Kind);
+            AssertVariableRateShadingInvariants(raster, ERHIBackend.DirectX12);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "SharpGpuWindowsQualified")]
+    public void Dx12_VariableRateShading_ShouldMatchIndependentOptions6Oracle()
+    {
+        Assert.True(
+            OperatingSystem.IsWindows(),
+            "SharpGpuWindowsQualified requires a Windows qualification host.");
+        Assert.True(
+            RHIInstance.IsBackendSupported(
+                ERHIBackend.DirectX12,
+                out string backendReason),
+            backendReason);
+
+        using RHIInstance instance = RHIInstance.Create(new RHIInstanceDescriptor
+        {
+            Backend = ERHIBackend.DirectX12,
+            SurfaceKind = ERHINativeSurfaceKind.Headless,
+            EnableDebugLayer = false,
+            EnableValidation = false,
+            ComputeQueueRequestCount = 0,
+            TransferQueueRequestCount = 0,
+            GraphicsQueueRequestCount = 1,
+        });
+        Assert.NotNull(instance);
+        Assert.True(instance.DeviceCount > 0);
+
+        for (int i = 0; i < instance.DeviceCount; ++i)
+        {
+            RHIDevice device = instance.GetDevice(i);
+            Dx12Device dx12Device = Assert.IsType<Dx12Device>(device);
+            FeatureDataD3D12Options6 options6 = default;
+            Assert.True(
+                dx12Device.NativeDevice.CheckFeatureSupport(
+                    Feature.Options6,
+                    ref options6),
+                "Independent VRS oracle requires D3D12_FEATURE_D3D12_OPTIONS6.");
+
+            RHIRasterCapabilities raster = device.Capabilities.Raster;
+            bool expectPerDraw =
+                options6.VariableShadingRateTier != VariableShadingRateTier.NotSupported;
+            bool expectTier2 =
+                options6.VariableShadingRateTier == VariableShadingRateTier.Tier2;
+            ERHICapabilityTier expectedPerDrawTier = options6.VariableShadingRateTier switch
+            {
+                VariableShadingRateTier.Tier1 => ERHICapabilityTier.Tier1,
+                VariableShadingRateTier.Tier2 => ERHICapabilityTier.Tier2,
+                _ => ERHICapabilityTier.Unavailable,
+            };
+
+            Assert.Equal(expectedPerDrawTier, raster.VariableRateShadingPerDraw.Tier);
+            Assert.Equal(
+                expectTier2 ? ERHICapabilityTier.Tier2 : ERHICapabilityTier.Unavailable,
+                raster.VariableRateShadingPerPrimitive.Tier);
+            Assert.Equal(
+                expectTier2 ? ERHICapabilityTier.Tier2 : ERHICapabilityTier.Unavailable,
+                raster.VariableRateShadingAttachment.Tier);
+            Assert.Equal(
+                expectTier2 ? ERHICapabilityTier.Tier2 : ERHICapabilityTier.Unavailable,
+                raster.VariableRateShadingCombiners.Tier);
+
+            if (expectPerDraw)
+            {
+                ulong expectedRateMask =
+                    (1UL << (byte)ERHIShadingRate.Rate1x1) |
+                    (1UL << (byte)ERHIShadingRate.Rate1x2) |
+                    (1UL << (byte)ERHIShadingRate.Rate2x1) |
+                    (1UL << (byte)ERHIShadingRate.Rate2x2);
+                if (options6.AdditionalShadingRatesSupported)
+                {
+                    expectedRateMask |=
+                        (1UL << (byte)ERHIShadingRate.Rate2x4) |
+                        (1UL << (byte)ERHIShadingRate.Rate4x2) |
+                        (1UL << (byte)ERHIShadingRate.Rate4x4);
+                }
+
+                Assert.True(
+                    raster.VariableRateShadingPerDraw.Limits.TryGetValue(
+                        ERHICapabilityLimitKind.SupportedShadingRateMask,
+                        out ulong reportedRateMask));
+                Assert.Equal(expectedRateMask, reportedRateMask);
+            }
+
+            if (expectTier2)
+            {
+                ulong expectedCombinerMask =
+                    (1UL << (byte)ERHIShadingRateCombiner.Min) |
+                    (1UL << (byte)ERHIShadingRateCombiner.Max) |
+                    (1UL << (byte)ERHIShadingRateCombiner.Sum) |
+                    (1UL << (byte)ERHIShadingRateCombiner.Override) |
+                    (1UL << (byte)ERHIShadingRateCombiner.Passthrough);
+                Assert.True(
+                    raster.VariableRateShadingCombiners.Limits.TryGetValue(
+                        ERHICapabilityLimitKind.SupportedShadingRateCombinerMask,
+                        out ulong reportedCombinerMask));
+                Assert.Equal(expectedCombinerMask, reportedCombinerMask);
+
+                ulong tileSize = options6.ShadingRateImageTileSize;
+                Assert.True(
+                    raster.VariableRateShadingAttachment.Limits.TryGetValue(
+                        ERHICapabilityLimitKind.ShadingRateAttachmentTileWidthMin,
+                        out ulong tileWidthMin));
+                Assert.True(
+                    raster.VariableRateShadingAttachment.Limits.TryGetValue(
+                        ERHICapabilityLimitKind.ShadingRateAttachmentTileHeightMin,
+                        out ulong tileHeightMin));
+                Assert.True(
+                    raster.VariableRateShadingAttachment.Limits.TryGetValue(
+                        ERHICapabilityLimitKind.ShadingRateAttachmentTileWidthMax,
+                        out ulong tileWidthMax));
+                Assert.True(
+                    raster.VariableRateShadingAttachment.Limits.TryGetValue(
+                        ERHICapabilityLimitKind.ShadingRateAttachmentTileHeightMax,
+                        out ulong tileHeightMax));
+                Assert.Equal(tileSize, tileWidthMin);
+                Assert.Equal(tileSize, tileHeightMin);
+                Assert.Equal(tileSize, tileWidthMax);
+                Assert.Equal(tileSize, tileHeightMax);
+            }
+
+            AssertVariableRateShadingInvariants(raster, ERHIBackend.DirectX12);
+        }
+    }
+#endif
+
+#if SHARPGPU_VULKAN_QUALIFICATION_HOST
+    [Fact]
+    [Trait("Category", "SharpGpuVulkanQualified")]
+    public void Vulkan_VariableRateShading_ShouldMatchNativeQueryAndBackendContractProvenance()
+    {
+        Assert.True(
+            OperatingSystem.IsWindows() ||
+            OperatingSystem.IsLinux() ||
+            OperatingSystem.IsAndroid(),
+            "SharpGpuVulkanQualified requires a Vulkan qualification host.");
+        Assert.True(
+            RHIInstance.IsBackendSupported(
+                ERHIBackend.Vulkan,
+                out string backendReason),
+            backendReason);
+
+        using RHIInstance instance = RHIInstance.Create(new RHIInstanceDescriptor
+        {
+            Backend = ERHIBackend.Vulkan,
+            SurfaceKind = ERHINativeSurfaceKind.Headless,
+            EnableDebugLayer = false,
+            EnableValidation = false,
+            ComputeQueueRequestCount = 0,
+            TransferQueueRequestCount = 0,
+            GraphicsQueueRequestCount = 1,
+        });
+        Assert.NotNull(instance);
+        Assert.True(instance.DeviceCount > 0);
+
+        for (int i = 0; i < instance.DeviceCount; ++i)
+        {
+            RHIRasterCapabilities raster = instance.GetDevice(i).Capabilities.Raster;
+            AssertVulkanVariableRateShadingProbeKind(raster.VariableRateShadingPerDraw);
+            AssertVulkanVariableRateShadingProbeKind(raster.VariableRateShadingPerPrimitive);
+            AssertVulkanVariableRateShadingProbeKind(raster.VariableRateShadingAttachment);
+            AssertVulkanVariableRateShadingProbeKind(raster.VariableRateShadingCombiners);
+            AssertVariableRateShadingInvariants(raster, ERHIBackend.Vulkan);
+        }
+    }
+#endif
+
+    private static void AssertVariableRateShadingInvariants(
+        in RHIRasterCapabilities raster,
+        ERHIBackend backend)
+    {
+        AssertVariableRateShadingCapabilityState(raster.VariableRateShadingPerDraw);
+        AssertVariableRateShadingCapabilityState(raster.VariableRateShadingPerPrimitive);
+        AssertVariableRateShadingCapabilityState(raster.VariableRateShadingAttachment);
+        AssertVariableRateShadingCapabilityState(raster.VariableRateShadingCombiners);
+
+        if (raster.VariableRateShadingPerDraw.Tier == ERHICapabilityTier.Unavailable)
+        {
+            RHICapability perDraw = raster.VariableRateShadingPerDraw;
+            RHICapability combiners = raster.VariableRateShadingCombiners;
+            Assert.Throws<NotSupportedException>(
+                () => VulkanVariableRateShadingCommandPolicy.ValidateSetShadingRate(
+                    perDraw,
+                    combiners,
+                    ERHIShadingRate.Rate1x1,
+                    ERHIShadingRateCombiner.Passthrough));
+        }
+
+        if (raster.VariableRateShadingCombiners.Tier != ERHICapabilityTier.Unavailable)
+        {
+            Assert.True(
+                raster.VariableRateShadingPerPrimitive.Tier != ERHICapabilityTier.Unavailable ||
+                raster.VariableRateShadingAttachment.Tier != ERHICapabilityTier.Unavailable);
+        }
+
+        AssertVariableRateShadingProvenance(raster.VariableRateShadingPerDraw, backend);
+        AssertVariableRateShadingProvenance(raster.VariableRateShadingPerPrimitive, backend);
+        AssertVariableRateShadingProvenance(raster.VariableRateShadingAttachment, backend);
+        AssertVariableRateShadingProvenance(raster.VariableRateShadingCombiners, backend);
+
+        if (raster.VariableRateShadingPerDraw.Limits.TryGetValue(
+                ERHICapabilityLimitKind.SupportedShadingRateMask,
+                out ulong rateMask))
+        {
+            Assert.NotEqual(0UL, rateMask & (1UL << (byte)ERHIShadingRate.Rate1x1));
+            Assert.Equal(0UL, rateMask & (1UL << (byte)ERHIShadingRate.Pending));
+        }
+
+        if (raster.VariableRateShadingCombiners.Limits.TryGetValue(
+                ERHICapabilityLimitKind.SupportedShadingRateCombinerMask,
+                out ulong combinerMask))
+        {
+            Assert.Equal(0UL, combinerMask & (1UL << (byte)ERHIShadingRateCombiner.Pending));
+            if (backend == ERHIBackend.Vulkan)
+            {
+                Assert.Equal(0UL, combinerMask & (1UL << (byte)ERHIShadingRateCombiner.Sum));
+            }
+        }
+    }
+
+    private static void AssertVariableRateShadingCapabilityState(in RHICapability capability)
+    {
+        if (capability.Tier == ERHICapabilityTier.Unavailable)
+        {
+            Assert.Equal(ERHICapabilityStrategy.Unavailable, capability.Strategy);
+            Assert.False(string.IsNullOrWhiteSpace(capability.UnavailableReason));
+            return;
+        }
+
+        Assert.NotEqual(ERHICapabilityStrategy.Unavailable, capability.Strategy);
+        Assert.True(string.IsNullOrEmpty(capability.UnavailableReason));
+    }
+
+    private static void AssertVariableRateShadingProvenance(
+        in RHICapability capability,
+        ERHIBackend backend)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(capability.Provenance.Source));
+        switch (backend)
+        {
+            case ERHIBackend.DirectX12:
+                Assert.Equal(
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    capability.Provenance.Kind);
+                break;
+            case ERHIBackend.Metal:
+                Assert.Equal(
+                    ERHICapabilityProbeKind.BackendContract,
+                    capability.Provenance.Kind);
+                break;
+            case ERHIBackend.Vulkan:
+                AssertVulkanVariableRateShadingProbeKind(capability);
+                break;
+            default:
+                Assert.Fail($"Unsupported VRS provenance backend {backend}.");
+                break;
+        }
+    }
+
+    private static void AssertVulkanVariableRateShadingProbeKind(in RHICapability capability)
+    {
+        bool backendContractSource = capability.Provenance.Source.Contains(
+            "SharpGPU Vulkan",
+            StringComparison.Ordinal);
+        if (backendContractSource)
+        {
+            Assert.Equal(
+                ERHICapabilityProbeKind.BackendContract,
+                capability.Provenance.Kind);
+            return;
+        }
+
+        Assert.True(
+            capability.Provenance.Kind == ERHICapabilityProbeKind.NativeExtensionQuery ||
+            capability.Provenance.Kind == ERHICapabilityProbeKind.NativeFeatureQuery,
+            $"Vulkan VRS source '{capability.Provenance.Source}' must use a native query kind, not {capability.Provenance.Kind}.");
+    }
+
     [Fact]
     public void Vulkan_MLUnsupportedContract_ShouldReportUnavailableAndThrow()
     {
@@ -349,6 +750,7 @@ internal sealed class FeatureContractContext : IDisposable
             instance = RHIInstance.Create(new RHIInstanceDescriptor
             {
                 Backend = backend,
+                SurfaceKind = ERHINativeSurfaceKind.Headless,
                 EnableDebugLayer = false,
                 EnableValidation = false,
                 ComputeQueueRequestCount = 0,

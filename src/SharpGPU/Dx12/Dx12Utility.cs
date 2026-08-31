@@ -716,8 +716,11 @@ namespace SharpGPU
                 case ERHIShadingRate.Rate4x2:
                     return Vortice.Direct3D12.ShadingRate.Rate4x2;
 
-                default:
+                case ERHIShadingRate.Rate4x4:
                     return Vortice.Direct3D12.ShadingRate.Rate4x4;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(shadingRate), shadingRate, "Unsupported DX12 shading rate.");
             }
         }
 
@@ -737,8 +740,11 @@ namespace SharpGPU
                 case ERHIShadingRateCombiner.Override:
                     return Vortice.Direct3D12.ShadingRateCombiner.Override;
 
-                default:
+                case ERHIShadingRateCombiner.Passthrough:
                     return Vortice.Direct3D12.ShadingRateCombiner.Passthrough;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(shadingRateCombiner), shadingRateCombiner, "Unsupported DX12 shading rate combiner.");
             }
         }
 
