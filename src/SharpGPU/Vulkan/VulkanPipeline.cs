@@ -366,6 +366,9 @@ namespace SharpGPU
             RHIRasterPipelineContract.ValidateAttachmentSupport(
                 device,
                 in m_Descriptor);
+            VulkanMeshCapabilityFactory.RequireMeshRasterPipeline(
+                in m_Descriptor,
+                device.Capabilities.Mesh.Shader);
             m_ShaderModules =
                 shaderModules ??
                 VulkanRasterShaderModuleSet.Create(
@@ -1423,6 +1426,9 @@ internal sealed unsafe class VulkanPipelineCache : RHIPipelineCache
         {
             ThrowIfDisposed();
             ValidateLayoutDevice(descriptor.PipelineLayout);
+            VulkanMeshCapabilityFactory.RequireMeshRasterPipeline(
+                in descriptor,
+                m_VulkanDevice.Capabilities.Mesh.Shader);
             _ = BuildRasterPipelineCacheKey(descriptor);
             lock (m_Gate)
             {

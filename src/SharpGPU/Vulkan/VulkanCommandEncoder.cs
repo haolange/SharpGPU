@@ -3924,6 +3924,8 @@ internal enum EVulkanRasterPassStrategy
 
         public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
+            VulkanDevice device = VulkanEncoderGuards.RequireDevice(m_CommandBuffer);
+            VulkanMeshCommandPolicy.RequireDispatch(device.Capabilities.Mesh.Shader);
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
             VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
@@ -3932,6 +3934,8 @@ internal enum EVulkanRasterPassStrategy
 
         public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
+            VulkanDevice device = VulkanEncoderGuards.RequireDevice(m_CommandBuffer);
+            VulkanMeshCommandPolicy.RequireDispatch(device.Capabilities.Mesh.Shader);
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
             VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
@@ -4423,6 +4427,8 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             in uint groupCountY,
             in uint groupCountZ)
         {
+            VulkanDevice device = VulkanEncoderGuards.RequireDevice(m_CommandBuffer);
+            VulkanMeshCommandPolicy.RequireDispatch(device.Capabilities.Mesh.Shader);
             RequireBoundPipeline();
             VulkanNative.vkCmdDrawMeshTasksEXT(
                 m_VulkanCommandBuffer.NativeCommandBuffer,
@@ -4435,6 +4441,8 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             RHIBuffer argsBuffer,
             in uint argsOffset)
         {
+            VulkanDevice device = VulkanEncoderGuards.RequireDevice(m_CommandBuffer);
+            VulkanMeshCommandPolicy.RequireDispatch(device.Capabilities.Mesh.Shader);
             RequireBoundPipeline();
             VulkanBuffer arguments =
                 argsBuffer as VulkanBuffer

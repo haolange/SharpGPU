@@ -105,7 +105,9 @@ namespace SharpGPU
 
         private bool m_RaytracingSupported;
         private bool m_RaytracingInlineSupported;
+#pragma warning disable CS0414 // Hardware mesh probe is retained for the P2 pipeline factory.
         private bool m_MeshShadingSupported;
+#pragma warning restore CS0414
         private bool m_FragmentShadingRateExtensionPresent;
         private bool m_VariableRateShadingPerDrawSupported;
         private bool m_VariableRateShadingPerPrimitiveSupported;
@@ -1231,9 +1233,6 @@ namespace SharpGPU
             VkPhysicalDeviceLimits limits = properties.limits;
 
             bool hasAtomicInt64 = m_ShaderAtomicInt64Supported;
-            // Barycentric support is fail-closed until its extension and feature are
-            // negotiated in the device-create chain.
-            bool hasBarycentrics = false;
             bool hasDynamicRenderingLocalReadRoute =
                 VulkanRasterCapabilityUtility
                     .HasFramebufferLocalReadLoweringRoute(
@@ -1413,12 +1412,8 @@ namespace SharpGPU
                         false,
                         "SharpGPU Vulkan raster lowering",
                         "Hidden-surface removal is renderer policy and is not a Vulkan HAL capability."),
-                    barycentricCoordinates: Probe(
-                        hasBarycentrics,
-                        "VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR.fragmentShaderBarycentric",
-                        "Fragment shader barycentric coordinates are unavailable.",
-                        strategy: ERHICapabilityStrategy.NativeExtension,
-                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery),
+                    barycentricCoordinates:
+                        VulkanBarycentricCapabilityFactory.CreatePublicCapability(),
                     programmableSamplePositions: Probe(
                         false,
                         "Vulkan programmable sample-location feature query",
@@ -1563,12 +1558,7 @@ namespace SharpGPU
                         strategy: ERHICapabilityStrategy.NativeExtension,
                         probeKind: ERHICapabilityProbeKind.NativeExtensionQuery)),
                 mesh: new RHIMeshCapabilities(
-                    shader: Probe(
-                        m_MeshShadingSupported,
-                        "VK_EXT_mesh_shader feature and extension set plus SharpGPU factory",
-                        "Mesh shaders are unavailable.",
-                        strategy: ERHICapabilityStrategy.NativeExtension,
-                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery)),
+                    shader: VulkanMeshCapabilityFactory.CreatePublicShaderCapability()),
                 machineLearning: new RHIMachineLearningCapabilities(
                     execution: RHICapability.Unavailable(
                         "Vulkan ML requires a supported native tensor/data-graph contract.",
@@ -1663,11 +1653,17 @@ namespace SharpGPU
         public override RHIStorageQueue CreateStorageQueue()
         {
             ThrowIfDeviceUnavailable();
-            return new VulkanStorageQueue(this);
+            VulkanStorageQueueFactoryPolicy.RequireNativeGpuFileIo(
+                Capabilities.Storage.NativeGpuFileIo);
+            throw new InvalidOperationException(
+                "Vulkan storage queue factory must not return a handle after NativeGpuFileIo Require.");
         }
 
         public override RHIQuery CreateQuery(in RHIQueryDescriptor descriptor)
         {
+            VulkanQueryFactoryPolicy.RequireSupportedQueryType(
+                descriptor.Type,
+                Capabilities.Synchronization);
             return new VulkanQuery(this, descriptor);
         }
 
@@ -2070,6 +2066,9 @@ namespace SharpGPU
 
         public override RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor)
         {
+            VulkanMeshCapabilityFactory.RequireMeshRasterPipeline(
+                in descriptor,
+                Capabilities.Mesh.Shader);
             return new VulkanRasterPipeline(this, descriptor);
         }
 
@@ -2866,6 +2865,102 @@ namespace SharpGPU
                 attachment.Tier != ERHICapabilityTier.Unavailable
                     ? VulkanUtility.ConvertToVkShadingRateCombiner(combiner)
                     : VkFragmentShadingRateCombinerOpKHR.Keep;
+        }
+    }
+
+    internal static class VulkanMeshCapabilityFactory
+    {
+        internal const string UnavailableReason =
+            "SharpGPU Vulkan mesh pipeline factory lowering is not implemented.";
+        internal const string ProbeSource = "SharpGPU Vulkan mesh pipeline factory";
+        internal const string CapabilityName = "Vulkan mesh shaders";
+
+        internal static RHICapability CreatePublicShaderCapability()
+        {
+            return RHICapability.Unavailable(
+                UnavailableReason,
+                ERHICapabilityProbeKind.BackendContract,
+                ProbeSource);
+        }
+
+        internal static bool RequestsMeshPath(in RHIRasterPipelineDescriptor descriptor)
+        {
+            return descriptor.PrimitiveAssembler.MeshletAssembler.HasValue
+                || descriptor.PrimitiveAssembler.PrimitiveType == ERHIPrimitiveType.Mesh;
+        }
+
+        internal static void RequireMeshRasterPipeline(
+            in RHIRasterPipelineDescriptor descriptor,
+            RHICapability meshShader)
+        {
+            if (RequestsMeshPath(in descriptor))
+            {
+                meshShader.Require(CapabilityName);
+            }
+        }
+    }
+
+    internal static class VulkanMeshCommandPolicy
+    {
+        internal static void RequireDispatch(RHICapability meshShader)
+        {
+            meshShader.Require(VulkanMeshCapabilityFactory.CapabilityName);
+        }
+    }
+
+    internal static class VulkanStorageQueueFactoryPolicy
+    {
+        internal const string CapabilityName = "Vulkan storage queue creation";
+
+        internal static void RequireNativeGpuFileIo(RHICapability nativeGpuFileIo)
+        {
+            nativeGpuFileIo.Require(CapabilityName);
+        }
+    }
+
+    internal static class VulkanQueryFactoryPolicy
+    {
+        internal static void RequireSupportedQueryType(
+            ERHIQueryType queryType,
+            RHISynchronizationCapabilities synchronization)
+        {
+            ArgumentNullException.ThrowIfNull(synchronization);
+            switch (queryType)
+            {
+                case ERHIQueryType.Occlusion:
+                    synchronization.OcclusionQueries.Require("Vulkan occlusion queries");
+                    break;
+                case ERHIQueryType.Statistics:
+                    synchronization.PipelineStatisticsQueries.Require(
+                        "Vulkan pipeline statistics queries");
+                    break;
+                case ERHIQueryType.Timestamp:
+                case ERHIQueryType.TimestampTransfer:
+                    synchronization.TimestampQueries.Require("Vulkan timestamp queries");
+                    break;
+                case ERHIQueryType.Pending:
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(queryType),
+                        queryType,
+                        "Vulkan CreateQuery does not accept Pending or unknown query types.");
+            }
+        }
+    }
+
+    internal static class VulkanBarycentricCapabilityFactory
+    {
+        internal const string UnavailableReason =
+            "Fragment shader barycentric coordinates have not been negotiated in the SharpGPU Vulkan device-create chain.";
+        internal const string ProbeSource =
+            "SharpGPU Vulkan device-create feature negotiation";
+
+        internal static RHICapability CreatePublicCapability()
+        {
+            return RHICapability.Unavailable(
+                UnavailableReason,
+                ERHICapabilityProbeKind.BackendContract,
+                ProbeSource);
         }
     }
 }

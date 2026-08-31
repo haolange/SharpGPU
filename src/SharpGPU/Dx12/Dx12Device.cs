@@ -1050,6 +1050,8 @@ namespace SharpGPU
             bool isFlipProjection = false;
             bool isHDRPresentSupported = false;
             bool isUnifiedMemorySupported = false;
+            string unifiedMemoryUnavailableReason =
+                "D3D12_FEATURE_ARCHITECTURE1.UMA is false for this adapter.";
             bool isRootConstantSupport = true;
             bool isIndirectRootConstantSupport = false;
             bool isPixelShaderUAVSupported = true;
@@ -1060,7 +1062,9 @@ namespace SharpGPU
             bool isTimestampQueriesSupported = true;
             bool isOcclusionQueriesSupported = true;
             bool isPipelineStatsQueriesSupported = true;
-            bool isAtomicUInt64Supported = true;
+            bool isAtomicUInt64Supported = false;
+            string atomicUInt64UnavailableReason =
+                "D3D12_FEATURE_D3D12_OPTIONS9 64-bit atomic features are unavailable.";
             bool isWorkgraphSupported = false;
             bool isMeshShadingSupported = false;
             bool isDrawIndirectSupported = true;
@@ -1126,7 +1130,7 @@ namespace SharpGPU
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options6, ref featureOptions6);
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options7, ref featureOptions7);
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options8, ref featureOptions8);
-            _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options9, ref featureOptions9);
+            bool options9Supported = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options9, ref featureOptions9);
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options10, ref featureOptions10);
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options11, ref featureOptions11);
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options12, ref featureOptions12);
@@ -1299,6 +1303,29 @@ namespace SharpGPU
 
             // check enhanced barrier support
             isEnhancedBarriersSupported = featureOptions12.EnhancedBarriersSupported;
+
+            // Public AtomicUInt64 means both typed-resource and groupshared 64-bit
+            // atomics work. No SharpGPU lowering path Requires only one surface.
+            isAtomicUInt64Supported = Dx12AtomicUInt64CapabilityFactory.IsAvailable(
+                options9Supported,
+                featureOptions9.AtomicInt64OnTypedResourceSupported,
+                featureOptions9.AtomicInt64OnGroupSharedSupported);
+            atomicUInt64UnavailableReason =
+                Dx12AtomicUInt64CapabilityFactory.CreateUnavailableReason(
+                    options9Supported,
+                    featureOptions9.AtomicInt64OnTypedResourceSupported,
+                    featureOptions9.AtomicInt64OnGroupSharedSupported);
+
+            Vortice.Direct3D12.FeatureDataArchitecture1 architecture1 = default;
+            architecture1.NodeIndex = 0;
+            bool architecture1Supported = NativeDevice.CheckFeatureSupport(
+                Vortice.Direct3D12.Feature.Architecture1,
+                ref architecture1);
+            isUnifiedMemorySupported =
+                architecture1Supported && architecture1.Uma;
+            unifiedMemoryUnavailableReason = architecture1Supported
+                ? Dx12UnifiedMemoryCapabilityFactory.UmaFalseReason
+                : Dx12UnifiedMemoryCapabilityFactory.QueryFailedReason;
 
             // check mesh shading level
             switch (featureOptions7.MeshShaderTier)
@@ -1507,8 +1534,8 @@ namespace SharpGPU
                         "Indirect root constants are not exposed by the current DX12 lowering."),
                     atomicUInt64: Probe(
                         isAtomicUInt64Supported,
-                        "D3D12 64-bit atomic feature contract",
-                        "64-bit shader atomics are unavailable."),
+                        Dx12AtomicUInt64CapabilityFactory.ProbeSource,
+                        atomicUInt64UnavailableReason),
                     descriptorIndexing: RHICapability.Available(
                         ERHICapabilityTier.Tier1,
                         ERHICapabilityStrategy.CoreApi,
@@ -1550,8 +1577,8 @@ namespace SharpGPU
                 memory: new RHIMemoryCapabilities(
                     unifiedMemory: Probe(
                         isUnifiedMemorySupported,
-                        "D3D12_FEATURE_ARCHITECTURE1.UMA",
-                        "Unified-memory architecture was not reported for this adapter."),
+                        Dx12UnifiedMemoryCapabilityFactory.ProbeSource,
+                        unifiedMemoryUnavailableReason),
                     placedResources: Probe(
                         true,
                         "GetResourceAllocationInfo + CreateHeap + CreatePlacedResource",
@@ -2072,6 +2099,65 @@ namespace SharpGPU
             unchecked((int)0x887A0005);
         private const int DxgiErrorDeviceReset =
             unchecked((int)0x887A0007);
+    }
+
+    internal static class Dx12AtomicUInt64CapabilityFactory
+    {
+        internal const string ProbeSource =
+            "D3D12_FEATURE_D3D12_OPTIONS9.AtomicInt64OnTypedResourceSupported AND AtomicInt64OnGroupSharedSupported";
+        internal const string QueryFailedReason =
+            "D3D12_FEATURE_D3D12_OPTIONS9 query failed.";
+        internal const string TypedResourceField =
+            "D3D12_FEATURE_D3D12_OPTIONS9.AtomicInt64OnTypedResourceSupported";
+        internal const string GroupSharedField =
+            "D3D12_FEATURE_D3D12_OPTIONS9.AtomicInt64OnGroupSharedSupported";
+
+        internal static bool IsAvailable(
+            bool options9Supported,
+            bool typedResourceSupported,
+            bool groupSharedSupported)
+        {
+            return options9Supported && typedResourceSupported && groupSharedSupported;
+        }
+
+        internal static string CreateUnavailableReason(
+            bool options9Supported,
+            bool typedResourceSupported,
+            bool groupSharedSupported)
+        {
+            if (!options9Supported)
+            {
+                return QueryFailedReason;
+            }
+
+            bool missingTyped = !typedResourceSupported;
+            bool missingGroupShared = !groupSharedSupported;
+            if (missingTyped && missingGroupShared)
+            {
+                return $"{TypedResourceField} and {GroupSharedField} are false.";
+            }
+
+            if (missingTyped)
+            {
+                return $"{TypedResourceField} is false.";
+            }
+
+            if (missingGroupShared)
+            {
+                return $"{GroupSharedField} is false.";
+            }
+
+            return "64-bit shader atomics are unavailable.";
+        }
+    }
+
+    internal static class Dx12UnifiedMemoryCapabilityFactory
+    {
+        internal const string ProbeSource = "D3D12_FEATURE_ARCHITECTURE1.UMA";
+        internal const string UmaFalseReason =
+            "D3D12_FEATURE_ARCHITECTURE1.UMA is false for this adapter.";
+        internal const string QueryFailedReason =
+            "D3D12_FEATURE_ARCHITECTURE1 query failed.";
     }
 #pragma warning restore CA1416
 }

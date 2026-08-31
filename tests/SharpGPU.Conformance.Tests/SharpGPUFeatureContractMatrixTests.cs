@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using SharpGPU;
 #if SHARPGPU_ENABLE_DX12
+using Vortice.Direct3D;
 using Vortice.Direct3D12;
 #endif
 using Xunit;
@@ -499,6 +500,139 @@ public sealed class SharpGPUFeatureContractMatrixTests
 
             AssertVariableRateShadingInvariants(raster, ERHIBackend.DirectX12);
         }
+    }
+
+    [Fact]
+    [Trait("Category", "SharpGpuWindowsQualified")]
+    public void Dx12_AtomicUInt64_ShouldMatchIndependentOptions9Oracle()
+    {
+        Assert.True(
+            OperatingSystem.IsWindows(),
+            "SharpGpuWindowsQualified requires a Windows qualification host.");
+        Assert.True(
+            RHIInstance.IsBackendSupported(
+                ERHIBackend.DirectX12,
+                out string backendReason),
+            backendReason);
+
+        using RHIInstance instance = RHIInstance.Create(new RHIInstanceDescriptor
+        {
+            Backend = ERHIBackend.DirectX12,
+            SurfaceKind = ERHINativeSurfaceKind.Headless,
+            EnableDebugLayer = false,
+            EnableValidation = false,
+            ComputeQueueRequestCount = 0,
+            TransferQueueRequestCount = 0,
+            GraphicsQueueRequestCount = 1,
+        });
+        Assert.NotNull(instance);
+        Assert.True(instance.DeviceCount > 0);
+
+        for (int i = 0; i < instance.DeviceCount; ++i)
+        {
+            RHIDevice device = instance.GetDevice(i);
+            Dx12Device dx12Device = Assert.IsType<Dx12Device>(device);
+            using ID3D12Device oracleDevice = CreateIndependentDx12Device(dx12Device);
+            FeatureDataD3D12Options9 options9 = default;
+            bool options9Supported = oracleDevice.CheckFeatureSupport(
+                Feature.Options9,
+                ref options9);
+            bool expectAvailable = Dx12AtomicUInt64CapabilityFactory.IsAvailable(
+                options9Supported,
+                options9.AtomicInt64OnTypedResourceSupported,
+                options9.AtomicInt64OnGroupSharedSupported);
+            RHICapability atomic = device.Capabilities.Binding.AtomicUInt64;
+
+            Assert.Equal(
+                Dx12AtomicUInt64CapabilityFactory.ProbeSource,
+                atomic.Provenance.Source);
+            Assert.Equal(
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                atomic.Provenance.Kind);
+            Assert.Equal(
+                expectAvailable ? ERHICapabilityTier.Tier1 : ERHICapabilityTier.Unavailable,
+                atomic.Tier);
+            if (!expectAvailable)
+            {
+                Assert.Equal(
+                    Dx12AtomicUInt64CapabilityFactory.CreateUnavailableReason(
+                        options9Supported,
+                        options9.AtomicInt64OnTypedResourceSupported,
+                        options9.AtomicInt64OnGroupSharedSupported),
+                    atomic.UnavailableReason);
+            }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "SharpGpuWindowsQualified")]
+    public void Dx12_UnifiedMemory_ShouldMatchIndependentArchitecture1Oracle()
+    {
+        Assert.True(
+            OperatingSystem.IsWindows(),
+            "SharpGpuWindowsQualified requires a Windows qualification host.");
+        Assert.True(
+            RHIInstance.IsBackendSupported(
+                ERHIBackend.DirectX12,
+                out string backendReason),
+            backendReason);
+
+        using RHIInstance instance = RHIInstance.Create(new RHIInstanceDescriptor
+        {
+            Backend = ERHIBackend.DirectX12,
+            SurfaceKind = ERHINativeSurfaceKind.Headless,
+            EnableDebugLayer = false,
+            EnableValidation = false,
+            ComputeQueueRequestCount = 0,
+            TransferQueueRequestCount = 0,
+            GraphicsQueueRequestCount = 1,
+        });
+        Assert.NotNull(instance);
+        Assert.True(instance.DeviceCount > 0);
+
+        for (int i = 0; i < instance.DeviceCount; ++i)
+        {
+            RHIDevice device = instance.GetDevice(i);
+            Dx12Device dx12Device = Assert.IsType<Dx12Device>(device);
+            using ID3D12Device oracleDevice = CreateIndependentDx12Device(dx12Device);
+            FeatureDataArchitecture1 architecture1 = default;
+            architecture1.NodeIndex = 0;
+            bool architecture1Supported = oracleDevice.CheckFeatureSupport(
+                Feature.Architecture1,
+                ref architecture1);
+            bool expectUma = architecture1Supported && architecture1.Uma;
+            RHICapability unifiedMemory = device.Capabilities.Memory.UnifiedMemory;
+
+            Assert.Equal(
+                Dx12UnifiedMemoryCapabilityFactory.ProbeSource,
+                unifiedMemory.Provenance.Source);
+            Assert.Equal(
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                unifiedMemory.Provenance.Kind);
+            Assert.Equal(
+                expectUma ? ERHICapabilityTier.Tier1 : ERHICapabilityTier.Unavailable,
+                unifiedMemory.Tier);
+            if (!expectUma)
+            {
+                Assert.Equal(
+                    architecture1Supported
+                        ? Dx12UnifiedMemoryCapabilityFactory.UmaFalseReason
+                        : Dx12UnifiedMemoryCapabilityFactory.QueryFailedReason,
+                    unifiedMemory.UnavailableReason);
+            }
+        }
+    }
+
+    private static ID3D12Device CreateIndependentDx12Device(Dx12Device dx12Device)
+    {
+        SharpGen.Runtime.Result result = D3D12.D3D12CreateDevice(
+            dx12Device.DXGIAdapter,
+            FeatureLevel.Level_12_0,
+            out ID3D12Device? oracleDevice);
+        Assert.True(
+            result.Success && oracleDevice != null,
+            "Independent D3D12 oracle device creation must succeed on a Windows DX12 host.");
+        return oracleDevice;
     }
 #endif
 
