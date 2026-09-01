@@ -85,6 +85,17 @@ namespace SharpGPU
             m_Placement = placement;
         }
 
+        internal Dx12Buffer(
+            Dx12Device device,
+            in RHIBufferDescriptor descriptor,
+            Vortice.Direct3D12.ID3D12Resource nativeResource)
+        {
+            m_Dx12Device = device;
+            m_Descriptor = descriptor;
+            m_NativeResource = nativeResource ?? throw new ArgumentNullException(nameof(nativeResource));
+            m_AllocationMode = ERHIResourceAllocationMode.External;
+        }
+
         public override IntPtr Map(in uint readBegin, in uint readEnd)
         {
             ThrowIfDisposed();

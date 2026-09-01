@@ -232,7 +232,7 @@ namespace SharpGPU
             if (MetalSparseMemoryUtility.RequiresPlacementSparseCompatibility(
                     descriptor.Compatibility))
             {
-                Capabilities.Memory.SparseBinding.Require(
+                Capabilities.Memory.SparseTexture2D.Require(
                     "Metal placement-sparse heap creation");
             }
             else
@@ -285,7 +285,8 @@ namespace SharpGPU
                 in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
-            Capabilities.Memory.SparseBinding.Require(
+            Capabilities.Memory.RequireSparseTexture(
+                descriptor,
                 "Metal sparse texture memory requirements");
             MTLTexture nativeTexture =
                 MetalSparseMemoryUtility.CreateSparseTexture(
@@ -308,7 +309,8 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
-            Capabilities.Memory.SparseBinding.Require(
+            Capabilities.Memory.RequireSparseTexture(
+                descriptor,
                 "Metal sparse texture creation");
             return new MetalTexture(this, descriptor, createSparse: true);
         }
@@ -359,6 +361,7 @@ namespace SharpGPU
         public override RHITexture CreateTexture(in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            RejectUnpairedSamplerFeedbackTexture(in descriptor);
             return new MetalTexture(this, descriptor);
         }
 
@@ -462,6 +465,214 @@ namespace SharpGPU
                 ERHICapabilityStrategy.NativeSpecialized,
                 ERHICapabilityProbeKind.RuntimeObjectProbe,
                 ProbeSource);
+        }
+
+        public override RHICapability QueryFormatSupport(
+            in RHIFormatSupportQuery query)
+        {
+            ThrowIfDisposed();
+            const string ProbeSource =
+                "MTLDevice.supportsTextureSampleCount + newTextureWithDescriptor";
+
+            if (query.Tiling == ERHITextureTiling.Linear)
+            {
+                return RHICapability.Unavailable(
+                    "Metal does not expose a generic linear image tiling query for this dimension.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            if ((query.Usage & ERHITextureUsage.ResolveTarget) != 0 &&
+                query.SampleCount != ERHISampleCount.None)
+            {
+                return RHICapability.Unavailable(
+                    "Metal resolve destination queries require a single-sample count.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            ERHITextureUsage textureUsageBits =
+                query.Usage & ~(ERHITextureUsage.CopySrc | ERHITextureUsage.CopyDst);
+            if (textureUsageBits == ERHITextureUsage.ResolveTarget)
+            {
+                return RHICapability.Unavailable(
+                    "Metal cannot exactly prove resolve support for this format combination.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            if ((query.Usage & ERHITextureUsage.DepthStencil) != 0 &&
+                (RHIBarrierUtility.InferAspectMask(query.Format) &
+                    (ERHITextureAspectMask.Depth | ERHITextureAspectMask.Stencil)) == 0)
+            {
+                return RHICapability.Unavailable(
+                    $"Metal DepthStencil usage requires a depth/stencil format, not {query.Format}.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            MTLPixelFormat pixelFormat;
+            try
+            {
+                pixelFormat = MetalUtility.ConvertToMetalPixelFormat(query.Format);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return RHICapability.Unavailable(
+                    $"Metal has no pixel-format mapping for {query.Format}.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    "SharpGPU Metal pixel-format lowering");
+            }
+
+            ulong sampleCount = checked((ulong)query.SampleCount);
+            if (!m_NativeDevice.SupportsTextureSampleCount(sampleCount))
+            {
+                return RHICapability.Unavailable(
+                    $"Metal does not support {sampleCount}x MSAA.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            MTLTextureDescriptor descriptor = query.Dimension switch
+            {
+                ERHITextureDimension.Texture3D =>
+                    MTLTextureDescriptor.Texture2DDescriptor(pixelFormat, 1, 1, false),
+                _ => MTLTextureDescriptor.Texture2DDescriptor(pixelFormat, 1, 1, false),
+            };
+            descriptor.TextureType = query.Dimension switch
+            {
+                ERHITextureDimension.Texture3D => MTLTextureType.Type3D,
+                ERHITextureDimension.TextureCube => MTLTextureType.Cube,
+                ERHITextureDimension.TextureCubeArray => MTLTextureType.CubeArray,
+                ERHITextureDimension.Texture2DArray =>
+                    sampleCount == 1
+                        ? MTLTextureType.Type2DArray
+                        : MTLTextureType.Type2DMultisampleArray,
+                ERHITextureDimension.Texture2DArrayMS => MTLTextureType.Type2DMultisampleArray,
+                ERHITextureDimension.Texture2DMS => MTLTextureType.Type2DMultisample,
+                _ => sampleCount == 1
+                    ? MTLTextureType.Type2D
+                    : MTLTextureType.Type2DMultisample,
+            };
+            descriptor.Width = 1;
+            descriptor.Height = 1;
+            descriptor.Depth = 1UL;
+            descriptor.ArrayLength = 1;
+            descriptor.SampleCount = sampleCount;
+            descriptor.Usage = MTLTextureUsage.Unknown;
+            if ((query.Usage & ERHITextureUsage.ShaderResource) != 0)
+            {
+                descriptor.Usage |= MTLTextureUsage.ShaderRead;
+            }
+            if ((query.Usage & ERHITextureUsage.UnorderedAccess) != 0)
+            {
+                descriptor.Usage |= MTLTextureUsage.ShaderWrite;
+            }
+            if ((query.Usage & (
+                    ERHITextureUsage.RenderTarget |
+                    ERHITextureUsage.DepthStencil)) != 0)
+            {
+                descriptor.Usage |= MTLTextureUsage.RenderTarget;
+            }
+            if (descriptor.Usage == MTLTextureUsage.Unknown)
+            {
+                return RHICapability.Unavailable(
+                    (query.Usage & ERHITextureUsage.ResolveTarget) != 0
+                        ? "Metal cannot exactly prove resolve support for this format combination."
+                        : "Metal cannot map the requested usage to MTLTextureUsage.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+            descriptor.StorageMode = MTLStorageMode.Private;
+
+            MTLTexture texture = default;
+            try
+            {
+                texture = m_NativeDevice.NewTexture(descriptor);
+                if (texture.NativePtr == IntPtr.Zero)
+                {
+                    return RHICapability.Unavailable(
+                        $"Metal rejected {query.Format} at {sampleCount}x for the queried dimension/usage.",
+                        ERHICapabilityProbeKind.RuntimeObjectProbe,
+                        ProbeSource);
+                }
+            }
+            finally
+            {
+                if (texture.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(texture);
+                }
+                if (descriptor.NativePtr != IntPtr.Zero)
+                {
+                    ObjectiveCRuntime.Release(descriptor);
+                }
+            }
+
+            ERHIFormatSupportOperation mask = ERHIFormatSupportOperation.None;
+            if ((query.Usage & ERHITextureUsage.ShaderResource) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.Sample;
+            }
+            if ((query.Usage & ERHITextureUsage.UnorderedAccess) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.StorageStore;
+            }
+            if ((query.Usage & ERHITextureUsage.RenderTarget) != 0 &&
+                RHIBarrierUtility.InferAspectMask(query.Format) ==
+                    ERHITextureAspectMask.Color)
+            {
+                mask |= ERHIFormatSupportOperation.ColorAttachment;
+                if (IsKnownMetalBlendableFormat(query.Format))
+                {
+                    mask |= ERHIFormatSupportOperation.Blend;
+                }
+            }
+            if ((query.Usage & ERHITextureUsage.DepthStencil) != 0 &&
+                (RHIBarrierUtility.InferAspectMask(query.Format) &
+                    (ERHITextureAspectMask.Depth | ERHITextureAspectMask.Stencil)) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.DepthStencilAttachment;
+            }
+
+            if (mask == ERHIFormatSupportOperation.None)
+            {
+                return RHICapability.Unavailable(
+                    "Metal texture creation succeeded but no requested operation could be proven.",
+                    ERHICapabilityProbeKind.RuntimeObjectProbe,
+                    ProbeSource);
+            }
+
+            return RHICapability.Available(
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.NativeSpecialized,
+                ERHICapabilityProbeKind.RuntimeObjectProbe,
+                ProbeSource,
+                new RHICapabilityLimits(
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.SupportedFormatOperationMask,
+                        (ulong)mask)));
+        }
+
+        public override int QueryCooperativeMatrixConfigs(
+            Span<RHICooperativeMatrixConfig> destination)
+        {
+            ThrowIfDisposed();
+            return CopyCooperativeMatrixConfigs(
+                ReadOnlySpan<RHICooperativeMatrixConfig>.Empty,
+                destination);
+        }
+
+        public override RHIClockCalibration QueryClockCalibration(
+            ERHIPipelineType queue,
+            int queueIndex = 0)
+        {
+            ThrowIfDisposed();
+            Capabilities.Synchronization.CalibratedTimestamps.Require(
+                "Synchronization.CalibratedTimestamps");
+            throw new NotSupportedException(
+                "Synchronization.CalibratedTimestamps is unavailable: " +
+                Capabilities.Synchronization.CalibratedTimestamps.UnavailableReason);
         }
 
         private static bool IsKnownMetalBlendableFormat(
@@ -691,6 +902,7 @@ namespace SharpGPU
 
         public override RHIFunctionLibrary CreateFunctionLibrary(in RHIFunctionLibraryDescriptor descriptor)
         {
+            Capabilities.FunctionLibrary.NativeLibrary.Require("FunctionLibrary.NativeLibrary");
             return new MetalFunctionLibrary(this, descriptor);
         }
 
@@ -715,6 +927,15 @@ namespace SharpGPU
 
         public override RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor)
         {
+            if (RHIRasterPipelineContract.RequestsMeshPath(in descriptor))
+            {
+                Capabilities.Mesh.MeshShader.Require("Metal mesh-shader pipelines");
+                if (descriptor.PrimitiveAssembler.MeshletAssembler is { TaskFunction: not null })
+                {
+                    Capabilities.Mesh.TaskShader.Require("Metal task-shader pipelines");
+                }
+            }
+
             return new MetalRasterPipeline(this, descriptor);
         }
 
@@ -829,6 +1050,7 @@ namespace SharpGPU
             int maxTextureSize = 16384;
             int maxCubeTextureSize = 16384;
 
+            string metalGpuFamilyName = ProbeMetalGpuFamilyName();
             m_Limit = new RHIDeviceLimit(
                 uniformBufferAlignment: 256,
                 uploadBufferAlignment: 4,
@@ -862,8 +1084,6 @@ namespace SharpGPU
             bool isPipelineStatsSupported = TryGetStatisticsCounterSet(m_NativeDevice, out _);
             bool isMLSupported = TryProbeMetalMLSupport(out string? metalMLUnavailableReason);
             m_MetalMLUnavailableReason = metalMLUnavailableReason;
-            bool nativeStorageAvailable =
-                MetalStorageQueue.TryProbeNativeSupport(this, out string nativeStorageReason);
 
             static RHICapability Probe(
                 bool available,
@@ -893,6 +1113,8 @@ namespace SharpGPU
             RHICapabilityLimits bindingLimits = new RHICapabilityLimits(
                 new RHICapabilityLimit(ERHICapabilityLimitKind.UniformBufferAlignment, 256),
                 new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumBoundTextures, 128));
+            string waveOperationsProbeSource =
+                $"Metal SIMD-group width is 32 or 64; device-wide exact width is not queried (MTLGPUFamily.{metalGpuFamilyName})";
             RHICapabilityLimits computeLimits = new RHICapabilityLimits(
                 new RHICapabilityLimit(ERHICapabilityLimitKind.MinimumWavefrontSize, 32),
                 new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumWavefrontSize, 64),
@@ -987,7 +1209,11 @@ namespace SharpGPU
                         ERHICapabilityStrategy.CoreApi,
                         ERHICapabilityProbeKind.ApiVersion,
                         "MTLRenderPassDescriptor",
-                        rasterLimits)),
+                        rasterLimits),
+                    samplerFeedback: RHICapability.Unavailable(
+                        "Sampler feedback has no Metal equivalent; it is a DX12-only optional facet and is not framebuffer-local read or an attachment feedback loop.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Metal sampler-feedback contract")),
                 binding: new RHIBindingCapabilities(
                     rootConstants: RHICapability.Available(
                         ERHICapabilityTier.Tier1,
@@ -1046,7 +1272,15 @@ namespace SharpGPU
                         m_SupportsMetal4Barriers,
                         "Metal 4 barrier contract",
                         "Metal 4 barriers are unavailable.",
-                        probeKind: ERHICapabilityProbeKind.ApiVersion)),
+                        probeKind: ERHICapabilityProbeKind.ApiVersion),
+                    calibratedTimestamps: RHICapability.Unavailable(
+                        "SharpMetal MTLDevice.SampleTimestamps passes timestamps by value and cannot return a calibrated CPU/GPU pair.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "MTLDevice.sampleTimestamps:gpuTimestamp:"),
+                    externalFence64: RHICapability.Unavailable(
+                        "ExternalFence64 is Win32 NT shared fence only. Metal has no matching handle contract.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "ADR-0066 ExternalFence64")),
                 memory: new RHIMemoryCapabilities(
                     unifiedMemory: Probe(
                         m_NativeDevice.HasUnifiedMemory,
@@ -1058,22 +1292,41 @@ namespace SharpGPU
                         "Metal placement heaps are unavailable.",
                         strategy: ERHICapabilityStrategy.CoreApi,
                         probeKind: ERHICapabilityProbeKind.ApiVersion),
-                    sparseBinding: Probe(
-                        m_SupportsPlacementSparse,
-                        "MTLDevice.supportsPlacementSparse + MTL4CommandQueue.updateTextureMappings",
-                        "The Metal runtime does not expose placement sparse resources.",
-                        strategy: ERHICapabilityStrategy.NativeSpecialized,
-                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe),
                     gpuVirtualAddress: Probe(
                         m_SupportsMetal4,
                         "MTLBuffer.gpuAddress",
                         "Metal buffer GPU addresses require a Metal 4 device.",
                         strategy: ERHICapabilityStrategy.CoreApi,
                         probeKind: ERHICapabilityProbeKind.ApiVersion),
-                    sparseBufferBinding: RHICapability.Unavailable(
+                    sparseBuffer: RHICapability.Unavailable(
                         "Metal sparse-buffer mapping is not implemented.",
                         ERHICapabilityProbeKind.BackendContract,
                         "SharpGPU Metal sparse-buffer contract"),
+                    sparseTexture2D: Probe(
+                        m_SupportsPlacementSparse,
+                        "MTLDevice.supportsPlacementSparse + MTL4CommandQueue.updateTextureMappings",
+                        "The Metal runtime does not expose placement sparse resources.",
+                        strategy: ERHICapabilityStrategy.NativeSpecialized,
+                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe),
+                    sparseTexture3D: RHICapability.Unavailable(
+                        "Metal placement-sparse 3D textures are not implemented.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Metal sparse-texture contract"),
+                    sparseMsaa: RHICapability.Unavailable(
+                        "Metal placement-sparse MSAA textures are not implemented.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Metal sparse-texture contract"),
+                    sparseMipTail: RHICapability.Unavailable(
+                        "Metal placement-sparse mip-tail binding is not implemented as a distinct native contract.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Metal sparse-texture contract"),
+                    sparseTileGeometry: Probe(
+                        m_SupportsPlacementSparse,
+                        "MTLDevice.sparseTileSizeInBytes + sparseTileSizeWithTextureType",
+                        "Metal sparse tile geometry requires placement sparse.",
+                        strategy: ERHICapabilityStrategy.NativeSpecialized,
+                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe,
+                        limits: ProbeMetalSparseTileSizeBytes()),
                     residency: RHICapability.Unavailable(
                         "MTLResidencySet does not provide the explicit completion-fence contract required by SharpGPU.",
                         ERHICapabilityProbeKind.BackendContract,
@@ -1083,18 +1336,25 @@ namespace SharpGPU
                         "MTLDevice.recommendedMaxWorkingSetSize + currentAllocatedSize",
                         "Metal did not report a device working-set budget.",
                         strategy: ERHICapabilityStrategy.CoreApi,
-                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe)),
-                storage: new RHIStorageCapabilities(
-                    nativeGpuFileIo: Probe(
-                        nativeStorageAvailable,
-                        "MTLIOCommandQueue + MTLIOFileHandle runtime probe",
-                        nativeStorageReason,
-                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe)),
+                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe),
+                    sparseAliasing: RHICapability.Unavailable(
+                        "Metal sparse aliasing is not implemented.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Metal sparse-texture contract"),
+                    externalImport: RHICapability.Unavailable(
+                        "Win32 NT handle import is not available on Metal.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "ADR-0066 external memory"),
+                    externalExport: RHICapability.Unavailable(
+                        "Win32 NT handle export is not available on Metal.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "ADR-0066 external memory")),
+                storage: MetalStorageQueue.CreateCapabilities(this),
                 pipelineCache: new RHIPipelineCacheCapabilities(
                     nativeCache: RHICapability.Unavailable(
-                        "MTLBinaryArchive is URL-based and cannot satisfy the caller-owned in-memory blob contract.",
+                        "ADR-0065: MTLBinaryArchive is URL-based and cannot satisfy the caller-owned in-memory blob contract. Temp-file and UrlArchive lowering are rejected.",
                         ERHICapabilityProbeKind.BackendContract,
-                        "MTLBinaryArchive import/export contract")),
+                        "ADR-0065 Metal pipeline cache")),
                 presentation: new RHIPresentationCapabilities(
                     swapChain: Probe(
                         m_SupportsMetal4,
@@ -1115,10 +1375,20 @@ namespace SharpGPU
                     inline: Probe(
                         isRayTracingSupported,
                         "MTLDevice ray-tracing properties plus Apple hardware-family qualification",
-                        "Inline Metal ray tracing is unavailable.")),
+                        "Inline Metal ray tracing is unavailable."),
+                    opacityMicromap: CreateMetalRayTracingOptionalFacetUnavailable(
+                        "Apple Metal ray tracing has no SharpGPU Opacity Micromap lowering."),
+                    shaderExecutionReordering: CreateMetalRayTracingOptionalFacetUnavailable(
+                        "Apple Metal ray tracing has no SharpGPU Shader Execution Reordering lowering."),
+                    motion: CreateMetalRayTracingOptionalFacetUnavailable(
+                        "Apple Metal ray tracing has no SharpGPU Motion lowering.")),
                 mesh: new RHIMeshCapabilities(
-                    shader: RHICapability.Unavailable(
+                    meshShader: RHICapability.Unavailable(
                         "Metal mesh shaders are not exposed by the current SharpGPU factory surface.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Metal factory surface"),
+                    taskShader: RHICapability.Unavailable(
+                        "Metal task/object shaders are not exposed by the current SharpGPU factory surface.",
                         ERHICapabilityProbeKind.BackendContract,
                         "SharpGPU Metal factory surface")),
                 machineLearning: new RHIMachineLearningCapabilities(
@@ -1133,20 +1403,75 @@ namespace SharpGPU
                             "Metal ML remains Unavailable until a Metal4-native program builder and stable multi-dispatch exist.",
                             ERHICapabilityProbeKind.BackendContract,
                             "SharpGPU Metal MTL4-only ML contract (ADR-0051)")),
-                workGraph: new RHIWorkGraphCapabilities(
-                    execution: RHICapability.Unavailable(
-                        "Metal Work Graph execution is not exposed by SharpGPU.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "SharpGPU Metal factory surface")),
+                workGraph: RHIWorkGraphCapabilities.CreateUnavailable(
+                    "Metal Work Graph execution is not exposed by SharpGPU.",
+                    "SharpGPU Metal factory surface"),
                 indirectCommandBuffer: new RHIIndirectCommandBufferCapabilities(layoutIndirectUnavailable, new RHIIndirectTokenCapabilities(layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable)),
                 compute: new RHIComputeCapabilities(
                     ERHIWaveOperationStrategy.Basic,
                     waveOperations: RHICapability.Available(
                         ERHICapabilityTier.Tier1,
                         ERHICapabilityStrategy.CoreApi,
-                        ERHICapabilityProbeKind.ApiVersion,
-                        "Metal SIMD-group operations",
-                        computeLimits)));
+                        ERHICapabilityProbeKind.BackendContract,
+                        waveOperationsProbeSource,
+                        computeLimits),
+                    variableSubgroupSize: RHICapability.Unavailable(
+                        "Metal has no device-wide variable SIMD-group width query; threadExecutionWidth is per-pipeline.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        waveOperationsProbeSource),
+                    cooperativeMatrix: RHICapability.Unavailable(
+                        "Metal simdgroup_matrix device query is not present in SharpMetal.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpMetal MTLDevice")),
+                functionLibrary: CreateMetalFunctionLibraryCapabilities(
+                    isRayTracingSupported),
+                multiGpu: RHIMultiGpuCapabilities.CreateUnavailable(
+                    "Metal explicit multi-adapter"));
+        }
+
+        private static RHIFunctionLibraryCapabilities CreateMetalFunctionLibraryCapabilities(
+            bool raytracingAvailable)
+        {
+            ulong reusable =
+                (ulong)ERHIFunctionLibraryReusablePipelineClass.Raster |
+                (ulong)ERHIFunctionLibraryReusablePipelineClass.Compute |
+                (raytracingAvailable
+                    ? (ulong)ERHIFunctionLibraryReusablePipelineClass.Raytracing
+                    : 0UL);
+            return RHIFunctionLibraryCapabilities.CreateNative(
+                "MTLLibrary.NewFunction shared-library views",
+                reusable,
+                RHIFunctionLibraryCapabilities.PayloadKindBit(ERHIShaderPayloadKind.MetalLibrary) |
+                    RHIFunctionLibraryCapabilities.PayloadKindBit(ERHIShaderPayloadKind.MslSource),
+                rasterComputeUnavailableReason: null);
+        }
+
+        private static RHICapability CreateMetalRayTracingOptionalFacetUnavailable(string reason)
+        {
+            return RHICapability.Unavailable(
+                reason,
+                ERHICapabilityProbeKind.BackendContract,
+                "SharpGPU Metal ray-tracing factory surface");
+        }
+
+        private RHICapabilityLimits ProbeMetalSparseTileSizeBytes()
+        {
+            if (!m_SupportsPlacementSparse)
+            {
+                return default;
+            }
+
+            ulong tileSizeBytes = m_NativeDevice.SparseTileSizeInBytes(
+                MetalSparseMemoryUtility.SparsePageSize);
+            if (tileSizeBytes == 0)
+            {
+                return default;
+            }
+
+            return new RHICapabilityLimits(
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.SparseStandardTileSizeBytes,
+                    tileSizeBytes));
         }
 
         private bool TryProbeTimestampCounterHeap(out string? unavailableReason)
@@ -1484,6 +1809,25 @@ namespace SharpGPU
                 passMappingSelector,
                 mapEntrySelector,
                 encoderMappingSelector);
+        }
+
+        private string ProbeMetalGpuFamilyName()
+        {
+            if (SafeSupportsFamily(MTLGPUFamily.Apple10)) return nameof(MTLGPUFamily.Apple10);
+            if (SafeSupportsFamily(MTLGPUFamily.Apple9)) return nameof(MTLGPUFamily.Apple9);
+            if (SafeSupportsFamily(MTLGPUFamily.Apple8)) return nameof(MTLGPUFamily.Apple8);
+            if (SafeSupportsFamily(MTLGPUFamily.Apple7)) return nameof(MTLGPUFamily.Apple7);
+            if (SafeSupportsFamily(MTLGPUFamily.Apple6)) return nameof(MTLGPUFamily.Apple6);
+            if (SafeSupportsFamily(MTLGPUFamily.Apple5)) return nameof(MTLGPUFamily.Apple5);
+            if (SafeSupportsFamily(MTLGPUFamily.Apple4)) return nameof(MTLGPUFamily.Apple4);
+            if (SafeSupportsFamily(MTLGPUFamily.Apple3)) return nameof(MTLGPUFamily.Apple3);
+            if (SafeSupportsFamily(MTLGPUFamily.Apple2)) return nameof(MTLGPUFamily.Apple2);
+            if (SafeSupportsFamily(MTLGPUFamily.Apple1)) return nameof(MTLGPUFamily.Apple1);
+            if (SafeSupportsFamily(MTLGPUFamily.Mac2)) return nameof(MTLGPUFamily.Mac2);
+            if (SafeSupportsFamily(MTLGPUFamily.Metal4)) return nameof(MTLGPUFamily.Metal4);
+            if (SafeSupportsFamily(MTLGPUFamily.Metal3)) return nameof(MTLGPUFamily.Metal3);
+            if (SafeSupportsFamily(MTLGPUFamily.Common3)) return nameof(MTLGPUFamily.Common3);
+            return "Unknown";
         }
 
         private bool SafeSupportsFamily(in MTLGPUFamily family)

@@ -317,7 +317,36 @@ namespace SharpGPU
                 in snapshot.AttachmentInterface,
                 depthStencilAspects,
                 nameof(descriptor));
+            ValidateAssemblerExclusive(in snapshot, nameof(descriptor));
             return snapshot;
+        }
+
+        internal static bool RequestsMeshPath(in RHIRasterPipelineDescriptor descriptor)
+        {
+            return descriptor.PrimitiveAssembler.MeshletAssembler.HasValue
+                || descriptor.PrimitiveAssembler.PrimitiveType == ERHIPrimitiveType.Mesh;
+        }
+
+        private static void ValidateAssemblerExclusive(
+            in RHIRasterPipelineDescriptor descriptor,
+            string parameterName)
+        {
+            bool hasVertexAssembler = descriptor.PrimitiveAssembler.VertexAssembler.HasValue;
+            bool hasMeshletAssembler = descriptor.PrimitiveAssembler.MeshletAssembler.HasValue;
+            if (hasVertexAssembler && hasMeshletAssembler)
+            {
+                throw new ArgumentException(
+                    "Raster pipelines cannot combine VertexAssembler and MeshletAssembler.",
+                    parameterName);
+            }
+
+            if (hasMeshletAssembler &&
+                descriptor.PrimitiveAssembler.MeshletAssembler.Value.MeshFunction == null)
+            {
+                throw new ArgumentException(
+                    "Mesh pipelines require a mesh shader function.",
+                    parameterName);
+            }
         }
 
         internal static void ValidateDepthStencilCompatibility(
@@ -1134,7 +1163,7 @@ namespace SharpGPU
     internal readonly struct RHIPipelineCacheIdentity
     {
         public const uint CurrentSchemaRevision = 3;
-        public const uint CurrentPipelineAbiRevision = 7;
+        public const uint CurrentPipelineAbiRevision = 8;
 
         public ERHIBackend Backend { get; }
         public uint VendorId { get; }
@@ -1575,28 +1604,21 @@ namespace SharpGPU
                     $"The {role} shader function is disposed.");
             }
 
+            function.ThrowIfSourceUnavailable();
             RHIFunctionDescriptor descriptor = function.Descriptor;
-            writer.Write((byte)descriptor.Type);
-            writer.Write((byte)descriptor.PayloadKind);
-            writer.Write(descriptor.EntryName ?? string.Empty);
-            writer.Write(descriptor.ByteSize);
-            if (descriptor.ByteSize == 0 || descriptor.ByteCode == IntPtr.Zero)
+            ReadOnlySpan<byte> contentDigest = function.ContentDigest.Span;
+            if (contentDigest.Length != RHIFunction.ContentDigestByteCount)
             {
                 throw new ArgumentException(
-                    $"The {role} shader function has no bytecode.",
+                    $"The {role} shader function is missing a {RHIFunction.ContentDigestByteCount}-byte content digest.",
                     nameof(function));
             }
-            if (descriptor.ByteSize > int.MaxValue)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(function),
-                    $"The {role} shader function is larger than the supported cache-key input.");
-            }
 
-            ReadOnlySpan<byte> byteCode = new ReadOnlySpan<byte>(
-                descriptor.ByteCode.ToPointer(),
-                checked((int)descriptor.ByteSize));
-            writer.Write(SHA256.HashData(byteCode));
+            writer.Write((byte)function.SourceKind);
+            writer.Write((byte)descriptor.PayloadKind);
+            writer.Write((byte)descriptor.Type);
+            writer.Write(descriptor.EntryName ?? string.Empty);
+            writer.Write(contentDigest);
         }
 
         private static void WritePrimitiveAssembler(

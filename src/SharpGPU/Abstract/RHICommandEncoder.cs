@@ -150,6 +150,12 @@ namespace SharpGPU
         public abstract void SetPushConstants(IntPtr data, in uint size, in uint offset = 0);
         public abstract void Dispatch(in uint groupCountX, in uint groupCountY, in uint groupCountZ);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset);
+        /// <summary>
+        /// Executes a layout-driven indirect command stream.
+        /// This is not a device-generated command buffer: preprocess
+        /// buffers, generated-count lifecycle, and reusable DGC streams
+        /// are out of scope.
+        /// </summary>
         public virtual void ExecuteIndirect(
             RHIIndirectCommandLayout layout,
             RHIBuffer argumentsBuffer,
@@ -172,6 +178,101 @@ namespace SharpGPU
             commandBuffer.ValidateEncoderEndFromEncoder(ERHICommandEncoderKind.Compute);
             throw new NotSupportedException(
                 $"{GetType().Name} does not implement compute pass teardown.");
+        }
+
+        /// <summary>
+        /// Clears an opaque sampler-feedback map. Pairing was established at
+        /// create time; this encoder cannot pair.
+        /// Requires <see cref="RHIRasterCapabilities.SamplerFeedback"/>.
+        /// </summary>
+        public virtual void ClearSamplerFeedbackMap(RHITexture feedbackMap)
+        {
+            RequireSamplerFeedbackEncoder(
+                feedbackMap,
+                ERHISamplerFeedbackOperation.Clear,
+                "clear");
+            throw new NotSupportedException(
+                $"{GetType().Name} does not implement sampler-feedback clear.");
+        }
+
+        /// <summary>
+        /// Encodes a decoded R8_UINT map back into an opaque feedback map
+        /// (D3D12 ENCODE_SAMPLER_FEEDBACK). Pairing was established at create
+        /// time; this encoder cannot pair.
+        /// Requires <see cref="RHIRasterCapabilities.SamplerFeedback"/>.
+        /// </summary>
+        public virtual void ResolveSamplerFeedbackMap(
+            RHITexture decodedSource,
+            RHITexture feedbackMap)
+        {
+            ArgumentNullException.ThrowIfNull(decodedSource);
+            RequireSamplerFeedbackEncoder(
+                feedbackMap,
+                ERHISamplerFeedbackOperation.Resolve,
+                "resolve");
+            throw new NotSupportedException(
+                $"{GetType().Name} does not implement sampler-feedback resolve.");
+        }
+
+        /// <summary>
+        /// Decodes an opaque feedback map into a readable R8_UINT texture
+        /// (D3D12 DECODE_SAMPLER_FEEDBACK). Pairing was established at create
+        /// time; this encoder cannot pair.
+        /// Requires <see cref="RHIRasterCapabilities.SamplerFeedback"/>.
+        /// </summary>
+        public virtual void DecodeSamplerFeedbackMap(
+            RHITexture feedbackMap,
+            RHITexture decodedDestination)
+        {
+            ArgumentNullException.ThrowIfNull(decodedDestination);
+            RequireSamplerFeedbackEncoder(
+                feedbackMap,
+                ERHISamplerFeedbackOperation.Decode,
+                "decode");
+            throw new NotSupportedException(
+                $"{GetType().Name} does not implement sampler-feedback decode.");
+        }
+
+        /// <summary>
+        /// Copies one opaque sampler-feedback map onto another of the same
+        /// format and extent. Pairing was established at create time; this
+        /// encoder cannot pair.
+        /// Requires <see cref="RHIRasterCapabilities.SamplerFeedback"/>.
+        /// </summary>
+        public virtual void CopySamplerFeedbackMap(
+            RHITexture source,
+            RHITexture destination)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+            RequireSamplerFeedbackEncoder(
+                destination,
+                ERHISamplerFeedbackOperation.Copy,
+                "copy");
+            throw new NotSupportedException(
+                $"{GetType().Name} does not implement sampler-feedback copy.");
+        }
+
+        protected void RequireSamplerFeedbackEncoder(
+            RHITexture feedbackMap,
+            ERHISamplerFeedbackOperation operation,
+            string operationName)
+        {
+            ArgumentNullException.ThrowIfNull(feedbackMap);
+            _ = feedbackMap.Descriptor;
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException(
+                    "The compute encoder is not attached to a command buffer.");
+            RHIDevice device = commandBuffer.CommandQueue.RequireOwnerDevice();
+            RHICapability capability = device.Capabilities.Raster.SamplerFeedback;
+            capability.Require("Raster.SamplerFeedback");
+            if (capability.Limits.TryGetValue(
+                    ERHICapabilityLimitKind.SupportedSamplerFeedbackOperationMask,
+                    out ulong supportedOperations) &&
+                (supportedOperations & (ulong)operation) == 0)
+            {
+                throw new NotSupportedException(
+                    $"Raster.SamplerFeedback does not list {operationName} among supported operations.");
+            }
         }
     }
 
@@ -1885,6 +1986,12 @@ namespace SharpGPU
                 $"{GetType().Name} does not implement indirect mesh dispatch.");
         }
 
+        /// <summary>
+        /// Executes a layout-driven indirect command stream.
+        /// This is not a device-generated command buffer: preprocess
+        /// buffers, generated-count lifecycle, and reusable DGC streams
+        /// are out of scope.
+        /// </summary>
         public virtual void ExecuteIndirect(
             RHIIndirectCommandLayout layout,
             RHIBuffer argumentsBuffer,

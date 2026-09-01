@@ -45,6 +45,13 @@ namespace SharpGPU
 
             if (descriptor.ViewType == ERHITextureViewType.ShaderResource)
             {
+                if (texture.IsSamplerFeedbackMap)
+                {
+                    throw new ArgumentException(
+                        "Opaque sampler-feedback maps are not shader-readable. Decode them into an R8_UINT texture first.",
+                        nameof(descriptor));
+                }
+
                 if(Dx12Utility.IsShaderResourceTexture(texture.Descriptor.UsageFlag))
                 {
                     Vortice.Direct3D12.ShaderResourceViewDescription desc = new Vortice.Direct3D12.ShaderResourceViewDescription();
@@ -65,7 +72,25 @@ namespace SharpGPU
             }
             else if (descriptor.ViewType == ERHITextureViewType.UnorderedAccess)
             {
-                if(Dx12Utility.IsUnorderedAccessTexture(texture.Descriptor.UsageFlag))
+                if (texture.IsSamplerFeedbackMap)
+                {
+                    if (texture.PairedSamplerFeedbackTexture is not Dx12Texture paired ||
+                        paired.IsDisposed)
+                    {
+                        throw new ArgumentException(
+                            "A sampler-feedback UAV requires the create-time paired sampled texture to still be alive.",
+                            nameof(descriptor));
+                    }
+
+                    m_Descriptors = m_Dx12Texture.Dx12Device.AllocateCbvSrvUavDescriptorPair();
+                    m_HasDescriptors = true;
+                    m_Dx12Texture.Dx12Device.CreateSamplerFeedbackUnorderedAccessView(
+                        paired.NativeResource,
+                        m_Dx12Texture.NativeResource,
+                        m_Descriptors.Staging.CpuHandle);
+                    m_Dx12Texture.Dx12Device.CopyDescriptorToShaderVisible(m_Descriptors);
+                }
+                else if(Dx12Utility.IsUnorderedAccessTexture(texture.Descriptor.UsageFlag))
                 {
                     Vortice.Direct3D12.UnorderedAccessViewDescription desc = new Vortice.Direct3D12.UnorderedAccessViewDescription();
                     desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);

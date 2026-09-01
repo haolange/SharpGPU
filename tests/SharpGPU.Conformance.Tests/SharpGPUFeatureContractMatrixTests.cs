@@ -173,63 +173,6 @@ public sealed class SharpGPUFeatureContractMatrixTests
     }
 
     [Fact]
-    public void Dx12_MeshFeatureFlag_ShouldBeFalseUntilNativePipelineConformanceExists()
-    {
-        if (!FeatureContractContext.TryCreateDx12Instance(out RHIInstance? instance, out _))
-        {
-            return;
-        }
-
-        using (instance)
-        {
-            for (int i = 0; i < instance.DeviceCount; ++i)
-            {
-                RHIDevice device = instance.GetDevice(i);
-                Assert.Equal(
-                    ERHICapabilityTier.Unavailable,
-                    device.Capabilities.Mesh.Shader.Tier);
-
-                using RHIPipelineLayout pipelineLayout = device.CreatePipelineLayout(new RHIPipelineLayoutDescriptor
-                {
-                    bLocalSignature = false,
-                    bUseVertexLayout = false,
-                    PushConstantSize = 0,
-                    BindingTableLayouts = Array.Empty<RHIBindingTableLayout>(),
-                });
-                RHIStencilStateDescriptor keepStencilFace = new()
-                {
-                    ComparisonMode = ERHIComparisonMode.Always,
-                    StencilPassOp = ERHIStencilOp.Keep,
-                    StencilFailOp = ERHIStencilOp.Keep,
-                    StencilDepthFailOp = ERHIStencilOp.Keep,
-                };
-                RHIRasterPipelineDescriptor descriptor = new()
-                {
-                    SampleCount = ERHISampleCount.None,
-                    ColorFormats = Array.Empty<ERHIPixelFormat>(),
-                    PipelineLayout = pipelineLayout,
-                    RenderState = new RHIRenderStateDescriptor
-                    {
-                        DepthStencilState =
-                            new RHIDepthStencilStateDescriptor
-                            {
-                                ComparisonMode = ERHIComparisonMode.Always,
-                                FrontFace = keepStencilFace,
-                                BackFace = keepStencilFace,
-                            },
-                    },
-                    PrimitiveAssembler = new RHIPrimitiveAssemblerDescriptor
-                    {
-                        MeshletAssembler = new RHIMeshletAssemblerDescriptor(null!, null!),
-                    },
-                };
-
-                Assert.Throws<NotSupportedException>(() => device.CreateRasterPipeline(descriptor));
-            }
-        }
-    }
-
-    [Fact]
     public void Dx12_RaytracingUnsupportedFeature_ShouldThrowNotSupported()
     {
         if (!FeatureContractContext.TryCreateDx12Instance(out RHIInstance? instance, out _))

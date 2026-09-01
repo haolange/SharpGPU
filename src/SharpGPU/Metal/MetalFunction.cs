@@ -186,15 +186,30 @@ namespace SharpGPU
 
     internal sealed class MetalFunction : RHIFunction
     {
-        public MTLLibrary NativeLibrary => m_NativeLibrary;
-        public MTLFunction NativeFunction => m_NativeFunction;
+        public MTLLibrary NativeLibrary
+        {
+            get
+            {
+                ThrowIfSourceUnavailable();
+                return m_NativeLibrary;
+            }
+        }
+        public MTLFunction NativeFunction
+        {
+            get
+            {
+                ThrowIfSourceUnavailable();
+                return m_NativeFunction;
+            }
+        }
 
         private MTLLibrary m_NativeLibrary;
         private MTLFunction m_NativeFunction;
+        private readonly bool m_OwnsLibrary;
 
         public MetalFunction(MetalDevice device, in RHIFunctionDescriptor descriptor)
         {
-            m_Descriptor = descriptor;
+            BindDirectBytecodeSource(descriptor);
 
             if (descriptor.PayloadKind == ERHIShaderPayloadKind.MetalLibrary)
             {
@@ -221,12 +236,54 @@ namespace SharpGPU
                 }
             }
 
-            NSString entryName = new NSString(descriptor.EntryName);
-            m_NativeFunction = m_NativeLibrary.NewFunction(entryName);
-            if (m_NativeFunction.NativePtr == IntPtr.Zero)
+            m_OwnsLibrary = true;
+            m_NativeFunction = CreateStageFunction(m_NativeLibrary, descriptor.EntryName, descriptor.Type);
+        }
+
+        internal MetalFunction(MetalFunctionLibrary library, in RHIFunctionViewDescriptor view)
+        {
+            library.ThrowIfViewSourceUnavailable();
+            BindLibraryViewSource(library, view, library.Descriptor.PayloadKind, library.ContentDigest);
+            m_NativeLibrary = library.NativeLibrary;
+            m_OwnsLibrary = false;
+            m_NativeFunction = CreateStageFunction(m_NativeLibrary, view.EntryName, view.Type);
+        }
+
+        private static MTLFunction CreateStageFunction(
+            MTLLibrary library,
+            string entryName,
+            ERHIFunctionType type)
+        {
+            NSString name = new NSString(entryName);
+            MTLFunction function = library.NewFunction(name);
+            if (function.NativePtr == IntPtr.Zero)
             {
-                throw new InvalidOperationException($"Failed to load function entry '{descriptor.EntryName}'.");
+                throw new InvalidOperationException($"Failed to load function entry '{entryName}'.");
             }
+
+            if (!MatchesStage(function.FunctionType, type))
+            {
+                ObjectiveCRuntime.Release(function);
+                throw new InvalidOperationException(
+                    $"Metal function '{entryName}' type {function.FunctionType} does not match stage {type}.");
+            }
+
+            return function;
+        }
+
+        private static bool MatchesStage(MTLFunctionType metalType, ERHIFunctionType type)
+        {
+            return type switch
+            {
+                ERHIFunctionType.Vertex => metalType == MTLFunctionType.Vertex,
+                ERHIFunctionType.Fragment => metalType == MTLFunctionType.Fragment,
+                ERHIFunctionType.Compute => metalType == MTLFunctionType.Kernel,
+                ERHIFunctionType.Task => metalType == MTLFunctionType.Object,
+                ERHIFunctionType.Mesh => metalType == MTLFunctionType.Mesh,
+                ERHIFunctionType.RayTracing =>
+                    metalType is MTLFunctionType.Visible or MTLFunctionType.Intersection or MTLFunctionType.Kernel,
+                _ => false,
+            };
         }
 
         protected override void Release()
@@ -237,11 +294,12 @@ namespace SharpGPU
                 m_NativeFunction = default;
             }
 
-            if (m_NativeLibrary.NativePtr != IntPtr.Zero)
+            if (m_OwnsLibrary && m_NativeLibrary.NativePtr != IntPtr.Zero)
             {
                 ObjectiveCRuntime.Release(m_NativeLibrary);
-                m_NativeLibrary = default;
             }
+
+            m_NativeLibrary = default;
         }
     }
 
@@ -249,11 +307,19 @@ namespace SharpGPU
     {
         internal MTLLibrary NativeLibrary => m_NativeLibrary;
 
+        private readonly MetalDevice m_Device;
         private MTLLibrary m_NativeLibrary;
 
         public MetalFunctionLibrary(MetalDevice device, in RHIFunctionLibraryDescriptor descriptor)
         {
-            m_Descriptor = descriptor;
+            m_Device = device ?? throw new ArgumentNullException(nameof(device));
+            if (!device.Capabilities.FunctionLibrary.SupportsPayloadKind(descriptor.PayloadKind))
+            {
+                throw new NotSupportedException(
+                    $"Metal function libraries require MetalLibrary or MslSource, received {descriptor.PayloadKind}.");
+            }
+
+            BindLibraryPayload(descriptor);
 
             if (descriptor.PayloadKind == ERHIShaderPayloadKind.MetalLibrary)
             {
@@ -279,6 +345,24 @@ namespace SharpGPU
                     throw new InvalidOperationException($"Failed to compile MSL function library: {errorText}");
                 }
             }
+        }
+
+        internal void ThrowIfViewSourceUnavailable()
+        {
+            ThrowIfDisposed();
+        }
+
+        public override RHIFunction CreateFunction(in RHIFunctionViewDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            m_Device.Capabilities.FunctionLibrary.NativeLibrary.Require(
+                "FunctionLibrary.NativeLibrary");
+            ERHIFunctionLibraryReusablePipelineClass pipelineClass =
+                m_Device.Capabilities.FunctionLibrary.ClassifyFunctionType(descriptor.Type);
+            m_Device.Capabilities.FunctionLibrary.RequireReusableClass(
+                pipelineClass,
+                $"Metal function-library views for {pipelineClass}");
+            return new MetalFunction(this, descriptor);
         }
 
         protected override void Release()

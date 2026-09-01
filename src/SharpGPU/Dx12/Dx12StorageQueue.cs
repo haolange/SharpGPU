@@ -165,6 +165,32 @@ namespace SharpGPU
             }
         }
 
+        public override void CancelRequestsWithTag(ulong mask, ulong value)
+        {
+            ThrowIfDisposed();
+            m_Dx12Device.Capabilities.Storage.RequestCancellation.Require(
+                "DirectStorage request cancellation");
+            IDStorageQueue queue = m_DStorageQueue
+                ?? throw new InvalidOperationException("The DirectStorage queue is not initialized.");
+            try
+            {
+                queue.CancelRequestsWithTag(mask, value);
+            }
+            catch (SharpGen.Runtime.SharpGenException exception)
+            {
+                throw CreateNativeFailure(
+                    ERHIErrorCode.NativeFailure,
+                    exception.HResult,
+                    "DirectStorage failed to cancel requests by CancellationTag.",
+                    exception);
+            }
+        }
+
+        public override void CancelPending()
+        {
+            CancelRequestsWithTag(0, 0);
+        }
+
         public override void ThrowIfSubmissionFailed()
         {
             ThrowIfDisposed();
@@ -216,12 +242,74 @@ namespace SharpGPU
             m_DStorageDevice = null;
         }
 
+        internal static RHIStorageCapabilities CreateCapabilities(Dx12Device device)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+
+            ProbeNativeFacets(device, out Dx12StorageFacetProbe probe);
+            RHICapabilityLimits nativeIoLimits = probe.NativeGpuFileIo
+                ? new RHICapabilityLimits(
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.MaximumStorageRequestBytes,
+                        probe.MaxRequestBytes),
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.MaximumStorageConcurrentRequests,
+                        probe.MaxConcurrentRequests))
+                : RHICapabilityLimits.Empty;
+            RHICapabilityLimits decompressionLimits = probe.GpuDecompression
+                ? new RHICapabilityLimits(
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.SupportedStorageCompressionFormatMask,
+                        (ulong)probe.CompressionFormatMask))
+                : RHICapabilityLimits.Empty;
+
+            return new RHIStorageCapabilities(
+                nativeGpuFileIo: RHICapability.FromProbe(
+                    probe.NativeGpuFileIo,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeLibrary,
+                    ERHICapabilityProbeKind.RuntimeObjectProbe,
+                    "DirectStorage native factory and file-queue probe",
+                    probe.NativeGpuFileIoReason,
+                    nativeIoLimits),
+                gpuDecompression: RHICapability.FromProbe(
+                    probe.GpuDecompression,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeLibrary,
+                    ERHICapabilityProbeKind.RuntimeObjectProbe,
+                    "IDStorageQueue2.GetCompressionSupport(GDeflate)",
+                    probe.GpuDecompressionReason,
+                    decompressionLimits),
+                requestCancellation: RHICapability.FromProbe(
+                    probe.RequestCancellation,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeLibrary,
+                    ERHICapabilityProbeKind.RuntimeObjectProbe,
+                    "IDStorageQueue.CancelRequestsWithTag",
+                    probe.RequestCancellationReason),
+                ioPriority: RHICapability.FromProbe(
+                    probe.IoPriority,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeLibrary,
+                    ERHICapabilityProbeKind.RuntimeObjectProbe,
+                    "DSTORAGE_QUEUE_DESC.Priority",
+                    probe.IoPriorityReason));
+        }
+
         internal static bool TryProbeNativeSupport(Dx12Device device, out string reason)
+        {
+            ProbeNativeFacets(device, out Dx12StorageFacetProbe probe);
+            reason = probe.NativeGpuFileIoReason;
+            return probe.NativeGpuFileIo;
+        }
+
+        private static void ProbeNativeFacets(Dx12Device device, out Dx12StorageFacetProbe probe)
         {
             ArgumentNullException.ThrowIfNull(device);
 
             IDStorageFactory? factory = null;
             IDStorageQueue? queue = null;
+            IDStorageQueue2? queue2 = null;
             Vortice.Direct3D12.ID3D12Device? storageDevice = null;
             try
             {
@@ -231,23 +319,123 @@ namespace SharpGPU
                     out queue,
                     out storageDevice);
 
-                reason =
+                queue2 = queue.QueryInterfaceOrNull<IDStorageQueue2>();
+                bool gpuDecompression = false;
+                ERHIStorageCompressionFormat compressionMask = ERHIStorageCompressionFormat.None;
+                string gpuDecompressionReason;
+                if (queue2 == null)
+                {
+                    gpuDecompressionReason =
+                        "IDStorageQueue2.GetCompressionSupport is not available on this DirectStorage queue.";
+                }
+                else
+                {
+                    CompressionSupport support = queue2.GetCompressionSupport(CompressionFormat.GDeflate);
+                    bool gpuPath =
+                        support.HasFlag(CompressionSupport.GpuOptimized) ||
+                        support.HasFlag(CompressionSupport.GpuFallback);
+                    if (gpuPath)
+                    {
+                        gpuDecompression = true;
+                        compressionMask = ERHIStorageCompressionFormat.GDeflate;
+                        gpuDecompressionReason =
+                            "IDStorageQueue2.GetCompressionSupport(GDeflate) reported a GPU decompression path.";
+                    }
+                    else if (support.HasFlag(CompressionSupport.CpuFallback))
+                    {
+                        gpuDecompressionReason =
+                            "IDStorageQueue2.GetCompressionSupport(GDeflate) reported CPU fallback only; " +
+                            "GPU decompression is not available.";
+                    }
+                    else
+                    {
+                        gpuDecompressionReason =
+                            $"IDStorageQueue2.GetCompressionSupport(GDeflate) returned {support}.";
+                    }
+                }
+
+                probe = new Dx12StorageFacetProbe(
+                    nativeGpuFileIo: true,
+                    nativeGpuFileIoReason:
                     "A native Microsoft DirectStorage file queue was created for the current DX12 device " +
-                    "using the explicitly configured file-buffered Tier-1 strategy.";
-                return true;
+                    "using the explicitly configured file-buffered Tier-1 strategy.",
+                    gpuDecompression: gpuDecompression,
+                    gpuDecompressionReason: gpuDecompressionReason,
+                    compressionFormatMask: compressionMask,
+                    requestCancellation: true,
+                    requestCancellationReason:
+                    "IDStorageQueue.CancelRequestsWithTag is present on the created DirectStorage queue.",
+                    ioPriority: true,
+                    ioPriorityReason:
+                    "DSTORAGE_QUEUE_DESC.Priority is set when the DirectStorage file queue is created.",
+                    maxRequestBytes: uint.MaxValue,
+                    maxConcurrentRequests: (ulong)(DirectStorage.MaxQueueCapacity - 1));
             }
             catch (Exception exception)
             {
-                reason =
+                string failure =
                     $"Native Microsoft DirectStorage file-queue probing failed " +
                     $"({exception.GetType().Name}, HRESULT 0x{exception.HResult:X8}).";
-                return false;
+                probe = new Dx12StorageFacetProbe(
+                    nativeGpuFileIo: false,
+                    nativeGpuFileIoReason: failure,
+                    gpuDecompression: false,
+                    gpuDecompressionReason: failure,
+                    compressionFormatMask: ERHIStorageCompressionFormat.None,
+                    requestCancellation: false,
+                    requestCancellationReason: failure,
+                    ioPriority: false,
+                    ioPriorityReason: failure,
+                    maxRequestBytes: 0,
+                    maxConcurrentRequests: 0);
             }
             finally
             {
+                queue2?.Dispose();
                 queue?.Dispose();
                 factory?.Dispose();
                 storageDevice?.Dispose();
+            }
+        }
+
+        private readonly struct Dx12StorageFacetProbe
+        {
+            public bool NativeGpuFileIo { get; }
+            public string NativeGpuFileIoReason { get; }
+            public bool GpuDecompression { get; }
+            public string GpuDecompressionReason { get; }
+            public ERHIStorageCompressionFormat CompressionFormatMask { get; }
+            public bool RequestCancellation { get; }
+            public string RequestCancellationReason { get; }
+            public bool IoPriority { get; }
+            public string IoPriorityReason { get; }
+            public ulong MaxRequestBytes { get; }
+            public ulong MaxConcurrentRequests { get; }
+
+            public Dx12StorageFacetProbe(
+                bool nativeGpuFileIo,
+                string nativeGpuFileIoReason,
+                bool gpuDecompression,
+                string gpuDecompressionReason,
+                ERHIStorageCompressionFormat compressionFormatMask,
+                bool requestCancellation,
+                string requestCancellationReason,
+                bool ioPriority,
+                string ioPriorityReason,
+                ulong maxRequestBytes,
+                ulong maxConcurrentRequests)
+            {
+                NativeGpuFileIo = nativeGpuFileIo;
+                NativeGpuFileIoReason = nativeGpuFileIoReason;
+                GpuDecompression = gpuDecompression;
+                GpuDecompressionReason = gpuDecompressionReason;
+                CompressionFormatMask = compressionFormatMask;
+                RequestCancellation = requestCancellation;
+                RequestCancellationReason = requestCancellationReason;
+                IoPriority = ioPriority;
+                IoPriorityReason = ioPriorityReason;
+                MaxRequestBytes = maxRequestBytes;
+                MaxConcurrentRequests = maxConcurrentRequests;
             }
         }
 
@@ -477,10 +665,18 @@ namespace SharpGPU
                     nameof(request));
             }
 
+            CompressionFormat compressionFormat = ResolveCompressionFormat(
+                request.CompressionFormat,
+                request.UncompressedSize,
+                nameof(request));
+            uint destinationSize = compressionFormat == CompressionFormat.None
+                ? fileSize
+                : request.UncompressedSize;
+
             ulong destinationEnd;
             try
             {
-                destinationEnd = checked(request.DestinationOffset + request.FileSize);
+                destinationEnd = checked(request.DestinationOffset + destinationSize);
             }
             catch (OverflowException)
             {
@@ -503,15 +699,15 @@ namespace SharpGPU
             Request directStorageRequest = new Request();
             directStorageRequest.Options.SourceType = RequestSourceType.File;
             directStorageRequest.Options.DestinationType = RequestDestinationType.Buffer;
-            directStorageRequest.Options.CompressionFormat = CompressionFormat.None;
+            directStorageRequest.Options.CompressionFormat = compressionFormat;
             directStorageRequest.Source.File.Source = storageFile;
             directStorageRequest.Source.File.Offset = request.FileOffset;
             directStorageRequest.Source.File.Size = fileSize;
-            directStorageRequest.UncompressedSize = fileSize;
+            directStorageRequest.UncompressedSize = destinationSize;
             directStorageRequest.Destination.Buffer.Resource = dx12Buffer.NativeResource;
             directStorageRequest.Destination.Buffer.Offset = request.DestinationOffset;
-            directStorageRequest.Destination.Buffer.Size = fileSize;
-            directStorageRequest.CancellationTag = 0;
+            directStorageRequest.Destination.Buffer.Size = destinationSize;
+            directStorageRequest.CancellationTag = request.CancellationTag;
             directStorageRequest.Name = null;
 
             try
@@ -627,29 +823,52 @@ namespace SharpGPU
                 1,
                 0,
                 out ulong conditionedSourceSize);
-            if (conditionedSourceSize > uint.MaxValue ||
-                request.FileSize != conditionedSourceSize)
+            CompressionFormat compressionFormat = ResolveCompressionFormat(
+                request.CompressionFormat,
+                request.UncompressedSize,
+                nameof(request));
+            if (conditionedSourceSize > uint.MaxValue)
             {
                 throw new ArgumentException(
                     $"Native DirectStorage texture source data must use the exact D3D12 " +
+                    $"GetCopyableFootprints layout; subresource {subresourceIndex} overflows UInt32.",
+                    nameof(request));
+            }
+
+            uint uncompressedSize = checked((uint)conditionedSourceSize);
+            if (compressionFormat == CompressionFormat.None)
+            {
+                if (request.FileSize != conditionedSourceSize)
+                {
+                    throw new ArgumentException(
+                        $"Native DirectStorage texture source data must use the exact D3D12 " +
+                        $"GetCopyableFootprints layout ({conditionedSourceSize} bytes for subresource " +
+                        $"{subresourceIndex}); received {request.FileSize} bytes.",
+                        nameof(request));
+                }
+            }
+            else if (request.UncompressedSize != uncompressedSize)
+            {
+                throw new ArgumentException(
+                    $"Compressed DirectStorage texture UncompressedSize must equal the D3D12 " +
                     $"GetCopyableFootprints layout ({conditionedSourceSize} bytes for subresource " +
-                    $"{subresourceIndex}); received {request.FileSize} bytes.",
+                    $"{subresourceIndex}); received {request.UncompressedSize} bytes.",
                     nameof(request));
             }
 
             Request directStorageRequest = new Request();
             directStorageRequest.Options.SourceType = RequestSourceType.File;
             directStorageRequest.Options.DestinationType = RequestDestinationType.TextureRegion;
-            directStorageRequest.Options.CompressionFormat = CompressionFormat.None;
+            directStorageRequest.Options.CompressionFormat = compressionFormat;
             directStorageRequest.Source.File.Source = storageFile;
             directStorageRequest.Source.File.Offset = request.FileOffset;
             directStorageRequest.Source.File.Size = fileSize;
-            directStorageRequest.UncompressedSize = checked((uint)conditionedSourceSize);
+            directStorageRequest.UncompressedSize = uncompressedSize;
             directStorageRequest.Destination.Texture.Resource = dx12Texture.NativeResource;
             directStorageRequest.Destination.Texture.SubresourceIndex = subresourceIndex;
             directStorageRequest.Destination.Texture.Region =
                 new Box(0, 0, 0, (int)width, (int)height, (int)depth);
-            directStorageRequest.CancellationTag = 0;
+            directStorageRequest.CancellationTag = request.CancellationTag;
             directStorageRequest.Name = null;
 
             try
@@ -680,6 +899,46 @@ namespace SharpGPU
             }
 
             return storageFile;
+        }
+
+        private CompressionFormat ResolveCompressionFormat(
+            ERHIStorageCompressionFormat format,
+            uint uncompressedSize,
+            string parameterName)
+        {
+            if (format == ERHIStorageCompressionFormat.None)
+            {
+                return CompressionFormat.None;
+            }
+
+            m_Dx12Device.Capabilities.Storage.GpuDecompression.Require(
+                "DirectStorage GPU decompression");
+            if (format != ERHIStorageCompressionFormat.GDeflate)
+            {
+                throw new ArgumentOutOfRangeException(
+                    parameterName,
+                    format,
+                    "DirectStorage can enqueue only GDeflate compressed requests.");
+            }
+
+            if (!m_Dx12Device.Capabilities.Storage.GpuDecompression.Limits.TryGetValue(
+                    ERHICapabilityLimitKind.SupportedStorageCompressionFormatMask,
+                    out ulong formatMask) ||
+                ((ulong)format & ~formatMask) != 0)
+            {
+                throw new NotSupportedException(
+                    "DirectStorage GPU decompression does not include the requested compression format.");
+            }
+
+            if (uncompressedSize == 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    parameterName,
+                    uncompressedSize,
+                    "Compressed DirectStorage requests require a non-zero UncompressedSize.");
+            }
+
+            return CompressionFormat.GDeflate;
         }
 
         private static uint ValidateFileSize(ulong fileSize, string parameterName)

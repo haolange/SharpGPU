@@ -107,6 +107,10 @@ public sealed class SharpGPUFeatureReportTests
             "\"Name\": \"Raster.SampledFeedback\"",
             json,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Raster.SamplerFeedback\"",
+            json,
+            StringComparison.Ordinal);
         Assert.DoesNotContain(
             "\"Name\": \"Raster.VariableRateShading\"",
             json,
@@ -125,6 +129,154 @@ public sealed class SharpGPUFeatureReportTests
             StringComparison.Ordinal);
         Assert.Contains(
             "\"Name\": \"Raster.VariableRateShadingCombiners\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "\"Name\": \"Memory.SparseBinding\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "\"Name\": \"Memory.SparseBufferBinding\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Memory.SparseBuffer\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Memory.SparseTexture2D\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Memory.SparseTexture3D\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Memory.SparseMsaa\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Memory.SparseMipTail\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Memory.SparseTileGeometry\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Memory.SparseAliasing\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Synchronization.CalibratedTimestamps\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Synchronization.ExternalFence64\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Memory.ExternalImport\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Memory.ExternalExport\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"FunctionLibrary.NativeLibrary\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"FunctionLibrary.RasterComputeReuse\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"MultiGpu.MultiGpu\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"WorkGraph.BroadcastNodes\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"WorkGraph.ThreadNodes\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"WorkGraph.Recursion\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"WorkGraph.MeshNodes\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"WorkGraph.GpuInput\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"WorkGraph.BackingMemory\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"WorkGraph.EntryRecords\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "\"Name\": \"Mesh.Shader\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Mesh.MeshShader\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Mesh.TaskShader\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Compute.WaveOperations\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Compute.VariableSubgroupSize\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Compute.CooperativeMatrix\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "\"Name\": \"MachineLearning.CooperativeMatrix\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"RayTracing.OpacityMicromap\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"RayTracing.ShaderExecutionReordering\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"RayTracing.Motion\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Storage.NativeGpuFileIo\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Storage.GpuDecompression\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Storage.RequestCancellation\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"Storage.IoPriority\"",
             json,
             StringComparison.Ordinal);
         Assert.DoesNotContain(

@@ -11,6 +11,8 @@ namespace SharpGPU
         //public ERHIPixelFormat Format;
         public ERHITextureViewType ViewType;
         //public ERHITextureDimension Dimension;
+        // Sampler-feedback UAV views consume the map's create-time pairing.
+        // The encoder cannot pair a feedback map with a sampled texture.
     }
 
     public abstract class RHITextureView : Disposal

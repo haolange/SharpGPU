@@ -92,6 +92,18 @@ namespace SharpGPU
             get;
         }
 
+        internal RHIDevice RequireOwnerDevice()
+        {
+            ThrowIfDisposed();
+            if (DeviceIdentity is RHIDevice device)
+            {
+                return device;
+            }
+
+            throw new InvalidOperationException(
+                "The command queue has no owner RHIDevice.");
+        }
+
         public abstract RHICommandBuffer CreateCommandBuffer();
         public abstract void Submit(in RHIQueueSubmitDescriptor descriptor);
 

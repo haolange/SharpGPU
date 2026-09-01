@@ -2980,6 +2980,7 @@ internal enum EVulkanRasterPassStrategy
     {
         private readonly VulkanDevice m_Device;
         private readonly VkShaderModule[] m_Modules;
+        private readonly bool[] m_OwnsModules;
         private readonly VkShaderStageFlags[] m_Stages;
         private readonly IntPtr[] m_EntryNames;
         private bool m_Disposed;
@@ -2990,6 +2991,7 @@ internal enum EVulkanRasterPassStrategy
         {
             m_Device = device;
             m_Modules = new VkShaderModule[stageCount];
+            m_OwnsModules = new bool[stageCount];
             m_Stages = new VkShaderStageFlags[stageCount];
             m_EntryNames = new IntPtr[stageCount];
         }
@@ -3111,6 +3113,7 @@ internal enum EVulkanRasterPassStrategy
                     "Vulkan shader function belongs to another device.",
                     nameof(function));
             }
+            vulkanFunction.ThrowIfViewSourceUnavailable();
             RHIFunctionDescriptor descriptor = function.Descriptor;
             if (descriptor.PayloadKind !=
                 ERHIShaderPayloadKind.SpirV)
@@ -3119,31 +3122,46 @@ internal enum EVulkanRasterPassStrategy
                     "Vulkan raster shaders require SPIR-V payloads.",
                     nameof(function));
             }
-            ReadOnlySpan<byte> bytecode = vulkanFunction.Bytecode;
-            if (bytecode.IsEmpty)
+
+            VkShaderModule module;
+            bool ownsModule;
+            if (function.SourceKind == ERHIFunctionSourceKind.LibraryView)
             {
-                throw new ArgumentException(
-                    "Vulkan raster shader bytecode is empty.",
-                    nameof(function));
+                module = vulkanFunction.NativeShaderModule;
+                ownsModule = false;
+            }
+            else
+            {
+                ReadOnlySpan<byte> bytecode = vulkanFunction.Bytecode;
+                if (bytecode.IsEmpty)
+                {
+                    throw new ArgumentException(
+                        "Vulkan raster shader bytecode is empty.",
+                        nameof(function));
+                }
+
+                module = default;
+                fixed (byte* bytecodePointer = bytecode)
+                {
+                    VkShaderModuleCreateInfo createInfo = new()
+                    {
+                        sType = VkStructureType.ShaderModuleCreateInfo,
+                        codeSize = (nuint)bytecode.Length,
+                        pCode = (uint*)bytecodePointer,
+                    };
+                    VulkanUtility.CheckErrors(
+                        VulkanNative.vkCreateShaderModule(
+                            m_Device.NativeDevice,
+                            &createInfo,
+                            null,
+                            &module));
+                }
+
+                ownsModule = true;
             }
 
-            VkShaderModule module = default;
-            fixed (byte* bytecodePointer = bytecode)
-            {
-                VkShaderModuleCreateInfo createInfo = new()
-                {
-                    sType = VkStructureType.ShaderModuleCreateInfo,
-                    codeSize = (nuint)bytecode.Length,
-                    pCode = (uint*)bytecodePointer,
-                };
-                VulkanUtility.CheckErrors(
-                    VulkanNative.vkCreateShaderModule(
-                        m_Device.NativeDevice,
-                        &createInfo,
-                        null,
-                        &module));
-            }
             m_Modules[index] = module;
+            m_OwnsModules[index] = ownsModule;
             m_Stages[index] =
                 VulkanUtility.ConvertToVkShaderStageBit(
                     descriptor.Type);
@@ -3165,7 +3183,7 @@ internal enum EVulkanRasterPassStrategy
                  index >= 0;
                  --index)
             {
-                if (m_Modules[index].Handle != 0)
+                if (m_OwnsModules[index] && m_Modules[index].Handle != 0)
                 {
                     VulkanNative.vkDestroyShaderModule(
                         m_Device.NativeDevice,
@@ -3925,7 +3943,7 @@ internal enum EVulkanRasterPassStrategy
         public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
             VulkanDevice device = VulkanEncoderGuards.RequireDevice(m_CommandBuffer);
-            VulkanMeshCommandPolicy.RequireDispatch(device.Capabilities.Mesh.Shader);
+            VulkanMeshCommandPolicy.RequireDispatch(device.Capabilities.Mesh.MeshShader);
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
             VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
@@ -3935,7 +3953,7 @@ internal enum EVulkanRasterPassStrategy
         public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
             VulkanDevice device = VulkanEncoderGuards.RequireDevice(m_CommandBuffer);
-            VulkanMeshCommandPolicy.RequireDispatch(device.Capabilities.Mesh.Shader);
+            VulkanMeshCommandPolicy.RequireDispatch(device.Capabilities.Mesh.MeshShader);
             BeginRenderingIfNeeded();
             m_HasIssuedDraw = true;
             VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
@@ -4428,7 +4446,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             in uint groupCountZ)
         {
             VulkanDevice device = VulkanEncoderGuards.RequireDevice(m_CommandBuffer);
-            VulkanMeshCommandPolicy.RequireDispatch(device.Capabilities.Mesh.Shader);
+            VulkanMeshCommandPolicy.RequireDispatch(device.Capabilities.Mesh.MeshShader);
             RequireBoundPipeline();
             VulkanNative.vkCmdDrawMeshTasksEXT(
                 m_VulkanCommandBuffer.NativeCommandBuffer,
@@ -4442,7 +4460,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             in uint argsOffset)
         {
             VulkanDevice device = VulkanEncoderGuards.RequireDevice(m_CommandBuffer);
-            VulkanMeshCommandPolicy.RequireDispatch(device.Capabilities.Mesh.Shader);
+            VulkanMeshCommandPolicy.RequireDispatch(device.Capabilities.Mesh.MeshShader);
             RequireBoundPipeline();
             VulkanBuffer arguments =
                 argsBuffer as VulkanBuffer

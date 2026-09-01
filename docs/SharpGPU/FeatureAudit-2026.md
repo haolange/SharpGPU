@@ -6,12 +6,20 @@
 | 状态 | Accepted |
 | 维护者 | CGBull |
 | 创建日期 | 2026-08-30 |
-| 最后更新 | 2026-08-30 |
-| 相关链接 | `ADR-0054` · `ADR-0064` · `RFC-0021` · `TASK-20260830-sharpgpu-raster-attachment-clean-break` · `CANONICAL-VERIFICATION` |
+| 最后更新 | 2026-09-01 |
+| 相关链接 | `ADR-0054` · `ADR-0064` · `ADR-0065` · `ADR-0066` · `RFC-0021` · `RFC-0026` · `TASK-20260901-sharpgpu-hal-completion` · `CANONICAL-VERIFICATION` |
 
 # SharpGPU 2026 三平台 Feature Audit
 
-审计日期：2026-08-30（Asia/Shanghai）  
+## 2026-09-01 addendum（RFC-0026）
+
+本审计正文仍是 2026-08-30 的历史快照。RFC-0026 / TASK-20260901 已关闭其中列出的 P0 真相问题，并补齐 typed optional facets。当前实现事实以源码与 `docs/Canonical/VERIFICATION.md` 为准，不把本文件 8/30 结论当成仍有效的 capability 表。
+
+已关闭（相对 8/30 正文）：DX12 VRS 硬编码与 Vulkan/Metal no-op setter；DX12 mesh 人为压制；Sampler Feedback 公共域；wave size 硬编码；Vulkan cooperative matrix 枚举；ExternalFence64（ADR-0066）；Function Library raster/compute 复用（DX12 该路径仍诚实 Unavailable）；Storage 解压/取消/优先级按原生探测。
+
+仍诚实 Unavailable / 阻塞：vendored Agility SDK 无 DXR 1.2 OMM/SER/Motion；Metal pipeline cache（ADR-0065）；Metal matching host；Linux/Android matching host；本机 Vulkan qualified 缺 `VK_EXT_rasterization_order_attachment_access`。
+
+审计日期：2026-08-30（Asia/Shanghai）；addendum 2026-09-01  
 仓库快照：`main`，commit `789b898bcc3619d7729a000c869d200aad1b2232`  
 实现快照：上述 commit 之上的 ADR-0064 当前工作树  
 审计对象：`Engine/Source/Runtime/Graphics/SharpGPU` 的 Abstract、Dx12、Vulkan、Metal 后端，SharpShader attachment 适配层，以及 `SharpGPU.Conformance.Tests`。  

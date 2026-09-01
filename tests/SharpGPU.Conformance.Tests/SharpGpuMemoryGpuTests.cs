@@ -266,7 +266,7 @@ public sealed class SharpGpuMemoryGpuTests
     {
         RHITextureDescriptor descriptor =
             CreateSparseTextureDescriptor();
-        if (device.Capabilities.Memory.SparseBinding.Tier ==
+        if (device.Capabilities.Memory.SparseTexture2D.Tier ==
             ERHICapabilityTier.Unavailable)
         {
             Assert.Throws<NotSupportedException>(
@@ -423,7 +423,7 @@ public sealed class SharpGpuMemoryGpuTests
             }
         }
 
-        if (device.Capabilities.Memory.SparseBinding.Tier !=
+        if (device.Capabilities.Memory.SparseTexture2D.Tier !=
             ERHICapabilityTier.Unavailable)
         {
             throw new InvalidOperationException(

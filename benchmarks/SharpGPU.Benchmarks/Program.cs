@@ -1519,6 +1519,9 @@ void WorkNode(ThreadNodeInputRecord<InputRecord> input)
             }
             public override void RequestTexture(in RHIStorageTextureRequest request) { }
             public override void Submit(RHIFence signalFence) { }
+            public override void ThrowIfSubmissionFailed() { }
+            public override void CancelRequestsWithTag(ulong mask, ulong value) { }
+            public override void CancelPending() { }
             protected override void Release() { }
         }
 

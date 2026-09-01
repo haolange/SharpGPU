@@ -253,6 +253,41 @@ public sealed class W11AdvancedSurfaceContractTests
             typeof(RHIWorkGraphCapabilities)
                 .GetProperty(nameof(RHIWorkGraphCapabilities.Execution))!
                 .PropertyType);
+        Assert.Equal(
+            typeof(RHICapability),
+            typeof(RHIWorkGraphCapabilities)
+                .GetProperty(nameof(RHIWorkGraphCapabilities.BroadcastNodes))!
+                .PropertyType);
+        Assert.Equal(
+            typeof(RHICapability),
+            typeof(RHIWorkGraphCapabilities)
+                .GetProperty(nameof(RHIWorkGraphCapabilities.ThreadNodes))!
+                .PropertyType);
+        Assert.Equal(
+            typeof(RHICapability),
+            typeof(RHIWorkGraphCapabilities)
+                .GetProperty(nameof(RHIWorkGraphCapabilities.Recursion))!
+                .PropertyType);
+        Assert.Equal(
+            typeof(RHICapability),
+            typeof(RHIWorkGraphCapabilities)
+                .GetProperty(nameof(RHIWorkGraphCapabilities.MeshNodes))!
+                .PropertyType);
+        Assert.Equal(
+            typeof(RHICapability),
+            typeof(RHIWorkGraphCapabilities)
+                .GetProperty(nameof(RHIWorkGraphCapabilities.GpuInput))!
+                .PropertyType);
+        Assert.Equal(
+            typeof(RHICapability),
+            typeof(RHIWorkGraphCapabilities)
+                .GetProperty(nameof(RHIWorkGraphCapabilities.BackingMemory))!
+                .PropertyType);
+        Assert.Equal(
+            typeof(RHICapability),
+            typeof(RHIWorkGraphCapabilities)
+                .GetProperty(nameof(RHIWorkGraphCapabilities.EntryRecords))!
+                .PropertyType);
 
         Assembly assembly = typeof(RHIDevice).Assembly;
         string[] backendTypeNames =

@@ -194,5 +194,52 @@ namespace SharpGPU
             m_NativeFence.Release();
         }
     }
+
+    internal sealed class Dx12ExternalFence64 : RHIExternalFence64
+    {
+        internal Vortice.Direct3D12.ID3D12Fence NativeFence => m_NativeFence;
+        internal RHIAdapterIdentity Adapter => m_Adapter;
+
+        private readonly Dx12Device m_Device;
+        private readonly Vortice.Direct3D12.ID3D12Fence m_NativeFence;
+        private readonly RHIAdapterIdentity m_Adapter;
+        private IntPtr m_OwnedImportHandle;
+
+        internal Dx12ExternalFence64(
+            Dx12Device device,
+            Vortice.Direct3D12.ID3D12Fence nativeFence,
+            ERHIExternalFence64Direction direction,
+            in RHIAdapterIdentity adapter,
+            IntPtr ownedImportHandle = default)
+            : base(device, direction)
+        {
+            m_Device = device;
+            m_NativeFence = nativeFence ?? throw new ArgumentNullException(nameof(nativeFence));
+            m_Adapter = adapter;
+            m_OwnedImportHandle = ownedImportHandle;
+        }
+
+        public override ulong GetCompletedValue()
+        {
+            ThrowIfExternalDisposed();
+            return m_NativeFence.CompletedValue;
+        }
+
+        public override void Signal(ulong value)
+        {
+            ThrowIfExternalDisposed();
+            m_NativeFence.Signal(value);
+        }
+
+        protected override void Release()
+        {
+            m_NativeFence.Release();
+            if (m_OwnedImportHandle != IntPtr.Zero)
+            {
+                RHIWin32NtHandle.Close(m_OwnedImportHandle);
+                m_OwnedImportHandle = IntPtr.Zero;
+            }
+        }
+    }
 #pragma warning restore CA1416
 }

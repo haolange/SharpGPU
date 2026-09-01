@@ -142,6 +142,117 @@ namespace SharpGPU
         }
     }
 
+    public enum ERHITextureTiling : byte
+    {
+        Optimal,
+        Linear,
+        Pending
+    }
+
+    [Flags]
+    public enum ERHIFormatSupportOperation : ulong
+    {
+        None = 0,
+        Sample = 1UL << 0,
+        StorageLoad = 1UL << 1,
+        StorageStore = 1UL << 2,
+        Atomic = 1UL << 3,
+        ColorAttachment = 1UL << 4,
+        DepthStencilAttachment = 1UL << 5,
+        Blend = 1UL << 6,
+        Resolve = 1UL << 7,
+        LinearFilter = 1UL << 8,
+        VertexBuffer = 1UL << 9,
+        IndexBuffer = 1UL << 10
+    }
+
+    /// <summary>
+    /// Describes one exact format, usage, dimension, sample-count, and tiling
+    /// combination. The returned operation mask is orthogonal: vertex and
+    /// index bits report whether the format itself supports those buffer
+    /// uses, even when the query names a texture dimension.
+    /// </summary>
+    public readonly struct RHIFormatSupportQuery
+    {
+        public ERHIPixelFormat Format { get; }
+        public ERHITextureUsage Usage { get; }
+        public ERHITextureDimension Dimension { get; }
+        public ERHISampleCount SampleCount { get; }
+        public ERHITextureTiling Tiling { get; }
+
+        public RHIFormatSupportQuery(
+            ERHIPixelFormat format,
+            ERHITextureUsage usage,
+            ERHITextureDimension dimension,
+            ERHISampleCount sampleCount,
+            ERHITextureTiling tiling)
+        {
+            if (format is ERHIPixelFormat.Unknown or ERHIPixelFormat.Pending ||
+                !Enum.IsDefined(format))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(format),
+                    format,
+                    "Format support queries require a concrete pixel format.");
+            }
+            if (usage == ERHITextureUsage.Pending ||
+                !IsKnownTextureUsage(usage))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(usage),
+                    usage,
+                    "Format support queries reject Pending or unknown texture usage.");
+            }
+            if (dimension == ERHITextureDimension.Pending ||
+                !Enum.IsDefined(dimension))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(dimension),
+                    dimension,
+                    "Format support queries require a concrete texture dimension.");
+            }
+            if (sampleCount is not (
+                    ERHISampleCount.None or
+                    ERHISampleCount.Count2 or
+                    ERHISampleCount.Count4 or
+                    ERHISampleCount.Count8))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(sampleCount),
+                    sampleCount,
+                    "Format support queries require a concrete sample count.");
+            }
+            if (tiling == ERHITextureTiling.Pending ||
+                !Enum.IsDefined(tiling))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(tiling),
+                    tiling,
+                    "Format support queries require a concrete texture tiling.");
+            }
+
+            Format = format;
+            Usage = usage;
+            Dimension = dimension;
+            SampleCount = sampleCount;
+            Tiling = tiling;
+        }
+
+        private static bool IsKnownTextureUsage(ERHITextureUsage usage)
+        {
+            const ERHITextureUsage knownBits =
+                ERHITextureUsage.CopySrc |
+                ERHITextureUsage.CopyDst |
+                ERHITextureUsage.DepthStencil |
+                ERHITextureUsage.RenderTarget |
+                ERHITextureUsage.ResolveTarget |
+                ERHITextureUsage.ShaderResource |
+                ERHITextureUsage.UnorderedAccess;
+            return usage != ERHITextureUsage.Pending &&
+                (usage & ~knownBits) == 0;
+        }
+    }
+
     public abstract class RHIDevice : Disposal
     {
         public string? Name => m_Name;
@@ -249,6 +360,66 @@ namespace SharpGPU
         public abstract RHISwapChain CreateSwapChain(in RHISwapChainDescriptor descriptor);
         public abstract RHIFence CreateFence();
         public abstract RHISemaphore CreateSemaphore();
+        public virtual RHIExternalFence64 CreateExternalFence64(
+            in RHIExternalFence64CreateDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.Synchronization.ExternalFence64.Require(
+                "Synchronization.ExternalFence64");
+            throw new NotSupportedException(
+                $"{BackendType} does not implement ExternalFence64 creation.");
+        }
+        public virtual RHIExternalFence64 ImportExternalFence64(
+            in RHIExternalFence64ImportDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.Synchronization.ExternalFence64.Require(
+                "Synchronization.ExternalFence64");
+            throw new NotSupportedException(
+                $"{BackendType} does not implement ExternalFence64 import.");
+        }
+        public virtual RHIExternalFence64Export ExportExternalFence64(
+            RHIExternalFence64 fence)
+        {
+            ThrowIfDisposed();
+            ArgumentNullException.ThrowIfNull(fence);
+            Capabilities.Synchronization.ExternalFence64.Require(
+                "Synchronization.ExternalFence64");
+            throw new NotSupportedException(
+                $"{BackendType} does not implement ExternalFence64 export.");
+        }
+        public virtual RHIExternalResourceExport ExportBufferNtHandle(RHIBuffer buffer)
+        {
+            ThrowIfDisposed();
+            ArgumentNullException.ThrowIfNull(buffer);
+            Capabilities.Memory.ExternalExport.Require("Memory.ExternalExport");
+            throw new NotSupportedException(
+                $"{BackendType} does not implement buffer NT-handle export.");
+        }
+        public virtual RHIExternalResourceExport ExportTextureNtHandle(RHITexture texture)
+        {
+            ThrowIfDisposed();
+            ArgumentNullException.ThrowIfNull(texture);
+            Capabilities.Memory.ExternalExport.Require("Memory.ExternalExport");
+            throw new NotSupportedException(
+                $"{BackendType} does not implement texture NT-handle export.");
+        }
+        public virtual RHIBuffer ImportBufferNtHandle(
+            in RHIExternalBufferImportDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.Memory.ExternalImport.Require("Memory.ExternalImport");
+            throw new NotSupportedException(
+                $"{BackendType} does not implement buffer NT-handle import.");
+        }
+        public virtual RHITexture ImportTextureNtHandle(
+            in RHIExternalTextureImportDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.Memory.ExternalImport.Require("Memory.ExternalImport");
+            throw new NotSupportedException(
+                $"{BackendType} does not implement texture NT-handle import.");
+        }
         public abstract RHIStorageQueue CreateStorageQueue();
         public abstract RHIQuery CreateQuery(in RHIQueryDescriptor descriptor);
         public abstract RHIHeap CreateHeap(in RHIHeapDescription descriptor);
@@ -273,15 +444,159 @@ namespace SharpGPU
         }
         public abstract RHITexture CreateTexture(in RHITextureDescriptor descriptor);
         /// <summary>
+        /// Creates an opaque sampler-feedback map paired with
+        /// <see cref="RHISamplerFeedbackMapDescriptor.PairedTexture"/> at
+        /// create time. The encoder cannot establish pairing.
+        /// The returned <see cref="RHITexture"/> does not own the paired
+        /// sampled texture; disposing the map does not dispose that texture.
+        /// Destroy views first, then the map. The paired texture may outlive
+        /// the map.
+        /// Requires <see cref="RHIRasterCapabilities.SamplerFeedback"/>.
+        /// </summary>
+        public virtual RHITexture CreateSamplerFeedbackMap(
+            in RHISamplerFeedbackMapDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            ValidateSamplerFeedbackMapDescriptor(in descriptor);
+            Capabilities.Raster.SamplerFeedback.Require("Raster.SamplerFeedback");
+            throw new NotSupportedException(
+                $"{BackendType} does not implement sampler-feedback map creation.");
+        }
+        /// <summary>
         /// Queries whether this device can express an exact attachment,
         /// sampling, and blend combination without semantic fallback.
         /// </summary>
         public abstract RHICapability QueryRasterAttachmentSupport(
             in RHIRasterAttachmentSupportQuery query);
         /// <summary>
+        /// Queries the orthogonal operation mask for one exact format,
+        /// usage, dimension, sample-count, and tiling combination.
+        /// This does not replace <see cref="QueryRasterAttachmentSupport"/>;
+        /// raster attachment plus blend combinations stay on that query.
+        /// </summary>
+        public abstract RHICapability QueryFormatSupport(
+            in RHIFormatSupportQuery query);
+        /// <summary>
+        /// Returns a native GPU/CPU clock calibration for the selected queue.
+        /// Requires <see cref="RHISynchronizationCapabilities.CalibratedTimestamps"/>.
+        /// </summary>
+        public abstract RHIClockCalibration QueryClockCalibration(
+            ERHIPipelineType queue,
+            int queueIndex = 0);
+        /// <summary>
+        /// Copies native cooperative-matrix configurations into
+        /// <paramref name="destination"/>. Requires
+        /// <see cref="RHIComputeCapabilities.CooperativeMatrix"/>.
+        /// An empty destination returns 0. A destination that is too small
+        /// returns the required count without writing.
+        /// </summary>
+        public virtual int QueryCooperativeMatrixConfigs(
+            Span<RHICooperativeMatrixConfig> destination)
+        {
+            ThrowIfDisposed();
+            return CopyCooperativeMatrixConfigs(
+                ReadOnlySpan<RHICooperativeMatrixConfig>.Empty,
+                destination);
+        }
+
+        protected int CopyCooperativeMatrixConfigs(
+            ReadOnlySpan<RHICooperativeMatrixConfig> source,
+            Span<RHICooperativeMatrixConfig> destination)
+        {
+            Capabilities.Compute.CooperativeMatrix.Require(
+                "Compute.CooperativeMatrix");
+            if (destination.IsEmpty)
+            {
+                return 0;
+            }
+
+            if (destination.Length < source.Length)
+            {
+                return source.Length;
+            }
+
+            source.CopyTo(destination);
+            return source.Length;
+        }
+        /// <summary>
         /// Queries the versioned target shader ABI for a logical attachment
         /// interface. SharpShader is not required to consume this contract.
         /// </summary>
+        /// <summary>
+        /// Validates create-time sampler-feedback pairing. Missing pairing
+        /// throws before the capability gate so the encoder cannot be used to
+        /// invent a pair.
+        /// </summary>
+        protected void ValidateSamplerFeedbackMapDescriptor(
+            in RHISamplerFeedbackMapDescriptor descriptor)
+        {
+            if (descriptor.PairedTexture == null)
+            {
+                throw new ArgumentException(
+                    "Sampler-feedback pairing must be established at create time. PairedTexture is required; the encoder cannot pair a map.",
+                    nameof(descriptor));
+            }
+
+            RHITexture paired = descriptor.PairedTexture;
+            RHITextureDescriptor pairedDescriptor = paired.Descriptor;
+            if (paired.IsSamplerFeedbackMap)
+            {
+                throw new ArgumentException(
+                    "A sampler-feedback map cannot be paired with another feedback map.",
+                    nameof(descriptor));
+            }
+
+            if (pairedDescriptor.Dimension is not (
+                    ERHITextureDimension.Texture2D or
+                    ERHITextureDimension.Texture2DArray))
+            {
+                throw new ArgumentException(
+                    "Sampler-feedback pairing requires a 2D or 2D-array sampled texture.",
+                    nameof(descriptor));
+            }
+
+            if (pairedDescriptor.SampleCount != ERHISampleCount.None)
+            {
+                throw new ArgumentException(
+                    "Sampler-feedback pairing does not accept a multisampled texture.",
+                    nameof(descriptor));
+            }
+
+            if ((pairedDescriptor.UsageFlag & ERHITextureUsage.ShaderResource) == 0)
+            {
+                throw new ArgumentException(
+                    "Sampler-feedback pairing requires a ShaderResource sampled texture.",
+                    nameof(descriptor));
+            }
+
+            if (RHITexture.IsSamplerFeedbackOpaqueFormat(pairedDescriptor.Format))
+            {
+                throw new ArgumentException(
+                    "Sampler-feedback pairing requires a sampled color texture, not an opaque feedback format.",
+                    nameof(descriptor));
+            }
+
+            if (descriptor.Mode is ERHISamplerFeedbackMode.Pending ||
+                !Enum.IsDefined(descriptor.Mode))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(descriptor),
+                    descriptor.Mode,
+                    "Sampler-feedback mode must be MinMip or MipRegionUsed.");
+            }
+        }
+
+        protected static void RejectUnpairedSamplerFeedbackTexture(
+            in RHITextureDescriptor descriptor)
+        {
+            if (RHITexture.IsSamplerFeedbackOpaqueFormat(descriptor.Format))
+            {
+                throw new ArgumentException(
+                    "Sampler-feedback maps must be created with CreateSamplerFeedbackMap so pairing is established at create time.",
+                    nameof(descriptor));
+            }
+        }
+
         public abstract RHIRasterAttachmentShaderAbi
             QueryRasterAttachmentShaderAbi(
                 in RHIRasterAttachmentShaderAbiDescriptor descriptor);
@@ -337,6 +652,37 @@ namespace SharpGPU
         {
             return false;
         }
+
+        protected RHICommandQueue RequireCommandQueue(
+            ERHIPipelineType queue,
+            int queueIndex,
+            string operation)
+        {
+            if (queue == ERHIPipelineType.Pending ||
+                !Enum.IsDefined(queue))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(queue),
+                    queue,
+                    $"{operation} requires a concrete queue type.");
+            }
+            if (queueIndex < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(queueIndex),
+                    queueIndex,
+                    $"{operation} queue index must not be negative.");
+            }
+
+            RHICommandQueue? commandQueue = GetCommandQueue(queue, queueIndex);
+            if (commandQueue == null)
+            {
+                throw new InvalidOperationException(
+                    $"{operation} target queue {queue}[{queueIndex}] does not exist.");
+            }
+
+            return commandQueue;
+        }
     }
     #region Capabilities
     public enum ERHICapabilityTier : byte
@@ -344,7 +690,8 @@ namespace SharpGPU
         Unavailable,
         Tier1,
         Tier2,
-        Tier3
+        Tier3,
+        Tier4
     }
 
     public enum ERHICapabilityStrategy : byte
@@ -399,7 +746,110 @@ namespace SharpGPU
         // Bit mask of supported ERHIShadingRate values: 1UL << (byte)rate. Pending is never set.
         SupportedShadingRateMask,
         // Bit mask of supported ERHIShadingRateCombiner values: 1UL << (byte)combiner. Pending is never set.
-        SupportedShadingRateCombinerMask
+        SupportedShadingRateCombinerMask,
+        // Bit mask of supported ERHIFormatSupportOperation values. Pending is never set.
+        SupportedFormatOperationMask,
+        CalibratedTimestampMaxDeviation,
+        GpuTimestampFrequency,
+        SparseStandardTileWidth,
+        SparseStandardTileHeight,
+        SparseStandardTileDepth,
+        SparseStandardTileSizeBytes,
+        MeshMaxOutputVertices,
+        MeshMaxOutputPrimitives,
+        MeshMaxPayloadBytes,
+        MeshMaxWorkGroupSizeX,
+        MeshMaxWorkGroupSizeY,
+        MeshMaxWorkGroupSizeZ,
+        MeshMaxPerPrimitiveAttributes,
+        /// <summary>
+        /// Bit mask of <see cref="ERHIStageMask"/> values for wave / subgroup
+        /// or cooperative-matrix stage scope. Pending is never set.
+        /// </summary>
+        WaveStageMask,
+        CooperativeMatrixConfigCount,
+        /// <summary>
+        /// Bit mask of supported <see cref="ERHISamplerFeedbackMode"/> values:
+        /// 1UL &lt;&lt; (byte)mode. Pending is never set.
+        /// </summary>
+        SupportedSamplerFeedbackModeMask,
+        /// <summary>
+        /// Bit mask of supported <see cref="ERHISamplerFeedbackOperation"/>
+        /// values. Pending / None are never set as exclusive encodings.
+        /// </summary>
+        SupportedSamplerFeedbackOperationMask,
+        MaximumStorageRequestBytes,
+        MaximumStorageConcurrentRequests,
+        /// <summary>
+        /// Bit mask of supported <see cref="ERHIStorageCompressionFormat"/>
+        /// values that a storage queue can enqueue. <see cref="ERHIStorageCompressionFormat.None"/>
+        /// is never set.
+        /// </summary>
+        SupportedStorageCompressionFormatMask,
+        FunctionLibraryReusablePipelineClassMask,
+        FunctionLibraryMaxEntryCount,
+        FunctionLibrarySupportedPayloadKindMask,
+        MultiGpuNodeMask
+    }
+
+    /// <summary>
+    /// One native cooperative-matrix configuration. Values come from a device
+    /// query; callers must not invent configurations.
+    /// </summary>
+    public readonly struct RHICooperativeMatrixConfig
+    {
+        public uint M { get; }
+        public uint N { get; }
+        public uint K { get; }
+        public ERHICooperativeMatrixElementType AType { get; }
+        public ERHICooperativeMatrixElementType BType { get; }
+        public ERHICooperativeMatrixElementType CType { get; }
+        public ERHICooperativeMatrixElementType ResultType { get; }
+        public ERHICooperativeMatrixScope Scope { get; }
+        public bool SaturatingAccumulation { get; }
+
+        public RHICooperativeMatrixConfig(
+            uint m,
+            uint n,
+            uint k,
+            ERHICooperativeMatrixElementType aType,
+            ERHICooperativeMatrixElementType bType,
+            ERHICooperativeMatrixElementType cType,
+            ERHICooperativeMatrixElementType resultType,
+            ERHICooperativeMatrixScope scope,
+            bool saturatingAccumulation)
+        {
+            if (!Enum.IsDefined(aType))
+            {
+                throw new ArgumentOutOfRangeException(nameof(aType), aType, "Unknown cooperative-matrix element type.");
+            }
+            if (!Enum.IsDefined(bType))
+            {
+                throw new ArgumentOutOfRangeException(nameof(bType), bType, "Unknown cooperative-matrix element type.");
+            }
+            if (!Enum.IsDefined(cType))
+            {
+                throw new ArgumentOutOfRangeException(nameof(cType), cType, "Unknown cooperative-matrix element type.");
+            }
+            if (!Enum.IsDefined(resultType))
+            {
+                throw new ArgumentOutOfRangeException(nameof(resultType), resultType, "Unknown cooperative-matrix element type.");
+            }
+            if (!Enum.IsDefined(scope))
+            {
+                throw new ArgumentOutOfRangeException(nameof(scope), scope, "Unknown cooperative-matrix scope.");
+            }
+
+            M = m;
+            N = n;
+            K = k;
+            AType = aType;
+            BType = bType;
+            CType = cType;
+            ResultType = resultType;
+            Scope = scope;
+            SaturatingAccumulation = saturatingAccumulation;
+        }
     }
 
     public enum ERHIProjectionStrategy : byte
@@ -626,6 +1076,12 @@ namespace SharpGPU
         public RHICapability BarycentricCoordinates { get; }
         public RHICapability ProgrammableSamplePositions { get; }
         public RHICapability NativeRenderPass { get; }
+        /// <summary>
+        /// DX12-only optional sampler-feedback facet. Not
+        /// <see cref="FramebufferLocalRead"/> and not an attachment
+        /// feedback loop. Vulkan and Metal stay Unavailable.
+        /// </summary>
+        public RHICapability SamplerFeedback { get; }
 
         public RHIRasterCapabilities(
             ERHIProjectionStrategy projectionStrategy,
@@ -646,7 +1102,8 @@ namespace SharpGPU
             RHICapability hiddenSurfaceRemoval,
             RHICapability barycentricCoordinates,
             RHICapability programmableSamplePositions,
-            RHICapability nativeRenderPass)
+            RHICapability nativeRenderPass,
+            RHICapability samplerFeedback)
         {
             ProjectionStrategy = projectionStrategy;
             MatrixMajorOrder = matrixMajorOrder;
@@ -667,6 +1124,7 @@ namespace SharpGPU
             BarycentricCoordinates = barycentricCoordinates;
             ProgrammableSamplePositions = programmableSamplePositions;
             NativeRenderPass = nativeRenderPass;
+            SamplerFeedback = samplerFeedback;
         }
     }
 
@@ -705,17 +1163,23 @@ namespace SharpGPU
         public RHICapability OcclusionQueries { get; }
         public RHICapability PipelineStatisticsQueries { get; }
         public RHICapability EnhancedBarriers { get; }
+        public RHICapability CalibratedTimestamps { get; }
+        public RHICapability ExternalFence64 { get; }
 
         public RHISynchronizationCapabilities(
             RHICapability timestampQueries,
             RHICapability occlusionQueries,
             RHICapability pipelineStatisticsQueries,
-            RHICapability enhancedBarriers)
+            RHICapability enhancedBarriers,
+            RHICapability calibratedTimestamps,
+            RHICapability externalFence64)
         {
             TimestampQueries = timestampQueries;
             OcclusionQueries = occlusionQueries;
             PipelineStatisticsQueries = pipelineStatisticsQueries;
             EnhancedBarriers = enhancedBarriers;
+            CalibratedTimestamps = calibratedTimestamps;
+            ExternalFence64 = externalFence64;
         }
     }
 
@@ -723,38 +1187,121 @@ namespace SharpGPU
     {
         public RHICapability UnifiedMemory { get; }
         public RHICapability PlacedResources { get; }
-        public RHICapability SparseBinding { get; }
         public RHICapability GpuVirtualAddress { get; }
-        public RHICapability SparseBufferBinding { get; }
+        public RHICapability SparseBuffer { get; }
+        public RHICapability SparseTexture2D { get; }
+        public RHICapability SparseTexture3D { get; }
+        public RHICapability SparseMsaa { get; }
+        public RHICapability SparseMipTail { get; }
+        public RHICapability SparseTileGeometry { get; }
         public RHICapability Residency { get; }
         public RHICapability BudgetQuery { get; }
+        public RHICapability SparseAliasing { get; }
+        public RHICapability ExternalImport { get; }
+        public RHICapability ExternalExport { get; }
 
         public RHIMemoryCapabilities(
             RHICapability unifiedMemory,
             RHICapability placedResources,
-            RHICapability sparseBinding,
             RHICapability gpuVirtualAddress,
-            RHICapability sparseBufferBinding,
+            RHICapability sparseBuffer,
+            RHICapability sparseTexture2D,
+            RHICapability sparseTexture3D,
+            RHICapability sparseMsaa,
+            RHICapability sparseMipTail,
+            RHICapability sparseTileGeometry,
             RHICapability residency,
-            RHICapability budgetQuery)
+            RHICapability budgetQuery,
+            RHICapability sparseAliasing,
+            RHICapability externalImport,
+            RHICapability externalExport)
         {
             UnifiedMemory = unifiedMemory;
             PlacedResources = placedResources;
-            SparseBinding = sparseBinding;
             GpuVirtualAddress = gpuVirtualAddress;
-            SparseBufferBinding = sparseBufferBinding;
+            SparseBuffer = sparseBuffer;
+            SparseTexture2D = sparseTexture2D;
+            SparseTexture3D = sparseTexture3D;
+            SparseMsaa = sparseMsaa;
+            SparseMipTail = sparseMipTail;
+            SparseTileGeometry = sparseTileGeometry;
             Residency = residency;
             BudgetQuery = budgetQuery;
+            SparseAliasing = sparseAliasing;
+            ExternalImport = externalImport;
+            ExternalExport = externalExport;
+        }
+
+        internal RHICapability RequireSparseTexture(
+            in RHITextureDescriptor descriptor,
+            string operation)
+        {
+            bool isMsaa =
+                descriptor.SampleCount != ERHISampleCount.None ||
+                descriptor.Dimension is
+                    ERHITextureDimension.Texture2DMS or
+                    ERHITextureDimension.Texture2DArrayMS;
+            if (isMsaa)
+            {
+                SparseMsaa.Require(operation);
+                return SparseMsaa;
+            }
+
+            if (descriptor.Dimension == ERHITextureDimension.Texture3D)
+            {
+                SparseTexture3D.Require(operation);
+                return SparseTexture3D;
+            }
+
+            SparseTexture2D.Require(operation);
+            return SparseTexture2D;
+        }
+
+        internal void RequireSparseBind(
+            in RHISparseBindDescriptor descriptor,
+            string operation)
+        {
+            ReadOnlySpan<RHISparseTextureTileBinding> tiles =
+                descriptor.TileBindings.Span;
+            for (int i = 0; i < tiles.Length; ++i)
+            {
+                RequireSparseTexture(
+                    tiles[i].Texture.Descriptor,
+                    operation);
+            }
+
+            ReadOnlySpan<RHISparseTextureMipTailBinding> tails =
+                descriptor.MipTailBindings.Span;
+            if (tails.Length > 0)
+            {
+                SparseMipTail.Require(operation);
+            }
+            for (int i = 0; i < tails.Length; ++i)
+            {
+                RequireSparseTexture(
+                    tails[i].Texture.Descriptor,
+                    operation);
+            }
         }
     }
 
     public sealed class RHIStorageCapabilities
     {
         public RHICapability NativeGpuFileIo { get; }
+        public RHICapability GpuDecompression { get; }
+        public RHICapability RequestCancellation { get; }
+        public RHICapability IoPriority { get; }
 
-        public RHIStorageCapabilities(RHICapability nativeGpuFileIo)
+        public RHIStorageCapabilities(
+            RHICapability nativeGpuFileIo,
+            RHICapability gpuDecompression,
+            RHICapability requestCancellation,
+            RHICapability ioPriority)
         {
             NativeGpuFileIo = nativeGpuFileIo;
+            GpuDecompression = gpuDecompression;
+            RequestCancellation = requestCancellation;
+            IoPriority = ioPriority;
         }
     }
 
@@ -765,6 +1312,169 @@ namespace SharpGPU
         public RHIPipelineCacheCapabilities(RHICapability nativeCache)
         {
             NativeCache = nativeCache;
+        }
+    }
+
+    public sealed class RHIFunctionLibraryCapabilities
+    {
+        public RHICapability NativeLibrary { get; }
+        public RHICapability RasterComputeReuse { get; }
+        public ulong ReusablePipelineClasses { get; }
+        public ulong MaxEntryCount { get; }
+        public ulong SupportedPayloadKinds { get; }
+
+        public RHIFunctionLibraryCapabilities(
+            RHICapability nativeLibrary,
+            RHICapability rasterComputeReuse,
+            ulong reusablePipelineClasses,
+            ulong maxEntryCount,
+            ulong supportedPayloadKinds)
+        {
+            NativeLibrary = nativeLibrary;
+            RasterComputeReuse = rasterComputeReuse;
+            ReusablePipelineClasses = reusablePipelineClasses;
+            MaxEntryCount = maxEntryCount;
+            SupportedPayloadKinds = supportedPayloadKinds;
+        }
+
+        internal static RHIFunctionLibraryCapabilities CreateNative(
+            string nativeLibrarySource,
+            ulong reusablePipelineClasses,
+            ulong supportedPayloadKinds,
+            string? rasterComputeUnavailableReason)
+        {
+            bool rasterCompute =
+                (reusablePipelineClasses &
+                    ((ulong)ERHIFunctionLibraryReusablePipelineClass.Raster |
+                     (ulong)ERHIFunctionLibraryReusablePipelineClass.Compute)) != 0;
+            RHICapability nativeLibrary = RHICapability.Available(
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.NativeLibrary,
+                ERHICapabilityProbeKind.BackendContract,
+                nativeLibrarySource,
+                new RHICapabilityLimits(
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.FunctionLibraryReusablePipelineClassMask,
+                        reusablePipelineClasses),
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.FunctionLibraryMaxEntryCount,
+                        0),
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.FunctionLibrarySupportedPayloadKindMask,
+                        supportedPayloadKinds)));
+            RHICapability rasterComputeReuse = rasterCompute
+                ? RHICapability.Available(
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeLibrary,
+                    ERHICapabilityProbeKind.BackendContract,
+                    nativeLibrarySource)
+                : RHICapability.Unavailable(
+                    rasterComputeUnavailableReason
+                        ?? "Raster / compute function-library views are unavailable.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    nativeLibrarySource);
+            return new RHIFunctionLibraryCapabilities(
+                nativeLibrary,
+                rasterComputeReuse,
+                reusablePipelineClasses,
+                maxEntryCount: 0,
+                supportedPayloadKinds);
+        }
+
+        internal static RHIFunctionLibraryCapabilities CreateUnavailable(
+            string reason,
+            string probeSource)
+        {
+            RHICapability unavailable = RHICapability.Unavailable(
+                reason,
+                ERHICapabilityProbeKind.BackendContract,
+                probeSource);
+            return new RHIFunctionLibraryCapabilities(
+                unavailable,
+                unavailable,
+                reusablePipelineClasses: 0,
+                maxEntryCount: 0,
+                supportedPayloadKinds: 0);
+        }
+
+        internal static ulong PayloadKindBit(ERHIShaderPayloadKind kind)
+        {
+            if (kind == ERHIShaderPayloadKind.Pending || !Enum.IsDefined(kind))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(kind),
+                    kind,
+                    "Pending is not a legal function-library payload kind.");
+            }
+
+            return 1UL << (byte)kind;
+        }
+
+        internal bool SupportsPayloadKind(ERHIShaderPayloadKind kind)
+        {
+            if (kind == ERHIShaderPayloadKind.Pending || !Enum.IsDefined(kind))
+            {
+                return false;
+            }
+
+            return (SupportedPayloadKinds & PayloadKindBit(kind)) != 0;
+        }
+
+        internal ERHIFunctionLibraryReusablePipelineClass ClassifyFunctionType(
+            ERHIFunctionType type)
+        {
+            return type switch
+            {
+                ERHIFunctionType.Vertex or
+                ERHIFunctionType.Fragment or
+                ERHIFunctionType.Task or
+                ERHIFunctionType.Mesh =>
+                    ERHIFunctionLibraryReusablePipelineClass.Raster,
+                ERHIFunctionType.Compute =>
+                    ERHIFunctionLibraryReusablePipelineClass.Compute,
+                ERHIFunctionType.RayTracing =>
+                    ERHIFunctionLibraryReusablePipelineClass.Raytracing,
+                _ => ERHIFunctionLibraryReusablePipelineClass.None,
+            };
+        }
+
+        internal void RequireReusableClass(
+            ERHIFunctionLibraryReusablePipelineClass pipelineClass,
+            string operation)
+        {
+            if (pipelineClass == ERHIFunctionLibraryReusablePipelineClass.Raster ||
+                pipelineClass == ERHIFunctionLibraryReusablePipelineClass.Compute)
+            {
+                RasterComputeReuse.Require(operation);
+            }
+
+            if ((ReusablePipelineClasses & (ulong)pipelineClass) == 0)
+            {
+                throw new NotSupportedException(
+                    $"{operation} is unavailable because reusable pipeline class {pipelineClass} is not set.");
+            }
+        }
+    }
+
+    public sealed class RHIMultiGpuCapabilities
+    {
+        public RHICapability MultiGpu { get; }
+        public uint NodeMask { get; }
+
+        public RHIMultiGpuCapabilities(RHICapability multiGpu, uint nodeMask = 0)
+        {
+            MultiGpu = multiGpu;
+            NodeMask = nodeMask;
+        }
+
+        internal static RHIMultiGpuCapabilities CreateUnavailable(string probeSource)
+        {
+            return new RHIMultiGpuCapabilities(
+                RHICapability.Unavailable(
+                    "Explicit multi-adapter / multi-GPU is not modeled. Node mask stays 0.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    probeSource),
+                nodeMask: 0);
         }
     }
 
@@ -786,23 +1496,34 @@ namespace SharpGPU
     {
         public RHICapability Pipeline { get; }
         public RHICapability Inline { get; }
+        public RHICapability OpacityMicromap { get; }
+        public RHICapability ShaderExecutionReordering { get; }
+        public RHICapability Motion { get; }
 
         public RHIRayTracingCapabilities(
             RHICapability pipeline,
-            RHICapability inline)
+            RHICapability inline,
+            RHICapability opacityMicromap,
+            RHICapability shaderExecutionReordering,
+            RHICapability motion)
         {
             Pipeline = pipeline;
             Inline = inline;
+            OpacityMicromap = opacityMicromap;
+            ShaderExecutionReordering = shaderExecutionReordering;
+            Motion = motion;
         }
     }
 
     public sealed class RHIMeshCapabilities
     {
-        public RHICapability Shader { get; }
+        public RHICapability MeshShader { get; }
+        public RHICapability TaskShader { get; }
 
-        public RHIMeshCapabilities(RHICapability shader)
+        public RHIMeshCapabilities(RHICapability meshShader, RHICapability taskShader)
         {
-            Shader = shader;
+            MeshShader = meshShader;
+            TaskShader = taskShader;
         }
     }
 
@@ -819,10 +1540,51 @@ namespace SharpGPU
     public sealed class RHIWorkGraphCapabilities
     {
         public RHICapability Execution { get; }
+        public RHICapability BroadcastNodes { get; }
+        public RHICapability ThreadNodes { get; }
+        public RHICapability Recursion { get; }
+        public RHICapability MeshNodes { get; }
+        public RHICapability GpuInput { get; }
+        public RHICapability BackingMemory { get; }
+        public RHICapability EntryRecords { get; }
 
-        public RHIWorkGraphCapabilities(RHICapability execution)
+        public RHIWorkGraphCapabilities(
+            RHICapability execution,
+            RHICapability broadcastNodes,
+            RHICapability threadNodes,
+            RHICapability recursion,
+            RHICapability meshNodes,
+            RHICapability gpuInput,
+            RHICapability backingMemory,
+            RHICapability entryRecords)
         {
             Execution = execution;
+            BroadcastNodes = broadcastNodes;
+            ThreadNodes = threadNodes;
+            Recursion = recursion;
+            MeshNodes = meshNodes;
+            GpuInput = gpuInput;
+            BackingMemory = backingMemory;
+            EntryRecords = entryRecords;
+        }
+
+        internal static RHIWorkGraphCapabilities CreateUnavailable(
+            string reason,
+            string probeSource)
+        {
+            RHICapability unavailable = RHICapability.Unavailable(
+                reason,
+                ERHICapabilityProbeKind.BackendContract,
+                probeSource);
+            return new RHIWorkGraphCapabilities(
+                unavailable,
+                unavailable,
+                unavailable,
+                unavailable,
+                unavailable,
+                unavailable,
+                unavailable,
+                unavailable);
         }
     }
 
@@ -880,13 +1642,19 @@ namespace SharpGPU
     {
         public ERHIWaveOperationStrategy WaveOperationStrategy { get; }
         public RHICapability WaveOperations { get; }
+        public RHICapability VariableSubgroupSize { get; }
+        public RHICapability CooperativeMatrix { get; }
 
         public RHIComputeCapabilities(
             ERHIWaveOperationStrategy waveOperationStrategy,
-            RHICapability waveOperations)
+            RHICapability waveOperations,
+            RHICapability variableSubgroupSize,
+            RHICapability cooperativeMatrix)
         {
             WaveOperationStrategy = waveOperationStrategy;
             WaveOperations = waveOperations;
+            VariableSubgroupSize = variableSubgroupSize;
+            CooperativeMatrix = cooperativeMatrix;
         }
     }
 
@@ -905,6 +1673,8 @@ namespace SharpGPU
         public RHIWorkGraphCapabilities WorkGraph { get; }
         public RHIIndirectCommandBufferCapabilities IndirectCommandBuffer { get; }
         public RHIComputeCapabilities Compute { get; }
+        public RHIFunctionLibraryCapabilities FunctionLibrary { get; }
+        public RHIMultiGpuCapabilities MultiGpu { get; }
 
         internal static RHIDeviceCapabilities CreateUnprobed(string probeSource)
         {
@@ -932,7 +1702,8 @@ namespace SharpGPU
                     hiddenSurfaceRemoval: unavailable,
                     barycentricCoordinates: unavailable,
                     programmableSamplePositions: unavailable,
-                    nativeRenderPass: unavailable),
+                    nativeRenderPass: unavailable,
+                    samplerFeedback: unavailable),
                 new RHIBindingCapabilities(
                     rootConstants: unavailable,
                     indirectRootConstants: unavailable,
@@ -945,26 +1716,46 @@ namespace SharpGPU
                     timestampQueries: unavailable,
                     occlusionQueries: unavailable,
                     pipelineStatisticsQueries: unavailable,
-                    enhancedBarriers: unavailable),
+                    enhancedBarriers: unavailable,
+                    calibratedTimestamps: unavailable,
+                    externalFence64: unavailable),
                 new RHIMemoryCapabilities(
                     unifiedMemory: unavailable,
                     placedResources: unavailable,
-                    sparseBinding: unavailable,
                     gpuVirtualAddress: unavailable,
-                    sparseBufferBinding: unavailable,
+                    sparseBuffer: unavailable,
+                    sparseTexture2D: unavailable,
+                    sparseTexture3D: unavailable,
+                    sparseMsaa: unavailable,
+                    sparseMipTail: unavailable,
+                    sparseTileGeometry: unavailable,
                     residency: unavailable,
-                    budgetQuery: unavailable),
-                new RHIStorageCapabilities(unavailable),
+                    budgetQuery: unavailable,
+                    sparseAliasing: unavailable,
+                    externalImport: unavailable,
+                    externalExport: unavailable),
+                new RHIStorageCapabilities(unavailable, unavailable, unavailable, unavailable),
                 new RHIPipelineCacheCapabilities(unavailable),
                 new RHIPresentationCapabilities(
                     swapChain: unavailable,
                     hdr: unavailable),
                 new RHIRayTracingCapabilities(
                     pipeline: unavailable,
-                    inline: unavailable),
-                new RHIMeshCapabilities(unavailable),
+                    inline: unavailable,
+                    opacityMicromap: unavailable,
+                    shaderExecutionReordering: unavailable,
+                    motion: unavailable),
+                new RHIMeshCapabilities(unavailable, unavailable),
                 new RHIMachineLearningCapabilities(unavailable),
-                new RHIWorkGraphCapabilities(unavailable),
+                new RHIWorkGraphCapabilities(
+                    execution: unavailable,
+                    broadcastNodes: unavailable,
+                    threadNodes: unavailable,
+                    recursion: unavailable,
+                    meshNodes: unavailable,
+                    gpuInput: unavailable,
+                    backingMemory: unavailable,
+                    entryRecords: unavailable),
                 new RHIIndirectCommandBufferCapabilities(
                     unavailable,
                     new RHIIndirectTokenCapabilities(
@@ -976,7 +1767,13 @@ namespace SharpGPU
                         unavailable)),
                 new RHIComputeCapabilities(
                     waveOperationStrategy: ERHIWaveOperationStrategy.Pending,
-                    waveOperations: unavailable));
+                    waveOperations: unavailable,
+                    variableSubgroupSize: unavailable,
+                    cooperativeMatrix: unavailable),
+                RHIFunctionLibraryCapabilities.CreateUnavailable(
+                    "The RHIDevice subclass has not published a native capability probe.",
+                    probeSource),
+                RHIMultiGpuCapabilities.CreateUnavailable(probeSource));
         }
 
         public RHIDeviceCapabilities(
@@ -992,7 +1789,9 @@ namespace SharpGPU
             RHIMachineLearningCapabilities machineLearning,
             RHIWorkGraphCapabilities workGraph,
             RHIIndirectCommandBufferCapabilities indirectCommandBuffer,
-            RHIComputeCapabilities compute)
+            RHIComputeCapabilities compute,
+            RHIFunctionLibraryCapabilities functionLibrary,
+            RHIMultiGpuCapabilities multiGpu)
         {
             Raster = raster ?? throw new ArgumentNullException(nameof(raster));
             Binding = binding ?? throw new ArgumentNullException(nameof(binding));
@@ -1007,6 +1806,8 @@ namespace SharpGPU
             WorkGraph = workGraph ?? throw new ArgumentNullException(nameof(workGraph));
             IndirectCommandBuffer = indirectCommandBuffer ?? throw new ArgumentNullException(nameof(indirectCommandBuffer));
             Compute = compute ?? throw new ArgumentNullException(nameof(compute));
+            FunctionLibrary = functionLibrary ?? throw new ArgumentNullException(nameof(functionLibrary));
+            MultiGpu = multiGpu ?? throw new ArgumentNullException(nameof(multiGpu));
         }
     }
     #endregion

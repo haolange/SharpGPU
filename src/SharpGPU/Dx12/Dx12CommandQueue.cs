@@ -197,7 +197,8 @@ namespace SharpGPU
 
         public override void BindSparse(in RHISparseBindDescriptor descriptor)
         {
-            m_Dx12Device.Capabilities.Memory.SparseBinding.Require(
+            m_Dx12Device.Capabilities.Memory.RequireSparseBind(
+                descriptor,
                 "DX12 queue-ordered sparse texture binding");
             ValidateSparseBind(in descriptor);
             ValidateDx12SparseBindings(in descriptor);

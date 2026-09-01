@@ -9,6 +9,24 @@ namespace SharpGPU.Conformance.Tests;
 public sealed class SharpGPUPipelineCacheContractTests
 {
     [Fact]
+    public void PipelineAbiRevision_IsEightAfterFunctionLibraryViewMetadata()
+    {
+        Assert.Equal(8u, RHIPipelineCacheIdentity.CurrentPipelineAbiRevision);
+
+        RHIPipelineCacheIdentity identity = new(
+            ERHIBackend.DirectX12,
+            0x1002,
+            0x744c,
+            "driver-A");
+        byte[] current = RHIPipelineCacheBlob.Encode(identity, new byte[] { 2, 4, 6, 8 });
+        byte[] revision7 = (byte[])current.Clone();
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(revision7.AsSpan(12, 4), 7);
+        RHIPipelineCacheImportResult oldRevision =
+            RHIPipelineCacheBlob.TryDecode(revision7, identity, out _);
+        Assert.Equal(ERHIPipelineCacheImportStatus.Incompatible, oldRevision.Status);
+    }
+
+    [Fact]
     public void PublicContract_RemovesRetiredCacheSurface()
     {
         string retiredTypeName = "SharpGPU.RHI" + "Pipeline" + "Library";
@@ -645,14 +663,14 @@ public sealed class SharpGPUPipelineCacheContractTests
         {
             m_ByteCode = Marshal.AllocHGlobal(byteCode.Length);
             Marshal.Copy(byteCode, 0, m_ByteCode, byteCode.Length);
-            m_Descriptor = new RHIFunctionDescriptor
+            BindDirectBytecodeSource(new RHIFunctionDescriptor
             {
                 ByteSize = checked((uint)byteCode.Length),
                 ByteCode = m_ByteCode,
                 EntryName = entryName,
                 Type = type,
                 PayloadKind = ERHIShaderPayloadKind.Dxil,
-            };
+            });
         }
 
         protected override void Release()

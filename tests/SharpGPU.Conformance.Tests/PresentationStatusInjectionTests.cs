@@ -480,6 +480,15 @@ namespace SharpGPU.Conformance.Tests
                 in RHIRasterAttachmentSupportQuery query) =>
                 Unsupported<RHICapability>();
 
+            public override RHICapability QueryFormatSupport(
+                in RHIFormatSupportQuery query) =>
+                Unsupported<RHICapability>();
+
+            public override RHIClockCalibration QueryClockCalibration(
+                ERHIPipelineType queue,
+                int queueIndex = 0) =>
+                Unsupported<RHIClockCalibration>();
+
             public override RHIRasterAttachmentShaderAbi
                 QueryRasterAttachmentShaderAbi(
                     in RHIRasterAttachmentShaderAbiDescriptor descriptor) =>

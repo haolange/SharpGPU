@@ -32,6 +32,12 @@ namespace SharpGPU
         public override void ThrowIfSubmissionFailed() =>
             throw CreateNotSupported(nameof(ThrowIfSubmissionFailed));
 
+        public override void CancelRequestsWithTag(ulong mask, ulong value) =>
+            throw CreateNotSupported(nameof(CancelRequestsWithTag));
+
+        public override void CancelPending() =>
+            throw CreateNotSupported(nameof(CancelPending));
+
         protected override void Release()
         {
         }

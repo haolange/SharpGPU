@@ -10,6 +10,80 @@ namespace SharpGPU
         NotReady
     }
 
+    public enum ERHITimeDomain : byte
+    {
+        Device,
+        QueryPerformanceCounter,
+        ClockMonotonic,
+        Pending
+    }
+
+    public readonly struct RHIClockCalibration
+    {
+        public ulong GpuTimestamp { get; }
+        public ulong CpuTimestamp { get; }
+        public ulong GpuTimestampFrequency { get; }
+        public ERHITimeDomain TimeDomain { get; }
+        public ERHIPipelineType Queue { get; }
+        public int QueueIndex { get; }
+        /// <summary>
+        /// Maximum deviation reported by the native calibrated-timestamp API.
+        /// Zero means the backend does not report a deviation (D3D12
+        /// <c>ID3D12CommandQueue.GetClockCalibration</c> has no max-deviation
+        /// output). Do not treat zero as a proven nanosecond bound.
+        /// </summary>
+        public ulong MaxDeviation { get; }
+
+        public RHIClockCalibration(
+            ulong gpuTimestamp,
+            ulong cpuTimestamp,
+            ulong gpuTimestampFrequency,
+            ERHITimeDomain timeDomain,
+            ERHIPipelineType queue,
+            int queueIndex,
+            ulong maxDeviation)
+        {
+            if (timeDomain == ERHITimeDomain.Pending ||
+                !Enum.IsDefined(timeDomain))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(timeDomain),
+                    timeDomain,
+                    "Clock calibration requires a concrete time domain.");
+            }
+            if (queue == ERHIPipelineType.Pending ||
+                !Enum.IsDefined(queue))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(queue),
+                    queue,
+                    "Clock calibration requires a concrete queue type.");
+            }
+            if (queueIndex < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(queueIndex),
+                    queueIndex,
+                    "Clock calibration queue index must not be negative.");
+            }
+            if (gpuTimestampFrequency == 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(gpuTimestampFrequency),
+                    gpuTimestampFrequency,
+                    "Clock calibration requires a non-zero GPU timestamp frequency.");
+            }
+
+            GpuTimestamp = gpuTimestamp;
+            CpuTimestamp = cpuTimestamp;
+            GpuTimestampFrequency = gpuTimestampFrequency;
+            TimeDomain = timeDomain;
+            Queue = queue;
+            QueueIndex = queueIndex;
+            MaxDeviation = maxDeviation;
+        }
+    }
+
     public struct RHIQueryDescriptor : IEquatable<RHIQueryDescriptor>
     {
         public uint Count;

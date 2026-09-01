@@ -1545,6 +1545,12 @@ namespace SharpGPU
 
                 case ERHIPixelFormat.YUV2:
                     return Vortice.DXGI.Format.YUY2;
+
+                case ERHIPixelFormat.SamplerFeedbackMinMipOpaque:
+                    return (Vortice.DXGI.Format)189;
+
+                case ERHIPixelFormat.SamplerFeedbackMipRegionUsedOpaque:
+                    return (Vortice.DXGI.Format)190;
             }
             return Vortice.DXGI.Format.Unknown;
         }
@@ -1743,6 +1749,12 @@ namespace SharpGPU
 
                 case ERHIPixelFormat.YUV2:
                     return Vortice.DXGI.Format.YUY2;
+
+                case ERHIPixelFormat.SamplerFeedbackMinMipOpaque:
+                    return (Vortice.DXGI.Format)189;
+
+                case ERHIPixelFormat.SamplerFeedbackMipRegionUsedOpaque:
+                    return (Vortice.DXGI.Format)190;
             }
             return Vortice.DXGI.Format.Unknown;
         }

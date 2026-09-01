@@ -4,6 +4,13 @@ using SharpGPU.Mathematics;
 
 namespace SharpGPU
 {
+    [Flags]
+    public enum ERHIStorageCompressionFormat : byte
+    {
+        None = 0,
+        GDeflate = 1 << 0
+    }
+
     public struct RHIStorageFileHandle
     {
         public IntPtr NativeHandle;
@@ -16,6 +23,9 @@ namespace SharpGPU
         public ulong FileSize;
         public RHIBuffer DestinationBuffer;
         public ulong DestinationOffset;
+        public ERHIStorageCompressionFormat CompressionFormat;
+        public uint UncompressedSize;
+        public ulong CancellationTag;
     }
 
     public struct RHIStorageTextureRequest
@@ -26,6 +36,9 @@ namespace SharpGPU
         public RHITexture DestinationTexture;
         public uint MipLevel;
         public uint ArraySlice;
+        public ERHIStorageCompressionFormat CompressionFormat;
+        public uint UncompressedSize;
+        public ulong CancellationTag;
     }
 
     public abstract class RHIStorageQueue : Disposal
@@ -37,5 +50,7 @@ namespace SharpGPU
         public abstract void RequestTexture(in RHIStorageTextureRequest request);
         public abstract void Submit(RHIFence signalFence);
         public abstract void ThrowIfSubmissionFailed();
+        public abstract void CancelRequestsWithTag(ulong mask, ulong value);
+        public abstract void CancelPending();
     }
 }

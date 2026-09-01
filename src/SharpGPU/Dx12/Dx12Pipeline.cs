@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.IO;
 using SharpGPU.Mathematics;
@@ -371,30 +372,6 @@ namespace SharpGPU
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct D3D12_RT_FORMAT_ARRAY
-    {
-        private fixed int m_Formats[8];
-        public uint NumRenderTargets;
-
-        public D3D12_RT_FORMAT_ARRAY(Vortice.DXGI.Format* formats, uint numRenderTargets)
-        {
-            NumRenderTargets = Math.Min(8u, numRenderTargets);
-            fixed (int* dst = m_Formats)
-            {
-                for (int i = 0; i < 8; ++i)
-                {
-                    dst[i] = 0;
-                }
-
-                for (int i = 0; i < NumRenderTargets; ++i)
-                {
-                    dst[i] = (int)formats[i];
-                }
-            }
-        }
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct D3D12_CUSTOM_COMPUTE_PIPELINE_STATE_DESC
     {
         public Vortice.Direct3D12.PipelineStateSubObjectType RootSignature_Type;
@@ -406,32 +383,36 @@ namespace SharpGPU
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe struct D3D12_MESH_PIPELINE_STATE_DESC
+    internal struct Dx12MeshPipelineStateStream
     {
-        public Vortice.Direct3D12.PipelineStateSubObjectType RootSignature_Type;
-        public Vortice.Direct3D12.ID3D12RootSignature pRootSignature;
-        public Vortice.Direct3D12.PipelineStateSubObjectType PrimitiveTopology_Type; 
-        public Vortice.Direct3D12.PrimitiveTopologyType PrimitiveTopologyType;
-        public Vortice.Direct3D12.PipelineStateSubObjectType TaskShader_Type; 
-        public Vortice.Direct3D12.ShaderBytecode TaskShader;
-        public Vortice.Direct3D12.PipelineStateSubObjectType MeshShader_Type; 
-        public Vortice.Direct3D12.ShaderBytecode MeshShader;
-        public Vortice.Direct3D12.PipelineStateSubObjectType PixelShader_Type; 
-        public Vortice.Direct3D12.ShaderBytecode PixelShader;
-        public Vortice.Direct3D12.PipelineStateSubObjectType RasterizerState_Type; 
-        public Vortice.Direct3D12.RasterizerDescription RasterizerState;
-        public Vortice.Direct3D12.PipelineStateSubObjectType DepthStencilState_Type; 
-        public Vortice.Direct3D12.DepthStencilDescription DepthStencilState;
-        public Vortice.Direct3D12.PipelineStateSubObjectType BlendState_Type; 
-        public Vortice.Direct3D12.BlendDescription BlendState;
-        public Vortice.Direct3D12.PipelineStateSubObjectType SampleDesc_Type; 
-        public Vortice.DXGI.SampleDescription SampleDesc;
-        public Vortice.Direct3D12.PipelineStateSubObjectType SampleMask_Type; 
-        public uint SampleMask;
-        public Vortice.Direct3D12.PipelineStateSubObjectType RTVFormats_Type; 
-        public D3D12_RT_FORMAT_ARRAY RTVFormats;
-        public Vortice.Direct3D12.PipelineStateSubObjectType DSVFormat_Type;
-        public Vortice.DXGI.Format DSVFormat;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeRootSignature RootSignature;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypePrimitiveTopology PrimitiveTopology;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeMeshShader MeshShader;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypePixelShader PixelShader;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeRasterizer RasterizerState;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeDepthStencil DepthStencilState;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeBlend BlendState;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeSampleDescription SampleDesc;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeSampleMask SampleMask;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeRenderTargetFormats RTVFormats;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeDepthStencilFormat DSVFormat;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Dx12MeshPipelineStateStreamWithTask
+    {
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeRootSignature RootSignature;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypePrimitiveTopology PrimitiveTopology;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeAmplificationShader TaskShader;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeMeshShader MeshShader;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypePixelShader PixelShader;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeRasterizer RasterizerState;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeDepthStencil DepthStencilState;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeBlend BlendState;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeSampleDescription SampleDesc;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeSampleMask SampleMask;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeRenderTargetFormats RTVFormats;
+        public Vortice.Direct3D12.PipelineStateSubObjectTypeDepthStencilFormat DSVFormat;
     }
 
     internal static unsafe class Dx12PipelineDebug
@@ -830,12 +811,15 @@ namespace SharpGPU
             RHIRasterPipelineContract.ValidateAttachmentSupport(
                 device,
                 in m_Descriptor);
-            if (descriptor.PrimitiveAssembler.PrimitiveType == ERHIPrimitiveType.Mesh)
+            if (RHIRasterPipelineContract.RequestsMeshPath(in descriptor))
             {
-                device.Capabilities.Mesh.Shader.Require(
+                device.Capabilities.Mesh.MeshShader.Require(
                     "DX12 mesh-shader pipelines");
-                throw new NotSupportedException(
-                    "DX12 mesh-shader pipeline-state-stream path is not implemented.");
+                if (descriptor.PrimitiveAssembler.MeshletAssembler is { TaskFunction: not null })
+                {
+                    device.Capabilities.Mesh.TaskShader.Require(
+                        "DX12 task-shader pipelines");
+                }
             }
 
             m_PrimitiveTopology = Dx12Utility.ConvertToDx12PrimitiveTopology(descriptor.PrimitiveAssembler.PrimitiveTopology);
@@ -866,7 +850,11 @@ namespace SharpGPU
             switch (descriptor.PrimitiveAssembler.PrimitiveType)
             {
                 case ERHIPrimitiveType.Mesh:
-                    throw new InvalidOperationException("DX12 mesh-shader capability gate was bypassed.");
+                    m_NativePipelineState = CreateMeshPipelineState(
+                        device,
+                        in descriptor,
+                        primitiveTopologyType);
+                    break;
 
                 case ERHIPrimitiveType.Vertex:
                     Dx12Function fragmentFunction = descriptor.FragmentFunction as Dx12Function
@@ -963,6 +951,145 @@ namespace SharpGPU
 
                     m_NativePipelineState = nativePipelineState;
                     break;
+            }
+        }
+
+        private Vortice.Direct3D12.ID3D12PipelineState CreateMeshPipelineState(
+            Dx12Device device,
+            in RHIRasterPipelineDescriptor descriptor,
+            Vortice.Direct3D12.PrimitiveTopologyType primitiveTopologyType)
+        {
+            if (descriptor.PrimitiveAssembler.VertexAssembler.HasValue)
+            {
+                throw new ArgumentException(
+                    "DX12 mesh pipelines cannot include a VertexAssembler.",
+                    nameof(descriptor));
+            }
+
+            if (!descriptor.PrimitiveAssembler.MeshletAssembler.HasValue)
+            {
+                throw new InvalidOperationException("Mesh pipeline descriptor is missing MeshletAssembler.");
+            }
+
+            RHIMeshletAssemblerDescriptor meshlet =
+                descriptor.PrimitiveAssembler.MeshletAssembler.Value;
+            Dx12Function meshFunction = meshlet.MeshFunction as Dx12Function
+                ?? throw new ArgumentException(
+                    "DX12 mesh pipelines require a Dx12Function mesh shader.",
+                    nameof(descriptor));
+            Dx12Function? taskFunction = meshlet.TaskFunction as Dx12Function;
+            if (meshlet.TaskFunction != null && taskFunction == null)
+            {
+                throw new ArgumentException(
+                    "DX12 task shaders require a Dx12Function.",
+                    nameof(descriptor));
+            }
+
+            Dx12Function fragmentFunction = descriptor.FragmentFunction as Dx12Function
+                ?? throw new ArgumentException(
+                    "DX12 mesh pipelines require a Dx12Function fragment shader.",
+                    nameof(descriptor));
+
+            ERHIPixelFormat[] outputLocationFormats =
+                Dx12RasterSubPassLowering.ResolveOutputLocationFormats(
+                    in m_Descriptor.AttachmentInterface,
+                    m_Descriptor.ColorFormats);
+            Vortice.DXGI.Format[] renderTargetFormats =
+                new Vortice.DXGI.Format[outputLocationFormats.Length];
+            for (int outputLocation = 0;
+                 outputLocation < outputLocationFormats.Length;
+                 ++outputLocation)
+            {
+                renderTargetFormats[outputLocation] =
+                    Dx12Utility.ConvertToDx12ViewFormat(
+                        outputLocationFormats[outputLocation]);
+            }
+
+            Vortice.DXGI.Format depthStencilFormat =
+                descriptor.DepthFormat != ERHIPixelFormat.Unknown
+                    ? Dx12Utility.ConvertToDx12Format(descriptor.DepthFormat)
+                    : Vortice.DXGI.Format.Unknown;
+            Vortice.Direct3D12.PipelineStateSubObjectTypeRootSignature rootSignature =
+                m_NativeRootSignature
+                ?? throw new InvalidOperationException("DX12 mesh pipeline is missing a root signature.");
+            Vortice.Direct3D12.PipelineStateSubObjectTypePrimitiveTopology topology = primitiveTopologyType;
+            Vortice.Direct3D12.PipelineStateSubObjectTypeRasterizer rasterizer =
+                Dx12Utility.CreateDx12RasterizerState(
+                    descriptor.RenderState.RasterizerState,
+                    descriptor.SampleCount != ERHISampleCount.None);
+            Vortice.Direct3D12.PipelineStateSubObjectTypeDepthStencil depthStencil =
+                Dx12Utility.CreateDx12DepthStencilState(descriptor.RenderState.DepthStencilState);
+            Vortice.Direct3D12.PipelineStateSubObjectTypeBlend blend =
+                Dx12Utility.CreateDx12BlendState(descriptor.RenderState.BlendState);
+            Vortice.Direct3D12.PipelineStateSubObjectTypeSampleDescription sampleDesc =
+                Dx12Utility.ConvertToDx12SampleCount(descriptor.SampleCount);
+            Vortice.Direct3D12.PipelineStateSubObjectTypeSampleMask sampleMask =
+                descriptor.RenderState.SampleMask.HasValue
+                    ? descriptor.RenderState.SampleMask.Value
+                    : uint.MaxValue;
+            Vortice.Direct3D12.PipelineStateSubObjectTypeRenderTargetFormats rtvFormats =
+                renderTargetFormats;
+            Vortice.Direct3D12.PipelineStateSubObjectTypeDepthStencilFormat dsvFormat =
+                depthStencilFormat;
+
+            using MemoryHandle meshPin = meshFunction.NativeShaderData.Pin();
+            using MemoryHandle pixelPin = fragmentFunction.NativeShaderData.Pin();
+            ReadOnlySpan<byte> meshBytecode = meshFunction.NativeShaderData.Span;
+            ReadOnlySpan<byte> pixelBytecode = fragmentFunction.NativeShaderData.Span;
+
+            try
+            {
+                if (taskFunction != null)
+                {
+                    using MemoryHandle taskPin = taskFunction.NativeShaderData.Pin();
+                    Dx12MeshPipelineStateStreamWithTask stream = new()
+                    {
+                        RootSignature = rootSignature,
+                        PrimitiveTopology = topology,
+                        TaskShader = taskFunction.NativeShaderData.Span,
+                        MeshShader = meshBytecode,
+                        PixelShader = pixelBytecode,
+                        RasterizerState = rasterizer,
+                        DepthStencilState = depthStencil,
+                        BlendState = blend,
+                        SampleDesc = sampleDesc,
+                        SampleMask = sampleMask,
+                        RTVFormats = rtvFormats,
+                        DSVFormat = dsvFormat,
+                    };
+                    return device.NativeDevice.CreatePipelineState(stream);
+                }
+
+                Dx12MeshPipelineStateStream meshStream = new()
+                {
+                    RootSignature = rootSignature,
+                    PrimitiveTopology = topology,
+                    MeshShader = meshBytecode,
+                    PixelShader = pixelBytecode,
+                    RasterizerState = rasterizer,
+                    DepthStencilState = depthStencil,
+                    BlendState = blend,
+                    SampleDesc = sampleDesc,
+                    SampleMask = sampleMask,
+                    RTVFormats = rtvFormats,
+                    DSVFormat = dsvFormat,
+                };
+                return device.NativeDevice.CreatePipelineState(meshStream);
+            }
+            catch (Exception exception)
+            {
+                string message =
+                    $"Failed to create DX12 mesh pipeline state. " +
+                    $"PrimitiveTopology={descriptor.PrimitiveAssembler.PrimitiveTopology}; " +
+                    $"TopologyType={primitiveTopologyType}; " +
+                    $"DepthFormat={descriptor.DepthFormat}/{depthStencilFormat}; " +
+                    $"ColorFormats={string.Join(",", descriptor.ColorFormats)}; " +
+                    $"RTVFormats={string.Join(",", renderTargetFormats)}; " +
+                    $"AS={DescribeShaderBytecode(taskFunction)}; MS={DescribeShaderBytecode(meshFunction)}; " +
+                    $"PS={DescribeShaderBytecode(fragmentFunction)}" +
+                    Environment.NewLine +
+                    Dx12PipelineDebug.CollectDeviceMessages(device, "[Dx12RasterPipeline.Mesh]");
+                throw new InvalidOperationException(message, exception);
             }
         }
 
@@ -1067,6 +1194,13 @@ namespace SharpGPU
                 Name = entrypoint,
                 ArrayIndex = 0
             });
+            if (entrypointIndex == uint.MaxValue)
+            {
+                throw new ArgumentException(
+                    $"WorkGraph entrypoint '{entrypoint}' was not found.",
+                    nameof(entrypoint));
+            }
+
             m_EntrypointIndices.Add(entrypoint, entrypointIndex);
             return entrypointIndex;
         }

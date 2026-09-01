@@ -184,7 +184,8 @@ namespace SharpGPU
             in RHISparseBindDescriptor descriptor)
         {
             m_MetalDevice.ThrowIfCommandQueueFailed();
-            m_MetalDevice.Capabilities.Memory.SparseBinding.Require(
+            m_MetalDevice.Capabilities.Memory.RequireSparseBind(
+                descriptor,
                 "Metal queue-ordered placement sparse texture binding");
             ValidateSparseBind(in descriptor);
             ValidateMetalSparseBindings(in descriptor);

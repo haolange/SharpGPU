@@ -1843,6 +1843,88 @@ namespace SharpGPU
                 countOffset);
         }
 
+        public override void ClearSamplerFeedbackMap(RHITexture feedbackMap)
+        {
+            RequireSamplerFeedbackEncoder(
+                feedbackMap,
+                ERHISamplerFeedbackOperation.Clear,
+                "clear");
+            Dx12SamplerFeedbackCommands.Clear(
+                Dx12EncoderGuards.RequireDevice(m_CommandBuffer),
+                Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer),
+                RequireFeedbackMap(feedbackMap));
+        }
+
+        public override void ResolveSamplerFeedbackMap(
+            RHITexture decodedSource,
+            RHITexture feedbackMap)
+        {
+            ArgumentNullException.ThrowIfNull(decodedSource);
+            RequireSamplerFeedbackEncoder(
+                feedbackMap,
+                ERHISamplerFeedbackOperation.Resolve,
+                "resolve");
+            Dx12SamplerFeedbackCommands.Transcode(
+                Dx12EncoderGuards.RequireDevice(m_CommandBuffer),
+                Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer),
+                RequireTexture(decodedSource),
+                RequireFeedbackMap(feedbackMap),
+                encode: true);
+        }
+
+        public override void DecodeSamplerFeedbackMap(
+            RHITexture feedbackMap,
+            RHITexture decodedDestination)
+        {
+            ArgumentNullException.ThrowIfNull(decodedDestination);
+            RequireSamplerFeedbackEncoder(
+                feedbackMap,
+                ERHISamplerFeedbackOperation.Decode,
+                "decode");
+            Dx12SamplerFeedbackCommands.Transcode(
+                Dx12EncoderGuards.RequireDevice(m_CommandBuffer),
+                Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer),
+                RequireFeedbackMap(feedbackMap),
+                RequireTexture(decodedDestination),
+                encode: false);
+        }
+
+        public override void CopySamplerFeedbackMap(
+            RHITexture source,
+            RHITexture destination)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+            RequireSamplerFeedbackEncoder(
+                destination,
+                ERHISamplerFeedbackOperation.Copy,
+                "copy");
+            Dx12SamplerFeedbackCommands.Copy(
+                Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer),
+                RequireFeedbackMap(source),
+                RequireFeedbackMap(destination));
+        }
+
+        private static Dx12Texture RequireFeedbackMap(RHITexture texture)
+        {
+            Dx12Texture dx12Texture = RequireTexture(texture);
+            if (!dx12Texture.IsSamplerFeedbackMap)
+            {
+                throw new ArgumentException(
+                    "The texture is not a sampler-feedback map created by CreateSamplerFeedbackMap.",
+                    nameof(texture));
+            }
+
+            return dx12Texture;
+        }
+
+        private static Dx12Texture RequireTexture(RHITexture texture)
+        {
+            return texture as Dx12Texture ??
+                throw new ArgumentException(
+                    "DX12 sampler-feedback commands require a Dx12Texture.",
+                    nameof(texture));
+        }
+
         public override void EndPass()
         {
             RHICommandBuffer commandBuffer = m_CommandBuffer ??
@@ -3727,7 +3809,7 @@ namespace SharpGPU
             ValidateDrawState();
             EnsureNativeRenderPassActive();
             Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
-            dx12Device.Capabilities.Mesh.Shader.Require("DX12 mesh shaders");
+            dx12Device.Capabilities.Mesh.MeshShader.Require("DX12 mesh shaders");
             Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.DispatchMesh(groupCountX, groupCountY, groupCountZ);
         }
@@ -3738,7 +3820,7 @@ namespace SharpGPU
             EnsureNativeRenderPassActive();
             Dx12Buffer dx12Buffer = Dx12EncoderGuards.RequireBuffer(argsBuffer);
             Dx12Device dx12Device = Dx12EncoderGuards.RequireDevice(m_CommandBuffer);
-            dx12Device.Capabilities.Mesh.Shader.Require("DX12 mesh shaders");
+            dx12Device.Capabilities.Mesh.MeshShader.Require("DX12 mesh shaders");
             Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             dx12CommandBuffer.NativeCommandList.ExecuteIndirect(dx12Device.DispatchMeshIndirectSignature, 1, dx12Buffer.NativeResource, argsOffset, null, 0);
         }
@@ -5176,6 +5258,142 @@ internal enum EDx12RasterPassStrategy
             return new Vortice.Direct3D12.RootParameter1(
                 new Vortice.Direct3D12.RootDescriptorTable1(ranges),
                 Vortice.Direct3D12.ShaderVisibility.Pixel);
+        }
+    }
+
+    internal static class Dx12SamplerFeedbackCommands
+    {
+        private const Vortice.Direct3D12.ResolveMode EncodeSamplerFeedback =
+            (Vortice.Direct3D12.ResolveMode)4;
+        private const Vortice.Direct3D12.ResolveMode DecodeSamplerFeedback =
+            (Vortice.Direct3D12.ResolveMode)5;
+
+        internal static void Clear(
+            Dx12Device device,
+            Dx12CommandBuffer commandBuffer,
+            Dx12Texture feedbackMap)
+        {
+            if (feedbackMap.PairedSamplerFeedbackTexture is not Dx12Texture paired)
+            {
+                throw new InvalidOperationException(
+                    "The sampler-feedback map has no create-time paired sampled texture.");
+            }
+
+            Dx12DescriptorPair descriptors = device.AllocateCbvSrvUavDescriptorPair();
+            try
+            {
+                device.CreateSamplerFeedbackUnorderedAccessView(
+                    paired.NativeResource,
+                    feedbackMap.NativeResource,
+                    descriptors.Staging.CpuHandle);
+                device.CopyDescriptorToShaderVisible(descriptors);
+                commandBuffer.NativeCommandList.ClearUnorderedAccessViewUint(
+                    descriptors.ShaderVisible.GpuHandle,
+                    descriptors.Staging.CpuHandle,
+                    feedbackMap.NativeResource,
+                    default(Vortice.Mathematics.Int4));
+            }
+            finally
+            {
+                device.FreeDescriptorPair(descriptors);
+            }
+        }
+
+        internal static void Transcode(
+            Dx12Device device,
+            Dx12CommandBuffer commandBuffer,
+            Dx12Texture source,
+            Dx12Texture destination,
+            bool encode)
+        {
+            if (commandBuffer.CommandQueue.PipelineType != ERHIPipelineType.Graphics)
+            {
+                throw new NotSupportedException(
+                    "DX12 sampler-feedback resolve/decode requires a DIRECT (graphics) command list.");
+            }
+
+            Dx12Texture feedback = encode ? destination : source;
+            Dx12Texture decoded = encode ? source : destination;
+            if (!feedback.IsSamplerFeedbackMap)
+            {
+                throw new ArgumentException(
+                    encode
+                        ? "Resolve destination must be an opaque sampler-feedback map."
+                        : "Decode source must be an opaque sampler-feedback map.");
+            }
+
+            ValidateDecodedTarget(decoded, feedback);
+
+            try
+            {
+                commandBuffer.NativeCommandList.ResolveSubresourceRegion(
+                    destination.NativeResource,
+                    0,
+                    0,
+                    0,
+                    source.NativeResource,
+                    0,
+                    Vortice.DXGI.Format.R8_UInt,
+                    encode ? EncodeSamplerFeedback : DecodeSamplerFeedback);
+            }
+            catch (Exception exception)
+            {
+                SharpGen.Runtime.Result removedReason = device.NativeDevice.DeviceRemovedReason;
+                throw new InvalidOperationException(
+                    $"DX12 sampler-feedback {(encode ? "resolve" : "decode")} failed (Device={device.Name}, Source={source.Descriptor.Format}, Destination={destination.Descriptor.Format}, DeviceRemovedReason=0x{(int)removedReason:X8}).",
+                    exception);
+            }
+        }
+
+        internal static void Copy(
+            Dx12CommandBuffer commandBuffer,
+            Dx12Texture source,
+            Dx12Texture destination)
+        {
+            if (!source.IsSamplerFeedbackMap || !destination.IsSamplerFeedbackMap)
+            {
+                throw new ArgumentException(
+                    "Sampler-feedback copy requires two opaque feedback maps created by CreateSamplerFeedbackMap.");
+            }
+
+            if (source.Descriptor.Format != destination.Descriptor.Format ||
+                source.Descriptor.Extent.x != destination.Descriptor.Extent.x ||
+                source.Descriptor.Extent.y != destination.Descriptor.Extent.y ||
+                source.Descriptor.Extent.z != destination.Descriptor.Extent.z)
+            {
+                throw new ArgumentException(
+                    "Sampler-feedback copy requires matching opaque format and extent.");
+            }
+
+            commandBuffer.NativeCommandList.CopyResource(
+                destination.NativeResource,
+                source.NativeResource);
+        }
+
+        private static void ValidateDecodedTarget(
+            Dx12Texture decoded,
+            Dx12Texture feedback)
+        {
+            if (decoded.IsSamplerFeedbackMap)
+            {
+                throw new ArgumentException(
+                    "The decoded sampler-feedback target must be a readable R8_UINT texture, not another feedback map.");
+            }
+
+            if (decoded.Descriptor.Format != ERHIPixelFormat.R8_UInt)
+            {
+                throw new ArgumentException(
+                    "Sampler-feedback decode/resolve requires an R8_UINT target texture.");
+            }
+
+            if (decoded.Descriptor.Dimension != feedback.Descriptor.Dimension ||
+                decoded.Descriptor.Extent.x != feedback.Descriptor.Extent.x ||
+                decoded.Descriptor.Extent.y != feedback.Descriptor.Extent.y ||
+                decoded.Descriptor.Extent.z != feedback.Descriptor.Extent.z)
+            {
+                throw new ArgumentException(
+                    "Sampler-feedback decode/resolve requires the R8_UINT target to match the feedback map dimension and extent.");
+            }
         }
     }
     #endregion

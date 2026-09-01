@@ -1,4 +1,5 @@
 using SharpGPU.Collections;
+using SharpGPU.Mathematics;
 using System.Collections.Generic;
 using System.Text;
 using System;
@@ -107,8 +108,10 @@ namespace SharpGPU
         internal bool SupportsDirectML => m_DirectMLDevice != null && m_DirectMLCommandRecorder != null;
         internal RHICapability EnhancedBarriers => Capabilities.Synchronization.EnhancedBarriers;
         internal RHICapability NativeRenderPass => Capabilities.Raster.NativeRenderPass;
+        internal RHIAdapterIdentity AdapterIdentity => m_AdapterIdentity;
 
         private Dx12Instance m_Dx12Instance;
+        private RHIAdapterIdentity m_AdapterIdentity;
         private Vortice.DXGI.IDXGIAdapter1? m_DXGIAdapter;
         private Vortice.Direct3D12.ID3D12Device10? m_NativeDevice;
         private Dx12NullDescriptorCache? m_NullDescriptors;
@@ -145,6 +148,7 @@ namespace SharpGPU
             m_VendorId.IntValue = adapterDesc.VendorId;
             m_DeviceId.IntValue = adapterDesc.DeviceId;
             m_DriverVersion = QueryDriverVersion(m_DXGIAdapter);
+            m_AdapterIdentity = new RHIAdapterIdentity((long)adapterDesc.Luid, Guid.Empty);
 
             CreateDevice();
             CreateDirectMLObjects();
@@ -203,6 +207,197 @@ namespace SharpGPU
         {
             ThrowIfDeviceUnavailable();
             return new Dx12Semaphore(this);
+        }
+
+        public override RHIExternalFence64 CreateExternalFence64(
+            in RHIExternalFence64CreateDescriptor descriptor)
+        {
+            ThrowIfDeviceUnavailable();
+            Capabilities.Synchronization.ExternalFence64.Require(
+                "Synchronization.ExternalFence64");
+            Vortice.Direct3D12.ID3D12Fence? fence;
+            SharpGen.Runtime.Result result = NativeDevice.CreateFence(
+                descriptor.InitialValue,
+                Vortice.Direct3D12.FenceFlags.Shared,
+                out fence);
+            return new Dx12ExternalFence64(
+                this,
+                Dx12Utility.RequireCreatedObject(
+                    fence,
+                    result,
+                    "ID3D12Device.CreateFence(SHARED)"),
+                ERHIExternalFence64Direction.Export,
+                m_AdapterIdentity);
+        }
+
+        public override RHIExternalFence64 ImportExternalFence64(
+            in RHIExternalFence64ImportDescriptor descriptor)
+        {
+            ThrowIfDeviceUnavailable();
+            Capabilities.Synchronization.ExternalFence64.Require(
+                "Synchronization.ExternalFence64");
+            if (descriptor.Handle == IntPtr.Zero)
+            {
+                throw new ArgumentException("Import handle is null.", nameof(descriptor));
+            }
+            if (descriptor.HandleKind != ERHIExternalHandleKind.Win32NtShared)
+            {
+                throw new NotSupportedException(
+                    $"DX12 ExternalFence64 only imports Win32 NT shared handles, not {descriptor.HandleKind}.");
+            }
+
+            RequireMatchingSharedAdapter(descriptor.ExpectedAdapter, "ExternalFence64 import");
+            IntPtr owned = RHIWin32NtHandle.Duplicate(descriptor.Handle);
+            try
+            {
+                Vortice.Direct3D12.ID3D12Fence imported =
+                    NativeDevice.OpenSharedHandle<Vortice.Direct3D12.ID3D12Fence>(owned);
+                return new Dx12ExternalFence64(
+                    this,
+                    imported,
+                    ERHIExternalFence64Direction.Import,
+                    m_AdapterIdentity,
+                    owned);
+            }
+            catch
+            {
+                RHIWin32NtHandle.Close(owned);
+                throw;
+            }
+        }
+
+        public override RHIExternalFence64Export ExportExternalFence64(RHIExternalFence64 fence)
+        {
+            ThrowIfDeviceUnavailable();
+            ArgumentNullException.ThrowIfNull(fence);
+            Capabilities.Synchronization.ExternalFence64.Require(
+                "Synchronization.ExternalFence64");
+            if (fence is not Dx12ExternalFence64 dx12Fence ||
+                !ReferenceEquals(dx12Fence.OwnerDevice, this))
+            {
+                throw new ArgumentException(
+                    "DX12 ExternalFence64 export requires a fence created by this device.",
+                    nameof(fence));
+            }
+
+            IntPtr handle = NativeDevice.CreateSharedHandle(dx12Fence.NativeFence, null, null!);
+            if (handle == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("ID3D12Device.CreateSharedHandle returned a null NT handle.");
+            }
+
+            return new RHIExternalFence64Export(
+                handle,
+                dx12Fence.GetCompletedValue(),
+                ERHIExternalHandleKind.Win32NtShared,
+                dx12Fence.Adapter);
+        }
+
+        public override RHIExternalResourceExport ExportBufferNtHandle(RHIBuffer buffer)
+        {
+            ThrowIfDeviceUnavailable();
+            ArgumentNullException.ThrowIfNull(buffer);
+            Capabilities.Memory.ExternalExport.Require("Memory.ExternalExport");
+            if (buffer is not Dx12Buffer dx12Buffer || !ReferenceEquals(dx12Buffer.Dx12Device, this))
+            {
+                throw new ArgumentException("DX12 buffer export requires a buffer created by this device.", nameof(buffer));
+            }
+
+            IntPtr handle = NativeDevice.CreateSharedHandle(dx12Buffer.NativeResource, null, null!);
+            if (handle == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("ID3D12Device.CreateSharedHandle returned a null buffer NT handle.");
+            }
+
+            return new RHIExternalResourceExport(
+                new RHIExternalNtHandle(handle),
+                m_AdapterIdentity);
+        }
+
+        public override RHIExternalResourceExport ExportTextureNtHandle(RHITexture texture)
+        {
+            ThrowIfDeviceUnavailable();
+            ArgumentNullException.ThrowIfNull(texture);
+            Capabilities.Memory.ExternalExport.Require("Memory.ExternalExport");
+            if (texture is not Dx12Texture dx12Texture || !ReferenceEquals(dx12Texture.Dx12Device, this))
+            {
+                throw new ArgumentException("DX12 texture export requires a texture created by this device.", nameof(texture));
+            }
+
+            IntPtr handle = NativeDevice.CreateSharedHandle(dx12Texture.NativeResource, null, null!);
+            if (handle == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("ID3D12Device.CreateSharedHandle returned a null texture NT handle.");
+            }
+
+            return new RHIExternalResourceExport(
+                new RHIExternalNtHandle(handle),
+                m_AdapterIdentity);
+        }
+
+        public override RHIBuffer ImportBufferNtHandle(in RHIExternalBufferImportDescriptor descriptor)
+        {
+            ThrowIfDeviceUnavailable();
+            Capabilities.Memory.ExternalImport.Require("Memory.ExternalImport");
+            if (descriptor.Handle.Handle == IntPtr.Zero)
+            {
+                throw new ArgumentException("Import handle is null.", nameof(descriptor));
+            }
+
+            RequireMatchingSharedAdapter(
+                descriptor.ExpectedAdapter,
+                "buffer NT-handle import");
+            IntPtr owned = RHIWin32NtHandle.Duplicate(descriptor.Handle.Handle);
+            Vortice.Direct3D12.ID3D12Resource resource;
+            try
+            {
+                resource = NativeDevice.OpenSharedHandle<Vortice.Direct3D12.ID3D12Resource>(owned);
+            }
+            catch
+            {
+                RHIWin32NtHandle.Close(owned);
+                throw;
+            }
+
+            RHIWin32NtHandle.Close(owned);
+            return new Dx12Buffer(this, descriptor.Buffer, resource);
+        }
+
+        public override RHITexture ImportTextureNtHandle(in RHIExternalTextureImportDescriptor descriptor)
+        {
+            ThrowIfDeviceUnavailable();
+            Capabilities.Memory.ExternalImport.Require("Memory.ExternalImport");
+            if (descriptor.Handle.Handle == IntPtr.Zero)
+            {
+                throw new ArgumentException("Import handle is null.", nameof(descriptor));
+            }
+
+            RequireMatchingSharedAdapter(
+                descriptor.ExpectedAdapter,
+                "texture NT-handle import");
+            IntPtr owned = RHIWin32NtHandle.Duplicate(descriptor.Handle.Handle);
+            Vortice.Direct3D12.ID3D12Resource resource;
+            try
+            {
+                resource = NativeDevice.OpenSharedHandle<Vortice.Direct3D12.ID3D12Resource>(owned);
+            }
+            catch
+            {
+                RHIWin32NtHandle.Close(owned);
+                throw;
+            }
+
+            RHIWin32NtHandle.Close(owned);
+            return new Dx12Texture(this, descriptor.Texture, resource);
+        }
+
+        private void RequireMatchingSharedAdapter(
+            in RHIAdapterIdentity expected,
+            string operation)
+        {
+            // DXGI GetSharedResourceAdapterLuid does not accept fence NT handles.
+            // Adapter identity is the device LUID captured at creation (ADR-0066).
+            m_AdapterIdentity.RequireMatch(expected, operation);
         }
 
         public override RHIStorageQueue CreateStorageQueue()
@@ -292,7 +487,123 @@ namespace SharpGPU
         public override RHITexture CreateTexture(in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            RejectUnpairedSamplerFeedbackTexture(in descriptor);
             return new Dx12Texture(this, descriptor);
+        }
+
+        public override RHITexture CreateSamplerFeedbackMap(
+            in RHISamplerFeedbackMapDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            ValidateSamplerFeedbackMapDescriptor(in descriptor);
+            Capabilities.Raster.SamplerFeedback.Require("Raster.SamplerFeedback");
+
+            RHITexture paired = descriptor.PairedTexture!;
+            if (paired is not Dx12Texture dx12Paired ||
+                !ReferenceEquals(dx12Paired.Dx12Device, this))
+            {
+                throw new ArgumentException(
+                    "The paired sampled texture must belong to this DX12 device.",
+                    nameof(descriptor));
+            }
+
+            if (!Capabilities.Raster.SamplerFeedback.Limits.TryGetValue(
+                    ERHICapabilityLimitKind.SupportedSamplerFeedbackModeMask,
+                    out ulong supportedModes) ||
+                (supportedModes & (1UL << (byte)descriptor.Mode)) == 0)
+            {
+                throw new NotSupportedException(
+                    $"Sampler-feedback mode {descriptor.Mode} is not supported by this DX12 device.");
+            }
+
+            uint3 mipRegion = descriptor.MipRegion;
+            if (mipRegion.x == 0 || mipRegion.y == 0 || mipRegion.z == 0)
+            {
+                mipRegion = new uint3(4, 4, 1);
+            }
+
+            RHITextureDescriptor pairedDescriptor = paired.Descriptor;
+            RHITextureDescriptor mapDescriptor = new()
+            {
+                MipCount = 1,
+                Extent = pairedDescriptor.Extent,
+                Format = descriptor.Mode == ERHISamplerFeedbackMode.MinMip
+                    ? ERHIPixelFormat.SamplerFeedbackMinMipOpaque
+                    : ERHIPixelFormat.SamplerFeedbackMipRegionUsedOpaque,
+                SampleCount = ERHISampleCount.None,
+                StorageMode = ERHIStorageMode.GPULocal,
+                UsageFlag = ERHITextureUsage.UnorderedAccess |
+                    ERHITextureUsage.CopySrc |
+                    ERHITextureUsage.CopyDst,
+                Dimension = pairedDescriptor.Dimension,
+            };
+
+            return Dx12Texture.CreateSamplerFeedbackMap(
+                this,
+                mapDescriptor,
+                dx12Paired,
+                descriptor.Mode,
+                mipRegion);
+        }
+
+        private static RHICapability ProbeDx12SamplerFeedback(
+            in Vortice.Direct3D12.FeatureDataD3D12Options7 options7)
+        {
+            const string ProbeSource =
+                "D3D12_FEATURE_D3D12_OPTIONS7.SamplerFeedbackTier";
+            int nativeTier = (int)options7.SamplerFeedbackTier;
+            // d3d12.h: NOT_SUPPORTED=0, TIER_0_9=90, TIER_1_0=100.
+            // Map the two native tiers onto RHI Tier1/Tier2 without renaming.
+            if (nativeTier == 90)
+            {
+                return RHICapability.Available(
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeSpecialized,
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource,
+                    new RHICapabilityLimits(
+                        new RHICapabilityLimit(
+                            ERHICapabilityLimitKind.SupportedSamplerFeedbackModeMask,
+                            1UL << (byte)ERHISamplerFeedbackMode.MinMip),
+                        new RHICapabilityLimit(
+                            ERHICapabilityLimitKind.SupportedSamplerFeedbackOperationMask,
+                            (ulong)ERHISamplerFeedbackOperation.All)));
+            }
+
+            if (nativeTier == 100)
+            {
+                return RHICapability.Available(
+                    ERHICapabilityTier.Tier2,
+                    ERHICapabilityStrategy.NativeSpecialized,
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource,
+                    new RHICapabilityLimits(
+                        new RHICapabilityLimit(
+                            ERHICapabilityLimitKind.SupportedSamplerFeedbackModeMask,
+                            (1UL << (byte)ERHISamplerFeedbackMode.MinMip) |
+                            (1UL << (byte)ERHISamplerFeedbackMode.MipRegionUsed)),
+                        new RHICapabilityLimit(
+                            ERHICapabilityLimitKind.SupportedSamplerFeedbackOperationMask,
+                            (ulong)ERHISamplerFeedbackOperation.All)));
+            }
+
+            return RHICapability.Unavailable(
+                nativeTier == 0
+                    ? "D3D12_SAMPLER_FEEDBACK_TIER_NOT_SUPPORTED."
+                    : $"D3D12 SamplerFeedbackTier reported unrecognized value {nativeTier}.",
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                ProbeSource);
+        }
+
+        internal void CreateSamplerFeedbackUnorderedAccessView(
+            Vortice.Direct3D12.ID3D12Resource targetedResource,
+            Vortice.Direct3D12.ID3D12Resource feedbackResource,
+            Vortice.Direct3D12.CpuDescriptorHandle destDescriptor)
+        {
+            NativeDevice.CreateSamplerFeedbackUnorderedAccessView(
+                targetedResource,
+                feedbackResource,
+                destDescriptor);
         }
 
         public override RHICapability QueryRasterAttachmentSupport(
@@ -419,6 +730,260 @@ namespace SharpGPU
                 ERHICapabilityStrategy.NativeSpecialized,
                 ERHICapabilityProbeKind.NativeFeatureQuery,
                 ProbeSource);
+        }
+
+        public override RHICapability QueryFormatSupport(
+            in RHIFormatSupportQuery query)
+        {
+            ThrowIfDisposed();
+            const string ProbeSource =
+                "ID3D12Device.CheckFormatSupport + CheckMultisampleQualityLevels";
+
+            if (query.Tiling == ERHITextureTiling.Linear)
+            {
+                return RHICapability.Unavailable(
+                    "DX12 does not expose a generic linear image tiling query for this dimension",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            Vortice.DXGI.Format format =
+                Dx12Utility.ConvertToDx12ViewFormat(query.Format);
+            if (!NativeDevice.CheckFormatSupport(
+                    format,
+                    out Vortice.Direct3D12.FormatSupport1 support1,
+                    out Vortice.Direct3D12.FormatSupport2 support2))
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 did not report format support for {query.Format}.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            if ((query.Dimension is
+                    ERHITextureDimension.Texture2DMS or
+                    ERHITextureDimension.Texture2DArrayMS) &&
+                query.SampleCount == ERHISampleCount.None)
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 {query.Dimension} queries require a concrete MSAA sample count.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            if ((query.Usage & ERHITextureUsage.ResolveTarget) != 0 &&
+                query.SampleCount != ERHISampleCount.None)
+            {
+                return RHICapability.Unavailable(
+                    "DX12 resolve destination queries require a single-sample count.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            Vortice.Direct3D12.FormatSupport1 requiredDimensionBit =
+                RequiredDx12FormatDimensionBit(query.Dimension);
+            if ((support1 & requiredDimensionBit) == 0)
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 format {query.Format} lacks FormatSupport1.{requiredDimensionBit} for {query.Dimension}.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            if ((query.Usage & ERHITextureUsage.ShaderResource) != 0 &&
+                (support1 & (
+                    Vortice.Direct3D12.FormatSupport1.ShaderSample |
+                    Vortice.Direct3D12.FormatSupport1.ShaderLoad)) == 0)
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 format {query.Format} lacks ShaderSample and ShaderLoad for ShaderResource usage.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+            if ((query.Usage & ERHITextureUsage.UnorderedAccess) != 0 &&
+                (support2 & (
+                    Vortice.Direct3D12.FormatSupport2.UnorderedAccessViewTypedLoad |
+                    Vortice.Direct3D12.FormatSupport2.UnorderedAccessViewTypedStore)) == 0)
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 format {query.Format} lacks UnorderedAccessViewTypedLoad and UnorderedAccessViewTypedStore.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+            if ((query.Usage & ERHITextureUsage.RenderTarget) != 0 &&
+                (support1 & Vortice.Direct3D12.FormatSupport1.RenderTarget) == 0)
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 format {query.Format} lacks FormatSupport1.RenderTarget.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+            if ((query.Usage & ERHITextureUsage.DepthStencil) != 0 &&
+                (support1 & Vortice.Direct3D12.FormatSupport1.DepthStencil) == 0)
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 format {query.Format} lacks FormatSupport1.DepthStencil.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+            if ((query.Usage & ERHITextureUsage.ResolveTarget) != 0 &&
+                (support1 & Vortice.Direct3D12.FormatSupport1.MultisampleResolve) == 0)
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 format {query.Format} lacks FormatSupport1.MultisampleResolve.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            if (query.SampleCount != ERHISampleCount.None)
+            {
+                uint sampleCount = checked((uint)query.SampleCount);
+                if (NativeDevice.CheckMultisampleQualityLevels(
+                        format,
+                        sampleCount) == 0)
+                {
+                    return RHICapability.Unavailable(
+                        $"DX12 format {query.Format} reports zero MSAA quality levels at {sampleCount}x.",
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        ProbeSource);
+                }
+            }
+
+            ERHIFormatSupportOperation mask = MapDx12FormatSupport(support1, support2);
+            return RHICapability.Available(
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.CoreApi,
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                ProbeSource,
+                new RHICapabilityLimits(
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.SupportedFormatOperationMask,
+                        (ulong)mask)));
+        }
+
+        private static Vortice.Direct3D12.FormatSupport1 RequiredDx12FormatDimensionBit(
+            ERHITextureDimension dimension)
+        {
+            return dimension switch
+            {
+                ERHITextureDimension.Texture2D or
+                ERHITextureDimension.Texture2DArray or
+                ERHITextureDimension.Texture2DMS or
+                ERHITextureDimension.Texture2DArrayMS =>
+                    Vortice.Direct3D12.FormatSupport1.Texture2D,
+                ERHITextureDimension.Texture3D =>
+                    Vortice.Direct3D12.FormatSupport1.Texture3D,
+                ERHITextureDimension.TextureCube or
+                ERHITextureDimension.TextureCubeArray =>
+                    Vortice.Direct3D12.FormatSupport1.TextureCube,
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(dimension),
+                    dimension,
+                    "DX12 format support requires a concrete texture dimension."),
+            };
+        }
+
+        private static ERHIFormatSupportOperation MapDx12FormatSupport(
+            Vortice.Direct3D12.FormatSupport1 support1,
+            Vortice.Direct3D12.FormatSupport2 support2)
+        {
+            ERHIFormatSupportOperation mask = ERHIFormatSupportOperation.None;
+            if ((support1 & Vortice.Direct3D12.FormatSupport1.ShaderSample) != 0 ||
+                (support1 & Vortice.Direct3D12.FormatSupport1.ShaderLoad) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.Sample;
+            }
+            if ((support2 & Vortice.Direct3D12.FormatSupport2.UnorderedAccessViewTypedLoad) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.StorageLoad;
+            }
+            if ((support2 & Vortice.Direct3D12.FormatSupport2.UnorderedAccessViewTypedStore) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.StorageStore;
+            }
+            if ((support2 & (
+                    Vortice.Direct3D12.FormatSupport2.UnorderedAccessViewAtomicAdd |
+                    Vortice.Direct3D12.FormatSupport2.UnorderedAccessViewAtomicBitwiseOps |
+                    Vortice.Direct3D12.FormatSupport2.UnorderedAccessViewAtomicCompareStoreOrCompareExchange |
+                    Vortice.Direct3D12.FormatSupport2.UnorderedAccessViewAtomicExchange |
+                    Vortice.Direct3D12.FormatSupport2.UnorderedAccessViewAtomicSignedMinOrMax |
+                    Vortice.Direct3D12.FormatSupport2.UnorderedAccessViewAtomicUnsignedMinOrMax)) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.Atomic;
+            }
+            if ((support1 & Vortice.Direct3D12.FormatSupport1.RenderTarget) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.ColorAttachment;
+            }
+            if ((support1 & Vortice.Direct3D12.FormatSupport1.DepthStencil) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.DepthStencilAttachment;
+            }
+            if ((support1 & Vortice.Direct3D12.FormatSupport1.Blendable) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.Blend;
+            }
+            if ((support1 & Vortice.Direct3D12.FormatSupport1.MultisampleResolve) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.Resolve;
+            }
+            if ((support1 & Vortice.Direct3D12.FormatSupport1.ShaderSample) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.LinearFilter;
+            }
+            if ((support1 & Vortice.Direct3D12.FormatSupport1.InputAssemblerVertexBuffer) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.VertexBuffer;
+            }
+            if ((support1 & Vortice.Direct3D12.FormatSupport1.InputAssemblerIndexBuffer) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.IndexBuffer;
+            }
+
+            return mask;
+        }
+
+        public override RHIClockCalibration QueryClockCalibration(
+            ERHIPipelineType queue,
+            int queueIndex = 0)
+        {
+            ThrowIfDisposed();
+            Capabilities.Synchronization.CalibratedTimestamps.Require(
+                "Synchronization.CalibratedTimestamps");
+            if (RequireCommandQueue(queue, queueIndex, "QueryClockCalibration")
+                is not Dx12CommandQueue dx12Queue)
+            {
+                throw new InvalidOperationException(
+                    "QueryClockCalibration received a non-DX12 command queue.");
+            }
+
+            SharpGen.Runtime.Result calibrationResult =
+                dx12Queue.NativeCommandQueue.GetClockCalibration(
+                    out ulong gpuTimestamp,
+                    out ulong cpuTimestamp);
+            if (calibrationResult.Failure)
+            {
+                throw new InvalidOperationException(
+                    $"ID3D12CommandQueue.GetClockCalibration failed: {calibrationResult}.");
+            }
+
+            SharpGen.Runtime.Result frequencyResult =
+                dx12Queue.NativeCommandQueue.GetTimestampFrequency(
+                    out ulong frequency);
+            if (frequencyResult.Failure || frequency == 0)
+            {
+                throw new InvalidOperationException(
+                    $"ID3D12CommandQueue.GetTimestampFrequency failed: {frequencyResult}.");
+            }
+
+            return new RHIClockCalibration(
+                gpuTimestamp,
+                cpuTimestamp,
+                frequency,
+                ERHITimeDomain.QueryPerformanceCounter,
+                queue,
+                queueIndex,
+                maxDeviation: 0);
         }
 
         public override RHIRasterAttachmentShaderAbi
@@ -699,7 +1264,9 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
-            Capabilities.Memory.SparseBinding.Require("DX12 sparse texture requirements");
+            Capabilities.Memory.RequireSparseTexture(
+                descriptor,
+                "DX12 sparse texture requirements");
             Vortice.Direct3D12.ID3D12Resource resource =
                 Dx12SparseMemoryUtility.CreateReservedTexture(this, descriptor);
             try
@@ -719,7 +1286,9 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
-            Capabilities.Memory.SparseBinding.Require("DX12 sparse textures");
+            Capabilities.Memory.RequireSparseTexture(
+                descriptor,
+                "DX12 sparse textures");
             return new Dx12Texture(
                 this,
                 descriptor,
@@ -763,7 +1332,8 @@ namespace SharpGPU
 
         public override RHIFunctionLibrary CreateFunctionLibrary(in RHIFunctionLibraryDescriptor descriptor)
         {
-            return new Dx12FunctionLibrary(descriptor);
+            Capabilities.FunctionLibrary.NativeLibrary.Require("FunctionLibrary.NativeLibrary");
+            return new Dx12FunctionLibrary(this, descriptor);
         }
 
         public override RHIFunctionTable CreateFunctionTable()
@@ -785,6 +1355,15 @@ namespace SharpGPU
 
         public override RHIRasterPipeline CreateRasterPipeline(in RHIRasterPipelineDescriptor descriptor)
         {
+            if (RHIRasterPipelineContract.RequestsMeshPath(in descriptor))
+            {
+                Capabilities.Mesh.MeshShader.Require("DX12 mesh-shader pipelines");
+                if (descriptor.PrimitiveAssembler.MeshletAssembler is { TaskFunction: not null })
+                {
+                    Capabilities.Mesh.TaskShader.Require("DX12 task-shader pipelines");
+                }
+            }
+
             return new Dx12RasterPipeline(this, descriptor);
         }
 
@@ -1037,8 +1616,8 @@ namespace SharpGPU
             int uploadBufferTextureRowAlignment = 256;
             int maxMSAACount = 16;
             int maxBoundTexture = 16;
-            int minWavefrontSize = 32;
-            int maxWavefrontSize = 32;
+            int minWavefrontSize = 0;
+            int maxWavefrontSize = 0;
             int maxComputeThreads = 1024;
             int maxGroupShareMemorySize = 1024;
             int maxVertexInputBindings = 32;
@@ -1078,11 +1657,16 @@ namespace SharpGPU
             ERHIMatrixMajorOrder matrixMajorOrder = ERHIMatrixMajorOrder.RowMajor;
             ERHIDepthValueRange depthValueRange = ERHIDepthValueRange.ZeroToOne;
             ERHIMultiviewStrategy multiviewStrategy = ERHIMultiviewStrategy.RenderTargetIndex;
-            ERHIWaveOperationStrategy waveOperationStrategy = ERHIWaveOperationStrategy.Basic;
+            ERHIWaveOperationStrategy waveOperationStrategy = ERHIWaveOperationStrategy.None;
+            bool waveOpsSupported = false;
+            string waveOperationsProbeSource =
+                "D3D12_FEATURE_D3D12_OPTIONS1.WaveLaneCountMin";
+            string waveOperationsUnavailableReason =
+                "D3D12_FEATURE_D3D12_OPTIONS1 query failed.";
             bool isEnhancedBarriersSupported = false;
             bool isNativeRenderPassSupported = false;
-            bool isSparseBindingSupported = false;
-            ERHICapabilityTier sparseBindingTier = ERHICapabilityTier.Unavailable;
+            Vortice.Direct3D12.TiledResourcesTier tiledResourcesTier =
+                Vortice.Direct3D12.TiledResourcesTier.TierNotSupported;
 
             // check feature level
             Vortice.Direct3D.FeatureLevel* aLevels = stackalloc Vortice.Direct3D.FeatureLevel[3];
@@ -1122,7 +1706,9 @@ namespace SharpGPU
             Vortice.Direct3D12.FeatureDataD3D12Options21 featureOptions21 = default;
 
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options, ref featureOptions0);
-            _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options1, ref featureOptions1);
+            bool options1Supported = NativeDevice.CheckFeatureSupport(
+                Vortice.Direct3D12.Feature.Options1,
+                ref featureOptions1);
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options2, ref featureOptions2);
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options3, ref featureOptions3);
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options4, ref featureOptions4);
@@ -1131,6 +1717,20 @@ namespace SharpGPU
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options7, ref featureOptions7);
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options8, ref featureOptions8);
             bool options9Supported = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options9, ref featureOptions9);
+            if (options1Supported)
+            {
+                minWavefrontSize = (int)featureOptions1.WaveLaneCountMin;
+                maxWavefrontSize = (int)featureOptions1.WaveLaneCountMax;
+                waveOpsSupported = featureOptions1.WaveOps;
+                waveOperationStrategy = waveOpsSupported
+                    ? ERHIWaveOperationStrategy.Basic
+                    : ERHIWaveOperationStrategy.None;
+                waveOperationsProbeSource =
+                    "D3D12_FEATURE_D3D12_OPTIONS1.WaveLaneCountMin";
+                waveOperationsUnavailableReason = waveOpsSupported
+                    ? string.Empty
+                    : "D3D12_FEATURE_D3D12_OPTIONS1.WaveOps is false.";
+            }
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options10, ref featureOptions10);
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options11, ref featureOptions11);
             _ = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options12, ref featureOptions12);
@@ -1145,17 +1745,7 @@ namespace SharpGPU
             bool options21Supported = NativeDevice.CheckFeatureSupport(Vortice.Direct3D12.Feature.Options21, ref featureOptions21);
 
             isRasterizerOrderedSupported = featureOptions0.ROVsSupported;
-            isSparseBindingSupported =
-                featureOptions0.TiledResourcesTier !=
-                Vortice.Direct3D12.TiledResourcesTier.TierNotSupported;
-            sparseBindingTier = featureOptions0.TiledResourcesTier switch
-            {
-                Vortice.Direct3D12.TiledResourcesTier.Tier1 => ERHICapabilityTier.Tier1,
-                Vortice.Direct3D12.TiledResourcesTier.Tier2 => ERHICapabilityTier.Tier2,
-                Vortice.Direct3D12.TiledResourcesTier.Tier3 or
-                Vortice.Direct3D12.TiledResourcesTier.Tier4 => ERHICapabilityTier.Tier3,
-                _ => ERHICapabilityTier.Unavailable,
-            };
+            tiledResourcesTier = featureOptions0.TiledResourcesTier;
 
             // check programmable msaa supported
             switch (featureOptions2.ProgrammableSamplePositionsTier)
@@ -1331,9 +1921,7 @@ namespace SharpGPU
             switch (featureOptions7.MeshShaderTier)
             {
                 case Vortice.Direct3D12.MeshShaderTier.Tier1:
-                    // The public flag must only turn true once the native mesh pipeline path is
-                    // implemented and covered by conformance; the current create path throws.
-                    isMeshShadingSupported = false;
+                    isMeshShadingSupported = true;
                     break;
 
                 case Vortice.Direct3D12.MeshShaderTier.NotSupported:
@@ -1388,12 +1976,17 @@ namespace SharpGPU
             RHICapabilityLimits bindingLimits = new RHICapabilityLimits(
                 new RHICapabilityLimit(ERHICapabilityLimitKind.UniformBufferAlignment, (ulong)uniformBufferAlignment),
                 new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumBoundTextures, (ulong)maxBoundTexture));
-            RHICapabilityLimits computeLimits = new RHICapabilityLimits(
-                new RHICapabilityLimit(ERHICapabilityLimitKind.MinimumWavefrontSize, (ulong)minWavefrontSize),
-                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumWavefrontSize, (ulong)maxWavefrontSize),
-                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumComputeThreads, (ulong)maxComputeThreads),
-                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumGroupSharedMemoryBytes, (ulong)maxGroupShareMemorySize));
-            bool nativeStorageAvailable = Dx12StorageQueue.TryProbeNativeSupport(this, out string nativeStorageReason);
+            RHICapabilityLimits computeLimits = options1Supported
+                ? new RHICapabilityLimits(
+                    new RHICapabilityLimit(ERHICapabilityLimitKind.MinimumWavefrontSize, (ulong)minWavefrontSize),
+                    new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumWavefrontSize, (ulong)maxWavefrontSize),
+                    new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumComputeThreads, (ulong)maxComputeThreads),
+                    new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumGroupSharedMemoryBytes, (ulong)maxGroupShareMemorySize))
+                : new RHICapabilityLimits(
+                    new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumComputeThreads, (ulong)maxComputeThreads),
+                    new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumGroupSharedMemoryBytes, (ulong)maxGroupShareMemorySize));
+            const string CooperativeMatrixUnavailableReason =
+                "D3D12 WaveMMA / cooperative-matrix feature query is not present in the vendored SDK";
             bool nativePipelineCacheAvailable = Dx12PipelineCache.TryProbeNativeSupport(this, out string nativePipelineCacheReason);
 
             bool nativeMemoryBudgetAvailable;
@@ -1520,7 +2113,8 @@ namespace SharpGPU
                         isNativeRenderPassSupported,
                         "D3D12_FEATURE_D3D12_OPTIONS5.RenderPassesTier",
                         "Native D3D12 render passes are unavailable.",
-                        limits: rasterLimits)),
+                        limits: rasterLimits),
+                    samplerFeedback: ProbeDx12SamplerFeedback(featureOptions7)),
                 binding: new RHIBindingCapabilities(
                     rootConstants: Probe(
                         isRootConstantSupport,
@@ -1573,52 +2167,19 @@ namespace SharpGPU
                     enhancedBarriers: Probe(
                         isEnhancedBarriersSupported,
                         "D3D12_FEATURE_D3D12_OPTIONS12.EnhancedBarriersSupported",
-                        "Enhanced barriers are unavailable.")),
-                memory: new RHIMemoryCapabilities(
-                    unifiedMemory: Probe(
-                        isUnifiedMemorySupported,
-                        Dx12UnifiedMemoryCapabilityFactory.ProbeSource,
-                        unifiedMemoryUnavailableReason),
-                    placedResources: Probe(
-                        true,
-                        "GetResourceAllocationInfo + CreateHeap + CreatePlacedResource",
-                        "DX12 placed resources are unavailable.",
-                        strategy: ERHICapabilityStrategy.CoreApi),
-                    sparseBinding: Probe(
-                        isSparseBindingSupported,
-                        "D3D12_FEATURE_D3D12_OPTIONS.TiledResourcesTier + CreateReservedResource + UpdateTileMappings",
-                        "DX12 tiled resources are unavailable on this adapter.",
-                        tier: sparseBindingTier,
-                        strategy: ERHICapabilityStrategy.CoreApi),
-                    gpuVirtualAddress: RHICapability.Available(
+                        "Enhanced barriers are unavailable."),
+                    calibratedTimestamps: ProbeDx12ClockCalibration(),
+                    externalFence64: RHICapability.Available(
                         ERHICapabilityTier.Tier1,
                         ERHICapabilityStrategy.CoreApi,
                         ERHICapabilityProbeKind.ApiVersion,
-                        "ID3D12Resource.GPUVirtualAddress"),
-                    sparseBufferBinding: Probe(
-                        isSparseBindingSupported,
-                        "D3D12_FEATURE_D3D12_OPTIONS.TiledResourcesTier + CreateReservedResource(buffer) + UpdateTileMappings",
-                        "DX12 sparse buffers are unavailable on this adapter.",
-                        tier: sparseBindingTier,
-                        strategy: ERHICapabilityStrategy.CoreApi),
-                    residency: Probe(
-                        true,
-                        "ID3D12Device3.EnqueueMakeResident + ID3D12Device.Evict",
-                        "Asynchronous explicit residency is unavailable.",
-                        strategy: ERHICapabilityStrategy.CoreApi),
-                    budgetQuery: Probe(
-                        nativeMemoryBudgetAvailable,
-                        "IDXGIAdapter3.QueryVideoMemoryInfo",
-                        "DXGI memory-budget reporting is unavailable.",
-                        strategy: ERHICapabilityStrategy.CoreApi)),
-                storage: new RHIStorageCapabilities(
-                    nativeGpuFileIo: RHICapability.FromProbe(
-                        nativeStorageAvailable,
-                        ERHICapabilityTier.Tier1,
-                        ERHICapabilityStrategy.NativeLibrary,
-                        ERHICapabilityProbeKind.RuntimeObjectProbe,
-                        "DirectStorage native factory and file-queue probe",
-                        nativeStorageReason)),
+                        "ID3D12Device.CreateFence(SHARED) + CreateSharedHandle / OpenSharedHandle")),
+                memory: CreateDx12MemoryCapabilities(
+                    isUnifiedMemorySupported,
+                    unifiedMemoryUnavailableReason,
+                    tiledResourcesTier,
+                    nativeMemoryBudgetAvailable),
+                storage: Dx12StorageQueue.CreateCapabilities(this),
                 pipelineCache: new RHIPipelineCacheCapabilities(
                     nativeCache: RHICapability.FromProbe(
                         nativePipelineCacheAvailable,
@@ -1646,12 +2207,19 @@ namespace SharpGPU
                         isRaytracingInlineSupported,
                         "D3D12_FEATURE_D3D12_OPTIONS5.RaytracingTier",
                         "Inline ray queries require DXR tier 1.1.",
-                        tier: ERHICapabilityTier.Tier2)),
+                        tier: ERHICapabilityTier.Tier2),
+                    opacityMicromap: CreateDx12RayTracingOptionalFacetUnavailable(),
+                    shaderExecutionReordering: CreateDx12RayTracingOptionalFacetUnavailable(),
+                    motion: CreateDx12RayTracingOptionalFacetUnavailable()),
                 mesh: new RHIMeshCapabilities(
-                    shader: Probe(
+                    meshShader: Probe(
                         isMeshShadingSupported,
                         "D3D12_FEATURE_D3D12_OPTIONS7.MeshShaderTier plus SharpGPU factory",
-                        "Mesh shaders remain unavailable until the native SharpGPU pipeline path is implemented.")),
+                        "D3D12_FEATURE_D3D12_OPTIONS7.MeshShaderTier is not supported."),
+                    taskShader: Probe(
+                        isMeshShadingSupported,
+                        "D3D12_FEATURE_D3D12_OPTIONS7.MeshShaderTier amplification shader plus SharpGPU factory",
+                        "DX12 task/amplification shaders require MeshShaderTier.Tier1.")),
                 machineLearning: new RHIMachineLearningCapabilities(
                     execution: RHICapability.FromProbe(
                         isMLSupported,
@@ -1660,19 +2228,280 @@ namespace SharpGPU
                         ERHICapabilityProbeKind.RuntimeObjectProbe,
                         "DirectML device and command-recorder creation",
                         "DirectML runtime objects could not be created.")),
-                workGraph: new RHIWorkGraphCapabilities(
-                    execution: Probe(
-                        isWorkgraphSupported,
-                        "D3D12_FEATURE_D3D12_OPTIONS21.WorkGraphsTier plus SharpGPU pipeline factory",
-                        "Work Graphs are unavailable.")),
+                workGraph: CreateDx12WorkGraphCapabilities(
+                    isWorkgraphSupported,
+                    options21Supported
+                        ? featureOptions21.WorkGraphsTier
+                        : Vortice.Direct3D12.WorkGraphsTier.TierNOT_SUPPORTED),
                 indirectCommandBuffer: new RHIIndirectCommandBufferCapabilities(indirectCommandExecution, new RHIIndirectTokenCapabilities(indirectCommandExecution, indirectCommandExecution, indirectCommandExecution, indirectCommandExecution, indirectCommandExecution, indirectMeshDispatch)),
                 compute: new RHIComputeCapabilities(
                     waveOperationStrategy,
                     waveOperations: Probe(
-                        waveOperationStrategy is not (ERHIWaveOperationStrategy.None or ERHIWaveOperationStrategy.Pending),
-                        "D3D12 wave-operation device contract",
-                        "Wave operations are unavailable.",
-                        limits: computeLimits)));
+                        waveOpsSupported,
+                        waveOperationsProbeSource,
+                        waveOperationsUnavailableReason,
+                        limits: computeLimits),
+                    variableSubgroupSize: RHICapability.Unavailable(
+                        "D3D12 reports WaveLaneCountMin/Max but has no programmable subgroup-size control equivalent to VK_EXT_subgroup_size_control.",
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        "D3D12_FEATURE_D3D12_OPTIONS1.WaveLaneCountMin"),
+                    cooperativeMatrix: RHICapability.Unavailable(
+                        CooperativeMatrixUnavailableReason,
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        "D3D12_FEATURE_D3D12_OPTIONS9")),
+                functionLibrary: CreateDx12FunctionLibraryCapabilities(
+                    isRaytracingSupported,
+                    isWorkgraphSupported),
+                multiGpu: RHIMultiGpuCapabilities.CreateUnavailable(
+                    "D3D12 node-mask / explicit multi-adapter"));
+        }
+
+        public override int QueryCooperativeMatrixConfigs(
+            Span<RHICooperativeMatrixConfig> destination)
+        {
+            ThrowIfDisposed();
+            return CopyCooperativeMatrixConfigs(
+                ReadOnlySpan<RHICooperativeMatrixConfig>.Empty,
+                destination);
+        }
+
+        private static RHICapability CreateDx12RayTracingOptionalFacetUnavailable()
+        {
+            return RHICapability.Unavailable(
+                "Vendored Agility SDK / d3d12.h documents RaytracingTier 1.0/1.1 only; DXR 1.2 Opacity Micromap / SER / Motion APIs are not present. Upgrade requires an independent ADR-0050 change.",
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                "D3D12_FEATURE_D3D12_OPTIONS5.RaytracingTier");
+        }
+
+        private RHICapability ProbeDx12ClockCalibration()
+        {
+            const string ProbeSource =
+                "ID3D12CommandQueue.GetClockCalibration + GetTimestampFrequency";
+            Vortice.Direct3D12.CommandQueueDescription queueDesc = new();
+            queueDesc.Flags = Vortice.Direct3D12.CommandQueueFlags.None;
+            queueDesc.Type = Vortice.Direct3D12.CommandListType.Direct;
+            SharpGen.Runtime.Result createResult =
+                NativeDevice.CreateCommandQueue(
+                    queueDesc,
+                    out Vortice.Direct3D12.ID3D12CommandQueue? probeQueue);
+            if (createResult.Failure || probeQueue == null)
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 could not create a graphics queue to probe clock calibration: {createResult}.",
+                    ERHICapabilityProbeKind.RuntimeObjectProbe,
+                    ProbeSource);
+            }
+
+            try
+            {
+                SharpGen.Runtime.Result calibrationResult =
+                    probeQueue.GetClockCalibration(out _, out _);
+                SharpGen.Runtime.Result frequencyResult =
+                    probeQueue.GetTimestampFrequency(out ulong frequency);
+                if (calibrationResult.Failure)
+                {
+                    return RHICapability.Unavailable(
+                        $"ID3D12CommandQueue.GetClockCalibration failed: {calibrationResult}.",
+                        ERHICapabilityProbeKind.RuntimeObjectProbe,
+                        ProbeSource);
+                }
+                if (frequencyResult.Failure || frequency == 0)
+                {
+                    return RHICapability.Unavailable(
+                        $"ID3D12CommandQueue.GetTimestampFrequency failed: {frequencyResult}.",
+                        ERHICapabilityProbeKind.RuntimeObjectProbe,
+                        ProbeSource);
+                }
+
+                return RHICapability.Available(
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.CoreApi,
+                    ERHICapabilityProbeKind.RuntimeObjectProbe,
+                    ProbeSource,
+                    new RHICapabilityLimits(
+                        new RHICapabilityLimit(
+                            ERHICapabilityLimitKind.GpuTimestampFrequency,
+                            frequency)));
+            }
+            finally
+            {
+                probeQueue.Release();
+            }
+        }
+
+        private static RHIMemoryCapabilities CreateDx12MemoryCapabilities(
+            bool isUnifiedMemorySupported,
+            string unifiedMemoryUnavailableReason,
+            Vortice.Direct3D12.TiledResourcesTier tiledResourcesTier,
+            bool nativeMemoryBudgetAvailable)
+        {
+            const string SparseSource =
+                "D3D12_FEATURE_D3D12_OPTIONS.TiledResourcesTier + CreateReservedResource + UpdateTileMappings";
+            ERHICapabilityTier mappedTier = tiledResourcesTier switch
+            {
+                Vortice.Direct3D12.TiledResourcesTier.Tier1 => ERHICapabilityTier.Tier1,
+                Vortice.Direct3D12.TiledResourcesTier.Tier2 => ERHICapabilityTier.Tier2,
+                Vortice.Direct3D12.TiledResourcesTier.Tier3 => ERHICapabilityTier.Tier3,
+                Vortice.Direct3D12.TiledResourcesTier.Tier4 => ERHICapabilityTier.Tier4,
+                _ => ERHICapabilityTier.Unavailable,
+            };
+            bool tiled = mappedTier != ERHICapabilityTier.Unavailable;
+            int numericTier = (int)tiledResourcesTier;
+
+            static RHICapability ProbeSparse(
+                bool available,
+                ERHICapabilityTier tier,
+                string unavailableReason)
+            {
+                return RHICapability.FromProbe(
+                    available,
+                    tier,
+                    ERHICapabilityStrategy.CoreApi,
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    SparseSource,
+                    unavailableReason);
+            }
+
+            return new RHIMemoryCapabilities(
+                unifiedMemory: RHICapability.FromProbe(
+                    isUnifiedMemorySupported,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeSpecialized,
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    Dx12UnifiedMemoryCapabilityFactory.ProbeSource,
+                    unifiedMemoryUnavailableReason),
+                placedResources: RHICapability.Available(
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.CoreApi,
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    "GetResourceAllocationInfo + CreateHeap + CreatePlacedResource"),
+                gpuVirtualAddress: RHICapability.Available(
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.CoreApi,
+                    ERHICapabilityProbeKind.ApiVersion,
+                    "ID3D12Resource.GPUVirtualAddress"),
+                sparseBuffer: RHICapability.Unavailable(
+                    "SharpGPU does not implement a sparse-buffer factory or tiled-buffer mapping path.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    SparseSource),
+                sparseTexture2D: ProbeSparse(
+                    tiled,
+                    mappedTier,
+                    "DX12 tiled 2D textures require TiledResourcesTier 1 or higher."),
+                sparseTexture3D: ProbeSparse(
+                    numericTier >= 3,
+                    mappedTier,
+                    "DX12 tiled 3D textures require TiledResourcesTier 3 or higher."),
+                sparseMsaa: RHICapability.Unavailable(
+                    "D3D12 tiled-resource tiers do not guarantee MSAA tiled resources; SharpGPU does not expose a device-wide tiled-MSAA guarantee.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    SparseSource),
+                sparseMipTail: ProbeSparse(
+                    numericTier >= 2,
+                    mappedTier,
+                    "D3D12 TiledResourcesTier 1 packs mip tails and does not guarantee independent mip-tail tile access."),
+                sparseTileGeometry: ProbeSparse(
+                    tiled,
+                    mappedTier,
+                    "DX12 tiled-resource tile geometry requires TiledResourcesTier 1 or higher."),
+                residency: RHICapability.Available(
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.CoreApi,
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    "ID3D12Device3.EnqueueMakeResident + ID3D12Device.Evict"),
+                budgetQuery: RHICapability.FromProbe(
+                    nativeMemoryBudgetAvailable,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.CoreApi,
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    "IDXGIAdapter3.QueryVideoMemoryInfo",
+                    "DXGI memory-budget reporting is unavailable."),
+                sparseAliasing: ProbeSparse(
+                    tiled,
+                    mappedTier,
+                    "DX12 tiled-resource aliasing onto a shared heap requires TiledResourcesTier 1 or higher."),
+                externalImport: RHICapability.Available(
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.CoreApi,
+                    ERHICapabilityProbeKind.ApiVersion,
+                    "ID3D12Device.OpenSharedHandle NT resource import"),
+                externalExport: RHICapability.Available(
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.CoreApi,
+                    ERHICapabilityProbeKind.ApiVersion,
+                    "ID3D12Device.CreateSharedHandle NT resource export"));
+        }
+
+        private static RHIFunctionLibraryCapabilities CreateDx12FunctionLibraryCapabilities(
+            bool raytracingAvailable,
+            bool workGraphAvailable)
+        {
+            ulong reusable =
+                (raytracingAvailable
+                    ? (ulong)ERHIFunctionLibraryReusablePipelineClass.Raytracing
+                    : 0UL) |
+                (workGraphAvailable
+                    ? (ulong)ERHIFunctionLibraryReusablePipelineClass.WorkGraph
+                    : 0UL);
+            return RHIFunctionLibraryCapabilities.CreateNative(
+                "DxilLibraryDescription + state-object export; CreateGraphics/ComputePipelineState is per-stage D3D12_SHADER_BYTECODE",
+                reusable,
+                RHIFunctionLibraryCapabilities.PayloadKindBit(ERHIShaderPayloadKind.Dxil),
+                "CreateGraphicsPipelineState / CreateComputePipelineState only accept per-stage D3D12_SHADER_BYTECODE. DXIL library export serves RT / WorkGraph state objects only.");
+        }
+
+        private static RHIWorkGraphCapabilities CreateDx12WorkGraphCapabilities(
+            bool isWorkgraphSupported,
+            Vortice.Direct3D12.WorkGraphsTier workGraphsTier)
+        {
+            const string ProbeSource =
+                "D3D12_FEATURE_D3D12_OPTIONS21.WorkGraphsTier plus SharpGPU pipeline factory";
+            if (!isWorkgraphSupported ||
+                workGraphsTier == Vortice.Direct3D12.WorkGraphsTier.TierNOT_SUPPORTED)
+            {
+                RHICapability unavailable = RHICapability.Unavailable(
+                    "Work Graphs are unavailable.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+                return new RHIWorkGraphCapabilities(
+                    unavailable,
+                    unavailable,
+                    unavailable,
+                    unavailable,
+                    unavailable,
+                    unavailable,
+                    unavailable,
+                    unavailable);
+            }
+
+            ERHICapabilityTier executionTier = workGraphsTier switch
+            {
+                Vortice.Direct3D12.WorkGraphsTier.Tier1_0 => ERHICapabilityTier.Tier1,
+                _ => ERHICapabilityTier.Tier1,
+            };
+            RHICapability execution = RHICapability.Available(
+                executionTier,
+                ERHICapabilityStrategy.NativeSpecialized,
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                ProbeSource);
+            RHICapability meshNodes = RHICapability.Unavailable(
+                "Vendored d3d12.h only documents D3D12_WORK_GRAPHS_TIER_1_0 and does not enumerate mesh-node support.",
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                ProbeSource);
+            RHICapability backingMemory = RHICapability.Available(
+                executionTier,
+                ERHICapabilityStrategy.NativeSpecialized,
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                "D3D12_FEATURE_D3D12_OPTIONS21.WorkGraphsTier; per-pipeline backing sizes come from ID3D12WorkGraphProperties after CreateWorkGraphPipeline");
+            return new RHIWorkGraphCapabilities(
+                execution,
+                broadcastNodes: execution,
+                threadNodes: execution,
+                recursion: execution,
+                meshNodes: meshNodes,
+                gpuInput: execution,
+                backingMemory: backingMemory,
+                entryRecords: execution);
         }
 
         private void CreateDirectMLObjects()
@@ -1778,7 +2607,7 @@ namespace SharpGPU
             #endregion
 
             #region Create_DispatchMeshIndirect_Argument
-            if (Capabilities.Mesh.Shader.Tier != ERHICapabilityTier.Unavailable)
+            if (Capabilities.Mesh.MeshShader.Tier != ERHICapabilityTier.Unavailable)
             {
                 indirectArgDesc = new Vortice.Direct3D12.IndirectArgumentDescription
                 {
@@ -1867,7 +2696,7 @@ namespace SharpGPU
 
             ReleaseComObject(ref m_DrawIndirectSignature);
             ReleaseComObject(ref m_DrawIndexedIndirectSignature);
-            if (Capabilities.Mesh.Shader.Tier != ERHICapabilityTier.Unavailable)
+            if (Capabilities.Mesh.MeshShader.Tier != ERHICapabilityTier.Unavailable)
             {
                 ReleaseComObject(ref m_DispatchMeshIndirectSignature);
             }

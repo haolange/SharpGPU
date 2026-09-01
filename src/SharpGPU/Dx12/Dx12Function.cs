@@ -25,10 +25,36 @@ namespace SharpGPU
         public Dx12Function(in RHIFunctionDescriptor descriptor)
         {
             m_OwnedByteCode = CloneShaderByteCode(descriptor.ByteCode, descriptor.ByteSize, nameof(Dx12Function));
-            m_Descriptor = descriptor;
-            m_Descriptor.ByteCode = m_OwnedByteCode;
+            RHIFunctionDescriptor owned = descriptor;
+            owned.ByteCode = m_OwnedByteCode;
+            BindDirectBytecodeSource(owned);
             m_NativeShaderData = CopyShaderByteCode(m_OwnedByteCode, descriptor.ByteSize, nameof(Dx12Function));
             m_NativeShaderBytecode = new Vortice.Direct3D12.ShaderBytecode(m_OwnedByteCode, checked((int)descriptor.ByteSize));
+        }
+
+        internal Dx12Function(
+            Dx12FunctionLibrary library,
+            in RHIFunctionViewDescriptor view)
+        {
+            library.ThrowIfViewSourceUnavailable();
+            BindLibraryViewSource(library, view, library.Descriptor.PayloadKind, library.ContentDigest);
+            m_SourceLibrary = library;
+            m_OwnedByteCode = IntPtr.Zero;
+            m_NativeShaderData = Array.Empty<byte>();
+            m_NativeShaderBytecode = default;
+        }
+
+        private Dx12FunctionLibrary? m_SourceLibrary;
+
+        internal void ThrowIfViewSourceUnavailable()
+        {
+            ThrowIfSourceUnavailable();
+            if (m_SourceLibrary != null && m_SourceLibrary.IsDisposed)
+            {
+                throw new ObjectDisposedException(
+                    m_SourceLibrary.GetType().FullName,
+                    "The function library that owns this view has been disposed.");
+            }
         }
 
         private static IntPtr CloneShaderByteCode(in IntPtr source, in uint byteSize, string context)
@@ -91,12 +117,66 @@ namespace SharpGPU
         private IntPtr m_OwnedByteCode;
 
         public Dx12FunctionLibrary(in RHIFunctionLibraryDescriptor descriptor)
+            : this(device: null, descriptor)
         {
+        }
+
+        public Dx12FunctionLibrary(Dx12Device? device, in RHIFunctionLibraryDescriptor descriptor)
+        {
+            m_Device = device;
+            if (device != null &&
+                !device.Capabilities.FunctionLibrary.SupportsPayloadKind(descriptor.PayloadKind))
+            {
+                throw new NotSupportedException(
+                    $"DX12 function libraries require Dxil payload, received {descriptor.PayloadKind}.");
+            }
+
             m_OwnedByteCode = CloneShaderByteCode(descriptor.ByteCode, descriptor.ByteSize, nameof(Dx12FunctionLibrary));
-            m_Descriptor = descriptor;
-            m_Descriptor.ByteCode = m_OwnedByteCode;
+            RHIFunctionLibraryDescriptor owned = descriptor;
+            owned.ByteCode = m_OwnedByteCode;
+            BindLibraryPayload(owned);
             m_NativeShaderData = CopyShaderByteCode(m_OwnedByteCode, descriptor.ByteSize, nameof(Dx12FunctionLibrary));
             m_NativeShaderBytecode = new Vortice.Direct3D12.ShaderBytecode(m_OwnedByteCode, checked((int)descriptor.ByteSize));
+        }
+
+        private readonly Dx12Device? m_Device;
+
+        internal void ThrowIfViewSourceUnavailable()
+        {
+            ThrowIfDisposed();
+        }
+
+        public override RHIFunction CreateFunction(in RHIFunctionViewDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            if (m_Device == null)
+            {
+                throw new InvalidOperationException(
+                    "Dx12FunctionLibrary views require a live Dx12Device.");
+            }
+
+            m_Device.Capabilities.FunctionLibrary.NativeLibrary.Require(
+                "FunctionLibrary.NativeLibrary");
+            ERHIFunctionLibraryReusablePipelineClass pipelineClass =
+                m_Device.Capabilities.FunctionLibrary.ClassifyFunctionType(descriptor.Type);
+            if (pipelineClass == ERHIFunctionLibraryReusablePipelineClass.Raster ||
+                pipelineClass == ERHIFunctionLibraryReusablePipelineClass.Compute)
+            {
+                m_Device.Capabilities.FunctionLibrary.RequireReusableClass(
+                    pipelineClass,
+                    "DX12 raster / compute function-library views");
+            }
+
+            if (pipelineClass == ERHIFunctionLibraryReusablePipelineClass.None)
+            {
+                throw new NotSupportedException(
+                    $"DX12 function-library views do not support stage {descriptor.Type}.");
+            }
+
+            m_Device.Capabilities.FunctionLibrary.RequireReusableClass(
+                pipelineClass,
+                $"DX12 function-library views for {pipelineClass}");
+            return new Dx12Function(this, descriptor);
         }
 
         protected override void Release()

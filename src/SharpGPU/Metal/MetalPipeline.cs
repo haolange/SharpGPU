@@ -479,6 +479,15 @@ namespace SharpGPU
                 device,
                 in m_Descriptor);
 
+            if (RHIRasterPipelineContract.RequestsMeshPath(in descriptor))
+            {
+                device.Capabilities.Mesh.MeshShader.Require("Metal mesh-shader pipelines");
+                if (descriptor.PrimitiveAssembler.MeshletAssembler is { TaskFunction: not null })
+                {
+                    device.Capabilities.Mesh.TaskShader.Require("Metal task-shader pipelines");
+                }
+            }
+
             MetalPipelineLayout pipelineLayout = descriptor.PipelineLayout as MetalPipelineLayout
                 ?? throw new ArgumentException("Metal raster pipeline requires a MetalPipelineLayout.", nameof(descriptor));
             RHIVertexAssemblerDescriptor vertexAssembler = descriptor.PrimitiveAssembler.VertexAssembler

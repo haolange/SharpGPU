@@ -123,6 +123,54 @@ namespace SharpGPU
             m_AllocationMode = ERHIResourceAllocationMode.External;
         }
 
+        internal static Dx12Texture CreateSamplerFeedbackMap(
+            Dx12Device device,
+            in RHITextureDescriptor descriptor,
+            Dx12Texture pairedTexture,
+            ERHISamplerFeedbackMode mode,
+            SharpGPU.Mathematics.uint3 mipRegion)
+        {
+            Vortice.Direct3D12.HeapProperties heapProperties = new(
+                Vortice.Direct3D12.HeapType.Default);
+            Vortice.Direct3D12.ResourceDescription1 textureDesc =
+                Vortice.Direct3D12.ResourceDescription1.Texture2D(
+                    Dx12Utility.ConvertToDx12Format(descriptor.Format),
+                    descriptor.Extent.x,
+                    descriptor.Extent.y,
+                    checked((ushort)descriptor.Extent.z),
+                    checked((ushort)descriptor.MipCount),
+                    sampleCount: 1,
+                    sampleQuality: 0,
+                    flags: Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess,
+                    samplerFeedbackMipRegionWidth: mipRegion.x,
+                    samplerFeedbackMipRegionHeight: mipRegion.y,
+                    samplerFeedbackMipRegionDepth: mipRegion.z);
+
+            Vortice.Direct3D12.ID3D12Resource nativeResource;
+            try
+            {
+                nativeResource =
+                    device.NativeDevice.CreateCommittedResource2<Vortice.Direct3D12.ID3D12Resource>(
+                        heapProperties,
+                        Vortice.Direct3D12.HeapFlags.None,
+                        textureDesc,
+                        Vortice.Direct3D12.ResourceStates.Common,
+                        protectedSession: null!);
+            }
+            catch (Exception exception)
+            {
+                SharpGen.Runtime.Result removedReason = device.NativeDevice.DeviceRemovedReason;
+                throw new InvalidOperationException(
+                    $"Failed to create DX12 sampler-feedback map (Device={device.Name}, Dimension={descriptor.Dimension}, Extent={descriptor.Extent}, Format={descriptor.Format}, Mode={mode}, MipRegion={mipRegion}, DeviceRemovedReason=0x{(int)removedReason:X8}).",
+                    exception);
+            }
+
+            Dx12Texture map = new(device, descriptor, nativeResource);
+            map.m_AllocationMode = ERHIResourceAllocationMode.Committed;
+            map.BindSamplerFeedbackPairing(pairedTexture, mode, mipRegion);
+            return map;
+        }
+
         public override RHITextureView CreateTextureView(in RHITextureViewDescriptor descriptor)
         {
             ThrowIfDisposed();

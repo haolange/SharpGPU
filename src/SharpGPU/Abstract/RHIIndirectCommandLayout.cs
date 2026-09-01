@@ -154,6 +154,11 @@ namespace SharpGPU
         }
     }
 
+    /// <summary>
+    /// Layout-driven indirect execution record. This is not a
+    /// device-generated command buffer: preprocess buffers, generated-count
+    /// lifecycle, and reusable DGC streams are out of scope.
+    /// </summary>
     public abstract class RHIIndirectCommandLayout : SharpGPU.Core.Disposal
     {
         private readonly RHIIndirectTokenDescriptor[] m_Tokens;

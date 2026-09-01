@@ -2203,6 +2203,30 @@ internal static unsafe class VulkanNative
                     formatProperties);
         }
 
+        public static void vkGetPhysicalDeviceFormatProperties2(
+            VkPhysicalDevice physicalDevice,
+            VkFormat format,
+            VkFormatProperties2* formatProperties)
+        {
+            GetInstanceApi(physicalDevice)
+                .vkGetPhysicalDeviceFormatProperties2(
+                    physicalDevice,
+                    format,
+                    formatProperties);
+        }
+
+        public static VkResult vkGetPhysicalDeviceImageFormatProperties2(
+            VkPhysicalDevice physicalDevice,
+            VkPhysicalDeviceImageFormatInfo2* imageFormatInfo,
+            VkImageFormatProperties2* imageFormatProperties)
+        {
+            return GetInstanceApi(physicalDevice)
+                .vkGetPhysicalDeviceImageFormatProperties2(
+                    physicalDevice,
+                    imageFormatInfo,
+                    imageFormatProperties);
+        }
+
         public static VkResult
             vkGetPhysicalDeviceImageFormatProperties(
                 VkPhysicalDevice physicalDevice,
@@ -2362,6 +2386,95 @@ internal static unsafe class VulkanNative
 
     }
     #endregion
+
+    internal enum VkTimeDomainKHR : int
+    {
+        Device = 0,
+        ClockMonotonic = 1,
+        ClockMonotonicRaw = 2,
+        QueryPerformanceCounter = 3
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct VkCalibratedTimestampInfoKHR
+    {
+        public VkStructureType sType;
+        public unsafe void* pNext;
+        public VkTimeDomainKHR timeDomain;
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    internal unsafe delegate VkResult PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR(
+        VkPhysicalDevice physicalDevice,
+        uint* timeDomainCount,
+        VkTimeDomainKHR* timeDomains);
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    internal unsafe delegate VkResult PFN_vkGetCalibratedTimestampsKHR(
+        VkDevice device,
+        uint timestampCount,
+        VkCalibratedTimestampInfoKHR* timestampInfos,
+        ulong* timestamps,
+        ulong* maxDeviation);
+
+    internal static unsafe class VulkanCalibratedTimestampNative
+    {
+        internal const string KhrExtensionName = "VK_KHR_calibrated_timestamps";
+        internal const string ExtExtensionName = "VK_EXT_calibrated_timestamps";
+        internal const VkStructureType CalibratedTimestampInfoStructureType =
+            (VkStructureType)1000184000;
+
+        internal static bool TryLoad(
+            VulkanInstance instance,
+            out PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR? getTimeDomains,
+            out PFN_vkGetCalibratedTimestampsKHR? getTimestamps,
+            out string extensionName,
+            out string getTimestampsFunctionName)
+        {
+            getTimeDomains = null;
+            getTimestamps = null;
+            extensionName = KhrExtensionName;
+            getTimestampsFunctionName = "vkGetCalibratedTimestampsKHR";
+
+            IntPtr domainsKhr = instance.TryGetInstanceProcedure(
+                "vkGetPhysicalDeviceCalibrateableTimeDomainsKHR");
+            IntPtr timestampsKhr = instance.TryGetInstanceProcedure(
+                "vkGetCalibratedTimestampsKHR");
+            if (domainsKhr != IntPtr.Zero && timestampsKhr != IntPtr.Zero)
+            {
+                getTimeDomains =
+                    Marshal.GetDelegateForFunctionPointer<
+                        PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR>(
+                        domainsKhr);
+                getTimestamps =
+                    Marshal.GetDelegateForFunctionPointer<
+                        PFN_vkGetCalibratedTimestampsKHR>(
+                        timestampsKhr);
+                return true;
+            }
+
+            IntPtr domainsExt = instance.TryGetInstanceProcedure(
+                "vkGetPhysicalDeviceCalibrateableTimeDomainsEXT");
+            IntPtr timestampsExt = instance.TryGetInstanceProcedure(
+                "vkGetCalibratedTimestampsEXT");
+            if (domainsExt != IntPtr.Zero && timestampsExt != IntPtr.Zero)
+            {
+                extensionName = ExtExtensionName;
+                getTimestampsFunctionName = "vkGetCalibratedTimestampsEXT";
+                getTimeDomains =
+                    Marshal.GetDelegateForFunctionPointer<
+                        PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR>(
+                        domainsExt);
+                getTimestamps =
+                    Marshal.GetDelegateForFunctionPointer<
+                        PFN_vkGetCalibratedTimestampsKHR>(
+                        timestampsExt);
+                return true;
+            }
+
+            return false;
+        }
+    }
 
 #pragma warning restore CA1416
 }

@@ -8,18 +8,28 @@ namespace SharpGPU.Conformance.Tests;
 public sealed class VulkanCapabilityFailClosedContractTests
 {
     [Fact]
-    public void MeshShader_PublicCapability_IsUnavailableUntilFactoryLoweringExists()
+    public void MeshShader_PublicCapability_ReportsNativeProbeWhenExtensionMissing()
     {
-        RHICapability mesh = VulkanMeshCapabilityFactory.CreatePublicShaderCapability();
+        RHICapability mesh = VulkanMeshCapabilityFactory.CreatePublicMeshShaderCapability(false);
         Assert.Equal(ERHICapabilityTier.Unavailable, mesh.Tier);
         Assert.Equal(ERHICapabilityStrategy.Unavailable, mesh.Strategy);
-        Assert.Equal(ERHICapabilityProbeKind.BackendContract, mesh.Provenance.Kind);
+        Assert.Equal(ERHICapabilityProbeKind.NativeExtensionQuery, mesh.Provenance.Kind);
         Assert.Equal(VulkanMeshCapabilityFactory.ProbeSource, mesh.Provenance.Source);
         Assert.Equal(VulkanMeshCapabilityFactory.UnavailableReason, mesh.UnavailableReason);
         Assert.DoesNotContain(
-            "feature and extension set plus SharpGPU factory",
-            mesh.Provenance.Source,
+            "factory lowering is not implemented",
+            mesh.UnavailableReason,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MeshShader_PublicCapability_IsAvailableWhenExtensionAndFactoryExist()
+    {
+        RHICapability mesh = VulkanMeshCapabilityFactory.CreatePublicMeshShaderCapability(true);
+        Assert.Equal(ERHICapabilityTier.Tier1, mesh.Tier);
+        Assert.Equal(ERHICapabilityStrategy.NativeExtension, mesh.Strategy);
+        Assert.Equal(VulkanMeshCapabilityFactory.ProbeSource, mesh.Provenance.Source);
+        Assert.True(string.IsNullOrEmpty(mesh.UnavailableReason));
     }
 
     [Fact]
@@ -27,8 +37,11 @@ public sealed class VulkanCapabilityFailClosedContractTests
     {
         RHIRasterPipelineDescriptor descriptor = default;
         Assert.False(VulkanMeshCapabilityFactory.RequestsMeshPath(in descriptor));
-        RHICapability unavailable = VulkanMeshCapabilityFactory.CreatePublicShaderCapability();
-        VulkanMeshCapabilityFactory.RequireMeshRasterPipeline(in descriptor, unavailable);
+        RHICapability unavailable = VulkanMeshCapabilityFactory.CreatePublicMeshShaderCapability(false);
+        VulkanMeshCapabilityFactory.RequireMeshRasterPipeline(
+            in descriptor,
+            unavailable,
+            unavailable);
     }
 
     [Fact]
@@ -42,10 +55,11 @@ public sealed class VulkanCapabilityFailClosedContractTests
             },
         };
         Assert.True(VulkanMeshCapabilityFactory.RequestsMeshPath(in descriptor));
-        RHICapability unavailable = VulkanMeshCapabilityFactory.CreatePublicShaderCapability();
+        RHICapability unavailable = VulkanMeshCapabilityFactory.CreatePublicMeshShaderCapability(false);
         NotSupportedException exception = Assert.Throws<NotSupportedException>(
             () => VulkanMeshCapabilityFactory.RequireMeshRasterPipeline(
                 in descriptor,
+                unavailable,
                 unavailable));
         Assert.Contains(
             VulkanMeshCapabilityFactory.UnavailableReason,
@@ -56,7 +70,7 @@ public sealed class VulkanCapabilityFailClosedContractTests
     [Fact]
     public void DispatchMesh_UnavailableCapability_FailClosedBeforeNativeCall()
     {
-        RHICapability unavailable = VulkanMeshCapabilityFactory.CreatePublicShaderCapability();
+        RHICapability unavailable = VulkanMeshCapabilityFactory.CreatePublicMeshShaderCapability(false);
         NotSupportedException exception = Assert.Throws<NotSupportedException>(
             () => VulkanMeshCommandPolicy.RequireDispatch(unavailable));
         Assert.Contains(
@@ -161,6 +175,8 @@ public sealed class VulkanCapabilityFailClosedContractTests
             ERHICapabilityProbeKind.BackendContract,
             "portable Vulkan query factory");
         return new RHISynchronizationCapabilities(
+            unavailable,
+            unavailable,
             unavailable,
             unavailable,
             unavailable,

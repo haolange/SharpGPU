@@ -170,6 +170,42 @@ namespace SharpGPU
             }
         }
 
+        public override void CancelRequestsWithTag(ulong mask, ulong value)
+        {
+            ThrowIfDisposed();
+            _ = mask;
+            _ = value;
+            throw new NotSupportedException(
+                "MTLIOCommandBuffer.tryCancel cancels the command buffer; it has no CancellationTag mask/value formula.");
+        }
+
+        public override void CancelPending()
+        {
+            ThrowIfDisposed();
+            m_MetalDevice.Capabilities.Storage.RequestCancellation.Require(
+                "Metal IO request cancellation");
+            try
+            {
+                if (m_CurrentCommandBuffer.NativePtr != IntPtr.Zero)
+                {
+                    m_CurrentCommandBuffer.TryCancel();
+                    return;
+                }
+
+                if (m_LastSubmittedCommandBuffer.NativePtr != IntPtr.Zero)
+                {
+                    m_LastSubmittedCommandBuffer.TryCancel();
+                }
+            }
+            catch (Exception exception)
+            {
+                throw WrapNativeFailure(
+                    ERHIErrorCode.NativeFailure,
+                    exception,
+                    "Metal IO failed to cancel the native command buffer.");
+            }
+        }
+
         public override void ThrowIfSubmissionFailed()
         {
             ThrowIfDisposed();
@@ -228,6 +264,55 @@ namespace SharpGPU
                 ObjectiveCRuntime.Release(m_NativeQueue);
                 m_NativeQueue = default;
             }
+        }
+
+        internal const ulong ConfiguredMaxCommandsInFlight = 256;
+
+        internal static RHIStorageCapabilities CreateCapabilities(MetalDevice device)
+        {
+            ArgumentNullException.ThrowIfNull(device);
+
+            bool nativeAvailable = TryProbeNativeSupport(device, out string nativeReason);
+            RHICapabilityLimits nativeIoLimits = nativeAvailable
+                ? new RHICapabilityLimits(
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.MaximumStorageRequestBytes,
+                        uint.MaxValue),
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.MaximumStorageConcurrentRequests,
+                        ConfiguredMaxCommandsInFlight))
+                : RHICapabilityLimits.Empty;
+
+            string requiresQueue =
+                "A native MTLIOCommandQueue is required. " + nativeReason;
+            return new RHIStorageCapabilities(
+                nativeGpuFileIo: RHICapability.FromProbe(
+                    nativeAvailable,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeSpecialized,
+                    ERHICapabilityProbeKind.RuntimeObjectProbe,
+                    "MTLIOCommandQueue + MTLIOFileHandle runtime probe",
+                    nativeReason,
+                    nativeIoLimits),
+                gpuDecompression: RHICapability.Unavailable(
+                    "MTLIO loadBuffer/loadTexture do not accept a compression format; " +
+                    "compressed file handles cannot be enqueued as a request.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    "MTLIO load request compression contract"),
+                requestCancellation: RHICapability.FromProbe(
+                    nativeAvailable,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeSpecialized,
+                    ERHICapabilityProbeKind.RuntimeObjectProbe,
+                    "MTLIOCommandBuffer.tryCancel",
+                    requiresQueue),
+                ioPriority: RHICapability.FromProbe(
+                    nativeAvailable,
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeSpecialized,
+                    ERHICapabilityProbeKind.RuntimeObjectProbe,
+                    "MTLIOCommandQueueDescriptor.priority",
+                    requiresQueue));
         }
 
         internal static bool TryProbeNativeSupport(MetalDevice device, out string reason)
@@ -340,7 +425,7 @@ namespace SharpGPU
             descriptor = MTLIOCommandQueueDescriptor.New();
             descriptor.Type = MTLIOCommandQueueType.Serial;
             descriptor.Priority = MTLIOPriority.Normal;
-            descriptor.MaxCommandsInFlight = 256;
+            descriptor.MaxCommandsInFlight = ConfiguredMaxCommandsInFlight;
             descriptor.MaxCommandBufferCount = 64;
 
             NSError error = default;
@@ -409,6 +494,10 @@ namespace SharpGPU
                     "The destination range exceeds the buffer size.");
             }
 
+            RejectUnsupportedRequestOptions(
+                request.CompressionFormat,
+                request.CancellationTag,
+                nameof(request));
             ValidateSourceRange(in request.FileHandle, request.FileOffset, request.FileSize, nameof(request));
 
             MTLIOCommandBuffer commandBuffer = EnsureCommandBuffer();
@@ -511,6 +600,10 @@ namespace SharpGPU
                     "The array slice is outside the destination texture.");
             }
 
+            RejectUnsupportedRequestOptions(
+                request.CompressionFormat,
+                request.CancellationTag,
+                nameof(request));
             ValidateSourceRange(in request.FileHandle, request.FileOffset, request.FileSize, nameof(request));
 
             uint mipLevel = request.MipLevel;
@@ -602,6 +695,27 @@ namespace SharpGPU
             }
 
             return storageFile;
+        }
+
+        private void RejectUnsupportedRequestOptions(
+            ERHIStorageCompressionFormat compressionFormat,
+            ulong cancellationTag,
+            string parameterName)
+        {
+            if (compressionFormat != ERHIStorageCompressionFormat.None)
+            {
+                m_MetalDevice.Capabilities.Storage.GpuDecompression.Require(
+                    "Metal IO GPU decompression");
+                throw new NotSupportedException(
+                    "MTLIO loadBuffer/loadTexture cannot enqueue a compression format.");
+            }
+
+            if (cancellationTag != 0)
+            {
+                throw new ArgumentException(
+                    "MTLIO requests have no CancellationTag.",
+                    parameterName);
+            }
         }
 
         private static uint ValidateFileSize(ulong fileSize, string parameterName)

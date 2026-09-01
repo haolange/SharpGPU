@@ -66,6 +66,42 @@ namespace SharpGPU
         Pending
     }
 
+    /// <summary>
+    /// Element types reported by a native cooperative-matrix configuration query.
+    /// This is wider than <see cref="ERHIMLDataType"/> so Vulkan component
+    /// types are not silently narrowed.
+    /// </summary>
+    public enum ERHICooperativeMatrixElementType : byte
+    {
+        Float16,
+        Float32,
+        Float64,
+        SInt8,
+        SInt16,
+        SInt32,
+        SInt64,
+        UInt8,
+        UInt16,
+        UInt32,
+        UInt64,
+        BFloat16,
+        Float8E4M3,
+        Float8E5M2,
+        Unknown
+    }
+
+    /// <summary>
+    /// Native cooperative-matrix scope. This is not a shader-stage mask.
+    /// </summary>
+    public enum ERHICooperativeMatrixScope : byte
+    {
+        Subgroup,
+        Workgroup,
+        Device,
+        QueueFamily,
+        Unknown
+    }
+
     public enum ERHIDeviceType : byte
     {
         Hardware,
@@ -232,6 +268,11 @@ namespace SharpGPU
         RGBA_ASTC12X12_UFloat,
         // YUV 4:2:2 Video resource format.
         YUV2,
+        // DX12-only opaque sampler-feedback formats. Not framebuffer-local
+        // read and not an attachment feedback loop. Create these only through
+        // RHIDevice.CreateSamplerFeedbackMap so pairing is established then.
+        SamplerFeedbackMinMipOpaque,
+        SamplerFeedbackMipRegionUsedOpaque,
         Pending
     }
 

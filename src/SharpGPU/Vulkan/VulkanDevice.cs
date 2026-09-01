@@ -89,6 +89,9 @@ namespace SharpGPU
         internal bool SupportsSparseQueueFamily(uint queueFamilyIndex) =>
             m_SparseBindingSupported &&
             m_SparseQueueFamilies.Contains(queueFamilyIndex);
+        internal RHIAdapterIdentity AdapterIdentity => m_AdapterIdentity;
+        internal bool ExternalFence64Supported => m_ExternalFence64Supported;
+        internal bool ExternalMemoryWin32Supported => m_ExternalMemoryWin32Supported;
 
         private VulkanInstance m_VulkanInstance;
         private VkDevice m_NativeDevice;
@@ -104,10 +107,17 @@ namespace SharpGPU
         private int m_TransferQueueFamilyIndex = -1;
 
         private bool m_RaytracingSupported;
+        private bool m_ExternalFence64Supported;
+        private bool m_ExternalMemoryWin32Supported;
+        private RHIAdapterIdentity m_AdapterIdentity;
         private bool m_RaytracingInlineSupported;
-#pragma warning disable CS0414 // Hardware mesh probe is retained for the P2 pipeline factory.
+        private bool m_OpacityMicromapExtensionListed;
+        private bool m_NvInvocationReorderExtensionListed;
+        private bool m_ExtInvocationReorderExtensionListed;
+        private bool m_NvMotionBlurExtensionListed;
         private bool m_MeshShadingSupported;
-#pragma warning restore CS0414
+        private bool m_TaskShadingSupported;
+        private RHICapabilityLimits m_MeshShaderLimits;
         private bool m_FragmentShadingRateExtensionPresent;
         private bool m_VariableRateShadingPerDrawSupported;
         private bool m_VariableRateShadingPerPrimitiveSupported;
@@ -145,9 +155,32 @@ namespace SharpGPU
         private bool m_IndependentResolveNone;
         private bool m_IndependentResolve;        private bool m_SparseResidencyImage2DSupported;
         private bool m_SparseResidencyImage3DSupported;
+        private bool m_SparseResidencyMsaaSupported;
+        private bool m_SparseResidencyAliasedSupported;
+        private bool m_SparseTileGeometrySupported;
+        private bool m_SparseMipTailSupported;
+        private bool m_CalibratedTimestampsSupported;
+        private string m_CalibratedTimestampsUnavailableReason =
+            "VK_KHR_calibrated_timestamps is not supported by this physical device.";
+        private string m_CalibratedTimestampsExtensionName =
+            VulkanCalibratedTimestampNative.KhrExtensionName;
+        private PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR? m_GetCalibrateableTimeDomains;
+        private PFN_vkGetCalibratedTimestampsKHR? m_GetCalibratedTimestamps;
+        private VkTimeDomainKHR m_CpuTimeDomain = VkTimeDomainKHR.Device;
+        private ERHITimeDomain m_CpuRhiTimeDomain = ERHITimeDomain.Device;
+        private ulong m_GpuTimestampFrequency;
+        private ulong m_CalibratedTimestampMaxDeviation;
+        private string m_CalibratedTimestampsGetFunctionName =
+            "vkGetCalibratedTimestampsKHR";
         private bool m_MemoryBudgetSupported;
         private bool m_SwapchainSupported;
         private bool m_SwapchainMaintenanceSupported;
+        private VulkanWaveProbe m_WaveProbe =
+            VulkanWaveProbe.Unavailable(
+                "Vulkan wave / cooperative-matrix probe has not run.",
+                "SharpGPU Vulkan factory surface");
+        private RHICooperativeMatrixConfig[] m_CooperativeMatrixConfigs =
+            Array.Empty<RHICooperativeMatrixConfig>();
 
         public VulkanDevice(VulkanInstance instance, VkPhysicalDevice physicalDevice, in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
         {
@@ -195,6 +228,8 @@ namespace SharpGPU
             VulkanNative.vkGetPhysicalDeviceFeatures(m_PhysicalDevice, &features);
 
             VkPhysicalDeviceLimits limits = properties.limits;
+            m_WaveProbe = VulkanWaveAndCooperativeMatrixNative.QuerySubgroupSizes(
+                m_PhysicalDevice);
 
             m_Limit = new RHIDeviceLimit(
                 uniformBufferAlignment: (int)limits.minUniformBufferOffsetAlignment,
@@ -203,8 +238,8 @@ namespace SharpGPU
                 uploadBufferTextureRowAlignment: 256,
                 maxMSAACount: 8,
                 maxBoundTexture: (int)limits.maxDescriptorSetSampledImages,
-                minWavefrontSize: (int)limits.minStorageBufferOffsetAlignment > 0 ? 32 : 32,
-                maxWavefrontSize: 64,
+                minWavefrontSize: m_WaveProbe.MinWavefrontSize,
+                maxWavefrontSize: m_WaveProbe.MaxWavefrontSize,
                 maxComputeThreads: (int)limits.maxComputeWorkGroupInvocations,
                 maxGroupShareMemorySize: (int)limits.maxComputeSharedMemorySize,
                 maxVertexInputBindings: (int)limits.maxVertexInputBindings,
@@ -390,8 +425,20 @@ namespace SharpGPU
             bool hasRTPipeline = availableExtNames.Contains("VK_KHR_ray_tracing_pipeline");
             bool hasDeferredOps = availableExtNames.Contains("VK_KHR_deferred_host_operations");
             bool hasRTQuery = availableExtNames.Contains("VK_KHR_ray_query");
+            bool hasOpacityMicromap = availableExtNames.Contains("VK_EXT_opacity_micromap");
+            bool hasNvInvocationReorder = availableExtNames.Contains(
+                "VK_NV_ray_tracing_invocation_reorder");
+            bool hasExtInvocationReorder = availableExtNames.Contains(
+                "VK_EXT_ray_tracing_invocation_reorder");
+            bool hasNvMotionBlur = availableExtNames.Contains("VK_NV_ray_tracing_motion_blur");
             bool hasMeshShader = availableExtNames.Contains("VK_EXT_mesh_shader");
             bool hasFragmentShadingRate = availableExtNames.Contains("VK_KHR_fragment_shading_rate");
+            bool hasCalibratedTimestampsKhr = availableExtNames.Contains(
+                VulkanCalibratedTimestampNative.KhrExtensionName);
+            bool hasCalibratedTimestampsExt = availableExtNames.Contains(
+                VulkanCalibratedTimestampNative.ExtExtensionName);
+            bool hasCalibratedTimestamps =
+                hasCalibratedTimestampsKhr || hasCalibratedTimestampsExt;
             bool hasSynchronization2Extension = availableExtNames.Contains("VK_KHR_synchronization2");
             bool hasCreateRenderPass2Extension =
                 availableExtNames.Contains("VK_KHR_create_renderpass2");
@@ -408,6 +455,17 @@ namespace SharpGPU
                     "VK_EXT_rasterization_order_attachment_access");
             bool hasMemoryBudgetExtension =
                 availableExtNames.Contains(VulkanMemoryBudgetUtility.ExtensionName);
+            bool hasSubgroupSizeControlExtension = availableExtNames.Contains(
+                VulkanWaveAndCooperativeMatrixNative.SubgroupSizeControlExtensionName);
+            bool hasCooperativeMatrixExtension = availableExtNames.Contains(
+                VulkanWaveAndCooperativeMatrixNative.CooperativeMatrixExtensionName);
+            bool hasExternalSemaphore = availableExtNames.Contains("VK_KHR_external_semaphore");
+            bool hasExternalSemaphoreWin32 = availableExtNames.Contains("VK_KHR_external_semaphore_win32");
+            bool enableExternalSemaphoreWin32 =
+                OperatingSystem.IsWindows() &&
+                hasExternalSemaphore &&
+                hasExternalSemaphoreWin32;
+            bool enableExternalMemoryWin32 = false;
             string? swapchainMaintenanceExtension =
                 availableExtNames.Contains("VK_KHR_swapchain_maintenance1")
                     ? "VK_KHR_swapchain_maintenance1"
@@ -571,6 +629,14 @@ namespace SharpGPU
             {
                 sType = VkStructureType.PhysicalDeviceSwapchainMaintenance1FeaturesKHR,
             };
+            VkPhysicalDeviceSubgroupSizeControlFeatures subgroupSizeControlFeaturesQuery = new()
+            {
+                sType = VkStructureType.PhysicalDeviceSubgroupSizeControlFeatures,
+            };
+            VkPhysicalDeviceCooperativeMatrixFeaturesKHR cooperativeMatrixFeaturesQuery = new()
+            {
+                sType = VkStructureType.PhysicalDeviceCooperativeMatrixFeaturesKHR,
+            };
 
             void* featureQueryChain = null;
             if (hasRTQuery)
@@ -655,6 +721,17 @@ namespace SharpGPU
             {
                 swapchainMaintenanceFeaturesQuery.pNext = featureQueryChain;
                 featureQueryChain = &swapchainMaintenanceFeaturesQuery;
+            }
+            if (!featureChainPlan.UseVulkan13Features &&
+                hasSubgroupSizeControlExtension)
+            {
+                subgroupSizeControlFeaturesQuery.pNext = featureQueryChain;
+                featureQueryChain = &subgroupSizeControlFeaturesQuery;
+            }
+            if (hasCooperativeMatrixExtension)
+            {
+                cooperativeMatrixFeaturesQuery.pNext = featureQueryChain;
+                featureQueryChain = &cooperativeMatrixFeaturesQuery;
             }
             VkPhysicalDeviceFeatures2 features2Query = new VkPhysicalDeviceFeatures2()
             {
@@ -764,6 +841,19 @@ namespace SharpGPU
             bool rtInlineSupported = rtSupported && rtQueryFeatureSupported;
             bool meshSupported = hasMeshShader && meshShaderFeatureSupported;
             bool vrsSupported = hasFragmentShadingRate && fragmentShadingRateFeatureSupported;
+            bool subgroupSizeControlUsesVulkan13Core =
+                featureChainPlan.UseVulkan13Features &&
+                vulkan13FeaturesQuery.subgroupSizeControl;
+            bool subgroupSizeControlUsesExtension =
+                !featureChainPlan.UseVulkan13Features &&
+                hasSubgroupSizeControlExtension &&
+                subgroupSizeControlFeaturesQuery.subgroupSizeControl;
+            bool subgroupSizeControlSupported =
+                subgroupSizeControlUsesVulkan13Core ||
+                subgroupSizeControlUsesExtension;
+            bool cooperativeMatrixSupported =
+                hasCooperativeMatrixExtension &&
+                cooperativeMatrixFeaturesQuery.cooperativeMatrix;
 
             if (useDescriptorIndexingExtension)
             {
@@ -827,6 +917,14 @@ namespace SharpGPU
                 deviceExtensions.Add("VK_KHR_fragment_shading_rate");
             }
 
+            if (hasCalibratedTimestamps)
+            {
+                deviceExtensions.Add(
+                    hasCalibratedTimestampsKhr
+                        ? VulkanCalibratedTimestampNative.KhrExtensionName
+                        : VulkanCalibratedTimestampNative.ExtExtensionName);
+            }
+
             if (hasMemoryBudgetExtension)
             {
                 deviceExtensions.Add(VulkanMemoryBudgetUtility.ExtensionName);
@@ -835,6 +933,32 @@ namespace SharpGPU
             {
                 deviceExtensions.Add(swapchainMaintenanceExtension!);
             }
+            if (subgroupSizeControlUsesExtension)
+            {
+                deviceExtensions.Add(
+                    VulkanWaveAndCooperativeMatrixNative.SubgroupSizeControlExtensionName);
+            }
+            if (cooperativeMatrixSupported)
+            {
+                deviceExtensions.Add(
+                    VulkanWaveAndCooperativeMatrixNative.CooperativeMatrixExtensionName);
+            }
+            if (enableExternalSemaphoreWin32)
+            {
+                deviceExtensions.Add("VK_KHR_external_semaphore");
+                deviceExtensions.Add("VK_KHR_external_semaphore_win32");
+            }
+            if (enableExternalMemoryWin32)
+            {
+                deviceExtensions.Add("VK_KHR_external_memory");
+                deviceExtensions.Add("VK_KHR_external_memory_win32");
+            }
+
+            m_ExternalFence64Supported =
+                enableExternalSemaphoreWin32 &&
+                vulkan12FeaturesQuery.timelineSemaphore;
+            m_ExternalMemoryWin32Supported = enableExternalMemoryWin32;
+            m_AdapterIdentity = QueryAdapterIdentity(m_PhysicalDevice);
 
             IntPtr* extensionPtrs = stackalloc IntPtr[deviceExtensions.Count];
             for (int i = 0; i < deviceExtensions.Count; ++i)
@@ -858,6 +982,21 @@ namespace SharpGPU
             enabledFeatures.sparseResidencyImage3D =
                 sparseBindingSupported &&
                 supportedCoreFeatures.sparseResidencyImage3D;
+            enabledFeatures.sparseResidency2Samples =
+                sparseBindingSupported &&
+                supportedCoreFeatures.sparseResidency2Samples;
+            enabledFeatures.sparseResidency4Samples =
+                sparseBindingSupported &&
+                supportedCoreFeatures.sparseResidency4Samples;
+            enabledFeatures.sparseResidency8Samples =
+                sparseBindingSupported &&
+                supportedCoreFeatures.sparseResidency8Samples;
+            enabledFeatures.sparseResidency16Samples =
+                sparseBindingSupported &&
+                supportedCoreFeatures.sparseResidency16Samples;
+            enabledFeatures.sparseResidencyAliased =
+                sparseBindingSupported &&
+                supportedCoreFeatures.sparseResidencyAliased;
 
             VkPhysicalDeviceVulkan14Features vulkan14Features =
                 new()
@@ -873,6 +1012,9 @@ namespace SharpGPU
                 sType = VkStructureType.PhysicalDeviceVulkan13Features,
                 dynamicRendering = dynamicRenderingFeatureSupported,
                 synchronization2 = featureChainPlan.UseVulkan13Features && useSynchronization2,
+                subgroupSizeControl = subgroupSizeControlUsesVulkan13Core,
+                computeFullSubgroups = subgroupSizeControlUsesVulkan13Core &&
+                    vulkan13FeaturesQuery.computeFullSubgroups,
             };
             VkPhysicalDeviceVulkan12Features vulkan12Features = new VkPhysicalDeviceVulkan12Features()
             {
@@ -1038,6 +1180,28 @@ namespace SharpGPU
                 pNextChain = &vrsFeatures;
             }
 
+            VkPhysicalDeviceSubgroupSizeControlFeatures subgroupSizeControlFeatures = default;
+            if (subgroupSizeControlUsesExtension)
+            {
+                subgroupSizeControlFeatures.sType =
+                    VkStructureType.PhysicalDeviceSubgroupSizeControlFeatures;
+                subgroupSizeControlFeatures.subgroupSizeControl = true;
+                subgroupSizeControlFeatures.computeFullSubgroups =
+                    subgroupSizeControlFeaturesQuery.computeFullSubgroups;
+                subgroupSizeControlFeatures.pNext = pNextChain;
+                pNextChain = &subgroupSizeControlFeatures;
+            }
+
+            VkPhysicalDeviceCooperativeMatrixFeaturesKHR cooperativeMatrixFeatures = default;
+            if (cooperativeMatrixSupported)
+            {
+                cooperativeMatrixFeatures.sType =
+                    VkStructureType.PhysicalDeviceCooperativeMatrixFeaturesKHR;
+                cooperativeMatrixFeatures.cooperativeMatrix = true;
+                cooperativeMatrixFeatures.pNext = pNextChain;
+                pNextChain = &cooperativeMatrixFeatures;
+            }
+
             VkDeviceCreateInfo deviceCreateInfo = new VkDeviceCreateInfo()
             {
                 sType = VkStructureType.DeviceCreateInfo,
@@ -1069,7 +1233,43 @@ namespace SharpGPU
 
             m_RaytracingSupported = rtSupported;
             m_RaytracingInlineSupported = rtInlineSupported;
+            m_OpacityMicromapExtensionListed = hasOpacityMicromap;
+            m_NvInvocationReorderExtensionListed = hasNvInvocationReorder;
+            m_ExtInvocationReorderExtensionListed = hasExtInvocationReorder;
+            m_NvMotionBlurExtensionListed = hasNvMotionBlur;
             m_MeshShadingSupported = meshSupported;
+            m_TaskShadingSupported = taskShaderFeatureSupported;
+            m_MeshShaderLimits = QueryMeshShaderLimits(hasMeshShader);
+            string cooperativeMatrixUnavailableReason = !hasCooperativeMatrixExtension
+                ? "VK_KHR_cooperative_matrix is not listed."
+                : cooperativeMatrixSupported
+                    ? string.Empty
+                    : "VK_KHR_cooperative_matrix is listed but VkPhysicalDeviceCooperativeMatrixFeaturesKHR.cooperativeMatrix is false.";
+            m_WaveProbe = VulkanWaveAndCooperativeMatrixNative.Refine(
+                m_WaveProbe,
+                m_PhysicalDevice,
+                m_VulkanInstance,
+                subgroupSizeControlSupported,
+                subgroupSizeControlUsesVulkan13Core,
+                cooperativeMatrixSupported,
+                cooperativeMatrixUnavailableReason);
+
+            m_CooperativeMatrixConfigs = m_WaveProbe.Configs;
+            m_Limit = new RHIDeviceLimit(
+                m_Limit.UniformBufferAlignment,
+                m_Limit.UploadBufferAlignment,
+                m_Limit.UploadBufferTextureAlignment,
+                m_Limit.UploadBufferTextureRowAlignment,
+                m_Limit.MaxMSAACount,
+                m_Limit.MaxBoundTexture,
+                m_WaveProbe.MinWavefrontSize,
+                m_WaveProbe.MaxWavefrontSize,
+                m_Limit.MaxComputeThreads,
+                m_Limit.MaxGroupShareMemorySize,
+                m_Limit.MaxVertexInputBindings,
+                m_Limit.MaxColorAttachments,
+                m_Limit.MaxTexture2DSize,
+                m_Limit.MaxTextureCubeSize);
             m_FragmentShadingRateExtensionPresent = hasFragmentShadingRate;
             m_VariableRateShadingPerDrawSupported = fragmentShadingRatePerDrawSupported;
             m_VariableRateShadingPerPrimitiveSupported = fragmentShadingRatePerPrimitiveSupported;
@@ -1156,10 +1356,20 @@ namespace SharpGPU
                 enabledFeatures.sparseResidencyImage2D;
             m_SparseResidencyImage3DSupported =
                 enabledFeatures.sparseResidencyImage3D;
+            m_SparseResidencyMsaaSupported =
+                sparseBindingSupported &&
+                (enabledFeatures.sparseResidency2Samples ||
+                 enabledFeatures.sparseResidency4Samples ||
+                 enabledFeatures.sparseResidency8Samples ||
+                 enabledFeatures.sparseResidency16Samples);
+            m_SparseResidencyAliasedSupported =
+                enabledFeatures.sparseResidencyAliased;
             m_SparseBindingSupported =
                 sparseBindingSupported &&
                 (m_SparseResidencyImage2DSupported ||
                  m_SparseResidencyImage3DSupported);
+            ProbeVulkanSparseProperties();
+            ProbeVulkanCalibratedTimestamps(hasCalibratedTimestamps);
             m_DescriptorFeatures = new VulkanDescriptorFeatures(
                 descriptorIndexingFeatureSupported,
                 nullDescriptor: false,
@@ -1171,6 +1381,147 @@ namespace SharpGPU
 
             // Create command queues
             CreateCommandQueues(actualComputeQueueCount, actualTransferQueueCount, actualGraphicsQueueCount);
+        }
+
+        private void ProbeVulkanSparseProperties()
+        {
+            VkPhysicalDeviceProperties properties;
+            VulkanNative.vkGetPhysicalDeviceProperties(m_PhysicalDevice, &properties);
+            VkPhysicalDeviceSparseProperties sparse = properties.sparseProperties;
+            m_SparseTileGeometrySupported =
+                m_SparseBindingSupported &&
+                (sparse.residencyStandard2DBlockShape ||
+                 sparse.residencyStandard3DBlockShape);
+            m_SparseMipTailSupported =
+                m_SparseBindingSupported &&
+                !sparse.residencyAlignedMipSize;
+            double timestampPeriod = properties.limits.timestampPeriod;
+            m_GpuTimestampFrequency = timestampPeriod > 0.0
+                ? (ulong)System.Math.Round(1_000_000_000.0 / timestampPeriod)
+                : 0;
+        }
+
+        private void ProbeVulkanCalibratedTimestamps(bool extensionPresent)
+        {
+            if (!extensionPresent)
+            {
+                m_CalibratedTimestampsSupported = false;
+                m_CalibratedTimestampsUnavailableReason =
+                    "VK_KHR_calibrated_timestamps is not supported by this physical device.";
+                return;
+            }
+
+            if (!VulkanCalibratedTimestampNative.TryLoad(
+                    m_VulkanInstance,
+                    out m_GetCalibrateableTimeDomains,
+                    out m_GetCalibratedTimestamps,
+                    out m_CalibratedTimestampsExtensionName,
+                    out m_CalibratedTimestampsGetFunctionName))
+            {
+                m_CalibratedTimestampsSupported = false;
+                m_CalibratedTimestampsUnavailableReason =
+                    "vkGetPhysicalDeviceCalibrateableTimeDomainsKHR/EXT and vkGetCalibratedTimestampsKHR/EXT are unavailable.";
+                return;
+            }
+
+            uint domainCount = 0;
+            VkResult countResult = m_GetCalibrateableTimeDomains!(
+                m_PhysicalDevice,
+                &domainCount,
+                null);
+            if (countResult != VkResult.Success || domainCount == 0)
+            {
+                m_CalibratedTimestampsSupported = false;
+                m_CalibratedTimestampsUnavailableReason =
+                    $"vkGetPhysicalDeviceCalibrateableTimeDomainsKHR failed: {countResult}.";
+                return;
+            }
+
+            VkTimeDomainKHR* domains = stackalloc VkTimeDomainKHR[(int)domainCount];
+            VkResult fetchResult = m_GetCalibrateableTimeDomains(
+                m_PhysicalDevice,
+                &domainCount,
+                domains);
+            if (fetchResult != VkResult.Success)
+            {
+                m_CalibratedTimestampsSupported = false;
+                m_CalibratedTimestampsUnavailableReason =
+                    $"vkGetPhysicalDeviceCalibrateableTimeDomainsKHR failed: {fetchResult}.";
+                return;
+            }
+
+            bool hasDevice = false;
+            bool hasQpc = false;
+            bool hasMonotonic = false;
+            for (uint i = 0; i < domainCount; ++i)
+            {
+                hasDevice |= domains[i] == VkTimeDomainKHR.Device;
+                hasQpc |= domains[i] == VkTimeDomainKHR.QueryPerformanceCounter;
+                hasMonotonic |= domains[i] == VkTimeDomainKHR.ClockMonotonic;
+            }
+
+            if (!hasDevice)
+            {
+                m_CalibratedTimestampsSupported = false;
+                m_CalibratedTimestampsUnavailableReason =
+                    "VK_TIME_DOMAIN_DEVICE_KHR is not calibrateable on this device.";
+                return;
+            }
+
+            if (OperatingSystem.IsWindows() && hasQpc)
+            {
+                m_CpuTimeDomain = VkTimeDomainKHR.QueryPerformanceCounter;
+                m_CpuRhiTimeDomain = ERHITimeDomain.QueryPerformanceCounter;
+            }
+            else if (hasMonotonic)
+            {
+                m_CpuTimeDomain = VkTimeDomainKHR.ClockMonotonic;
+                m_CpuRhiTimeDomain = ERHITimeDomain.ClockMonotonic;
+            }
+            else
+            {
+                m_CalibratedTimestampsSupported = false;
+                m_CalibratedTimestampsUnavailableReason =
+                    "No CPU time domain (QPC or CLOCK_MONOTONIC) is calibrateable with DEVICE.";
+                return;
+            }
+
+            if (m_GpuTimestampFrequency == 0)
+            {
+                m_CalibratedTimestampsSupported = false;
+                m_CalibratedTimestampsUnavailableReason =
+                    "VkPhysicalDeviceLimits.timestampPeriod is zero; GPU timestamp frequency is unknown.";
+                return;
+            }
+
+            VkCalibratedTimestampInfoKHR* infos =
+                stackalloc VkCalibratedTimestampInfoKHR[2];
+            infos[0].sType =
+                VulkanCalibratedTimestampNative.CalibratedTimestampInfoStructureType;
+            infos[0].pNext = null;
+            infos[0].timeDomain = VkTimeDomainKHR.Device;
+            infos[1].sType =
+                VulkanCalibratedTimestampNative.CalibratedTimestampInfoStructureType;
+            infos[1].pNext = null;
+            infos[1].timeDomain = m_CpuTimeDomain;
+            ulong* timestamps = stackalloc ulong[2];
+            ulong maxDeviation = 0;
+            VkResult calibrated = m_GetCalibratedTimestamps!(
+                m_NativeDevice,
+                2,
+                infos,
+                timestamps,
+                &maxDeviation);
+            if (calibrated != VkResult.Success)
+            {
+                m_CalibratedTimestampsSupported = false;
+                m_CalibratedTimestampsUnavailableReason =
+                    $"{m_CalibratedTimestampsGetFunctionName} probe failed: {calibrated}.";
+                return;
+            }
+
+            m_CalibratedTimestampMaxDeviation = maxDeviation;
+            m_CalibratedTimestampsSupported = true;
         }
 
         private VulkanFragmentShadingRateMaskQuery QuerySupportedFragmentShadingRateMask(
@@ -1221,6 +1572,44 @@ namespace SharpGPU
                     return result;
                 }
             }
+        }
+
+        private unsafe RHICapabilityLimits QueryMeshShaderLimits(bool hasMeshShaderExtension)
+        {
+            if (!hasMeshShaderExtension)
+            {
+                return RHICapabilityLimits.Empty;
+            }
+
+            VkPhysicalDeviceMeshShaderPropertiesEXT meshProperties = new()
+            {
+                sType = VkStructureType.PhysicalDeviceMeshShaderPropertiesEXT,
+            };
+            VkPhysicalDeviceProperties2 properties2 = new()
+            {
+                sType = VkStructureType.PhysicalDeviceProperties2,
+                pNext = &meshProperties,
+            };
+            VulkanNative.vkGetPhysicalDeviceProperties2(m_PhysicalDevice, &properties2);
+            return new RHICapabilityLimits(
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MeshMaxOutputVertices,
+                    meshProperties.maxMeshOutputVertices),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MeshMaxOutputPrimitives,
+                    meshProperties.maxMeshOutputPrimitives),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MeshMaxPayloadBytes,
+                    meshProperties.maxTaskPayloadSize),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MeshMaxWorkGroupSizeX,
+                    meshProperties.maxMeshWorkGroupSize[0]),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MeshMaxWorkGroupSizeY,
+                    meshProperties.maxMeshWorkGroupSize[1]),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MeshMaxWorkGroupSizeZ,
+                    meshProperties.maxMeshWorkGroupSize[2]));
         }
 
         private void UpdateDeviceFeatures()
@@ -1286,11 +1675,11 @@ namespace SharpGPU
                 new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumStorageImageDescriptorsPerTable, limits.maxDescriptorSetStorageImages),
                 new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumUniformBufferDescriptorsPerTable, limits.maxDescriptorSetUniformBuffers),
                 new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumStorageBufferDescriptorsPerTable, limits.maxDescriptorSetStorageBuffers));
-            RHICapabilityLimits computeLimits = new RHICapabilityLimits(
-                new RHICapabilityLimit(ERHICapabilityLimitKind.MinimumWavefrontSize, 32),
-                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumWavefrontSize, 64),
-                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumComputeThreads, limits.maxComputeWorkGroupInvocations),
-                new RHICapabilityLimit(ERHICapabilityLimitKind.MaximumGroupSharedMemoryBytes, limits.maxComputeSharedMemorySize));
+            RHICapabilityLimits computeLimits =
+                VulkanWaveAndCooperativeMatrixNative.CreateWaveLimits(
+                    m_WaveProbe,
+                    limits.maxComputeWorkGroupInvocations,
+                    limits.maxComputeSharedMemorySize);
 
             RHICapability layoutIndirectUnavailable = RHICapability.Unavailable(
                 "Vulkan layout-driven indirect execution requires VK_EXT_device_generated_commands lowering.",
@@ -1423,7 +1812,11 @@ namespace SharpGPU
                         m_UseRenderPass2KhrCommands ? "VK_KHR_create_renderpass2 extension" : "Vulkan 1.2 RenderPass2 core",
                         "Vulkan RenderPass2 is unavailable.",
                         strategy: m_UseRenderPass2KhrCommands ? ERHICapabilityStrategy.NativeExtension : ERHICapabilityStrategy.CoreApi,
-                        capabilityLimits: rasterLimits)),
+                        capabilityLimits: rasterLimits),
+                    samplerFeedback: RHICapability.Unavailable(
+                        "Sampler feedback has no Vulkan equivalent; it is a DX12-only optional facet and is not framebuffer-local read or an attachment feedback loop.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Vulkan sampler-feedback contract")),
                 binding: new RHIBindingCapabilities(
                     rootConstants: RHICapability.Available(
                         ERHICapabilityTier.Tier1,
@@ -1488,7 +1881,32 @@ namespace SharpGPU
                             : ERHICapabilityStrategy.CoreApi,
                         probeKind: m_UseSynchronization2KhrCommand
                             ? ERHICapabilityProbeKind.NativeExtensionQuery
-                            : ERHICapabilityProbeKind.ApiVersion)),
+                            : ERHICapabilityProbeKind.ApiVersion),
+                    calibratedTimestamps: Probe(
+                        m_CalibratedTimestampsSupported,
+                        m_CalibratedTimestampsExtensionName +
+                            " + " +
+                            m_CalibratedTimestampsGetFunctionName,
+                        m_CalibratedTimestampsUnavailableReason,
+                        strategy: ERHICapabilityStrategy.NativeExtension,
+                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery,
+                        capabilityLimits: m_CalibratedTimestampsSupported
+                            ? new RHICapabilityLimits(
+                                new RHICapabilityLimit(
+                                    ERHICapabilityLimitKind.GpuTimestampFrequency,
+                                    m_GpuTimestampFrequency),
+                                new RHICapabilityLimit(
+                                    ERHICapabilityLimitKind.CalibratedTimestampMaxDeviation,
+                                    m_CalibratedTimestampMaxDeviation))
+                            : default),
+                    externalFence64: Probe(
+                        m_ExternalFence64Supported,
+                        "VK_KHR_external_semaphore + VK_KHR_external_semaphore_win32 + D3D12 fence handle type",
+                        OperatingSystem.IsWindows()
+                            ? "Vulkan win32 external semaphore or D3D12 fence handle type is unavailable."
+                            : "ExternalFence64 is Win32 NT shared fence only.",
+                        strategy: ERHICapabilityStrategy.NativeExtension,
+                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery)),
                 memory: new RHIMemoryCapabilities(
                     unifiedMemory: Probe(
                         hasUnifiedMemory,
@@ -1499,28 +1917,71 @@ namespace SharpGPU
                         "vkGet*MemoryRequirements + vkAllocateMemory + vkBind*Memory",
                         "Vulkan placed resources are unavailable.",
                         strategy: ERHICapabilityStrategy.CoreApi),
-                    sparseBinding: Probe(
-                        m_SparseBindingSupported,
-                        "enabled VkPhysicalDeviceFeatures sparseBinding/sparseResidencyImage* + sparse-capable created queue",
-                        "Vulkan sparse image residency or a sparse-capable created queue is unavailable.",
-                        strategy: ERHICapabilityStrategy.CoreApi),
                     gpuVirtualAddress: RHICapability.Unavailable(
                         "Vulkan buffer device-address allocation is not established for every SharpGPU buffer path.",
                         ERHICapabilityProbeKind.BackendContract,
                         "SharpGPU Vulkan buffer-address contract"),
-                    sparseBufferBinding: RHICapability.Unavailable(
+                    sparseBuffer: RHICapability.Unavailable(
                         "Vulkan sparse-buffer mapping is not implemented.",
                         ERHICapabilityProbeKind.BackendContract,
                         "SharpGPU Vulkan sparse-buffer contract"),
+                    sparseTexture2D: Probe(
+                        m_SparseResidencyImage2DSupported &&
+                            m_SparseBindingSupported,
+                        "enabled VkPhysicalDeviceFeatures.sparseResidencyImage2D + sparse-capable created queue",
+                        "Vulkan sparse 2D image residency or a sparse-capable created queue is unavailable.",
+                        strategy: ERHICapabilityStrategy.CoreApi),
+                    sparseTexture3D: Probe(
+                        m_SparseResidencyImage3DSupported &&
+                            m_SparseBindingSupported,
+                        "enabled VkPhysicalDeviceFeatures.sparseResidencyImage3D + sparse-capable created queue",
+                        "Vulkan sparse 3D image residency or a sparse-capable created queue is unavailable.",
+                        strategy: ERHICapabilityStrategy.CoreApi),
+                    sparseMsaa: RHICapability.Unavailable(
+                        "Vulkan sparse texture factory rejects MSAA; sparse MSAA residency is not implemented.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "VulkanSparseMemoryUtility.ValidateDescriptor"),
+                    sparseMipTail: Probe(
+                        m_SparseMipTailSupported,
+                        "VkPhysicalDeviceSparseProperties.residencyAlignedMipSize",
+                        "Vulkan sparse mip-tail binding is unavailable because sparse image residency is off or mip tails are aligned-only."),
+                    sparseTileGeometry: Probe(
+                        m_SparseTileGeometrySupported,
+                        "VkPhysicalDeviceSparseProperties.residencyStandard2D/3DBlockShape",
+                        "Vulkan standard sparse block shapes are not reported for 2D or 3D images."),
                     residency: Probe(
                         false,
                         "SharpGPU Vulkan residency lowering",
                         "Explicit residency requests are not implemented."),
                     budgetQuery: VulkanMemoryBudgetUtility.CreateCapability(
                         m_MemoryBudgetSupported,
-                        m_MemoryProperties.memoryHeapCount)),
+                        m_MemoryProperties.memoryHeapCount),
+                    sparseAliasing: RHICapability.Unavailable(
+                        "Vulkan sparse image creation does not set SparseAliased and SharpGPU has no sparse-aliasing path.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Vulkan sparse-aliasing contract"),
+                    externalImport: RHICapability.Unavailable(
+                        "SharpGPU does not implement Vulkan Win32 NT buffer/texture import. Extensions may exist, but the HAL path is not shipped.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "ADR-0066 Vulkan external memory"),
+                    externalExport: RHICapability.Unavailable(
+                        "SharpGPU does not implement Vulkan Win32 NT buffer/texture export. Extensions may exist, but the HAL path is not shipped.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "ADR-0066 Vulkan external memory")),
                 storage: new RHIStorageCapabilities(
                     nativeGpuFileIo: RHICapability.Unavailable(
+                        "Vulkan has no SharpGPU-supported official native GPU file-I/O queue.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "Vulkan storage contract"),
+                    gpuDecompression: RHICapability.Unavailable(
+                        "Vulkan has no SharpGPU-supported official native GPU file-I/O queue.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "Vulkan storage contract"),
+                    requestCancellation: RHICapability.Unavailable(
+                        "Vulkan has no SharpGPU-supported official native GPU file-I/O queue.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "Vulkan storage contract"),
+                    ioPriority: RHICapability.Unavailable(
                         "Vulkan has no SharpGPU-supported official native GPU file-I/O queue.",
                         ERHICapabilityProbeKind.BackendContract,
                         "Vulkan storage contract")),
@@ -1556,28 +2017,157 @@ namespace SharpGPU
                         "VkPhysicalDeviceRayQueryFeaturesKHR.rayQuery",
                         "Inline ray queries are unavailable.",
                         strategy: ERHICapabilityStrategy.NativeExtension,
-                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery)),
+                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery),
+                    opacityMicromap: CreateUnusedVulkanRayTracingFacet(
+                        m_OpacityMicromapExtensionListed,
+                        "VK_EXT_opacity_micromap",
+                        "SharpGPU has no micromap object or command path."),
+                    shaderExecutionReordering: CreateUnusedVulkanShaderExecutionReorderingFacet(),
+                    motion: CreateUnusedVulkanRayTracingFacet(
+                        m_NvMotionBlurExtensionListed,
+                        "VK_NV_ray_tracing_motion_blur",
+                        "SharpGPU has no motion-instance or motion-triangle build path.")),
                 mesh: new RHIMeshCapabilities(
-                    shader: VulkanMeshCapabilityFactory.CreatePublicShaderCapability()),
+                    meshShader: VulkanMeshCapabilityFactory.CreatePublicMeshShaderCapability(
+                        m_MeshShadingSupported,
+                        m_MeshShaderLimits),
+                    taskShader: VulkanMeshCapabilityFactory.CreatePublicTaskShaderCapability(
+                        m_TaskShadingSupported)),
                 machineLearning: new RHIMachineLearningCapabilities(
                     execution: RHICapability.Unavailable(
                         "Vulkan ML requires a supported native tensor/data-graph contract.",
                         ERHICapabilityProbeKind.NativeExtensionQuery,
                         "Vulkan ML extension set")),
-                workGraph: new RHIWorkGraphCapabilities(
-                    execution: RHICapability.Unavailable(
-                        "Vulkan Work Graph execution is not exposed by SharpGPU.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "SharpGPU Vulkan factory surface")),
+                workGraph: RHIWorkGraphCapabilities.CreateUnavailable(
+                    "Vulkan Work Graph execution is not exposed by SharpGPU.",
+                    "SharpGPU Vulkan factory surface"),
                 indirectCommandBuffer: new RHIIndirectCommandBufferCapabilities(layoutIndirectUnavailable, new RHIIndirectTokenCapabilities(layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable, layoutIndirectUnavailable)),
                 compute: new RHIComputeCapabilities(
-                    ERHIWaveOperationStrategy.Basic,
-                    waveOperations: RHICapability.Available(
+                    m_WaveProbe.WaveOperationsAvailable
+                        ? m_WaveProbe.Strategy
+                        : ERHIWaveOperationStrategy.None,
+                    waveOperations: RHICapability.FromProbe(
+                        m_WaveProbe.WaveOperationsAvailable,
                         ERHICapabilityTier.Tier1,
                         ERHICapabilityStrategy.CoreApi,
-                        ERHICapabilityProbeKind.ApiVersion,
-                        "Vulkan subgroup operations",
-                        computeLimits)));
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        m_WaveProbe.WaveOperationsProbeSource,
+                        m_WaveProbe.WaveOperationsUnavailableReason,
+                        computeLimits),
+                    variableSubgroupSize: RHICapability.FromProbe(
+                        m_WaveProbe.VariableSubgroupSizeAvailable,
+                        ERHICapabilityTier.Tier1,
+                        m_WaveProbe.VariableSubgroupSizeEnabled &&
+                            !string.IsNullOrEmpty(m_WaveProbe.VariableSubgroupSizeProbeSource) &&
+                            m_WaveProbe.VariableSubgroupSizeProbeSource.Contains(
+                                "Vulkan13Properties",
+                                StringComparison.Ordinal)
+                            ? ERHICapabilityStrategy.CoreApi
+                            : ERHICapabilityStrategy.NativeExtension,
+                        m_WaveProbe.VariableSubgroupSizeEnabled &&
+                            m_WaveProbe.VariableSubgroupSizeProbeSource.Contains(
+                                "Vulkan13Properties",
+                                StringComparison.Ordinal)
+                            ? ERHICapabilityProbeKind.ApiVersion
+                            : ERHICapabilityProbeKind.NativeExtensionQuery,
+                        m_WaveProbe.VariableSubgroupSizeProbeSource,
+                        m_WaveProbe.VariableSubgroupSizeUnavailableReason,
+                        VulkanWaveAndCooperativeMatrixNative.CreateVariableSubgroupSizeLimits(
+                            m_WaveProbe)),
+                    cooperativeMatrix: RHICapability.FromProbe(
+                        m_WaveProbe.CooperativeMatrixEnabled,
+                        ERHICapabilityTier.Tier1,
+                        ERHICapabilityStrategy.NativeExtension,
+                        ERHICapabilityProbeKind.NativeExtensionQuery,
+                        m_WaveProbe.CooperativeMatrixProbeSource,
+                        m_WaveProbe.CooperativeMatrixUnavailableReason,
+                        VulkanWaveAndCooperativeMatrixNative.CreateCooperativeMatrixLimits(
+                            m_WaveProbe))),
+                functionLibrary: CreateVulkanFunctionLibraryCapabilities(
+                    m_RaytracingSupported),
+                multiGpu: RHIMultiGpuCapabilities.CreateUnavailable(
+                    "Vulkan explicit multi-adapter"));
+        }
+
+        private static RHIFunctionLibraryCapabilities CreateVulkanFunctionLibraryCapabilities(
+            bool raytracingAvailable)
+        {
+            ulong reusable =
+                (ulong)ERHIFunctionLibraryReusablePipelineClass.Raster |
+                (ulong)ERHIFunctionLibraryReusablePipelineClass.Compute |
+                (raytracingAvailable
+                    ? (ulong)ERHIFunctionLibraryReusablePipelineClass.Raytracing
+                    : 0UL);
+            return RHIFunctionLibraryCapabilities.CreateNative(
+                "shared VkShaderModule + pName views",
+                reusable,
+                RHIFunctionLibraryCapabilities.PayloadKindBit(ERHIShaderPayloadKind.SpirV),
+                rasterComputeUnavailableReason: null);
+        }
+
+        private static RHIAdapterIdentity QueryAdapterIdentity(VkPhysicalDevice physicalDevice)
+        {
+            VkPhysicalDeviceIDProperties idProperties = new()
+            {
+                sType = VkStructureType.PhysicalDeviceIdProperties,
+            };
+            VkPhysicalDeviceProperties2 properties2 = new()
+            {
+                sType = VkStructureType.PhysicalDeviceProperties2,
+                pNext = &idProperties,
+            };
+            VulkanNative.vkGetPhysicalDeviceProperties2(physicalDevice, &properties2);
+
+            byte[] uuidBytes = new byte[16];
+            for (int i = 0; i < 16; ++i)
+            {
+                uuidBytes[i] = idProperties.deviceUUID[i];
+            }
+            Guid deviceUuid = new Guid(uuidBytes);
+
+            long luid = 0;
+            if (idProperties.deviceLUIDValid)
+            {
+                byte[] luidBytes = new byte[8];
+                for (int i = 0; i < 8; ++i)
+                {
+                    luidBytes[i] = idProperties.deviceLUID[i];
+                }
+
+                luid = BitConverter.ToInt64(luidBytes, 0);
+            }
+
+            return new RHIAdapterIdentity(luid, deviceUuid);
+        }
+
+        private static RHICapability CreateUnusedVulkanRayTracingFacet(
+            bool listed,
+            string extensionName,
+            string missingPath)
+        {
+            string reason = listed
+                ? $"{extensionName} is listed but not enabled; {missingPath}"
+                : $"{extensionName} is not listed; {missingPath}";
+            return RHICapability.Unavailable(
+                reason,
+                ERHICapabilityProbeKind.NativeExtensionQuery,
+                extensionName);
+        }
+
+        private RHICapability CreateUnusedVulkanShaderExecutionReorderingFacet()
+        {
+            const string ExtensionNames =
+                "VK_NV_ray_tracing_invocation_reorder / VK_EXT_ray_tracing_invocation_reorder";
+            bool listed =
+                m_NvInvocationReorderExtensionListed ||
+                m_ExtInvocationReorderExtensionListed;
+            string reason = listed
+                ? $"{ExtensionNames} are listed but not enabled; SharpGPU has no HitObject or invocation-reorder command path. VK_EXT_shader_replicated_composites is not Shader Execution Reordering."
+                : $"{ExtensionNames} are not listed; SharpGPU has no HitObject or invocation-reorder command path. VK_EXT_shader_replicated_composites is not Shader Execution Reordering.";
+            return RHICapability.Unavailable(
+                reason,
+                ERHICapabilityProbeKind.NativeExtensionQuery,
+                ExtensionNames);
         }
 
         private void CreateCommandQueues(in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
@@ -1648,6 +2238,42 @@ namespace SharpGPU
         {
             ThrowIfDeviceUnavailable();
             return new VulkanSemaphore(this);
+        }
+
+        public override RHIExternalFence64 CreateExternalFence64(
+            in RHIExternalFence64CreateDescriptor descriptor)
+        {
+            ThrowIfDeviceUnavailable();
+            Capabilities.Synchronization.ExternalFence64.Require(
+                "Synchronization.ExternalFence64");
+            return VulkanExternalFence64.Create(this, descriptor);
+        }
+
+        public override RHIExternalFence64 ImportExternalFence64(
+            in RHIExternalFence64ImportDescriptor descriptor)
+        {
+            ThrowIfDeviceUnavailable();
+            Capabilities.Synchronization.ExternalFence64.Require(
+                "Synchronization.ExternalFence64");
+            return VulkanExternalFence64.Import(this, descriptor);
+        }
+
+        public override RHIExternalFence64Export ExportExternalFence64(
+            RHIExternalFence64 fence)
+        {
+            ThrowIfDeviceUnavailable();
+            ArgumentNullException.ThrowIfNull(fence);
+            Capabilities.Synchronization.ExternalFence64.Require(
+                "Synchronization.ExternalFence64");
+            if (fence is not VulkanExternalFence64 vulkanFence ||
+                !ReferenceEquals(vulkanFence.OwnerDevice, this))
+            {
+                throw new ArgumentException(
+                    "Vulkan ExternalFence64 export requires a fence created by this device.",
+                    nameof(fence));
+            }
+
+            return vulkanFence.Export();
         }
 
         public override RHIStorageQueue CreateStorageQueue()
@@ -1786,6 +2412,7 @@ namespace SharpGPU
         public override RHITexture CreateTexture(in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            RejectUnpairedSamplerFeedbackTexture(in descriptor);
             return new VulkanTexture(this, descriptor);
         }
 
@@ -1874,6 +2501,224 @@ namespace SharpGPU
                 ERHICapabilityStrategy.NativeSpecialized,
                 ERHICapabilityProbeKind.NativeFeatureQuery,
                 ProbeSource);
+        }
+
+        public override RHICapability QueryFormatSupport(
+            in RHIFormatSupportQuery query)
+        {
+            ThrowIfDisposed();
+            const string ProbeSource =
+                "vkGetPhysicalDeviceFormatProperties2 + " +
+                "vkGetPhysicalDeviceImageFormatProperties2";
+
+            if ((query.Dimension is
+                    ERHITextureDimension.Texture2DMS or
+                    ERHITextureDimension.Texture2DArrayMS) &&
+                query.SampleCount == ERHISampleCount.None)
+            {
+                return RHICapability.Unavailable(
+                    $"Vulkan {query.Dimension} queries require a concrete MSAA sample count.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            if ((query.Usage & ERHITextureUsage.ResolveTarget) != 0 &&
+                query.SampleCount != ERHISampleCount.None)
+            {
+                return RHICapability.Unavailable(
+                    "Vulkan resolve destination queries require a single-sample count.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            VkFormat format = VulkanUtility.ConvertToVkFormat(query.Format);
+            VkFormatProperties2 formatProperties = new()
+            {
+                sType = VkStructureType.FormatProperties2,
+            };
+            VulkanNative.vkGetPhysicalDeviceFormatProperties2(
+                m_PhysicalDevice,
+                format,
+                &formatProperties);
+
+            VkFormatFeatureFlags tilingFeatures =
+                query.Tiling == ERHITextureTiling.Linear
+                    ? formatProperties.formatProperties.linearTilingFeatures
+                    : formatProperties.formatProperties.optimalTilingFeatures;
+            ERHIFormatSupportOperation mask =
+                MapVulkanFormatFeatures(
+                    tilingFeatures,
+                    formatProperties.formatProperties.bufferFeatures);
+
+            VkImageUsageFlags usage =
+                VulkanUtility.ConvertToVkImageUsage(query.Usage);
+            if (usage == 0)
+            {
+                return RHICapability.Unavailable(
+                    "Vulkan cannot map the requested usage to VkImageUsageFlags",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            VkPhysicalDeviceImageFormatInfo2 imageInfo = new()
+            {
+                sType = VkStructureType.PhysicalDeviceImageFormatInfo2,
+                format = format,
+                type = VulkanUtility.ConvertToVkImageType(query.Dimension),
+                tiling = query.Tiling == ERHITextureTiling.Linear
+                    ? VkImageTiling.Linear
+                    : VkImageTiling.Optimal,
+                usage = usage,
+                flags = VulkanUtility.ConvertToVkImageCreateFlags(query.Dimension),
+            };
+            VkImageFormatProperties2 imageProperties = new()
+            {
+                sType = VkStructureType.ImageFormatProperties2,
+            };
+            VkResult result =
+                VulkanNative.vkGetPhysicalDeviceImageFormatProperties2(
+                    m_PhysicalDevice,
+                    &imageInfo,
+                    &imageProperties);
+            if (result != VkResult.Success)
+            {
+                return RHICapability.Unavailable(
+                    $"Vulkan rejected {format} for image usage {usage}, " +
+                    $"tiling {imageInfo.tiling}: {result}.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            if (query.SampleCount != ERHISampleCount.None)
+            {
+                VkSampleCountFlags sampleCount =
+                    VulkanUtility.ConvertToVkSampleCount(query.SampleCount);
+                if ((imageProperties.imageFormatProperties.sampleCounts &
+                     sampleCount) == 0)
+                {
+                    return RHICapability.Unavailable(
+                        $"Vulkan format {format} does not support {query.SampleCount} for the queried image combination.",
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        ProbeSource);
+                }
+            }
+
+            return RHICapability.Available(
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.CoreApi,
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                ProbeSource,
+                new RHICapabilityLimits(
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.SupportedFormatOperationMask,
+                        (ulong)mask)));
+        }
+
+        private static ERHIFormatSupportOperation MapVulkanFormatFeatures(
+            VkFormatFeatureFlags tilingFeatures,
+            VkFormatFeatureFlags bufferFeatures)
+        {
+            ERHIFormatSupportOperation mask = ERHIFormatSupportOperation.None;
+            if ((tilingFeatures & VkFormatFeatureFlags.SampledImage) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.Sample;
+            }
+            if ((tilingFeatures & VkFormatFeatureFlags.StorageImage) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.StorageLoad |
+                    ERHIFormatSupportOperation.StorageStore;
+            }
+            if ((tilingFeatures & VkFormatFeatureFlags.StorageImageAtomic) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.Atomic;
+            }
+            if ((tilingFeatures & VkFormatFeatureFlags.ColorAttachment) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.ColorAttachment;
+            }
+            if ((tilingFeatures & VkFormatFeatureFlags.DepthStencilAttachment) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.DepthStencilAttachment;
+            }
+            if ((tilingFeatures & VkFormatFeatureFlags.ColorAttachmentBlend) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.Blend;
+            }
+            if ((tilingFeatures & VkFormatFeatureFlags.SampledImageFilterLinear) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.LinearFilter;
+            }
+            if ((bufferFeatures & VkFormatFeatureFlags.VertexBuffer) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.VertexBuffer;
+            }
+
+            return mask;
+        }
+
+        public override int QueryCooperativeMatrixConfigs(
+            Span<RHICooperativeMatrixConfig> destination)
+        {
+            ThrowIfDisposed();
+            return CopyCooperativeMatrixConfigs(
+                m_CooperativeMatrixConfigs,
+                destination);
+        }
+
+        public override RHIClockCalibration QueryClockCalibration(
+            ERHIPipelineType queue,
+            int queueIndex = 0)
+        {
+            ThrowIfDisposed();
+            Capabilities.Synchronization.CalibratedTimestamps.Require(
+                "Synchronization.CalibratedTimestamps");
+            _ = RequireCommandQueue(queue, queueIndex, "QueryClockCalibration");
+            return QueryVulkanClockCalibration(queue, queueIndex);
+        }
+
+        private RHIClockCalibration QueryVulkanClockCalibration(
+            ERHIPipelineType queue,
+            int queueIndex)
+        {
+            if (m_GetCalibratedTimestamps == null ||
+                m_GpuTimestampFrequency == 0)
+            {
+                throw new InvalidOperationException(
+                    "Vulkan calibrated timestamps were reported available without loaded entry points.");
+            }
+
+            VkCalibratedTimestampInfoKHR* infos =
+                stackalloc VkCalibratedTimestampInfoKHR[2];
+            infos[0].sType =
+                VulkanCalibratedTimestampNative.CalibratedTimestampInfoStructureType;
+            infos[0].pNext = null;
+            infos[0].timeDomain = VkTimeDomainKHR.Device;
+            infos[1].sType =
+                VulkanCalibratedTimestampNative.CalibratedTimestampInfoStructureType;
+            infos[1].pNext = null;
+            infos[1].timeDomain = m_CpuTimeDomain;
+            ulong* timestamps = stackalloc ulong[2];
+            ulong maxDeviation = 0;
+            VkResult result = m_GetCalibratedTimestamps(
+                m_NativeDevice,
+                2,
+                infos,
+                timestamps,
+                &maxDeviation);
+            if (result != VkResult.Success)
+            {
+                throw new InvalidOperationException(
+                    $"{m_CalibratedTimestampsGetFunctionName} failed: {result}.");
+            }
+
+            return new RHIClockCalibration(
+                timestamps[0],
+                timestamps[1],
+                m_GpuTimestampFrequency,
+                m_CpuRhiTimeDomain,
+                queue,
+                queueIndex,
+                maxDeviation);
         }
 
         public override RHIRasterAttachmentShaderAbi
@@ -1970,7 +2815,8 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
-            Capabilities.Memory.SparseBinding.Require(
+            Capabilities.Memory.RequireSparseTexture(
+                descriptor,
                 "Vulkan sparse texture requirements");
             VkImage image = VulkanSparseMemoryUtility.CreateSparseImage(
                 this,
@@ -1992,7 +2838,9 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
-            Capabilities.Memory.SparseBinding.Require("Vulkan sparse textures");
+            Capabilities.Memory.RequireSparseTexture(
+                descriptor,
+                "Vulkan sparse textures");
             return new VulkanTexture(this, descriptor, createSparse: true);
         }
 
@@ -2044,6 +2892,7 @@ namespace SharpGPU
 
         public override RHIFunctionLibrary CreateFunctionLibrary(in RHIFunctionLibraryDescriptor descriptor)
         {
+            Capabilities.FunctionLibrary.NativeLibrary.Require("FunctionLibrary.NativeLibrary");
             return new VulkanFunctionLibrary(this, descriptor);
         }
 
@@ -2068,7 +2917,8 @@ namespace SharpGPU
         {
             VulkanMeshCapabilityFactory.RequireMeshRasterPipeline(
                 in descriptor,
-                Capabilities.Mesh.Shader);
+                Capabilities.Mesh.MeshShader,
+                Capabilities.Mesh.TaskShader);
             return new VulkanRasterPipeline(this, descriptor);
         }
 
@@ -2871,31 +3721,60 @@ namespace SharpGPU
     internal static class VulkanMeshCapabilityFactory
     {
         internal const string UnavailableReason =
-            "SharpGPU Vulkan mesh pipeline factory lowering is not implemented.";
-        internal const string ProbeSource = "SharpGPU Vulkan mesh pipeline factory";
+            "VK_EXT_mesh_shader or meshShader feature is unavailable.";
+        internal const string TaskUnavailableReason =
+            "VK_EXT_mesh_shader or taskShader feature is unavailable.";
+        internal const string ProbeSource =
+            "VK_EXT_mesh_shader + VkPhysicalDeviceMeshShaderFeaturesEXT.meshShader plus SharpGPU factory";
+        internal const string TaskProbeSource =
+            "VK_EXT_mesh_shader + VkPhysicalDeviceMeshShaderFeaturesEXT.taskShader plus SharpGPU factory";
         internal const string CapabilityName = "Vulkan mesh shaders";
+        internal const string TaskCapabilityName = "Vulkan task shaders";
 
-        internal static RHICapability CreatePublicShaderCapability()
+        internal static RHICapability CreatePublicMeshShaderCapability(
+            bool available,
+            RHICapabilityLimits limits = default)
         {
-            return RHICapability.Unavailable(
+            return RHICapability.FromProbe(
+                available,
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.NativeExtension,
+                ERHICapabilityProbeKind.NativeExtensionQuery,
+                ProbeSource,
                 UnavailableReason,
-                ERHICapabilityProbeKind.BackendContract,
-                ProbeSource);
+                limits);
+        }
+
+        internal static RHICapability CreatePublicTaskShaderCapability(bool available)
+        {
+            return RHICapability.FromProbe(
+                available,
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.NativeExtension,
+                ERHICapabilityProbeKind.NativeExtensionQuery,
+                TaskProbeSource,
+                TaskUnavailableReason);
         }
 
         internal static bool RequestsMeshPath(in RHIRasterPipelineDescriptor descriptor)
         {
-            return descriptor.PrimitiveAssembler.MeshletAssembler.HasValue
-                || descriptor.PrimitiveAssembler.PrimitiveType == ERHIPrimitiveType.Mesh;
+            return RHIRasterPipelineContract.RequestsMeshPath(in descriptor);
         }
 
         internal static void RequireMeshRasterPipeline(
             in RHIRasterPipelineDescriptor descriptor,
-            RHICapability meshShader)
+            RHICapability meshShader,
+            RHICapability taskShader)
         {
-            if (RequestsMeshPath(in descriptor))
+            if (!RequestsMeshPath(in descriptor))
             {
-                meshShader.Require(CapabilityName);
+                return;
+            }
+
+            meshShader.Require(CapabilityName);
+            if (descriptor.PrimitiveAssembler.MeshletAssembler is { TaskFunction: not null })
+            {
+                taskShader.Require(TaskCapabilityName);
             }
         }
     }
@@ -2961,6 +3840,523 @@ namespace SharpGPU
                 UnavailableReason,
                 ERHICapabilityProbeKind.BackendContract,
                 ProbeSource);
+        }
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    internal unsafe delegate VkResult PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR(
+        VkPhysicalDevice physicalDevice,
+        uint* propertyCount,
+        VkCooperativeMatrixPropertiesKHR* properties);
+
+    internal readonly struct VulkanWaveProbe
+    {
+        public int MinWavefrontSize { get; init; }
+        public int MaxWavefrontSize { get; init; }
+        public ERHIWaveOperationStrategy Strategy { get; init; }
+        public ERHIStageMask SupportedStages { get; init; }
+        public bool WaveOperationsAvailable { get; init; }
+        public string WaveOperationsProbeSource { get; init; }
+        public string WaveOperationsUnavailableReason { get; init; }
+        public bool VariableSubgroupSizeEnabled { get; init; }
+        public bool VariableSubgroupSizeAvailable { get; init; }
+        public ERHIStageMask RequiredSubgroupSizeStages { get; init; }
+        public string VariableSubgroupSizeProbeSource { get; init; }
+        public string VariableSubgroupSizeUnavailableReason { get; init; }
+        public bool CooperativeMatrixEnabled { get; init; }
+        public string CooperativeMatrixProbeSource { get; init; }
+        public string CooperativeMatrixUnavailableReason { get; init; }
+        public ERHIStageMask CooperativeMatrixStages { get; init; }
+        public RHICooperativeMatrixConfig[] Configs { get; init; }
+
+        public static VulkanWaveProbe Unavailable(string reason, string source)
+        {
+            return new VulkanWaveProbe
+            {
+                WaveOperationsProbeSource = source,
+                WaveOperationsUnavailableReason = reason,
+                VariableSubgroupSizeProbeSource = source,
+                VariableSubgroupSizeUnavailableReason = reason,
+                CooperativeMatrixProbeSource = source,
+                CooperativeMatrixUnavailableReason = reason,
+                Configs = Array.Empty<RHICooperativeMatrixConfig>(),
+            };
+        }
+    }
+
+    internal static unsafe class VulkanWaveAndCooperativeMatrixNative
+    {
+        internal const string CooperativeMatrixExtensionName = "VK_KHR_cooperative_matrix";
+        internal const string SubgroupSizeControlExtensionName = "VK_EXT_subgroup_size_control";
+        internal const string SubgroupPropertiesSource =
+            "VkPhysicalDeviceSubgroupProperties.subgroupSize";
+        internal const string Vulkan11PropertiesSource =
+            "VkPhysicalDeviceVulkan11Properties.subgroupSize";
+
+        internal static VulkanWaveProbe QuerySubgroupSizes(VkPhysicalDevice physicalDevice)
+        {
+            VkPhysicalDeviceSubgroupProperties subgroup = new()
+            {
+                sType = VkStructureType.PhysicalDeviceSubgroupProperties,
+            };
+            VkPhysicalDeviceVulkan11Properties vulkan11 = new()
+            {
+                sType = VkStructureType.PhysicalDeviceVulkan11Properties,
+                pNext = &subgroup,
+            };
+            VkPhysicalDeviceProperties2 properties2 = new()
+            {
+                sType = VkStructureType.PhysicalDeviceProperties2,
+                pNext = &vulkan11,
+            };
+            VulkanNative.vkGetPhysicalDeviceProperties2(physicalDevice, &properties2);
+
+            uint subgroupSize = subgroup.subgroupSize != 0
+                ? subgroup.subgroupSize
+                : vulkan11.subgroupSize;
+            VkShaderStageFlags stages = subgroup.supportedStages != 0
+                ? subgroup.supportedStages
+                : vulkan11.subgroupSupportedStages;
+            VkSubgroupFeatureFlags operations = subgroup.supportedOperations != 0
+                ? subgroup.supportedOperations
+                : vulkan11.subgroupSupportedOperations;
+            string source = subgroup.subgroupSize != 0
+                ? SubgroupPropertiesSource
+                : Vulkan11PropertiesSource;
+            bool available = subgroupSize > 0 && operations != 0;
+            return new VulkanWaveProbe
+            {
+                MinWavefrontSize = available ? (int)subgroupSize : 0,
+                MaxWavefrontSize = available ? (int)subgroupSize : 0,
+                Strategy = available
+                    ? MapWaveOperations(operations)
+                    : ERHIWaveOperationStrategy.None,
+                SupportedStages = MapShaderStages(stages),
+                WaveOperationsAvailable = available,
+                WaveOperationsProbeSource = source,
+                WaveOperationsUnavailableReason = available
+                    ? string.Empty
+                    : "VkPhysicalDeviceSubgroupProperties.subgroupSize is 0 or supportedOperations is empty.",
+                VariableSubgroupSizeProbeSource = SubgroupSizeControlExtensionName,
+                VariableSubgroupSizeUnavailableReason =
+                    "VK_EXT_subgroup_size_control is not enabled and Vulkan 1.3 subgroupSizeControl is not enabled.",
+                CooperativeMatrixProbeSource = CooperativeMatrixExtensionName,
+                CooperativeMatrixUnavailableReason =
+                    "VK_KHR_cooperative_matrix is not listed.",
+                Configs = Array.Empty<RHICooperativeMatrixConfig>(),
+            };
+        }
+
+        internal static VulkanWaveProbe Refine(
+            VulkanWaveProbe baseline,
+            VkPhysicalDevice physicalDevice,
+            VulkanInstance instance,
+            bool sizeControlEnabled,
+            bool sizeControlUsesVulkan13Core,
+            bool cooperativeMatrixEnabled,
+            string? cooperativeMatrixUnavailableReason = null)
+        {
+            int minSize = baseline.MinWavefrontSize;
+            int maxSize = baseline.MaxWavefrontSize;
+            ERHIStageMask requiredStages = ERHIStageMask.None;
+            string waveSource = baseline.WaveOperationsProbeSource;
+            string variableSource = baseline.VariableSubgroupSizeProbeSource;
+            string variableReason = baseline.VariableSubgroupSizeUnavailableReason;
+            bool variableAvailable = false;
+
+            if (sizeControlEnabled)
+            {
+                uint minSubgroupSize;
+                uint maxSubgroupSize;
+                VkShaderStageFlags requiredStageFlags;
+                if (sizeControlUsesVulkan13Core)
+                {
+                    VkPhysicalDeviceVulkan13Properties vulkan13 = new()
+                    {
+                        sType = VkStructureType.PhysicalDeviceVulkan13Properties,
+                    };
+                    VkPhysicalDeviceProperties2 properties2 = new()
+                    {
+                        sType = VkStructureType.PhysicalDeviceProperties2,
+                        pNext = &vulkan13,
+                    };
+                    VulkanNative.vkGetPhysicalDeviceProperties2(physicalDevice, &properties2);
+                    minSubgroupSize = vulkan13.minSubgroupSize;
+                    maxSubgroupSize = vulkan13.maxSubgroupSize;
+                    requiredStageFlags = vulkan13.requiredSubgroupSizeStages;
+                    variableSource =
+                        "VkPhysicalDeviceVulkan13Properties.minSubgroupSize / maxSubgroupSize / requiredSubgroupSizeStages";
+                }
+                else
+                {
+                    VkPhysicalDeviceSubgroupSizeControlProperties sizeControl = new()
+                    {
+                        sType = VkStructureType.PhysicalDeviceSubgroupSizeControlProperties,
+                    };
+                    VkPhysicalDeviceProperties2 properties2 = new()
+                    {
+                        sType = VkStructureType.PhysicalDeviceProperties2,
+                        pNext = &sizeControl,
+                    };
+                    VulkanNative.vkGetPhysicalDeviceProperties2(physicalDevice, &properties2);
+                    minSubgroupSize = sizeControl.minSubgroupSize;
+                    maxSubgroupSize = sizeControl.maxSubgroupSize;
+                    requiredStageFlags = sizeControl.requiredSubgroupSizeStages;
+                    variableSource =
+                        "VkPhysicalDeviceSubgroupSizeControlProperties.minSubgroupSize / maxSubgroupSize / requiredSubgroupSizeStages";
+                }
+
+                requiredStages = MapShaderStages(requiredStageFlags);
+                if (minSubgroupSize > 0 && maxSubgroupSize >= minSubgroupSize)
+                {
+                    minSize = (int)minSubgroupSize;
+                    maxSize = (int)maxSubgroupSize;
+                    waveSource =
+                        $"{baseline.WaveOperationsProbeSource}; {variableSource}";
+                }
+
+                variableAvailable =
+                    minSubgroupSize != maxSubgroupSize || requiredStageFlags != 0;
+                variableReason = variableAvailable
+                    ? string.Empty
+                    : "Subgroup size control is enabled but minSubgroupSize equals maxSubgroupSize and requiredSubgroupSizeStages is 0.";
+            }
+
+            RHICooperativeMatrixConfig[] configs = Array.Empty<RHICooperativeMatrixConfig>();
+            ERHIStageMask coopStages = ERHIStageMask.None;
+            string coopSource = CooperativeMatrixExtensionName;
+            string coopReason = cooperativeMatrixUnavailableReason
+                ?? baseline.CooperativeMatrixUnavailableReason;
+            bool coopEnabled = cooperativeMatrixEnabled;
+            if (cooperativeMatrixEnabled)
+            {
+                VkPhysicalDeviceCooperativeMatrixPropertiesKHR coopProperties = new()
+                {
+                    sType = VkStructureType.PhysicalDeviceCooperativeMatrixPropertiesKHR,
+                };
+                VkPhysicalDeviceProperties2 properties2 = new()
+                {
+                    sType = VkStructureType.PhysicalDeviceProperties2,
+                    pNext = &coopProperties,
+                };
+                VulkanNative.vkGetPhysicalDeviceProperties2(physicalDevice, &properties2);
+                coopStages = MapShaderStages(coopProperties.cooperativeMatrixSupportedStages);
+                coopSource =
+                    "VK_KHR_cooperative_matrix + vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR";
+                if (!TryEnumerateCooperativeMatrixConfigs(
+                        physicalDevice,
+                        instance,
+                        out configs,
+                        out string enumerateReason))
+                {
+                    coopEnabled = false;
+                    coopReason = enumerateReason;
+                    configs = Array.Empty<RHICooperativeMatrixConfig>();
+                }
+                else
+                {
+                    coopReason = string.Empty;
+                }
+            }
+            else if (string.IsNullOrWhiteSpace(coopReason))
+            {
+                coopReason = "VK_KHR_cooperative_matrix is not enabled.";
+            }
+
+            return new VulkanWaveProbe
+            {
+                MinWavefrontSize = minSize,
+                MaxWavefrontSize = maxSize,
+                Strategy = baseline.Strategy,
+                SupportedStages = baseline.SupportedStages,
+                WaveOperationsAvailable = baseline.WaveOperationsAvailable,
+                WaveOperationsProbeSource = waveSource,
+                WaveOperationsUnavailableReason = baseline.WaveOperationsUnavailableReason,
+                VariableSubgroupSizeEnabled = sizeControlEnabled,
+                VariableSubgroupSizeAvailable = variableAvailable,
+                RequiredSubgroupSizeStages = requiredStages,
+                VariableSubgroupSizeProbeSource = variableSource,
+                VariableSubgroupSizeUnavailableReason = variableReason,
+                CooperativeMatrixEnabled = coopEnabled,
+                CooperativeMatrixProbeSource = coopSource,
+                CooperativeMatrixUnavailableReason = coopReason,
+                CooperativeMatrixStages = coopStages,
+                Configs = configs,
+            };
+        }
+
+        internal static RHICapabilityLimits CreateWaveLimits(
+            VulkanWaveProbe probe,
+            ulong maxComputeThreads,
+            ulong maxGroupSharedMemoryBytes)
+        {
+            if (!probe.WaveOperationsAvailable)
+            {
+                return new RHICapabilityLimits(
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.MaximumComputeThreads,
+                        maxComputeThreads),
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.MaximumGroupSharedMemoryBytes,
+                        maxGroupSharedMemoryBytes));
+            }
+
+            return new RHICapabilityLimits(
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MinimumWavefrontSize,
+                    (ulong)probe.MinWavefrontSize),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MaximumWavefrontSize,
+                    (ulong)probe.MaxWavefrontSize),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.WaveStageMask,
+                    (ulong)probe.SupportedStages),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MaximumComputeThreads,
+                    maxComputeThreads),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MaximumGroupSharedMemoryBytes,
+                    maxGroupSharedMemoryBytes));
+        }
+
+        internal static RHICapabilityLimits CreateVariableSubgroupSizeLimits(
+            VulkanWaveProbe probe)
+        {
+            if (!probe.VariableSubgroupSizeAvailable)
+            {
+                return RHICapabilityLimits.Empty;
+            }
+
+            return new RHICapabilityLimits(
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MinimumWavefrontSize,
+                    (ulong)probe.MinWavefrontSize),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.MaximumWavefrontSize,
+                    (ulong)probe.MaxWavefrontSize),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.WaveStageMask,
+                    (ulong)probe.RequiredSubgroupSizeStages));
+        }
+
+        internal static RHICapabilityLimits CreateCooperativeMatrixLimits(
+            VulkanWaveProbe probe)
+        {
+            if (!probe.CooperativeMatrixEnabled)
+            {
+                return RHICapabilityLimits.Empty;
+            }
+
+            return new RHICapabilityLimits(
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.CooperativeMatrixConfigCount,
+                    (ulong)probe.Configs.Length),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.WaveStageMask,
+                    (ulong)probe.CooperativeMatrixStages));
+        }
+
+        private static bool TryEnumerateCooperativeMatrixConfigs(
+            VkPhysicalDevice physicalDevice,
+            VulkanInstance instance,
+            out RHICooperativeMatrixConfig[] configs,
+            out string reason)
+        {
+            configs = Array.Empty<RHICooperativeMatrixConfig>();
+            IntPtr function = instance.TryGetInstanceProcedure(
+                "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR");
+            if (function == IntPtr.Zero)
+            {
+                reason =
+                    "vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR is not exported by this instance.";
+                return false;
+            }
+
+            PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR getProperties =
+                Marshal.GetDelegateForFunctionPointer<
+                    PFN_vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR>(function);
+            uint count = 0;
+            VkResult countResult = getProperties(physicalDevice, &count, null);
+            if (countResult != VkResult.Success)
+            {
+                reason =
+                    $"vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR count query failed: {countResult}.";
+                return false;
+            }
+
+            if (count == 0)
+            {
+                reason = string.Empty;
+                return true;
+            }
+
+            VkCooperativeMatrixPropertiesKHR* native =
+                stackalloc VkCooperativeMatrixPropertiesKHR[(int)count];
+            for (int i = 0; i < count; ++i)
+            {
+                native[i].sType = VkStructureType.CooperativeMatrixPropertiesKHR;
+            }
+
+            VkResult listResult = getProperties(physicalDevice, &count, native);
+            if (listResult != VkResult.Success)
+            {
+                reason =
+                    $"vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR enumeration failed: {listResult}.";
+                return false;
+            }
+
+            RHICooperativeMatrixConfig[] mapped = new RHICooperativeMatrixConfig[count];
+            for (int i = 0; i < count; ++i)
+            {
+                mapped[i] = new RHICooperativeMatrixConfig(
+                    native[i].MSize,
+                    native[i].NSize,
+                    native[i].KSize,
+                    MapComponentType(native[i].AType),
+                    MapComponentType(native[i].BType),
+                    MapComponentType(native[i].CType),
+                    MapComponentType(native[i].ResultType),
+                    MapScope(native[i].scope),
+                    native[i].saturatingAccumulation);
+            }
+
+            configs = mapped;
+            reason = string.Empty;
+            return true;
+        }
+
+        private static ERHIWaveOperationStrategy MapWaveOperations(
+            VkSubgroupFeatureFlags operations)
+        {
+            ERHIWaveOperationStrategy strategy = ERHIWaveOperationStrategy.None;
+            if ((operations & VkSubgroupFeatureFlags.Basic) != 0)
+            {
+                strategy |= ERHIWaveOperationStrategy.Basic;
+            }
+            if ((operations & VkSubgroupFeatureFlags.Vote) != 0)
+            {
+                strategy |= ERHIWaveOperationStrategy.Vote;
+            }
+            if ((operations & VkSubgroupFeatureFlags.Arithmetic) != 0)
+            {
+                strategy |= ERHIWaveOperationStrategy.Arithmetic;
+            }
+            if ((operations & VkSubgroupFeatureFlags.Ballot) != 0)
+            {
+                strategy |= ERHIWaveOperationStrategy.Ballot;
+            }
+            if ((operations & VkSubgroupFeatureFlags.Shuffle) != 0)
+            {
+                strategy |= ERHIWaveOperationStrategy.Shuffle;
+            }
+            if ((operations & VkSubgroupFeatureFlags.ShuffleRelative) != 0)
+            {
+                strategy |= ERHIWaveOperationStrategy.ShuffleRelative;
+            }
+            if ((operations & VkSubgroupFeatureFlags.Clustered) != 0)
+            {
+                strategy |= ERHIWaveOperationStrategy.Clustered;
+            }
+            if ((operations & VkSubgroupFeatureFlags.Quad) != 0)
+            {
+                strategy |= ERHIWaveOperationStrategy.Quad;
+            }
+
+            return strategy == ERHIWaveOperationStrategy.None
+                ? ERHIWaveOperationStrategy.Basic
+                : strategy;
+        }
+
+        internal static ERHIStageMask MapShaderStages(VkShaderStageFlags stages)
+        {
+            ERHIStageMask mask = ERHIStageMask.None;
+            if ((stages & VkShaderStageFlags.Vertex) != 0)
+            {
+                mask |= ERHIStageMask.Vertex;
+            }
+            if ((stages & VkShaderStageFlags.Fragment) != 0)
+            {
+                mask |= ERHIStageMask.Fragment;
+            }
+            if ((stages & VkShaderStageFlags.Compute) != 0)
+            {
+                mask |= ERHIStageMask.Compute;
+            }
+            if ((stages & VkShaderStageFlags.TaskEXT) != 0)
+            {
+                mask |= ERHIStageMask.Task;
+            }
+            if ((stages & VkShaderStageFlags.MeshEXT) != 0)
+            {
+                mask |= ERHIStageMask.Mesh;
+            }
+            if ((stages & (
+                    VkShaderStageFlags.RaygenKHR |
+                    VkShaderStageFlags.MissKHR |
+                    VkShaderStageFlags.ClosestHitKHR |
+                    VkShaderStageFlags.AnyHitKHR |
+                    VkShaderStageFlags.IntersectionKHR |
+                    VkShaderStageFlags.CallableKHR)) != 0)
+            {
+                mask |= ERHIStageMask.RayTracing;
+            }
+
+            return mask;
+        }
+
+        private static ERHICooperativeMatrixElementType MapComponentType(
+            VkComponentTypeKHR type)
+        {
+            return type switch
+            {
+                VkComponentTypeKHR.Float16 => ERHICooperativeMatrixElementType.Float16,
+                VkComponentTypeKHR.Float32 => ERHICooperativeMatrixElementType.Float32,
+                VkComponentTypeKHR.Float64 => ERHICooperativeMatrixElementType.Float64,
+                VkComponentTypeKHR.Sint8 => ERHICooperativeMatrixElementType.SInt8,
+                VkComponentTypeKHR.Sint16 => ERHICooperativeMatrixElementType.SInt16,
+                VkComponentTypeKHR.Sint32 => ERHICooperativeMatrixElementType.SInt32,
+                VkComponentTypeKHR.Sint64 => ERHICooperativeMatrixElementType.SInt64,
+                VkComponentTypeKHR.Uint8 => ERHICooperativeMatrixElementType.UInt8,
+                VkComponentTypeKHR.Uint16 => ERHICooperativeMatrixElementType.UInt16,
+                VkComponentTypeKHR.Uint32 => ERHICooperativeMatrixElementType.UInt32,
+                VkComponentTypeKHR.Uint64 => ERHICooperativeMatrixElementType.UInt64,
+                _ => MapExtendedComponentType(type),
+            };
+        }
+
+        private static ERHICooperativeMatrixElementType MapExtendedComponentType(
+            VkComponentTypeKHR type)
+        {
+            string name = type.ToString();
+            if (name.Contains("BFloat16", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("Bfloat16", StringComparison.OrdinalIgnoreCase))
+            {
+                return ERHICooperativeMatrixElementType.BFloat16;
+            }
+
+            if (name.Contains("E4M3", StringComparison.OrdinalIgnoreCase))
+            {
+                return ERHICooperativeMatrixElementType.Float8E4M3;
+            }
+
+            if (name.Contains("E5M2", StringComparison.OrdinalIgnoreCase))
+            {
+                return ERHICooperativeMatrixElementType.Float8E5M2;
+            }
+
+            return ERHICooperativeMatrixElementType.Unknown;
+        }
+
+        private static ERHICooperativeMatrixScope MapScope(VkScopeKHR scope)
+        {
+            return scope switch
+            {
+                VkScopeKHR.Subgroup => ERHICooperativeMatrixScope.Subgroup,
+                VkScopeKHR.Workgroup => ERHICooperativeMatrixScope.Workgroup,
+                VkScopeKHR.Device => ERHICooperativeMatrixScope.Device,
+                VkScopeKHR.QueueFamily => ERHICooperativeMatrixScope.QueueFamily,
+                _ => ERHICooperativeMatrixScope.Unknown,
+            };
         }
     }
 }

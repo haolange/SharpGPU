@@ -477,6 +477,18 @@ namespace SharpGPU
             }
         }
 
+        internal IntPtr TryGetInstanceProcedure(string name)
+        {
+            try
+            {
+                return GetInstanceProcedure(m_VkInstance, name);
+            }
+            catch (NotSupportedException)
+            {
+                return IntPtr.Zero;
+            }
+        }
+
         private static IntPtr GetInstanceProcedure(
             VkInstance instance,
             string name)

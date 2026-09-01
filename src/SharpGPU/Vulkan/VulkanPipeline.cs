@@ -368,7 +368,8 @@ namespace SharpGPU
                 in m_Descriptor);
             VulkanMeshCapabilityFactory.RequireMeshRasterPipeline(
                 in m_Descriptor,
-                device.Capabilities.Mesh.Shader);
+                device.Capabilities.Mesh.MeshShader,
+                device.Capabilities.Mesh.TaskShader);
             m_ShaderModules =
                 shaderModules ??
                 VulkanRasterShaderModuleSet.Create(
@@ -680,6 +681,9 @@ namespace SharpGPU
                 stencilAttachmentFormat = (descriptor.DepthFormat == ERHIPixelFormat.D24_UNorm_S8_UInt || descriptor.DepthFormat == ERHIPixelFormat.D32_Float_S8_UInt) ? VulkanUtility.ConvertToVkFormat(descriptor.DepthFormat) : VkFormat.Undefined,
             };
 
+            bool isMeshPipeline =
+                m_Descriptor.PrimitiveAssembler.MeshletAssembler.HasValue
+                || m_Descriptor.PrimitiveAssembler.PrimitiveType == ERHIPrimitiveType.Mesh;
             VkGraphicsPipelineCreateInfo pipelineInfo = new VkGraphicsPipelineCreateInfo()
             {
                 sType = VkStructureType.GraphicsPipelineCreateInfo,
@@ -689,8 +693,8 @@ namespace SharpGPU
                         : null,
                 stageCount = (uint)stageCount,
                 pStages = shaderStages,
-                pVertexInputState = &vertexInputInfo,
-                pInputAssemblyState = &inputAssembly,
+                pVertexInputState = isMeshPipeline ? null : &vertexInputInfo,
+                pInputAssemblyState = isMeshPipeline ? null : &inputAssembly,
                 pViewportState = &viewportState,
                 pRasterizationState = &rasterizer,
                 pMultisampleState = &multisampling,
@@ -1428,7 +1432,8 @@ internal sealed unsafe class VulkanPipelineCache : RHIPipelineCache
             ValidateLayoutDevice(descriptor.PipelineLayout);
             VulkanMeshCapabilityFactory.RequireMeshRasterPipeline(
                 in descriptor,
-                m_VulkanDevice.Capabilities.Mesh.Shader);
+                m_VulkanDevice.Capabilities.Mesh.MeshShader,
+                m_VulkanDevice.Capabilities.Mesh.TaskShader);
             _ = BuildRasterPipelineCacheKey(descriptor);
             lock (m_Gate)
             {

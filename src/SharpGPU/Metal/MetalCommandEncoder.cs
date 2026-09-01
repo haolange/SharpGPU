@@ -3359,7 +3359,7 @@ internal readonly struct MetalRasterCapabilities
         public override void DispatchMesh(in uint groupCountX, in uint groupCountY, in uint groupCountZ)
         {
             MetalDevice device = ((MetalCommandQueue)((MetalCommandBuffer)m_CommandBuffer!).CommandQueue).MetalDevice;
-            device.Capabilities.Mesh.Shader.Require("Metal mesh shaders");
+            device.Capabilities.Mesh.MeshShader.Require("Metal mesh shaders");
             m_BindingBackend?.CommitRaster(m_NativeEncoder4);
             m_NativeEncoder4.DrawMeshThreadgroups(new MTLSize(groupCountX, groupCountY, groupCountZ), new MTLSize(1, 1, 1), new MTLSize(1, 1, 1));
             MarkRasterStagesSeen();
@@ -3368,7 +3368,7 @@ internal readonly struct MetalRasterCapabilities
         public override void DispatchMeshIndirect(RHIBuffer argsBuffer, in uint argsOffset)
         {
             MetalDevice device = ((MetalCommandQueue)((MetalCommandBuffer)m_CommandBuffer!).CommandQueue).MetalDevice;
-            device.Capabilities.Mesh.Shader.Require("Metal mesh shaders");
+            device.Capabilities.Mesh.MeshShader.Require("Metal mesh shaders");
             MetalBuffer metalBuffer = (MetalBuffer)argsBuffer;
             m_BindingBackend?.CommitRaster(m_NativeEncoder4);
             ulong indirectAddress = metalBuffer.NativeBuffer.GpuAddress + argsOffset;

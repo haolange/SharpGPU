@@ -159,7 +159,8 @@ namespace SharpGPU
 
         public override void BindSparse(in RHISparseBindDescriptor descriptor)
         {
-            m_VulkanDevice.Capabilities.Memory.SparseBinding.Require(
+            m_VulkanDevice.Capabilities.Memory.RequireSparseBind(
+                descriptor,
                 "Vulkan queue-ordered sparse texture binding");
             if (!m_VulkanDevice.SupportsSparseQueueFamily(m_QueueFamilyIndex))
             {

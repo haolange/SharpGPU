@@ -18,7 +18,7 @@ namespace SharpGPU
         public VulkanFunction(VulkanDevice device, in RHIFunctionDescriptor descriptor)
         {
             m_VulkanDevice = device;
-            m_Descriptor = descriptor;
+            BindDirectBytecodeSource(descriptor);
             if (descriptor.ByteCode == IntPtr.Zero || descriptor.ByteSize == 0)
             {
                 throw new ArgumentException(
@@ -28,14 +28,59 @@ namespace SharpGPU
             int byteCount = checked((int)descriptor.ByteSize);
             m_Bytecode = new byte[byteCount];
             Marshal.Copy(descriptor.ByteCode, m_Bytecode, 0, byteCount);
+            m_OwnsNativeModule = true;
+            CreateOwnedModule(device, m_Bytecode);
+        }
 
-            fixed (byte* bytecode = m_Bytecode)
+        internal VulkanFunction(
+            VulkanFunctionLibrary library,
+            in RHIFunctionViewDescriptor view)
+        {
+            library.ThrowIfViewSourceUnavailable();
+            library.ValidateViewEntry(view);
+            m_VulkanDevice = library.VulkanDevice;
+            m_SourceLibrary = library;
+            m_NativeShaderModule = library.NativeShaderModule;
+            m_OwnsNativeModule = false;
+            m_Bytecode = Array.Empty<byte>();
+            BindLibraryViewSource(library, view, library.Descriptor.PayloadKind, library.ContentDigest);
+        }
+
+        private VulkanFunctionLibrary? m_SourceLibrary;
+        private bool m_OwnsNativeModule;
+
+        public VkPipelineShaderStageCreateInfo GetShaderStageCreateInfo()
+        {
+            ThrowIfViewSourceUnavailable();
+            return new VkPipelineShaderStageCreateInfo()
+            {
+                sType = VkStructureType.PipelineShaderStageCreateInfo,
+                stage = VulkanUtility.ConvertToVkShaderStageBit(m_Descriptor.Type),
+                module = m_NativeShaderModule,
+                pName = m_Descriptor.EntryName.ToPointer(),
+            };
+        }
+
+        internal void ThrowIfViewSourceUnavailable()
+        {
+            ThrowIfSourceUnavailable();
+            if (m_SourceLibrary != null && m_SourceLibrary.IsDisposed)
+            {
+                throw new ObjectDisposedException(
+                    m_SourceLibrary.GetType().FullName,
+                    "The function library that owns this view has been disposed.");
+            }
+        }
+
+        private void CreateOwnedModule(VulkanDevice device, byte[] bytecode)
+        {
+            fixed (byte* bytecodePointer = bytecode)
             {
                 VkShaderModuleCreateInfo createInfo = new VkShaderModuleCreateInfo()
                 {
                     sType = VkStructureType.ShaderModuleCreateInfo,
-                    codeSize = (nuint)m_Bytecode.Length,
-                    pCode = (uint*)bytecode,
+                    codeSize = (nuint)bytecode.Length,
+                    pCode = (uint*)bytecodePointer,
                 };
 
                 fixed (VkShaderModule* modulePtr = &m_NativeShaderModule)
@@ -50,20 +95,15 @@ namespace SharpGPU
             }
         }
 
-        public VkPipelineShaderStageCreateInfo GetShaderStageCreateInfo()
-        {
-            return new VkPipelineShaderStageCreateInfo()
-            {
-                sType = VkStructureType.PipelineShaderStageCreateInfo,
-                stage = VulkanUtility.ConvertToVkShaderStageBit(m_Descriptor.Type),
-                module = m_NativeShaderModule,
-                pName = m_Descriptor.EntryName.ToPointer(),
-            };
-        }
-
         protected override void Release()
         {
-            VulkanNative.vkDestroyShaderModule(m_VulkanDevice.NativeDevice, m_NativeShaderModule, null);
+            if (m_OwnsNativeModule && m_NativeShaderModule.Handle != 0)
+            {
+                VulkanNative.vkDestroyShaderModule(m_VulkanDevice.NativeDevice, m_NativeShaderModule, null);
+            }
+
+            m_NativeShaderModule = default;
+            m_OwnsNativeModule = false;
         }
     }
 
@@ -80,7 +120,11 @@ namespace SharpGPU
         public VulkanFunctionLibrary(VulkanDevice device, in RHIFunctionLibraryDescriptor descriptor)
         {
             m_VulkanDevice = device;
-            m_Descriptor = descriptor;
+            if (!device.Capabilities.FunctionLibrary.SupportsPayloadKind(descriptor.PayloadKind))
+            {
+                throw new NotSupportedException(
+                    $"Vulkan function libraries require SpirV payload, received {descriptor.PayloadKind}.");
+            }
             if (descriptor.ByteCode == IntPtr.Zero || descriptor.ByteSize == 0)
             {
                 throw new ArgumentException(
@@ -90,6 +134,7 @@ namespace SharpGPU
             int byteCount = checked((int)descriptor.ByteSize);
             m_Bytecode = new byte[byteCount];
             Marshal.Copy(descriptor.ByteCode, m_Bytecode, 0, byteCount);
+            BindLibraryPayload(descriptor);
 
             fixed (byte* bytecode = m_Bytecode)
             {
@@ -110,6 +155,33 @@ namespace SharpGPU
                             modulePtr));
                 }
             }
+        }
+
+        internal void ThrowIfViewSourceUnavailable()
+        {
+            ThrowIfDisposed();
+        }
+
+        internal void ValidateViewEntry(in RHIFunctionViewDescriptor view)
+        {
+            ThrowIfDisposed();
+            VulkanSpirvEntryPoint.Require(
+                m_Bytecode,
+                view.EntryName,
+                view.Type);
+        }
+
+        public override RHIFunction CreateFunction(in RHIFunctionViewDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            m_VulkanDevice.Capabilities.FunctionLibrary.NativeLibrary.Require(
+                "FunctionLibrary.NativeLibrary");
+            ERHIFunctionLibraryReusablePipelineClass pipelineClass =
+                m_VulkanDevice.Capabilities.FunctionLibrary.ClassifyFunctionType(descriptor.Type);
+            m_VulkanDevice.Capabilities.FunctionLibrary.RequireReusableClass(
+                pipelineClass,
+                $"Vulkan function-library views for {pipelineClass}");
+            return new VulkanFunction(this, descriptor);
         }
 
         protected override void Release()
@@ -683,6 +755,126 @@ namespace SharpGPU
             {
                 ptr[i] = value;
             }
+        }
+    }
+
+    internal static class VulkanSpirvEntryPoint
+    {
+        private const uint Magic = 0x07230203;
+        private const uint OpEntryPoint = 15;
+        private const uint ExecutionModelVertex = 0;
+        private const uint ExecutionModelFragment = 4;
+        private const uint ExecutionModelGLCompute = 5;
+        private const uint ExecutionModelTaskNV = 5267;
+        private const uint ExecutionModelMeshNV = 5268;
+        private const uint ExecutionModelRayGenerationKHR = 5313;
+        private const uint ExecutionModelIntersectionKHR = 5314;
+        private const uint ExecutionModelAnyHitKHR = 5315;
+        private const uint ExecutionModelClosestHitKHR = 5316;
+        private const uint ExecutionModelMissKHR = 5317;
+        private const uint ExecutionModelCallableKHR = 5318;
+        private const uint ExecutionModelTaskEXT = 5364;
+        private const uint ExecutionModelMeshEXT = 5365;
+
+        public static void Require(
+            ReadOnlySpan<byte> spirv,
+            string entryName,
+            ERHIFunctionType type)
+        {
+            if (string.IsNullOrWhiteSpace(entryName))
+            {
+                throw new ArgumentException("Vulkan function view entry name is empty.", nameof(entryName));
+            }
+            if (spirv.Length < 20 || (spirv.Length & 3) != 0)
+            {
+                throw new ArgumentException("Vulkan function library payload is not valid SPIR-V.");
+            }
+
+            ReadOnlySpan<uint> words = MemoryMarshal.Cast<byte, uint>(spirv);
+            if (words[0] != Magic)
+            {
+                throw new ArgumentException("Vulkan function library payload is not SPIR-V.");
+            }
+
+            bool found = false;
+            uint matchedModel = 0;
+            int index = 5;
+            while (index < words.Length)
+            {
+                uint header = words[index];
+                int wordCount = (int)(header >> 16);
+                uint opcode = header & 0xffff;
+                if (wordCount == 0 || index + wordCount > words.Length)
+                {
+                    throw new ArgumentException("SPIR-V instruction stream is truncated.");
+                }
+
+                if (opcode == OpEntryPoint && wordCount >= 3)
+                {
+                    uint model = words[index + 1];
+                    string name = ReadString(words.Slice(index + 3, wordCount - 3));
+                    if (string.Equals(name, entryName, StringComparison.Ordinal))
+                    {
+                        found = true;
+                        matchedModel = model;
+                        break;
+                    }
+                }
+
+                index += wordCount;
+            }
+
+            if (!found)
+            {
+                throw new InvalidOperationException(
+                    $"SPIR-V entry '{entryName}' is not present in the function library.");
+            }
+
+            if (!Matches(type, matchedModel))
+            {
+                throw new InvalidOperationException(
+                    $"SPIR-V entry '{entryName}' execution model {matchedModel} does not match stage {type}.");
+            }
+        }
+
+        private static bool Matches(ERHIFunctionType type, uint model)
+        {
+            return type switch
+            {
+                ERHIFunctionType.Vertex => model == ExecutionModelVertex,
+                ERHIFunctionType.Fragment => model == ExecutionModelFragment,
+                ERHIFunctionType.Compute => model == ExecutionModelGLCompute,
+                ERHIFunctionType.Task =>
+                    model == ExecutionModelTaskEXT || model == ExecutionModelTaskNV,
+                ERHIFunctionType.Mesh =>
+                    model == ExecutionModelMeshEXT || model == ExecutionModelMeshNV,
+                ERHIFunctionType.RayTracing =>
+                    model == ExecutionModelRayGenerationKHR ||
+                    model == ExecutionModelIntersectionKHR ||
+                    model == ExecutionModelAnyHitKHR ||
+                    model == ExecutionModelClosestHitKHR ||
+                    model == ExecutionModelMissKHR ||
+                    model == ExecutionModelCallableKHR,
+                _ => false,
+            };
+        }
+
+        private static string ReadString(ReadOnlySpan<uint> words)
+        {
+            if (words.IsEmpty)
+            {
+                return string.Empty;
+            }
+
+            byte[] bytes = new byte[words.Length * 4];
+            MemoryMarshal.AsBytes(words).CopyTo(bytes);
+            int length = Array.IndexOf(bytes, (byte)0);
+            if (length < 0)
+            {
+                length = bytes.Length;
+            }
+
+            return System.Text.Encoding.UTF8.GetString(bytes, 0, length);
         }
     }
 }
