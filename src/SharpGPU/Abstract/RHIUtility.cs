@@ -634,16 +634,17 @@ namespace SharpGPU
         Pending
     }
 
+    [Flags]
     public enum ERHITextureUsage
     {
+        None = 0,
         CopySrc = 0x01,
         CopyDst = 0x02,
         DepthStencil = 0x04,
         RenderTarget = 0x08,
         ResolveTarget = 0x10,
         ShaderResource = 0x20,
-        UnorderedAccess = 0x40,
-        Pending
+        UnorderedAccess = 0x40
     }
 
     public enum ERHITextureViewType : byte

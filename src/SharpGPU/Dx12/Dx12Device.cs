@@ -214,6 +214,8 @@ namespace SharpGPU
 
         public override RHIQuery CreateQuery(in RHIQueryDescriptor descriptor)
         {
+            ThrowIfDeviceUnavailable();
+            ValidateQueryDescriptor(in descriptor);
             return new Dx12Query(this, descriptor);
         }
 
@@ -245,6 +247,7 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            ValidateTextureUsage(descriptor.UsageFlag, nameof(descriptor));
             Capabilities.Memory.PlacedResources.Require(
                 "DX12 texture memory requirements");
             Vortice.Direct3D12.ResourceDescription nativeDescriptor =
@@ -294,6 +297,7 @@ namespace SharpGPU
         public override RHITexture CreateTexture(in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            ValidateTextureUsage(descriptor.UsageFlag, nameof(descriptor));
             RejectUnpairedSamplerFeedbackTexture(in descriptor);
             return new Dx12Texture(this, descriptor);
         }
@@ -730,9 +734,13 @@ namespace SharpGPU
             {
                 mask |= ERHIFormatSupportOperation.Blend;
             }
+            if ((support1 & Vortice.Direct3D12.FormatSupport1.MultisampleRendertarget) != 0)
+            {
+                mask |= ERHIFormatSupportOperation.ResolveSource;
+            }
             if ((support1 & Vortice.Direct3D12.FormatSupport1.MultisampleResolve) != 0)
             {
-                mask |= ERHIFormatSupportOperation.Resolve;
+                mask |= ERHIFormatSupportOperation.ResolveDestination;
             }
             if ((support1 & Vortice.Direct3D12.FormatSupport1.ShaderSample) != 0)
             {
@@ -748,6 +756,170 @@ namespace SharpGPU
             }
 
             return mask;
+        }
+
+        private static RHICapabilityLimits CreateDx12PipelineStatisticsLimits(
+            bool meshStatisticsAvailable)
+        {
+            const ERHIPipelineStatisticCounter rasterCore =
+                ERHIPipelineStatisticCounter.InputAssemblyVertices |
+                ERHIPipelineStatisticCounter.InputAssemblyPrimitives |
+                ERHIPipelineStatisticCounter.VertexShaderInvocations |
+                ERHIPipelineStatisticCounter.GeometryShaderInvocations |
+                ERHIPipelineStatisticCounter.GeometryShaderPrimitives |
+                ERHIPipelineStatisticCounter.ClipperInvocations |
+                ERHIPipelineStatisticCounter.ClipperPrimitives |
+                ERHIPipelineStatisticCounter.PixelShaderInvocations |
+                ERHIPipelineStatisticCounter.HullShaderInvocations |
+                ERHIPipelineStatisticCounter.DomainShaderInvocations;
+            const ERHIPipelineStatisticCounter meshCounters =
+                ERHIPipelineStatisticCounter.MeshShaderInvocations |
+                ERHIPipelineStatisticCounter.TaskShaderInvocations |
+                ERHIPipelineStatisticCounter.MeshShaderPrimitives;
+            return CreatePipelineStatisticsLimits(
+                rasterCore | (meshStatisticsAvailable ? meshCounters : 0),
+                ERHIPipelineStatisticCounter.ComputeShaderInvocations,
+                ERHIPipelineStatisticCounter.None);
+        }
+
+        public override RHICapability QueryResolveSupport(
+            in RHIResolveSupportQuery query)
+        {
+            ThrowIfDisposed();
+            const string ProbeSource =
+                "ID3D12Device.CheckFormatSupport + CheckMultisampleQualityLevels";
+
+            if (query.SourceTiling == ERHITextureTiling.Linear ||
+                query.DestinationTiling == ERHITextureTiling.Linear)
+            {
+                return RHICapability.Unavailable(
+                    "DX12 does not expose a generic linear image tiling query for resolve.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            if (query.SourceFormat != query.DestinationFormat)
+            {
+                return RHICapability.Unavailable(
+                    "DX12 resolve requires the source and destination formats to match exactly.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            if ((query.DestinationUsage & ERHITextureUsage.ResolveTarget) == 0)
+            {
+                return RHICapability.Unavailable(
+                    "DX12 resolve destination usage must include ResolveTarget.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            Vortice.DXGI.Format sourceFormat =
+                Dx12Utility.ConvertToDx12ViewFormat(query.SourceFormat);
+            Vortice.DXGI.Format destinationFormat =
+                Dx12Utility.ConvertToDx12ViewFormat(query.DestinationFormat);
+            if (!NativeDevice.CheckFormatSupport(
+                    sourceFormat,
+                    out Vortice.Direct3D12.FormatSupport1 sourceSupport1,
+                    out _))
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 did not report format support for source {query.SourceFormat}.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            if (!NativeDevice.CheckFormatSupport(
+                    destinationFormat,
+                    out Vortice.Direct3D12.FormatSupport1 destSupport1,
+                    out _))
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 did not report format support for destination {query.DestinationFormat}.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            bool isDepthStencil =
+                (query.Aspect & (ERHITextureAspectMask.Depth | ERHITextureAspectMask.Stencil)) != 0;
+            ERHITextureUsage requiredSourceUsage = isDepthStencil
+                ? ERHITextureUsage.DepthStencil
+                : ERHITextureUsage.RenderTarget;
+            if ((query.SourceUsage & requiredSourceUsage) == 0)
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 resolve source usage must include {requiredSourceUsage}.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            Vortice.Direct3D12.FormatSupport1 sourceRequired = isDepthStencil
+                ? Vortice.Direct3D12.FormatSupport1.DepthStencil |
+                    Vortice.Direct3D12.FormatSupport1.MultisampleRendertarget
+                : Vortice.Direct3D12.FormatSupport1.RenderTarget |
+                    Vortice.Direct3D12.FormatSupport1.MultisampleRendertarget;
+            if ((sourceSupport1 & sourceRequired) != sourceRequired)
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 format {query.SourceFormat} lacks MultisampleRenderTarget for resolve source.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            if ((destSupport1 & Vortice.Direct3D12.FormatSupport1.MultisampleResolve) == 0)
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 format {query.DestinationFormat} lacks MultisampleResolve for resolve destination.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            uint sampleCount = checked((uint)query.SourceSampleCount);
+            if (NativeDevice.CheckMultisampleQualityLevels(sourceFormat, sampleCount) == 0)
+            {
+                return RHICapability.Unavailable(
+                    $"DX12 format {query.SourceFormat} reports zero MSAA quality levels at {sampleCount}x.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            ulong supportedModes = 0;
+            if (!isDepthStencil)
+            {
+                if (query.ResolveMode is not (ERHIResolveMode.None or ERHIResolveMode.Sample0))
+                {
+                    return RHICapability.Unavailable(
+                        "DX12 color resolve uses average / sample-0 only.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        ProbeSource);
+                }
+
+                supportedModes = 1UL << (byte)ERHIResolveMode.Sample0;
+            }
+            else
+            {
+                supportedModes =
+                    (1UL << (byte)ERHIResolveMode.Min) |
+                    (1UL << (byte)ERHIResolveMode.Max);
+                if (query.ResolveMode != ERHIResolveMode.None &&
+                    (supportedModes & (1UL << (byte)query.ResolveMode)) == 0)
+                {
+                    return RHICapability.Unavailable(
+                        $"DX12 does not support resolve mode {query.ResolveMode} for this depth/stencil pair.",
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        ProbeSource);
+                }
+            }
+
+            return RHICapability.Available(
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.CoreApi,
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                ProbeSource,
+                new RHICapabilityLimits(
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.SupportedResolveModeMask,
+                        supportedModes)));
         }
 
         public override RHIClockCalibration QueryClockCalibration(
@@ -1071,6 +1243,7 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            ValidateTextureUsage(descriptor.UsageFlag, nameof(descriptor));
             Capabilities.Memory.RequireSparseTexture(
                 descriptor,
                 "DX12 sparse texture requirements");
@@ -1093,6 +1266,7 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            ValidateTextureUsage(descriptor.UsageFlag, nameof(descriptor));
             Capabilities.Memory.RequireSparseTexture(
                 descriptor,
                 "DX12 sparse textures");
@@ -1970,7 +2144,9 @@ namespace SharpGPU
                         isPipelineStatsQueriesSupported,
                         "D3D12 pipeline statistics query contract",
                         "Pipeline statistics queries are unavailable.",
-                        strategy: ERHICapabilityStrategy.CoreApi),
+                        strategy: ERHICapabilityStrategy.CoreApi,
+                        limits: CreateDx12PipelineStatisticsLimits(
+                            isMeshShadingSupported)),
                     enhancedBarriers: Probe(
                         isEnhancedBarriersSupported,
                         "D3D12_FEATURE_D3D12_OPTIONS12.EnhancedBarriersSupported",

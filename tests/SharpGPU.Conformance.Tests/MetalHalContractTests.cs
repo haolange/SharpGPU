@@ -89,21 +89,20 @@ public sealed class MetalHalContractTests
             : null;
 
         RHIQuery? statisticsQuery = null;
+        RHIQueryDescriptor rasterStatisticsDescriptor = new()
+        {
+            Count = 1,
+            Type = ERHIQueryType.Statistics,
+            Domain = ERHIPipelineStatisticsDomain.Raster,
+            CounterMask = ERHIPipelineStatisticCounter.PixelShaderInvocations,
+        };
         if (context.Device.Capabilities.Synchronization.PipelineStatisticsQueries.Tier != ERHICapabilityTier.Unavailable)
         {
-            statisticsQuery = context.Device.CreateQuery(new RHIQueryDescriptor
-            {
-                Count = 1,
-                Type = ERHIQueryType.Statistics,
-            });
+            statisticsQuery = context.Device.CreateQuery(in rasterStatisticsDescriptor);
         }
         else
         {
-            Assert.Throws<NotSupportedException>(() => context.Device.CreateQuery(new RHIQueryDescriptor
-            {
-                Count = 1,
-                Type = ERHIQueryType.Statistics,
-            }));
+            Assert.Throws<NotSupportedException>(() => context.Device.CreateQuery(in rasterStatisticsDescriptor));
         }
 
         try
@@ -144,8 +143,11 @@ public sealed class MetalHalContractTests
             if (statisticsQuery != null)
             {
                 Assert.Equal(ERHIQueryResultStatus.Ready, statisticsQuery.ResolveData());
-                ulong statisticsValue = statisticsQuery.Results.Span[0];
-                Assert.True(statisticsValue > 0, $"Metal pipeline statistics query returned zero after a triangle draw. value={statisticsValue}.");
+                Assert.True(
+                    statisticsQuery.TryGetRasterStatistics(0, out RHIRasterPipelineStatistics rasterStatistics));
+                Assert.True(
+                    rasterStatistics.PixelShaderInvocations > 0,
+                    $"Metal pipeline statistics query returned zero pixel invocations after a triangle draw. value={rasterStatistics.PixelShaderInvocations}.");
             }
         }
         finally

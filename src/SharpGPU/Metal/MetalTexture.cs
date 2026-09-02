@@ -126,6 +126,14 @@ namespace SharpGPU
 
         internal MetalTexture(MetalDevice device, in RHITextureDescriptor descriptor, in MTLTexture nativeTexture, in bool ownsTexture, in CAMetalDrawable drawable)
         {
+            if (!RHIFormatSupportQuery.IsKnownTextureUsage(descriptor.UsageFlag))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(descriptor),
+                    descriptor.UsageFlag,
+                    "Metal native texture wrap requires an explicit non-zero known ERHITextureUsage.");
+            }
+
             m_MetalDevice = device;
             m_Descriptor = descriptor;
             m_NativeTexture = nativeTexture;
@@ -137,12 +145,16 @@ namespace SharpGPU
             }
         }
 
-        internal static RHITextureDescriptor BuildDescriptorFromNative(in MTLTexture nativeTexture)
+        internal static RHITextureDescriptor BuildDescriptorFromNative(
+            in MTLTexture nativeTexture,
+            ERHITextureUsage usage)
         {
-            ERHITextureUsage usage = MetalUtility.ConvertToRhiTextureUsage(nativeTexture.Usage);
-            if (usage == ERHITextureUsage.Pending)
+            if (!RHIFormatSupportQuery.IsKnownTextureUsage(usage))
             {
-                usage = ERHITextureUsage.RenderTarget;
+                throw new ArgumentOutOfRangeException(
+                    nameof(usage),
+                    usage,
+                    "Metal native texture wrap requires an explicit non-zero known ERHITextureUsage.");
             }
 
             return new RHITextureDescriptor

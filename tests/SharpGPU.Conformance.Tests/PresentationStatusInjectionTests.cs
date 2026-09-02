@@ -484,6 +484,10 @@ namespace SharpGPU.Conformance.Tests
                 in RHIFormatSupportQuery query) =>
                 Unsupported<RHICapability>();
 
+            public override RHICapability QueryResolveSupport(
+                in RHIResolveSupportQuery query) =>
+                Unsupported<RHICapability>();
+
             public override RHIClockCalibration QueryClockCalibration(
                 ERHIPipelineType queue,
                 int queueIndex = 0) =>

@@ -207,15 +207,17 @@ namespace SharpGPU
         internal static (Dx12Query Query, Dx12CommandBuffer CommandBuffer) RequireStatisticsQuery(
             RHICommandBuffer? commandBuffer,
             RHIQuery? queryHeap,
+            ERHIPipelineStatisticsDomain expectedDomain,
             uint index)
         {
             Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(commandBuffer);
-            return RequireQueryHeap(
-                dx12CommandBuffer,
+            Dx12Query typedQuery = RHIQueryUseValidator.RequireStatistics<Dx12Query>(
                 queryHeap,
-                "statistics",
+                Dx12EncoderGuards.RequireDevice(commandBuffer),
+                expectedDomain,
                 index,
-                ERHIQueryType.Statistics);
+                "statistics");
+            return (typedQuery, dx12CommandBuffer);
         }
 
         private static (Dx12Query Query, Dx12CommandBuffer CommandBuffer) RequireQueryHeap(
@@ -1541,7 +1543,7 @@ namespace SharpGPU
                     break;
 
                 case ERHIQueryType.Statistics:
-                    dx12CommandBuffer.NativeCommandList.ResolveQueryData(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, startIndex, queriesCount, dx12Query.QueryResult, startIndex * dx12Query.ResultStrideInBytes);
+                    dx12CommandBuffer.NativeCommandList.ResolveQueryData(dx12Query.QueryHeap, dx12Query.NativeQueryType, startIndex, queriesCount, dx12Query.QueryResult, startIndex * dx12Query.ResultStrideInBytes);
                     break;
 
                 default:
@@ -1741,15 +1743,15 @@ namespace SharpGPU
         public override void BeginStatistics(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, index);
-            dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, ERHIPipelineStatisticsDomain.Compute, index);
+            dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, dx12Query.NativeQueryType, index);
         }
 
         public override void EndStatistics(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, index);
-            dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, ERHIPipelineStatisticsDomain.Compute, index);
+            dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, dx12Query.NativeQueryType, index);
         }
 
         public override void SetPipeline(RHIComputePipeline pipeline)
@@ -1997,15 +1999,15 @@ namespace SharpGPU
         public override void BeginStatistics(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, index);
-            dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, ERHIPipelineStatisticsDomain.RayTracing, index);
+            dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, dx12Query.NativeQueryType, index);
         }
 
         public override void EndStatistics(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, index);
-            dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, ERHIPipelineStatisticsDomain.RayTracing, index);
+            dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, dx12Query.NativeQueryType, index);
         }
 
         public override void SetPipeline(RHIRaytracingPipeline pipeline)
@@ -3454,15 +3456,15 @@ namespace SharpGPU
         public override void BeginStatistics(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, index);
-            dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, ERHIPipelineStatisticsDomain.Raster, index);
+            dx12CommandBuffer.NativeCommandList.BeginQuery(dx12Query.QueryHeap, dx12Query.NativeQueryType, index);
         }
 
         public override void EndStatistics(in uint index)
         {
             (Dx12Query dx12Query, Dx12CommandBuffer dx12CommandBuffer) =
-                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, index);
-            dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, Vortice.Direct3D12.QueryType.PipelineStatistics, index);
+                Dx12QueryEncoderValidation.RequireStatisticsQuery(m_CommandBuffer, m_PassDescriptor.Statistics?.Query, ERHIPipelineStatisticsDomain.Raster, index);
+            dx12CommandBuffer.NativeCommandList.EndQuery(dx12Query.QueryHeap, dx12Query.NativeQueryType, index);
         }
 
         public override void Barrier(in RHIBarrier barrier)

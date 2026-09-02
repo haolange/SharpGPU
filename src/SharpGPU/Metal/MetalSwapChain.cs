@@ -488,18 +488,18 @@ namespace SharpGPU
                         : ERHISwapChainStatus.Timeout);
             }
 
-            RHITextureDescriptor backTextureDescriptor =
-                MetalTexture.BuildDescriptorFromNative(
-                    m_CurrentDrawable.Texture);
-            backTextureDescriptor.StorageMode =
-                ERHIStorageMode.GPULocal;
-            backTextureDescriptor.UsageFlag =
-                ERHITextureUsage.RenderTarget;
+            ERHITextureUsage backUsage = ERHITextureUsage.RenderTarget;
             if (!m_Descriptor.FrameBufferOnly)
             {
-                backTextureDescriptor.UsageFlag |=
-                    ERHITextureUsage.ShaderResource;
+                backUsage |= ERHITextureUsage.ShaderResource;
             }
+
+            RHITextureDescriptor backTextureDescriptor =
+                MetalTexture.BuildDescriptorFromNative(
+                    m_CurrentDrawable.Texture,
+                    backUsage);
+            backTextureDescriptor.StorageMode =
+                ERHIStorageMode.GPULocal;
             m_CurrentBackTexture = new MetalTexture(
                 m_MetalDevice,
                 backTextureDescriptor,

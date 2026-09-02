@@ -106,6 +106,7 @@ namespace SharpGPU
         private bool m_RaytracingInlineSupported;
         private bool m_MeshShadingSupported;
         private bool m_TaskShadingSupported;
+        private bool m_MeshShaderQueriesSupported;
         private RHICapabilityLimits m_MeshShaderLimits;
         private bool m_FragmentShadingRateExtensionPresent;
         private bool m_VariableRateShadingPerDrawSupported;
@@ -786,6 +787,7 @@ namespace SharpGPU
             bool rtQueryFeatureSupported = hasRTQuery && rtQueryFeaturesQuery.rayQuery;
             bool meshShaderFeatureSupported = hasMeshShader && meshFeaturesQuery.meshShader;
             bool taskShaderFeatureSupported = hasMeshShader && meshFeaturesQuery.taskShader;
+            bool meshShaderQueriesSupported = hasMeshShader && meshFeaturesQuery.meshShaderQueries;
             bool fragmentShadingRatePerDrawSupported =
                 hasFragmentShadingRate && vrsFeaturesQuery.pipelineFragmentShadingRate;
             bool fragmentShadingRatePerPrimitiveSupported =
@@ -1127,6 +1129,7 @@ namespace SharpGPU
                 meshFeatures.sType = VkStructureType.PhysicalDeviceMeshShaderFeaturesEXT;
                 meshFeatures.meshShader = true;
                 meshFeatures.taskShader = taskShaderFeatureSupported;
+                meshFeatures.meshShaderQueries = meshShaderQueriesSupported;
                 meshFeatures.pNext = pNextChain;
                 pNextChain = &meshFeatures;
             }
@@ -1197,6 +1200,7 @@ namespace SharpGPU
             m_RaytracingInlineSupported = rtInlineSupported;
             m_MeshShadingSupported = meshSupported;
             m_TaskShadingSupported = taskShaderFeatureSupported;
+            m_MeshShaderQueriesSupported = meshSupported && meshShaderQueriesSupported;
             m_MeshShaderLimits = QueryMeshShaderLimits(hasMeshShader);
             string cooperativeMatrixUnavailableReason = !hasCooperativeMatrixExtension
                 ? "VK_KHR_cooperative_matrix is not listed."
@@ -1829,7 +1833,12 @@ namespace SharpGPU
                     pipelineStatisticsQueries: Probe(
                         features.pipelineStatisticsQuery,
                         "VkPhysicalDeviceFeatures.pipelineStatisticsQuery",
-                        "Pipeline statistics queries are unavailable."),
+                        "Pipeline statistics queries are unavailable.",
+                        capabilityLimits: CreateVulkanPipelineStatisticsLimits(
+                            features.pipelineStatisticsQuery,
+                            m_MeshShadingSupported,
+                            m_TaskShadingSupported,
+                            m_MeshShaderQueriesSupported)),
                     enhancedBarriers: Probe(
                         m_UseSynchronization2,
                         "Vulkan 1.3 synchronization2 or VK_KHR_synchronization2",
@@ -2152,6 +2161,8 @@ namespace SharpGPU
 
         public override RHIQuery CreateQuery(in RHIQueryDescriptor descriptor)
         {
+            ThrowIfDeviceUnavailable();
+            ValidateQueryDescriptor(in descriptor);
             VulkanQueryFactoryPolicy.RequireSupportedQueryType(
                 descriptor.Type,
                 Capabilities.Synchronization);
@@ -2209,6 +2220,7 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            ValidateTextureUsage(descriptor.UsageFlag, nameof(descriptor));
             Capabilities.Memory.PlacedResources.Require(
                 "Vulkan texture memory requirements");
             VkImageCreateInfo createInfo =
@@ -2277,6 +2289,7 @@ namespace SharpGPU
         public override RHITexture CreateTexture(in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            ValidateTextureUsage(descriptor.UsageFlag, nameof(descriptor));
             RejectUnpairedSamplerFeedbackTexture(in descriptor);
             return new VulkanTexture(this, descriptor);
         }
@@ -2518,6 +2531,250 @@ namespace SharpGPU
                 mask |= ERHIFormatSupportOperation.VertexBuffer;
             }
 
+            // QueryFormatSupport is a coarse format-feature map. Vulkan has
+            // no VkFormatFeatureFlags bit that literally means resolve.
+            // ResolveSource / ResolveDestination stay unset here; the pair
+            // truth is QueryResolveSupport only.
+            return mask;
+        }
+
+        private RHICapabilityLimits CreateVulkanPipelineStatisticsLimits(
+            bool pipelineStatisticsQuery,
+            bool meshShadingSupported,
+            bool taskShadingSupported,
+            bool meshShaderQueriesSupported)
+        {
+            if (!pipelineStatisticsQuery)
+            {
+                return CreatePipelineStatisticsLimits(
+                    ERHIPipelineStatisticCounter.None,
+                    ERHIPipelineStatisticCounter.None,
+                    ERHIPipelineStatisticCounter.None);
+            }
+
+            ERHIPipelineStatisticCounter raster =
+                ERHIPipelineStatisticCounter.InputAssemblyVertices |
+                ERHIPipelineStatisticCounter.InputAssemblyPrimitives |
+                ERHIPipelineStatisticCounter.VertexShaderInvocations |
+                ERHIPipelineStatisticCounter.GeometryShaderInvocations |
+                ERHIPipelineStatisticCounter.GeometryShaderPrimitives |
+                ERHIPipelineStatisticCounter.ClipperInvocations |
+                ERHIPipelineStatisticCounter.ClipperPrimitives |
+                ERHIPipelineStatisticCounter.PixelShaderInvocations |
+                ERHIPipelineStatisticCounter.HullShaderInvocations |
+                ERHIPipelineStatisticCounter.DomainShaderInvocations;
+            if (meshShaderQueriesSupported &&
+                meshShadingSupported &&
+                HasVulkanMeshPipelineStatisticBits())
+            {
+                raster |= ERHIPipelineStatisticCounter.MeshShaderInvocations |
+                    ERHIPipelineStatisticCounter.MeshShaderPrimitives;
+            }
+
+            if (meshShaderQueriesSupported &&
+                taskShadingSupported &&
+                HasVulkanMeshPipelineStatisticBits())
+            {
+                raster |= ERHIPipelineStatisticCounter.TaskShaderInvocations;
+            }
+
+            return CreatePipelineStatisticsLimits(
+                raster,
+                ERHIPipelineStatisticCounter.ComputeShaderInvocations,
+                ERHIPipelineStatisticCounter.None);
+        }
+
+        private static bool HasVulkanMeshPipelineStatisticBits()
+        {
+            return Enum.IsDefined(
+                typeof(VkQueryPipelineStatisticFlags),
+                (VkQueryPipelineStatisticFlags)0x800);
+        }
+
+        public override RHICapability QueryResolveSupport(
+            in RHIResolveSupportQuery query)
+        {
+            ThrowIfDisposed();
+            const string ProbeSource =
+                "vkGetPhysicalDeviceFormatProperties2 + " +
+                "vkGetPhysicalDeviceImageFormatProperties2 + " +
+                "VkPhysicalDeviceDepthStencilResolveProperties";
+
+            if (query.SourceFormat != query.DestinationFormat)
+            {
+                return RHICapability.Unavailable(
+                    "Vulkan resolve requires the source and destination formats to match exactly.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            if ((query.DestinationUsage & ERHITextureUsage.ResolveTarget) == 0)
+            {
+                return RHICapability.Unavailable(
+                    "Vulkan resolve destination usage must include ResolveTarget.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            VkFormat sourceFormat = VulkanUtility.ConvertToVkFormat(query.SourceFormat);
+            VkFormat destFormat = VulkanUtility.ConvertToVkFormat(query.DestinationFormat);
+            if (!TryQueryVulkanImageSupport(
+                    sourceFormat,
+                    query.SourceUsage,
+                    query.SourceDimension,
+                    query.SourceSampleCount,
+                    query.SourceTiling,
+                    out string sourceReason))
+            {
+                return RHICapability.Unavailable(
+                    sourceReason,
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            if (!TryQueryVulkanImageSupport(
+                    destFormat,
+                    query.DestinationUsage,
+                    query.DestinationDimension,
+                    query.DestinationSampleCount,
+                    query.DestinationTiling,
+                    out string destReason))
+            {
+                return RHICapability.Unavailable(
+                    destReason,
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            bool isDepthStencil =
+                (query.Aspect & (ERHITextureAspectMask.Depth | ERHITextureAspectMask.Stencil)) != 0;
+            ulong supportedModes;
+            if (isDepthStencil)
+            {
+                VkResolveModeFlags nativeModes =
+                    (query.Aspect & ERHITextureAspectMask.Stencil) != 0
+                        ? m_SupportedStencilResolveModes
+                        : m_SupportedDepthResolveModes;
+                if (nativeModes == VkResolveModeFlags.None)
+                {
+                    return RHICapability.Unavailable(
+                        "Vulkan DepthStencilResolveProperties do not expose a resolve mode for this aspect.",
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        ProbeSource);
+                }
+
+                supportedModes = MapVulkanResolveModes(nativeModes);
+                if (query.ResolveMode != ERHIResolveMode.None &&
+                    (supportedModes & (1UL << (byte)query.ResolveMode)) == 0)
+                {
+                    return RHICapability.Unavailable(
+                        $"Vulkan does not support resolve mode {query.ResolveMode} for this depth/stencil pair.",
+                        ERHICapabilityProbeKind.NativeFeatureQuery,
+                        ProbeSource);
+                }
+            }
+            else
+            {
+                if (query.ResolveMode is not (ERHIResolveMode.None or ERHIResolveMode.Sample0))
+                {
+                    return RHICapability.Unavailable(
+                        "Vulkan color resolve uses average / sample-0 only.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        ProbeSource);
+                }
+
+                supportedModes = 1UL << (byte)ERHIResolveMode.Sample0;
+            }
+
+            return RHICapability.Available(
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.CoreApi,
+                ERHICapabilityProbeKind.NativeFeatureQuery,
+                ProbeSource,
+                new RHICapabilityLimits(
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.SupportedResolveModeMask,
+                        supportedModes)));
+        }
+
+        private bool TryQueryVulkanImageSupport(
+            VkFormat format,
+            ERHITextureUsage usage,
+            ERHITextureDimension dimension,
+            ERHISampleCount sampleCount,
+            ERHITextureTiling tiling,
+            out string unavailableReason)
+        {
+            VkImageUsageFlags nativeUsage = VulkanUtility.ConvertToVkImageUsage(usage);
+            if (nativeUsage == 0)
+            {
+                unavailableReason =
+                    "Vulkan cannot map the requested usage to VkImageUsageFlags.";
+                return false;
+            }
+
+            VkPhysicalDeviceImageFormatInfo2 imageInfo = new()
+            {
+                sType = VkStructureType.PhysicalDeviceImageFormatInfo2,
+                format = format,
+                type = VulkanUtility.ConvertToVkImageType(dimension),
+                tiling = tiling == ERHITextureTiling.Linear
+                    ? VkImageTiling.Linear
+                    : VkImageTiling.Optimal,
+                usage = nativeUsage,
+                flags = VulkanUtility.ConvertToVkImageCreateFlags(dimension),
+            };
+            VkImageFormatProperties2 imageProperties = new()
+            {
+                sType = VkStructureType.ImageFormatProperties2,
+            };
+            VkResult result =
+                VulkanNative.vkGetPhysicalDeviceImageFormatProperties2(
+                    m_PhysicalDevice,
+                    &imageInfo,
+                    &imageProperties);
+            if (result != VkResult.Success)
+            {
+                unavailableReason =
+                    $"Vulkan rejected {format} for image usage {nativeUsage}: {result}.";
+                return false;
+            }
+
+            if (sampleCount != ERHISampleCount.None)
+            {
+                VkSampleCountFlags nativeSampleCount =
+                    VulkanUtility.ConvertToVkSampleCount(sampleCount);
+                if ((imageProperties.imageFormatProperties.sampleCounts &
+                     nativeSampleCount) == 0)
+                {
+                    unavailableReason =
+                        $"Vulkan format {format} does not support {sampleCount} for the queried image combination.";
+                    return false;
+                }
+            }
+
+            unavailableReason = string.Empty;
+            return true;
+        }
+
+        private static ulong MapVulkanResolveModes(VkResolveModeFlags nativeModes)
+        {
+            ulong mask = 0;
+            if ((nativeModes & VkResolveModeFlags.SampleZero) != 0)
+            {
+                mask |= 1UL << (byte)ERHIResolveMode.Sample0;
+            }
+
+            if ((nativeModes & VkResolveModeFlags.Min) != 0)
+            {
+                mask |= 1UL << (byte)ERHIResolveMode.Min;
+            }
+
+            if ((nativeModes & VkResolveModeFlags.Max) != 0)
+            {
+                mask |= 1UL << (byte)ERHIResolveMode.Max;
+            }
+
             return mask;
         }
 
@@ -2680,6 +2937,7 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            ValidateTextureUsage(descriptor.UsageFlag, nameof(descriptor));
             Capabilities.Memory.RequireSparseTexture(
                 descriptor,
                 "Vulkan sparse texture requirements");
@@ -2703,6 +2961,7 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            ValidateTextureUsage(descriptor.UsageFlag, nameof(descriptor));
             Capabilities.Memory.RequireSparseTexture(
                 descriptor,
                 "Vulkan sparse textures");

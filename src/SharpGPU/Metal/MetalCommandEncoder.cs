@@ -1723,10 +1723,26 @@ namespace SharpGPU
 
         public override void BeginStatistics(in uint index)
         {
+            RHIQueryUseValidator.RequireStatistics<MetalQuery>(
+                m_PassDescriptor.Statistics?.Query,
+                m_MetalDevice,
+                ERHIPipelineStatisticsDomain.Compute,
+                index,
+                nameof(BeginStatistics));
+            throw new NotSupportedException(
+                "Metal compute pipeline statistics are unavailable: no native compute statistic counter is exposed.");
         }
 
         public override void EndStatistics(in uint index)
         {
+            RHIQueryUseValidator.RequireStatistics<MetalQuery>(
+                m_PassDescriptor.Statistics?.Query,
+                m_MetalDevice,
+                ERHIPipelineStatisticsDomain.Compute,
+                index,
+                nameof(EndStatistics));
+            throw new NotSupportedException(
+                "Metal compute pipeline statistics are unavailable: no native compute statistic counter is exposed.");
         }
 
         public override void SetPipeline(RHIComputePipeline pipeline)
@@ -1988,10 +2004,26 @@ namespace SharpGPU
 
         public override void BeginStatistics(in uint index)
         {
+            RHIQueryUseValidator.RequireStatistics<MetalQuery>(
+                m_PassDescriptor.Statistics?.Query,
+                m_MetalDevice,
+                ERHIPipelineStatisticsDomain.RayTracing,
+                index,
+                nameof(BeginStatistics));
+            throw new NotSupportedException(
+                "Metal ray-tracing pipeline statistics are unavailable: no native ray statistic counter is exposed.");
         }
 
         public override void EndStatistics(in uint index)
         {
+            RHIQueryUseValidator.RequireStatistics<MetalQuery>(
+                m_PassDescriptor.Statistics?.Query,
+                m_MetalDevice,
+                ERHIPipelineStatisticsDomain.RayTracing,
+                index,
+                nameof(EndStatistics));
+            throw new NotSupportedException(
+                "Metal ray-tracing pipeline statistics are unavailable: no native ray statistic counter is exposed.");
         }
 
         public override void SetPipeline(RHIRaytracingPipeline pipeline)
@@ -3056,22 +3088,28 @@ internal readonly struct MetalRasterCapabilities
 
         public override void BeginStatistics(in uint index)
         {
-            if (m_HasPendingPassDescriptor && m_PendingPassDescriptor.Statistics.HasValue)
-            {
-                MetalQuery query = m_PendingPassDescriptor.Statistics.Value.Query as MetalQuery
-                    ?? throw new InvalidOperationException("Metal raster statistics pass requires a MetalQuery.");
-                query.BeginStatistics(m_NativeEncoder4, index);
-            }
+            MetalDevice device =
+                ((MetalCommandQueue)((MetalCommandBuffer)m_CommandBuffer!).CommandQueue).MetalDevice;
+            MetalQuery query = RHIQueryUseValidator.RequireStatistics<MetalQuery>(
+                m_HasPendingPassDescriptor ? m_PendingPassDescriptor.Statistics?.Query : null,
+                device,
+                ERHIPipelineStatisticsDomain.Raster,
+                index,
+                nameof(BeginStatistics));
+            query.BeginStatistics(m_NativeEncoder4, index);
         }
 
         public override void EndStatistics(in uint index)
         {
-            if (m_HasPendingPassDescriptor && m_PendingPassDescriptor.Statistics.HasValue)
-            {
-                MetalQuery query = m_PendingPassDescriptor.Statistics.Value.Query as MetalQuery
-                    ?? throw new InvalidOperationException("Metal raster statistics pass requires a MetalQuery.");
-                query.EndStatistics(m_NativeEncoder4, index);
-            }
+            MetalDevice device =
+                ((MetalCommandQueue)((MetalCommandBuffer)m_CommandBuffer!).CommandQueue).MetalDevice;
+            MetalQuery query = RHIQueryUseValidator.RequireStatistics<MetalQuery>(
+                m_HasPendingPassDescriptor ? m_PendingPassDescriptor.Statistics?.Query : null,
+                device,
+                ERHIPipelineStatisticsDomain.Raster,
+                index,
+                nameof(EndStatistics));
+            query.EndStatistics(m_NativeEncoder4, index);
         }
 
         public override void NextSubPass()

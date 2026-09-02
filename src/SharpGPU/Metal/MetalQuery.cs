@@ -22,10 +22,17 @@ namespace SharpGPU
         {
             m_Device = device;
             m_QueryDescriptor = descriptor;
-            m_Results = new ulong[descriptor.Count];
             m_IsTimestampQuery = descriptor.Type == ERHIQueryType.TimestampTransfer || descriptor.Type == ERHIQueryType.Timestamp;
             m_IsOcclusionQuery = descriptor.Type == ERHIQueryType.Occlusion;
             m_IsStatisticsQuery = descriptor.Type == ERHIQueryType.Statistics;
+            if (m_IsStatisticsQuery)
+            {
+                m_RasterStatistics = new RHIRasterPipelineStatistics[descriptor.Count];
+            }
+            else
+            {
+                m_Results = new ulong[descriptor.Count];
+            }
 
             if (m_IsOcclusionQuery)
             {
@@ -311,9 +318,15 @@ namespace SharpGPU
             return ERHIQueryResultStatus.Ready;
         }
 
+        private static ulong Delta(ulong begin, ulong end)
+        {
+            return end >= begin ? end - begin : 0;
+        }
+
         private ERHIQueryResultStatus ResolveStatisticsData()
         {
-            if (m_StatisticsSampleBuffer.NativePtr == IntPtr.Zero || m_Results == null)
+            if (m_StatisticsSampleBuffer.NativePtr == IntPtr.Zero ||
+                m_RasterStatistics.Length == 0)
             {
                 return ERHIQueryResultStatus.NotReady;
             }
@@ -330,15 +343,26 @@ namespace SharpGPU
             }
 
             int resultSize = Marshal.SizeOf<MTLCounterResultStatistic>();
-            for (int i = 0; i < m_Results.Length; ++i)
+            for (int i = 0; i < m_RasterStatistics.Length; ++i)
             {
                 IntPtr beginPtr = IntPtr.Add(bytes, checked(i * 2 * resultSize));
                 IntPtr endPtr = IntPtr.Add(bytes, checked((i * 2 + 1) * resultSize));
                 MTLCounterResultStatistic begin = Marshal.PtrToStructure<MTLCounterResultStatistic>(beginPtr);
                 MTLCounterResultStatistic end = Marshal.PtrToStructure<MTLCounterResultStatistic>(endPtr);
-                m_Results[i] = end.fragmentInvocations >= begin.fragmentInvocations
-                    ? end.fragmentInvocations - begin.fragmentInvocations
-                    : end.fragmentsPassed;
+                m_RasterStatistics[i] = new RHIRasterPipelineStatistics(
+                    0,
+                    0,
+                    Delta(begin.vertexInvocations, end.vertexInvocations),
+                    0,
+                    0,
+                    Delta(begin.clipperInvocations, end.clipperInvocations),
+                    Delta(begin.clipperPrimitivesOut, end.clipperPrimitivesOut),
+                    Delta(begin.fragmentInvocations, end.fragmentInvocations),
+                    Delta(begin.tessellationInputPatches, end.tessellationInputPatches),
+                    Delta(begin.postTessellationVertexInvocations, end.postTessellationVertexInvocations),
+                    0,
+                    0,
+                    0);
             }
 
             return ERHIQueryResultStatus.Ready;

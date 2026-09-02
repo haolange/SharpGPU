@@ -215,15 +215,12 @@ namespace SharpGPU
 
         public override RHIQuery CreateQuery(in RHIQueryDescriptor descriptor)
         {
+            ThrowIfCommandQueueFailed();
+            ValidateQueryDescriptor(in descriptor);
             if ((descriptor.Type == ERHIQueryType.TimestampTransfer || descriptor.Type == ERHIQueryType.Timestamp)
                 && Capabilities.Synchronization.TimestampQueries.Tier == ERHICapabilityTier.Unavailable)
             {
                 throw new NotSupportedException(m_TimestampQueriesUnavailableReason ?? "Metal timestamp queries require native MTL4CounterHeap support.");
-            }
-
-            if (descriptor.Type == ERHIQueryType.Statistics && Capabilities.Synchronization.PipelineStatisticsQueries.Tier == ERHICapabilityTier.Unavailable)
-            {
-                throw new NotSupportedException("Metal pipeline statistics queries require a device statistics counter set.");
             }
 
             return new MetalQuery(this, descriptor);
@@ -264,6 +261,7 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            ValidateTextureUsage(descriptor.UsageFlag, nameof(descriptor));
             Capabilities.Memory.PlacedResources.Require(
                 "Metal texture memory requirements");
             MTLTextureDescriptor nativeDescriptor =
@@ -288,6 +286,7 @@ namespace SharpGPU
                 in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            ValidateTextureUsage(descriptor.UsageFlag, nameof(descriptor));
             Capabilities.Memory.RequireSparseTexture(
                 descriptor,
                 "Metal sparse texture memory requirements");
@@ -312,6 +311,7 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            ValidateTextureUsage(descriptor.UsageFlag, nameof(descriptor));
             Capabilities.Memory.RequireSparseTexture(
                 descriptor,
                 "Metal sparse texture creation");
@@ -364,6 +364,7 @@ namespace SharpGPU
         public override RHITexture CreateTexture(in RHITextureDescriptor descriptor)
         {
             ThrowIfDisposed();
+            ValidateTextureUsage(descriptor.UsageFlag, nameof(descriptor));
             RejectUnpairedSamplerFeedbackTexture(in descriptor);
             return new MetalTexture(this, descriptor);
         }
@@ -656,6 +657,162 @@ namespace SharpGPU
                         ERHICapabilityLimitKind.SupportedFormatOperationMask,
                         (ulong)mask)));
         }
+
+        private static RHICapabilityLimits CreateMetalPipelineStatisticsLimits(
+            bool statisticsCounterSetAvailable)
+        {
+            if (!statisticsCounterSetAvailable)
+            {
+                return CreatePipelineStatisticsLimits(
+                    ERHIPipelineStatisticCounter.None,
+                    ERHIPipelineStatisticCounter.None,
+                    ERHIPipelineStatisticCounter.None);
+            }
+
+            const ERHIPipelineStatisticCounter rasterCounters =
+                ERHIPipelineStatisticCounter.VertexShaderInvocations |
+                ERHIPipelineStatisticCounter.HullShaderInvocations |
+                ERHIPipelineStatisticCounter.DomainShaderInvocations |
+                ERHIPipelineStatisticCounter.ClipperInvocations |
+                ERHIPipelineStatisticCounter.ClipperPrimitives |
+                ERHIPipelineStatisticCounter.PixelShaderInvocations;
+            return CreatePipelineStatisticsLimits(
+                rasterCounters,
+                ERHIPipelineStatisticCounter.None,
+                ERHIPipelineStatisticCounter.None);
+        }
+
+        public override RHICapability QueryResolveSupport(
+            in RHIResolveSupportQuery query)
+        {
+            ThrowIfDisposed();
+            const string ProbeSource =
+                "Metal resolve format table + supportsTextureSampleCount";
+
+            if (query.SourceTiling == ERHITextureTiling.Linear ||
+                query.DestinationTiling == ERHITextureTiling.Linear)
+            {
+                return RHICapability.Unavailable(
+                    "Metal does not expose a generic linear image tiling query for resolve.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            if (query.SourceFormat != query.DestinationFormat)
+            {
+                return RHICapability.Unavailable(
+                    "Metal resolve requires the source and destination formats to match exactly.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            if ((query.DestinationUsage & ERHITextureUsage.ResolveTarget) == 0)
+            {
+                return RHICapability.Unavailable(
+                    "Metal resolve destination usage must include ResolveTarget.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            if (!IsKnownMetalResolveFormat(query.SourceFormat) ||
+                !IsKnownMetalResolveFormat(query.DestinationFormat))
+            {
+                return RHICapability.Unavailable(
+                    "Metal resolve support is unknown for this format pair.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            ulong sampleCount = checked((ulong)query.SourceSampleCount);
+            if (!m_NativeDevice.SupportsTextureSampleCount(sampleCount))
+            {
+                return RHICapability.Unavailable(
+                    $"Metal does not support {sampleCount}x MSAA.",
+                    ERHICapabilityProbeKind.NativeFeatureQuery,
+                    ProbeSource);
+            }
+
+            bool isDepthStencil =
+                (query.Aspect & (ERHITextureAspectMask.Depth | ERHITextureAspectMask.Stencil)) != 0;
+            ERHITextureUsage requiredSourceUsage = isDepthStencil
+                ? ERHITextureUsage.DepthStencil
+                : ERHITextureUsage.RenderTarget;
+            if ((query.SourceUsage & requiredSourceUsage) == 0)
+            {
+                return RHICapability.Unavailable(
+                    $"Metal resolve source usage must include {requiredSourceUsage}.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            if (isDepthStencil)
+            {
+                if (!IsKnownMetalDepthResolveFormat(query.SourceFormat) ||
+                    !IsKnownMetalDepthResolveFormat(query.DestinationFormat))
+                {
+                    return RHICapability.Unavailable(
+                        "Metal depth/stencil resolve support is unknown for this format pair.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        ProbeSource);
+                }
+
+                ulong supportedModes =
+                    (1UL << (byte)ERHIResolveMode.Min) |
+                    (1UL << (byte)ERHIResolveMode.Max) |
+                    (1UL << (byte)ERHIResolveMode.Sample0);
+                if (query.ResolveMode != ERHIResolveMode.None &&
+                    (supportedModes & (1UL << (byte)query.ResolveMode)) == 0)
+                {
+                    return RHICapability.Unavailable(
+                        $"Metal does not support resolve mode {query.ResolveMode} for this depth/stencil pair.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        ProbeSource);
+                }
+
+                return RHICapability.Available(
+                    ERHICapabilityTier.Tier1,
+                    ERHICapabilityStrategy.NativeSpecialized,
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource,
+                    new RHICapabilityLimits(
+                        new RHICapabilityLimit(
+                            ERHICapabilityLimitKind.SupportedResolveModeMask,
+                            supportedModes)));
+            }
+
+            if (query.ResolveMode is not (ERHIResolveMode.None or ERHIResolveMode.Sample0))
+            {
+                return RHICapability.Unavailable(
+                    "Metal color resolve uses average / sample-0 only.",
+                    ERHICapabilityProbeKind.BackendContract,
+                    ProbeSource);
+            }
+
+            return RHICapability.Available(
+                ERHICapabilityTier.Tier1,
+                ERHICapabilityStrategy.NativeSpecialized,
+                ERHICapabilityProbeKind.BackendContract,
+                ProbeSource,
+                new RHICapabilityLimits(
+                    new RHICapabilityLimit(
+                        ERHICapabilityLimitKind.SupportedResolveModeMask,
+                        1UL << (byte)ERHIResolveMode.Sample0)));
+        }
+
+        private static bool IsKnownMetalResolveFormat(ERHIPixelFormat format) =>
+            IsKnownMetalBlendableFormat(format) ||
+            format is
+                ERHIPixelFormat.D32_Float or
+                ERHIPixelFormat.D24_UNorm_S8_UInt or
+                ERHIPixelFormat.D32_Float_S8_UInt or
+                ERHIPixelFormat.D16_UNorm;
+
+        private static bool IsKnownMetalDepthResolveFormat(ERHIPixelFormat format) =>
+            format is
+                ERHIPixelFormat.D32_Float or
+                ERHIPixelFormat.D24_UNorm_S8_UInt or
+                ERHIPixelFormat.D32_Float_S8_UInt or
+                ERHIPixelFormat.D16_UNorm;
 
         public override int QueryCooperativeMatrixConfigs(
             Span<RHICooperativeMatrixConfig> destination)
@@ -1270,7 +1427,9 @@ namespace SharpGPU
                         isPipelineStatsSupported,
                         "MTLDevice counterSets statistics probe",
                         "Metal pipeline statistics counter sets are unavailable.",
-                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe),
+                        probeKind: ERHICapabilityProbeKind.RuntimeObjectProbe,
+                        limits: CreateMetalPipelineStatisticsLimits(
+                            isPipelineStatsSupported)),
                     enhancedBarriers: Probe(
                         m_SupportsMetal4Barriers,
                         "Metal 4 barrier contract",
@@ -1597,24 +1756,10 @@ namespace SharpGPU
             {
                 MTLCounterSet candidate = new MTLCounterSet(counterSets[i]);
                 string name = candidate.Name.ToString() ?? string.Empty;
-                if (name.Contains("stat", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(name, "Statistic", StringComparison.Ordinal))
                 {
                     counterSet = candidate;
                     return true;
-                }
-
-                NSArray counters = candidate.Counters;
-                for (uint counterIndex = 0; counterIndex < counters.Count; ++counterIndex)
-                {
-                    MTLCounter counter = new MTLCounter(counters[counterIndex]);
-                    string counterName = counter.Name.ToString() ?? string.Empty;
-                    if (counterName.Contains("vertex", StringComparison.OrdinalIgnoreCase)
-                        || counterName.Contains("fragment", StringComparison.OrdinalIgnoreCase)
-                        || counterName.Contains("primitive", StringComparison.OrdinalIgnoreCase))
-                    {
-                        counterSet = candidate;
-                        return true;
-                    }
                 }
             }
 

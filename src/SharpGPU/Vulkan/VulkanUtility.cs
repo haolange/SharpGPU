@@ -461,6 +461,8 @@ namespace SharpGPU
             if ((usage & ERHITextureUsage.RenderTarget) == ERHITextureUsage.RenderTarget)
                 result |= VkImageUsageFlags.ColorAttachment |
                           VkImageUsageFlags.InputAttachment;
+            if ((usage & ERHITextureUsage.ResolveTarget) == ERHITextureUsage.ResolveTarget)
+                result |= VkImageUsageFlags.ColorAttachment;
             if ((usage & ERHITextureUsage.ShaderResource) == ERHITextureUsage.ShaderResource)
                 result |= VkImageUsageFlags.Sampled;
             if ((usage & ERHITextureUsage.UnorderedAccess) != 0)

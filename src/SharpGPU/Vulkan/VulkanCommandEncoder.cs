@@ -105,6 +105,27 @@ namespace SharpGPU
         }
     }
 
+    internal static class VulkanQueryEncoderValidation
+    {
+        internal static (VulkanQuery Query, VulkanCommandBuffer CommandBuffer) RequireStatistics(
+            RHICommandBuffer? commandBuffer,
+            RHIQuery? query,
+            ERHIPipelineStatisticsDomain expectedDomain,
+            uint index,
+            string operation)
+        {
+            VulkanCommandBuffer typedCommandBuffer =
+                VulkanEncoderGuards.RequireCommandBuffer(commandBuffer);
+            VulkanQuery typedQuery = RHIQueryUseValidator.RequireStatistics<VulkanQuery>(
+                query,
+                VulkanEncoderGuards.RequireDevice(commandBuffer),
+                expectedDomain,
+                index,
+                operation);
+            return (typedQuery, typedCommandBuffer);
+        }
+    }
+
     internal static unsafe class VulkanBarrierEmitter
     {
         private sealed class Sync1Bucket
@@ -909,9 +930,12 @@ namespace SharpGPU
 
         public override void ResolveQuery(RHIQuery query, in uint startIndex, in uint queriesCount)
         {
-            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
             VulkanQuery vkQuery = VulkanEncoderGuards.RequireQuery(query);
-            VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, startIndex, queriesCount);
+            // Host readback uses vkGetQueryPoolResults. Resetting the pool here
+            // would wipe results before ResolveData and return NotReady.
+            // vkCmdResetQueryPool belongs only to BeginStatistics / BeginOcclusion /
+            // WriteTimestamp, immediately before the query is written.
+            vkQuery.MarkResolvedRange(startIndex, queriesCount);
         }
 
         public override void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size)
@@ -1090,23 +1114,27 @@ namespace SharpGPU
 
         public override void BeginStatistics(in uint index)
         {
-            if (m_PassDescriptor.Statistics.HasValue)
-            {
-                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
-                VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
-                VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 0);
-            }
+            (VulkanQuery vkQuery, VulkanCommandBuffer vkCmdBuf) =
+                VulkanQueryEncoderValidation.RequireStatistics(
+                    m_CommandBuffer,
+                    m_PassDescriptor.Statistics?.Query,
+                    ERHIPipelineStatisticsDomain.Compute,
+                    index,
+                    nameof(BeginStatistics));
+            VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
+            VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 0);
         }
 
         public override void EndStatistics(in uint index)
         {
-            if (m_PassDescriptor.Statistics.HasValue)
-            {
-                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
-                VulkanNative.vkCmdEndQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index);
-            }
+            (VulkanQuery vkQuery, VulkanCommandBuffer vkCmdBuf) =
+                VulkanQueryEncoderValidation.RequireStatistics(
+                    m_CommandBuffer,
+                    m_PassDescriptor.Statistics?.Query,
+                    ERHIPipelineStatisticsDomain.Compute,
+                    index,
+                    nameof(EndStatistics));
+            VulkanNative.vkCmdEndQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index);
         }
 
         public override void SetPipeline(RHIComputePipeline pipeline)
@@ -3703,23 +3731,27 @@ internal enum EVulkanRasterPassStrategy
 
         public override void BeginStatistics(in uint index)
         {
-            if (m_PassDescriptor.Statistics.HasValue)
-            {
-                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
-                VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
-                VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 0);
-            }
+            (VulkanQuery vkQuery, VulkanCommandBuffer vkCmdBuf) =
+                VulkanQueryEncoderValidation.RequireStatistics(
+                    m_CommandBuffer,
+                    m_PassDescriptor.Statistics?.Query,
+                    ERHIPipelineStatisticsDomain.Raster,
+                    index,
+                    nameof(BeginStatistics));
+            VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
+            VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 0);
         }
 
         public override void EndStatistics(in uint index)
         {
-            if (m_PassDescriptor.Statistics.HasValue)
-            {
-                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
-                VulkanNative.vkCmdEndQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index);
-            }
+            (VulkanQuery vkQuery, VulkanCommandBuffer vkCmdBuf) =
+                VulkanQueryEncoderValidation.RequireStatistics(
+                    m_CommandBuffer,
+                    m_PassDescriptor.Statistics?.Query,
+                    ERHIPipelineStatisticsDomain.Raster,
+                    index,
+                    nameof(EndStatistics));
+            VulkanNative.vkCmdEndQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index);
         }
 
         public override void NextSubPass()
@@ -4336,21 +4368,20 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
 
         public override void BeginStatistics(in uint index)
         {
-            if (!m_PassDescriptor.Statistics.HasValue)
-            {
-                return;
-            }
-            VulkanQuery query =
-                m_PassDescriptor.Statistics.Value.Query as VulkanQuery
-                ?? throw new ArgumentException(
-                    "The statistics query must belong to Vulkan.");
+            (VulkanQuery query, VulkanCommandBuffer vkCmdBuf) =
+                VulkanQueryEncoderValidation.RequireStatistics(
+                    m_CommandBuffer,
+                    m_PassDescriptor.Statistics?.Query,
+                    ERHIPipelineStatisticsDomain.Raster,
+                    index,
+                    nameof(BeginStatistics));
             VulkanNative.vkCmdResetQueryPool(
-                m_VulkanCommandBuffer.NativeCommandBuffer,
+                vkCmdBuf.NativeCommandBuffer,
                 query.NativeQueryPool,
                 index,
                 1);
             VulkanNative.vkCmdBeginQuery(
-                m_VulkanCommandBuffer.NativeCommandBuffer,
+                vkCmdBuf.NativeCommandBuffer,
                 query.NativeQueryPool,
                 index,
                 0);
@@ -4358,14 +4389,15 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
 
         public override void EndStatistics(in uint index)
         {
-            if (!m_PassDescriptor.Statistics.HasValue)
-            {
-                return;
-            }
-            VulkanQuery query =
-                (VulkanQuery)m_PassDescriptor.Statistics.Value.Query;
+            (VulkanQuery query, VulkanCommandBuffer vkCmdBuf) =
+                VulkanQueryEncoderValidation.RequireStatistics(
+                    m_CommandBuffer,
+                    m_PassDescriptor.Statistics?.Query,
+                    ERHIPipelineStatisticsDomain.Raster,
+                    index,
+                    nameof(EndStatistics));
             VulkanNative.vkCmdEndQuery(
-                m_VulkanCommandBuffer.NativeCommandBuffer,
+                vkCmdBuf.NativeCommandBuffer,
                 query.NativeQueryPool,
                 index);
         }
@@ -6078,23 +6110,27 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
 
         public override void BeginStatistics(in uint index)
         {
-            if (m_PassDescriptor.Statistics.HasValue)
-            {
-                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
-                VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
-                VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 0);
-            }
+            (VulkanQuery vkQuery, VulkanCommandBuffer vkCmdBuf) =
+                VulkanQueryEncoderValidation.RequireStatistics(
+                    m_CommandBuffer,
+                    m_PassDescriptor.Statistics?.Query,
+                    ERHIPipelineStatisticsDomain.RayTracing,
+                    index,
+                    nameof(BeginStatistics));
+            VulkanNative.vkCmdResetQueryPool(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 1);
+            VulkanNative.vkCmdBeginQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index, 0);
         }
 
         public override void EndStatistics(in uint index)
         {
-            if (m_PassDescriptor.Statistics.HasValue)
-            {
-                VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
-                VulkanQuery vkQuery = m_PassDescriptor.Statistics.Value.Query as VulkanQuery ?? throw new InvalidOperationException("Pass query must be a VulkanQuery.");
-                VulkanNative.vkCmdEndQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index);
-            }
+            (VulkanQuery vkQuery, VulkanCommandBuffer vkCmdBuf) =
+                VulkanQueryEncoderValidation.RequireStatistics(
+                    m_CommandBuffer,
+                    m_PassDescriptor.Statistics?.Query,
+                    ERHIPipelineStatisticsDomain.RayTracing,
+                    index,
+                    nameof(EndStatistics));
+            VulkanNative.vkCmdEndQuery(vkCmdBuf.NativeCommandBuffer, vkQuery.NativeQueryPool, index);
         }
 
         public override void SetPipeline(RHIRaytracingPipeline pipeline)

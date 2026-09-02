@@ -160,10 +160,11 @@ namespace SharpGPU
         ColorAttachment = 1UL << 4,
         DepthStencilAttachment = 1UL << 5,
         Blend = 1UL << 6,
-        Resolve = 1UL << 7,
+        ResolveSource = 1UL << 7,
         LinearFilter = 1UL << 8,
         VertexBuffer = 1UL << 9,
-        IndexBuffer = 1UL << 10
+        IndexBuffer = 1UL << 10,
+        ResolveDestination = 1UL << 11
     }
 
     /// <summary>
@@ -195,13 +196,12 @@ namespace SharpGPU
                     format,
                     "Format support queries require a concrete pixel format.");
             }
-            if (usage == ERHITextureUsage.Pending ||
-                !IsKnownTextureUsage(usage))
+            if (!IsKnownTextureUsage(usage))
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(usage),
                     usage,
-                    "Format support queries reject Pending or unknown texture usage.");
+                    "Format support queries reject None, zero, or unknown texture usage.");
             }
             if (dimension == ERHITextureDimension.Pending ||
                 !Enum.IsDefined(dimension))
@@ -238,7 +238,7 @@ namespace SharpGPU
             Tiling = tiling;
         }
 
-        private static bool IsKnownTextureUsage(ERHITextureUsage usage)
+        internal static bool IsKnownTextureUsage(ERHITextureUsage usage)
         {
             const ERHITextureUsage knownBits =
                 ERHITextureUsage.CopySrc |
@@ -248,8 +248,174 @@ namespace SharpGPU
                 ERHITextureUsage.ResolveTarget |
                 ERHITextureUsage.ShaderResource |
                 ERHITextureUsage.UnorderedAccess;
-            return usage != ERHITextureUsage.Pending &&
+            return usage != ERHITextureUsage.None &&
                 (usage & ~knownBits) == 0;
+        }
+    }
+
+    /// <summary>
+    /// Describes one exact MSAA source and single-sample destination pair
+    /// for a resolve query. Extent and layer equality stay encoder-time.
+    /// </summary>
+    public readonly struct RHIResolveSupportQuery
+    {
+        public ERHIPixelFormat SourceFormat { get; }
+        public ERHITextureUsage SourceUsage { get; }
+        public ERHITextureDimension SourceDimension { get; }
+        public ERHISampleCount SourceSampleCount { get; }
+        public ERHITextureTiling SourceTiling { get; }
+        public ERHIPixelFormat DestinationFormat { get; }
+        public ERHITextureUsage DestinationUsage { get; }
+        public ERHITextureDimension DestinationDimension { get; }
+        public ERHISampleCount DestinationSampleCount { get; }
+        public ERHITextureTiling DestinationTiling { get; }
+        public ERHITextureAspectMask Aspect { get; }
+        public ERHIResolveMode ResolveMode { get; }
+
+        public RHIResolveSupportQuery(
+            ERHIPixelFormat sourceFormat,
+            ERHITextureUsage sourceUsage,
+            ERHITextureDimension sourceDimension,
+            ERHISampleCount sourceSampleCount,
+            ERHITextureTiling sourceTiling,
+            ERHIPixelFormat destinationFormat,
+            ERHITextureUsage destinationUsage,
+            ERHITextureDimension destinationDimension,
+            ERHISampleCount destinationSampleCount,
+            ERHITextureTiling destinationTiling,
+            ERHITextureAspectMask aspect,
+            ERHIResolveMode resolveMode)
+        {
+            ValidateFormat(sourceFormat, nameof(sourceFormat));
+            ValidateUsage(sourceUsage, nameof(sourceUsage));
+            ValidateDimension(sourceDimension, nameof(sourceDimension));
+            ValidateTiling(sourceTiling, nameof(sourceTiling));
+            ValidateFormat(destinationFormat, nameof(destinationFormat));
+            ValidateUsage(destinationUsage, nameof(destinationUsage));
+            ValidateDimension(destinationDimension, nameof(destinationDimension));
+            ValidateTiling(destinationTiling, nameof(destinationTiling));
+            if (sourceSampleCount is not (
+                    ERHISampleCount.Count2 or
+                    ERHISampleCount.Count4 or
+                    ERHISampleCount.Count8))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(sourceSampleCount),
+                    sourceSampleCount,
+                    "Resolve support queries require an MSAA source sample count.");
+            }
+
+            if (destinationSampleCount != ERHISampleCount.None)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(destinationSampleCount),
+                    destinationSampleCount,
+                    "Resolve support queries require a single-sample destination.");
+            }
+
+            const ERHITextureAspectMask knownAspects =
+                ERHITextureAspectMask.Color |
+                ERHITextureAspectMask.Depth |
+                ERHITextureAspectMask.Stencil;
+            if (aspect == ERHITextureAspectMask.None ||
+                (aspect & ~knownAspects) != 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(aspect),
+                    aspect,
+                    "Resolve support queries require a concrete texture aspect.");
+            }
+
+            if (resolveMode == ERHIResolveMode.Pending ||
+                !Enum.IsDefined(resolveMode))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(resolveMode),
+                    resolveMode,
+                    "Resolve support queries require a concrete resolve mode.");
+            }
+
+            if (sourceFormat != destinationFormat)
+            {
+                throw new ArgumentException(
+                    "Resolve support queries require the source and destination formats to match exactly.",
+                    nameof(destinationFormat));
+            }
+
+            if ((destinationUsage & ERHITextureUsage.ResolveTarget) == 0)
+            {
+                throw new ArgumentException(
+                    "Resolve support queries require DestinationUsage to include ResolveTarget.",
+                    nameof(destinationUsage));
+            }
+
+            SourceFormat = sourceFormat;
+            SourceUsage = sourceUsage;
+            SourceDimension = sourceDimension;
+            SourceSampleCount = sourceSampleCount;
+            SourceTiling = sourceTiling;
+            DestinationFormat = destinationFormat;
+            DestinationUsage = destinationUsage;
+            DestinationDimension = destinationDimension;
+            DestinationSampleCount = destinationSampleCount;
+            DestinationTiling = destinationTiling;
+            Aspect = aspect;
+            ResolveMode = resolveMode;
+        }
+
+        private static void ValidateFormat(
+            ERHIPixelFormat format,
+            string paramName)
+        {
+            if (format is ERHIPixelFormat.Unknown or ERHIPixelFormat.Pending ||
+                !Enum.IsDefined(format))
+            {
+                throw new ArgumentOutOfRangeException(
+                    paramName,
+                    format,
+                    "Resolve support queries require a concrete pixel format.");
+            }
+        }
+
+        private static void ValidateUsage(
+            ERHITextureUsage usage,
+            string paramName)
+        {
+            if (!RHIFormatSupportQuery.IsKnownTextureUsage(usage))
+            {
+                throw new ArgumentOutOfRangeException(
+                    paramName,
+                    usage,
+                    "Resolve support queries reject None, zero, or unknown texture usage.");
+            }
+        }
+
+        private static void ValidateDimension(
+            ERHITextureDimension dimension,
+            string paramName)
+        {
+            if (dimension == ERHITextureDimension.Pending ||
+                !Enum.IsDefined(dimension))
+            {
+                throw new ArgumentOutOfRangeException(
+                    paramName,
+                    dimension,
+                    "Resolve support queries require a concrete texture dimension.");
+            }
+        }
+
+        private static void ValidateTiling(
+            ERHITextureTiling tiling,
+            string paramName)
+        {
+            if (tiling == ERHITextureTiling.Pending ||
+                !Enum.IsDefined(tiling))
+            {
+                throw new ArgumentOutOfRangeException(
+                    paramName,
+                    tiling,
+                    "Resolve support queries require a concrete texture tiling.");
+            }
         }
     }
 
@@ -419,6 +585,14 @@ namespace SharpGPU
         public abstract RHICapability QueryFormatSupport(
             in RHIFormatSupportQuery query);
         /// <summary>
+        /// Queries whether this device can resolve one exact MSAA source
+        /// into one exact single-sample destination. This does not replace
+        /// <see cref="QueryRasterAttachmentSupport"/> or
+        /// <see cref="QueryFormatSupport"/>.
+        /// </summary>
+        public abstract RHICapability QueryResolveSupport(
+            in RHIResolveSupportQuery query);
+        /// <summary>
         /// Returns a native GPU/CPU clock calibration for the selected queue.
         /// Requires <see cref="RHISynchronizationCapabilities.CalibratedTimestamps"/>.
         /// </summary>
@@ -537,6 +711,169 @@ namespace SharpGPU
                     "Sampler-feedback maps must be created with CreateSamplerFeedbackMap so pairing is established at create time.",
                     nameof(descriptor));
             }
+        }
+
+        protected static void ValidateTextureUsage(
+            ERHITextureUsage usage,
+            string parameterName)
+        {
+            if (!RHIFormatSupportQuery.IsKnownTextureUsage(usage))
+            {
+                throw new ArgumentOutOfRangeException(
+                    parameterName,
+                    usage,
+                    "Texture usage must be a non-zero combination of known ERHITextureUsage bits.");
+            }
+        }
+
+        protected void ValidateQueryDescriptor(in RHIQueryDescriptor descriptor)
+        {
+            if (descriptor.Count == 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(descriptor),
+                    "A query descriptor must contain at least one slot.");
+            }
+
+            if (descriptor.Type == ERHIQueryType.Pending ||
+                !Enum.IsDefined(descriptor.Type))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(descriptor),
+                    descriptor.Type,
+                    "CreateQuery does not accept Pending or unknown query types.");
+            }
+
+            if (descriptor.Type != ERHIQueryType.Statistics)
+            {
+                return;
+            }
+
+            if (descriptor.CounterMask == ERHIPipelineStatisticCounter.None)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(descriptor),
+                    descriptor.CounterMask,
+                    "Statistics queries require a non-empty CounterMask.");
+            }
+
+            if (!Enum.IsDefined(descriptor.Domain))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(descriptor),
+                    descriptor.Domain,
+                    "Statistics queries require a concrete pipeline-statistics domain.");
+            }
+
+            ERHIPipelineStatisticCounter legalMask =
+                LegalCountersForDomain(descriptor.Domain);
+            if ((descriptor.CounterMask & ~legalMask) != 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(descriptor),
+                    descriptor.CounterMask,
+                    $"Statistics domain {descriptor.Domain} does not accept the requested counter mask.");
+            }
+
+            RHICapability capability =
+                Capabilities.Synchronization.PipelineStatisticsQueries;
+            capability.Require("Synchronization.PipelineStatisticsQueries");
+            if (!capability.Limits.TryGetValue(
+                    ERHICapabilityLimitKind.SupportedPipelineStatisticsDomainMask,
+                    out ulong domainMask) ||
+                (domainMask & (1UL << (byte)descriptor.Domain)) == 0)
+            {
+                throw new NotSupportedException(
+                    $"Pipeline statistics domain {descriptor.Domain} is unavailable on this device.");
+            }
+
+            ERHICapabilityLimitKind counterLimitKind =
+                descriptor.Domain switch
+                {
+                    ERHIPipelineStatisticsDomain.Raster =>
+                        ERHICapabilityLimitKind.RasterPipelineStatisticCounterMask,
+                    ERHIPipelineStatisticsDomain.Compute =>
+                        ERHICapabilityLimitKind.ComputePipelineStatisticCounterMask,
+                    ERHIPipelineStatisticsDomain.RayTracing =>
+                        ERHICapabilityLimitKind.RayTracingPipelineStatisticCounterMask,
+                    _ => throw new ArgumentOutOfRangeException(
+                        nameof(descriptor),
+                        descriptor.Domain,
+                        "Statistics queries require a concrete pipeline-statistics domain."),
+                };
+            if (!capability.Limits.TryGetValue(
+                    counterLimitKind,
+                    out ulong supportedCounters) ||
+                ((ulong)descriptor.CounterMask & ~supportedCounters) != 0)
+            {
+                throw new NotSupportedException(
+                    $"Pipeline statistics domain {descriptor.Domain} does not support the requested CounterMask.");
+            }
+        }
+
+        internal static ERHIPipelineStatisticCounter LegalCountersForDomain(
+            ERHIPipelineStatisticsDomain domain)
+        {
+            const ERHIPipelineStatisticCounter rasterCounters =
+                ERHIPipelineStatisticCounter.InputAssemblyVertices |
+                ERHIPipelineStatisticCounter.InputAssemblyPrimitives |
+                ERHIPipelineStatisticCounter.VertexShaderInvocations |
+                ERHIPipelineStatisticCounter.GeometryShaderInvocations |
+                ERHIPipelineStatisticCounter.GeometryShaderPrimitives |
+                ERHIPipelineStatisticCounter.ClipperInvocations |
+                ERHIPipelineStatisticCounter.ClipperPrimitives |
+                ERHIPipelineStatisticCounter.PixelShaderInvocations |
+                ERHIPipelineStatisticCounter.HullShaderInvocations |
+                ERHIPipelineStatisticCounter.DomainShaderInvocations |
+                ERHIPipelineStatisticCounter.MeshShaderInvocations |
+                ERHIPipelineStatisticCounter.TaskShaderInvocations |
+                ERHIPipelineStatisticCounter.MeshShaderPrimitives;
+            const ERHIPipelineStatisticCounter computeCounters =
+                ERHIPipelineStatisticCounter.ComputeShaderInvocations;
+            return domain switch
+            {
+                ERHIPipelineStatisticsDomain.Raster => rasterCounters,
+                ERHIPipelineStatisticsDomain.Compute => computeCounters,
+                ERHIPipelineStatisticsDomain.RayTracing =>
+                    ERHIPipelineStatisticCounter.None,
+                _ => ERHIPipelineStatisticCounter.None,
+            };
+        }
+
+        internal static RHICapabilityLimits CreatePipelineStatisticsLimits(
+            ERHIPipelineStatisticCounter rasterCounters,
+            ERHIPipelineStatisticCounter computeCounters,
+            ERHIPipelineStatisticCounter rayTracingCounters)
+        {
+            ulong domainMask = 0;
+            if (rasterCounters != ERHIPipelineStatisticCounter.None)
+            {
+                domainMask |= 1UL << (byte)ERHIPipelineStatisticsDomain.Raster;
+            }
+
+            if (computeCounters != ERHIPipelineStatisticCounter.None)
+            {
+                domainMask |= 1UL << (byte)ERHIPipelineStatisticsDomain.Compute;
+            }
+
+            if (rayTracingCounters != ERHIPipelineStatisticCounter.None)
+            {
+                domainMask |= 1UL << (byte)ERHIPipelineStatisticsDomain.RayTracing;
+            }
+
+            return new RHICapabilityLimits(
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.SupportedPipelineStatisticsDomainMask,
+                    domainMask),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.RasterPipelineStatisticCounterMask,
+                    (ulong)rasterCounters),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.ComputePipelineStatisticCounterMask,
+                    (ulong)computeCounters),
+                new RHICapabilityLimit(
+                    ERHICapabilityLimitKind.RayTracingPipelineStatisticCounterMask,
+                    (ulong)rayTracingCounters));
         }
 
         public abstract RHIRasterAttachmentShaderAbi
@@ -730,7 +1067,32 @@ namespace SharpGPU
         SupportedStorageCompressionFormatMask,
         FunctionLibraryReusablePipelineClassMask,
         FunctionLibraryMaxEntryCount,
-        FunctionLibrarySupportedPayloadKindMask
+        FunctionLibrarySupportedPayloadKindMask,
+        /// <summary>
+        /// Bit mask of supported <see cref="ERHIResolveMode"/> values:
+        /// 1UL &lt;&lt; (byte)mode. Pending / None are never set as exclusive encodings.
+        /// </summary>
+        SupportedResolveModeMask,
+        /// <summary>
+        /// Bit mask of supported <see cref="ERHIPipelineStatisticsDomain"/>
+        /// values: 1UL &lt;&lt; (byte)domain.
+        /// </summary>
+        SupportedPipelineStatisticsDomainMask,
+        /// <summary>
+        /// Bit mask of supported <see cref="ERHIPipelineStatisticCounter"/>
+        /// values for the Raster domain.
+        /// </summary>
+        RasterPipelineStatisticCounterMask,
+        /// <summary>
+        /// Bit mask of supported <see cref="ERHIPipelineStatisticCounter"/>
+        /// values for the Compute domain.
+        /// </summary>
+        ComputePipelineStatisticCounterMask,
+        /// <summary>
+        /// Bit mask of supported <see cref="ERHIPipelineStatisticCounter"/>
+        /// values for the RayTracing domain.
+        /// </summary>
+        RayTracingPipelineStatisticCounterMask
     }
 
     /// <summary>

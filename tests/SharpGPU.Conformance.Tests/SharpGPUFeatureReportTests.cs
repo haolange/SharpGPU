@@ -95,7 +95,7 @@ public sealed class SharpGPUFeatureReportTests
             $"\"SchemaRevision\": {SharpGPUFeatureReportDocument.CurrentSchemaRevision}",
             json,
             StringComparison.Ordinal);
-        Assert.Equal(3u, SharpGPUFeatureReportDocument.CurrentSchemaRevision);
+        Assert.Equal(4u, SharpGPUFeatureReportDocument.CurrentSchemaRevision);
         Assert.DoesNotContain(ArtifactPath.RepositoryRoot, json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("\"TimestampQueries\": true", json, StringComparison.Ordinal);
         Assert.Contains("\"Capabilities\":", json, StringComparison.Ordinal);
@@ -342,6 +342,15 @@ public sealed class SharpGPUFeatureReportTests
                 schema2,
                 JsonOptions.Indented));
 
+        string schema3 = canonical.Replace(
+            $"\"SchemaRevision\": {SharpGPUFeatureReportDocument.CurrentSchemaRevision}",
+            "\"SchemaRevision\": 3",
+            StringComparison.Ordinal);
+        Assert.ThrowsAny<Exception>(() =>
+            JsonSerializer.Deserialize<SharpGPUFeatureReportDocument>(
+                schema3,
+                JsonOptions.Indented));
+
         string unknownField = canonical.Replace(
             "{",
             "{\"TimestampQueries\":true,",
@@ -423,7 +432,7 @@ public sealed class UnsupportedBackendContractTests
 
 internal sealed record SharpGPUFeatureReportDocument
 {
-    public const uint CurrentSchemaRevision = 3;
+    public const uint CurrentSchemaRevision = 4;
 
     public uint SchemaRevision { get; }
     public SharpGPUEnvironmentReport Environment { get; }

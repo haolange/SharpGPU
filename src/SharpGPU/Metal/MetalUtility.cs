@@ -398,7 +398,7 @@ namespace SharpGPU
                 result |= ERHITextureUsage.RenderTarget;
             }
 
-            return result == 0 ? ERHITextureUsage.Pending : result;
+            return result;
         }
 
         internal static ERHITextureDimension ConvertToRhiTextureDimension(in MTLTextureType type)

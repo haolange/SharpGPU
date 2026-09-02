@@ -187,6 +187,14 @@ namespace SharpGPU
 
         internal VulkanTexture(VulkanDevice device, in RHITextureDescriptor descriptor, VkImage existingImage)
         {
+            if (!RHIFormatSupportQuery.IsKnownTextureUsage(descriptor.UsageFlag))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(descriptor),
+                    descriptor.UsageFlag,
+                    "Texture usage must be a non-zero combination of known ERHITextureUsage bits.");
+            }
+
             m_VulkanDevice = device;
             m_Descriptor = descriptor;
             m_NativeImage = existingImage;

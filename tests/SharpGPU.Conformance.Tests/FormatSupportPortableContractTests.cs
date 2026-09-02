@@ -19,10 +19,17 @@ public sealed class FormatSupportPortableContractTests
             nameof(RHIDevice.QueryRasterAttachmentSupport),
             BindingFlags.Public | BindingFlags.Instance)
             ?? throw new InvalidOperationException("QueryRasterAttachmentSupport was not found.");
+        MethodInfo resolve = typeof(RHIDevice).GetMethod(
+            nameof(RHIDevice.QueryResolveSupport),
+            BindingFlags.Public | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("QueryResolveSupport was not found.");
 
         Assert.NotEqual(format, raster);
+        Assert.NotEqual(format, resolve);
+        Assert.NotEqual(raster, resolve);
         Assert.Equal(typeof(RHICapability), format.ReturnType);
         Assert.Equal(typeof(RHICapability), raster.ReturnType);
+        Assert.Equal(typeof(RHICapability), resolve.ReturnType);
         Assert.True(Enum.IsDefined(ERHICapabilityLimitKind.SupportedFormatOperationMask));
     }
 
@@ -53,7 +60,14 @@ public sealed class FormatSupportPortableContractTests
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new RHIFormatSupportQuery(
                 ERHIPixelFormat.R8G8B8A8_UNorm,
-                ERHITextureUsage.Pending,
+                ERHITextureUsage.None,
+                ERHITextureDimension.Texture2D,
+                ERHISampleCount.None,
+                ERHITextureTiling.Optimal));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new RHIFormatSupportQuery(
+                ERHIPixelFormat.R8G8B8A8_UNorm,
+                (ERHITextureUsage)0x80,
                 ERHITextureDimension.Texture2D,
                 ERHISampleCount.None,
                 ERHITextureTiling.Optimal));

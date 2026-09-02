@@ -117,6 +117,14 @@ namespace SharpGPU
 
         public Dx12Texture(Dx12Device device, in RHITextureDescriptor Descriptor, in Vortice.Direct3D12.ID3D12Resource nativeResource)
         {
+            if (!RHIFormatSupportQuery.IsKnownTextureUsage(Descriptor.UsageFlag))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(Descriptor),
+                    Descriptor.UsageFlag,
+                    "Texture usage must be a non-zero combination of known ERHITextureUsage bits.");
+            }
+
             m_Dx12Device = device;
             m_Descriptor = Descriptor;
             m_NativeResource = nativeResource;
