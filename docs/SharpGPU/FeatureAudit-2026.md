@@ -11,9 +11,19 @@
 
 # SharpGPU 2026 三平台 Feature Audit
 
+## 2026-09-03 addendum（G5-T16 public HAL）
+
+G0–G4 之后的现行公共面以源码与 `docs/Canonical/VERIFICATION.md` CURRENT（SHA `11d5a8c1ba2bb9d131a96458d22e12ff167e3041`）为准。8/30 正文、9/01 addendum、以及下条 G1 addendum 中“OMM/SER/Motion 无对象模型 / ExternalFence64 已关闭 / VRS no-op”等句不再是现行事实。
+
+- 仍是 21 RHI 域，无第 22 域。
+- P3 Unavailable 占位已删。OMM 已交付（G4-T13，AccelStruct 对象模型）。SER 无 capability 字段、无 HitObject 公共 API（G4-T14 `BLOCKED_SDK_BINDING`）。Motion 已交付（G4-T15：Vulkan NV Available，DX12 Unavailable，Metal compile-level）。
+- P8 ExternalFence64 SUPERSEDED；保留本进程 `ERHIResourceAllocationMode.External` wrap。无 `RHIMultiGpuCapabilities` / `NodeMask`；Instance/Device 保留 `RHIAdapterIdentity`。
+- (a) 提交/退休安全归 renderer，不进 HAL（`ADR-0047`）。
+- CURRENT：Portable 192/192、WindowsQualified 20/20、FeatureReport 2/2 schema **6**、PipelineCache ABI **9**、独立 `MotionVulkanQualifiedTests` 2/2。全量 `SharpGpuVulkanQualified` 仍 `BLOCKED_DEVICE`（ROAA）。包 `0.2.0-preview.1`。
+
 ## 2026-09-03 addendum（G1 withdrawal）
 
-G1 撤回 2026-09-01 误记为已交付的占位：`RayTracing.OpacityMicromap` / `ShaderExecutionReordering` / `Motion` 字段已从公共面删除（真实对象模型改期 G4）；P8 ExternalFence64 / NT share import-export / `Memory.ExternalImport|ExternalExport` / `Synchronization.ExternalFence64` 整面删除，`ADR-0066` 现为 Superseded；`RHIMultiGpuCapabilities` / `Capabilities.MultiGpu` / `NodeMask` 占位删除。保留核心 RT Pipeline/Inline、Function Library、本进程 `ERHIResourceAllocationMode.External` wrap，以及 Device 级 `AdapterIdentity`（LUID / UUID）。
+G1 撤回 2026-09-01 误记为已交付的占位：`RayTracing.OpacityMicromap` / `ShaderExecutionReordering` / `Motion` 字段已从公共面删除（真实对象模型当时改期 G4；G4-T13/T15 已交付 OMM/Motion，见上条）。P8 ExternalFence64 / NT share import-export / `Memory.ExternalImport|ExternalExport` / `Synchronization.ExternalFence64` 整面删除，`ADR-0066` 现为 Superseded；`RHIMultiGpuCapabilities` / `Capabilities.MultiGpu` / `NodeMask` 占位删除。保留核心 RT Pipeline/Inline、Function Library、本进程 `ERHIResourceAllocationMode.External` wrap，以及 Device 级 `AdapterIdentity`（LUID / UUID）。
 
 ## 2026-09-01 addendum（RFC-0026）
 
@@ -21,7 +31,7 @@ G1 撤回 2026-09-01 误记为已交付的占位：`RayTracing.OpacityMicromap` 
 
 已关闭（相对 8/30 正文）：DX12 VRS 硬编码与 Vulkan/Metal no-op setter；DX12 mesh 人为压制；Sampler Feedback 公共域；wave size 硬编码；Vulkan cooperative matrix 枚举；Function Library raster/compute 复用（DX12 该路径仍诚实 Unavailable）；Storage 解压/取消/优先级按原生探测。2026-09-01 曾把 ExternalFence64（ADR-0066）记为已关闭；该面已于 2026-09-03 G1 撤回，见上条 addendum。
 
-仍诚实 Unavailable / 阻塞：vendored Agility SDK 无 DXR 1.2 OMM/SER/Motion 对象模型（占位字段已删）；Metal pipeline cache（ADR-0065）；Metal matching host；Linux/Android matching host；本机 Vulkan qualified 缺 `VK_EXT_rasterization_order_attachment_access`。
+仍诚实 Unavailable / 阻塞（9/01 当时）：vendored Agility SDK 无 DXR 1.2 OMM/SER/Motion 对象模型（占位字段已删）。**G5-T16：该句 HISTORICAL。** G4-T13 已交付 OMM；G4-T15 已交付 Motion（DX12 仍 Unavailable）；SER 仍 `BLOCKED_SDK_BINDING`。现行仍阻塞：Metal pipeline cache（ADR-0065）；Metal matching host；Linux/Android matching host；本机 Vulkan qualified 缺 `VK_EXT_rasterization_order_attachment_access`。
 
 审计日期：2026-08-30（Asia/Shanghai）；addendum 2026-09-01  
 仓库快照：`main`，commit `789b898bcc3619d7729a000c869d200aad1b2232`  

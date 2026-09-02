@@ -9,7 +9,4 @@ Start with:
 - `docs/SharpGPU/FeatureMatrix.md`
 - `docs/Canonical/VERIFICATION.md`
 
-Current focus:
-- DX12 WorkGraph dispatch/readback conformance.
-- Feature contract matrix for Query, ML, RT, Mesh, Bindless, StorageQueue, PipelineCache, and WorkGraph.
-- Backend encode and workload benchmarks with regression gates.
+Current public contract rows are in `docs/SharpGPU/FeatureMatrix.md` (21 RHI domains; pipeline ABI 9; feature-report schema 6). Qualification numbers live only in `docs/Canonical/VERIFICATION.md`.
