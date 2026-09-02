@@ -44,6 +44,7 @@ namespace SharpGPU
         internal MetalBottomLevelAccelStruct(MetalDevice device, in RHIBottomLevelAccelStructDescriptor descriptor)
         {
             m_MetalDevice = device;
+            RHIOpacityMicromapContract.ValidateBlasDescriptor(device, in descriptor);
             m_Descriptor = descriptor;
             m_GeometryDescriptors = new List<IntPtr>(Math.Max(1, descriptor.Geometries.Length));
 
@@ -83,7 +84,7 @@ namespace SharpGPU
 
                 IntPtr geometryDescriptorPtr = geometry.GeometryType switch
                 {
-                    ERHIAccelStructGeometryType.Triangle => CreateTriangleGeometryDescriptor((RHIAccelStructTriangles)geometry),
+                    ERHIAccelStructGeometryType.Triangle => CreateTriangleGeometryDescriptor(m_MetalDevice, (RHIAccelStructTriangles)geometry),
                     ERHIAccelStructGeometryType.AABB => CreateAabbGeometryDescriptor((RHIAccelStructAABBs)geometry),
                     ERHIAccelStructGeometryType.Curves => CreateCurveGeometryDescriptor((RHIAccelStructCurves)geometry),
                     _ => throw new NotSupportedException($"Unsupported geometry type '{geometry.GeometryType}'.")
@@ -96,8 +97,14 @@ namespace SharpGPU
             m_NativeDescriptor.GeometryDescriptors = MetalArrayHelper.CreateNSArrayFromPointers(geometryDescriptorPtrs);
         }
 
-        private static IntPtr CreateTriangleGeometryDescriptor(RHIAccelStructTriangles geometry)
+        private static IntPtr CreateTriangleGeometryDescriptor(MetalDevice device, RHIAccelStructTriangles geometry)
         {
+            RHIOpacityMicromapContract.ValidateTriangleAttachment(geometry);
+            if (geometry.OpacityMicromap != null)
+            {
+                device.Capabilities.RayTracing.OpacityMicromap.Require("RayTracing.OpacityMicromap");
+            }
+
             if (geometry.VertexBuffer is not MetalBuffer vertexBuffer)
             {
                 throw new InvalidOperationException("Triangle geometry vertex buffer is missing or not a Metal buffer.");
@@ -252,6 +259,7 @@ namespace SharpGPU
 
         internal MetalTopLevelAccelStruct(MetalDevice device, in RHITopLevelAccelStructDescriptor descriptor)
         {
+            RHIOpacityMicromapContract.ValidateTlasDescriptor(device, in descriptor);
             m_MetalDevice = device;
             m_NativeDescriptor = MTLInstanceAccelerationStructureDescriptor.New();
             m_NativeDescriptor.InstanceDescriptorType = MTLAccelerationStructureInstanceDescriptorType.Default;
@@ -264,6 +272,7 @@ namespace SharpGPU
 
         public override void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
         {
+            RHIOpacityMicromapContract.ValidateTlasDescriptor(m_MetalDevice, in descriptor);
             m_Descriptor = descriptor;
             UpdateNativeDescriptorAndBuffers(descriptor);
         }

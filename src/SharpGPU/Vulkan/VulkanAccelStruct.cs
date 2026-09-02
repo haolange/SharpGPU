@@ -36,6 +36,7 @@ namespace SharpGPU
         {
             m_VulkanDevice = device;
             m_Descriptor = descriptor;
+            RHIOpacityMicromapContract.ValidateTlasDescriptor(device, in descriptor);
 
             uint instanceCount = (uint)descriptor.Instances.Length;
 
@@ -73,8 +74,7 @@ namespace SharpGPU
             {
                 sType = VkStructureType.AccelerationStructureBuildGeometryInfoKHR,
                 type = VkAccelerationStructureTypeKHR.TopLevel,
-                flags = VkBuildAccelerationStructureFlagsKHR.PreferFastTrace |
-                        VkBuildAccelerationStructureFlagsKHR.AllowUpdate,
+                flags = VulkanAccelStructHelper.ComposeTopLevelBuildFlags(descriptor),
                 geometryCount = 1,
                 pGeometries = &geometry,
             };
@@ -121,6 +121,7 @@ namespace SharpGPU
         public override void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
         {
             m_Descriptor = descriptor;
+            RHIOpacityMicromapContract.ValidateTlasDescriptor(m_VulkanDevice, in descriptor);
             UploadInstanceData(descriptor);
         }
 
@@ -217,6 +218,14 @@ namespace SharpGPU
             {
                 result |= VkGeometryInstanceFlagsKHR.ForceNoOpaque;
             }
+            if ((flag & ERHIAccelStructInstanceFlag.ForceOmm2State) != 0)
+            {
+                result |= (VkGeometryInstanceFlagsKHR)0x10;
+            }
+            if ((flag & ERHIAccelStructInstanceFlag.DisableOmms) != 0)
+            {
+                result |= (VkGeometryInstanceFlagsKHR)0x20;
+            }
             return result;
         }
 
@@ -258,10 +267,14 @@ namespace SharpGPU
         private VkDeviceMemory m_NativeScratchMemory;
         private VkBuffer[] m_NativeCurveAabbBuffers;
         private VkDeviceMemory[] m_NativeCurveAabbMemories;
+        private VkBuffer[] m_NativeOmmSpecialIndexBuffers;
+        private VkDeviceMemory[] m_NativeOmmSpecialIndexMemories;
+        private IntPtr[] m_NativeOmmUsageCounts;
 
         public VulkanBottomLevelAccelStruct(VulkanDevice device, in RHIBottomLevelAccelStructDescriptor descriptor)
         {
             m_VulkanDevice = device;
+            RHIOpacityMicromapContract.ValidateBlasDescriptor(device, in descriptor);
             m_Descriptor = descriptor;
 
             int geometryCount = descriptor.Geometries.Length;
@@ -269,6 +282,11 @@ namespace SharpGPU
             uint* maxPrimitiveCounts = stackalloc uint[Math.Max(geometryCount, 1)];
             m_NativeCurveAabbBuffers = geometryCount > 0 ? new VkBuffer[geometryCount] : Array.Empty<VkBuffer>();
             m_NativeCurveAabbMemories = geometryCount > 0 ? new VkDeviceMemory[geometryCount] : Array.Empty<VkDeviceMemory>();
+            m_NativeOmmSpecialIndexBuffers = geometryCount > 0 ? new VkBuffer[geometryCount] : Array.Empty<VkBuffer>();
+            m_NativeOmmSpecialIndexMemories = geometryCount > 0 ? new VkDeviceMemory[geometryCount] : Array.Empty<VkDeviceMemory>();
+            m_NativeOmmUsageCounts = geometryCount > 0 ? new IntPtr[geometryCount] : Array.Empty<IntPtr>();
+            VulkanOpacityMicromapNative.VkAccelerationStructureTrianglesOpacityMicromapEXT* ommAttachments =
+                stackalloc VulkanOpacityMicromapNative.VkAccelerationStructureTrianglesOpacityMicromapEXT[Math.Max(geometryCount, 1)];
 
             for (int i = 0; i < geometryCount; ++i)
             {
@@ -318,6 +336,17 @@ namespace SharpGPU
                     {
                         geometries[i].geometry.triangles.indexType = VkIndexType.NoneKHR;
                         maxPrimitiveCounts[i] = triangleGeometry.VertexCount / 3;
+                    }
+
+                    RHIOpacityMicromapContract.ValidateTriangleAttachment(triangleGeometry);
+                    if (triangleGeometry.OpacityMicromap != null)
+                    {
+                        FillOpacityMicromapAttachment(
+                            device,
+                            i,
+                            triangleGeometry,
+                            &ommAttachments[i]);
+                        geometries[i].geometry.triangles.pNext = &ommAttachments[i];
                     }
                 }
                 else if (geom.GeometryType == ERHIAccelStructGeometryType.AABB)
@@ -452,7 +481,7 @@ namespace SharpGPU
             {
                 sType = VkStructureType.AccelerationStructureBuildGeometryInfoKHR,
                 type = VkAccelerationStructureTypeKHR.BottomLevel,
-                flags = VkBuildAccelerationStructureFlagsKHR.PreferFastTrace,
+                flags = VulkanAccelStructHelper.ComposeBottomLevelBuildFlags(descriptor),
                 geometryCount = (uint)geometryCount,
                 pGeometries = geometries,
             };
@@ -493,8 +522,147 @@ namespace SharpGPU
                 out m_NativeScratchBuffer, out m_NativeScratchMemory);
         }
 
+        internal void FillOpacityMicromapAttachment(
+            VulkanDevice device,
+            in int geometryIndex,
+            in RHIAccelStructTriangles triangleGeometry,
+            VulkanOpacityMicromapNative.VkAccelerationStructureTrianglesOpacityMicromapEXT* attachment)
+        {
+            VulkanOpacityMicromap micromap = triangleGeometry.OpacityMicromap as VulkanOpacityMicromap
+                ?? throw new InvalidOperationException("Vulkan triangle OMM attachment requires a VulkanOpacityMicromap.");
+
+            VkIndexType indexType;
+            ulong indexAddress;
+            ulong indexStride;
+            if (triangleGeometry.OpacityMicromapIndexBuffer != null)
+            {
+                VulkanBuffer indexBuffer = triangleGeometry.OpacityMicromapIndexBuffer as VulkanBuffer
+                    ?? throw new InvalidOperationException("Vulkan OMM index buffer must be a VulkanBuffer.");
+                indexType = VulkanUtility.ConvertToVkIndexType(triangleGeometry.OpacityMicromapIndexFormat);
+                indexAddress = indexBuffer.GetNativeDeviceAddress() + triangleGeometry.OpacityMicromapIndexOffset;
+                indexStride = triangleGeometry.OpacityMicromapIndexStride == 0
+                    ? (indexType == VkIndexType.Uint16 ? 2UL : 4UL)
+                    : triangleGeometry.OpacityMicromapIndexStride;
+            }
+            else
+            {
+                uint triangleCount = triangleGeometry.IndexBuffer != null
+                    ? triangleGeometry.IndexCount / 3u
+                    : triangleGeometry.VertexCount / 3u;
+                if (triangleCount == 0)
+                {
+                    throw new InvalidOperationException("OMM special-index attachment requires at least one triangle.");
+                }
+
+                ulong bufferSize = triangleCount * sizeof(int);
+                if (m_NativeOmmSpecialIndexBuffers[geometryIndex].Handle == 0)
+                {
+                    VulkanAccelStructHelper.CreateDeviceAddressBuffer(
+                        device,
+                        bufferSize,
+                        VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyKHR |
+                        VulkanOpacityMicromapNative.MicromapBuildInputReadOnly |
+                        VkBufferUsageFlags.ShaderDeviceAddress,
+                        VkMemoryPropertyFlags.HostVisible | VkMemoryPropertyFlags.HostCoherent,
+                        out m_NativeOmmSpecialIndexBuffers[geometryIndex],
+                        out m_NativeOmmSpecialIndexMemories[geometryIndex]);
+
+                    void* mapped = null;
+                    VulkanUtility.CheckErrors(
+                        VulkanNative.vkMapMemory(
+                            device.NativeDevice,
+                            m_NativeOmmSpecialIndexMemories[geometryIndex],
+                            0,
+                            bufferSize,
+                            0,
+                            &mapped));
+                    try
+                    {
+                        int specialIndex = (int)triangleGeometry.OpacityMicromapSpecialIndex;
+                        int* indices = (int*)mapped;
+                        for (uint i = 0; i < triangleCount; ++i)
+                        {
+                            indices[i] = specialIndex;
+                        }
+                    }
+                    finally
+                    {
+                        VulkanNative.vkUnmapMemory(
+                            device.NativeDevice,
+                            m_NativeOmmSpecialIndexMemories[geometryIndex]);
+                    }
+                }
+
+                indexType = VkIndexType.Uint32;
+                VkBufferDeviceAddressInfo addressInfo = new()
+                {
+                    sType = VkStructureType.BufferDeviceAddressInfo,
+                    buffer = m_NativeOmmSpecialIndexBuffers[geometryIndex],
+                };
+                indexAddress = VulkanNative.vkGetBufferDeviceAddress(device.NativeDevice, &addressInfo);
+                indexStride = sizeof(int);
+            }
+
+            RHIOpacityMicromapUsageCount[] usageCounts = micromap.UsageCounts;
+            int usageCount = usageCounts.Length;
+            if (m_NativeOmmUsageCounts[geometryIndex] == IntPtr.Zero)
+            {
+                nuint byteCount = (nuint)(usageCount * sizeof(VulkanOpacityMicromapNative.VkMicromapUsageEXT));
+                m_NativeOmmUsageCounts[geometryIndex] = (IntPtr)NativeMemory.Alloc(byteCount);
+                VulkanOpacityMicromapNative.VkMicromapUsageEXT* stored =
+                    (VulkanOpacityMicromapNative.VkMicromapUsageEXT*)m_NativeOmmUsageCounts[geometryIndex];
+                for (int i = 0; i < usageCount; ++i)
+                {
+                    stored[i] = new VulkanOpacityMicromapNative.VkMicromapUsageEXT
+                    {
+                        count = usageCounts[i].Count,
+                        subdivisionLevel = usageCounts[i].SubdivisionLevel,
+                        format = (uint)usageCounts[i].Format,
+                    };
+                }
+            }
+
+            *attachment = new VulkanOpacityMicromapNative.VkAccelerationStructureTrianglesOpacityMicromapEXT
+            {
+                sType = VulkanOpacityMicromapNative.TrianglesOpacityMicromapStructureType,
+                indexType = indexType,
+                indexBuffer = new VkDeviceOrHostAddressConstKHR { deviceAddress = indexAddress },
+                indexStride = indexStride,
+                baseTriangle = 0,
+                usageCountsCount = (uint)usageCount,
+                pUsageCounts = (VulkanOpacityMicromapNative.VkMicromapUsageEXT*)m_NativeOmmUsageCounts[geometryIndex],
+                micromap = micromap.NativeMicromap,
+            };
+        }
+
         protected override void Release()
         {
+            for (int i = 0; i < m_NativeOmmSpecialIndexBuffers.Length; ++i)
+            {
+                VkBuffer specialIndexBuffer = m_NativeOmmSpecialIndexBuffers[i];
+                if (specialIndexBuffer.Handle != 0)
+                {
+                    VulkanNative.vkDestroyBuffer(m_VulkanDevice.NativeDevice, specialIndexBuffer, null);
+                    m_NativeOmmSpecialIndexBuffers[i] = default;
+                }
+
+                VkDeviceMemory specialIndexMemory = m_NativeOmmSpecialIndexMemories[i];
+                if (specialIndexMemory.Handle != 0)
+                {
+                    VulkanNative.vkFreeMemory(m_VulkanDevice.NativeDevice, specialIndexMemory, null);
+                    m_NativeOmmSpecialIndexMemories[i] = default;
+                }
+            }
+
+            for (int i = 0; i < m_NativeOmmUsageCounts.Length; ++i)
+            {
+                if (m_NativeOmmUsageCounts[i] != IntPtr.Zero)
+                {
+                    NativeMemory.Free((void*)m_NativeOmmUsageCounts[i]);
+                    m_NativeOmmUsageCounts[i] = IntPtr.Zero;
+                }
+            }
+
             for (int i = 0; i < m_NativeCurveAabbBuffers.Length; ++i)
             {
                 VkBuffer curveAabbBuffer = m_NativeCurveAabbBuffers[i];
@@ -616,6 +784,32 @@ namespace SharpGPU
 
     internal static unsafe class VulkanAccelStructHelper
     {
+        internal static VkBuildAccelerationStructureFlagsKHR ComposeTopLevelBuildFlags(
+            in RHITopLevelAccelStructDescriptor descriptor)
+        {
+            VkBuildAccelerationStructureFlagsKHR flags =
+                VkBuildAccelerationStructureFlagsKHR.PreferFastTrace |
+                VkBuildAccelerationStructureFlagsKHR.AllowUpdate;
+            if (RHIOpacityMicromapContract.AnyInstanceDisablesOmms(descriptor.Instances.Span))
+            {
+                flags |= VkBuildAccelerationStructureFlagsKHR.AllowDisableOpacityMicromapsEXT;
+            }
+
+            return flags;
+        }
+
+        internal static VkBuildAccelerationStructureFlagsKHR ComposeBottomLevelBuildFlags(
+            in RHIBottomLevelAccelStructDescriptor descriptor)
+        {
+            VkBuildAccelerationStructureFlagsKHR flags = VkBuildAccelerationStructureFlagsKHR.PreferFastTrace;
+            if (RHIOpacityMicromapContract.BlasAllowsDisableOmms(descriptor))
+            {
+                flags |= VkBuildAccelerationStructureFlagsKHR.AllowDisableOpacityMicromapsEXT;
+            }
+
+            return flags;
+        }
+
         internal static void CreateDeviceAddressBuffer(VulkanDevice device, ulong size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps, out VkBuffer buffer, out VkDeviceMemory memory)
         {
             if (size == 0)

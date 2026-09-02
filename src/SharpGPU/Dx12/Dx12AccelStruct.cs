@@ -72,6 +72,7 @@ namespace SharpGPU
             m_Dx12Device = device;
             m_Descriptor = descriptor;
             m_DescriptionHeapIndex = -1;
+            RHIOpacityMicromapContract.ValidateTlasDescriptor(device, in descriptor);
             Span<RHIAccelStructInstance> asInstances = descriptor.Instances.Span;
             Vortice.Direct3D12.RaytracingInstanceDescription* nativeInstanceDescriptions = stackalloc Vortice.Direct3D12.RaytracingInstanceDescription[descriptor.Instances.Length];
 
@@ -135,6 +136,7 @@ namespace SharpGPU
         public override void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
         {
             m_Descriptor = descriptor;
+            RHIOpacityMicromapContract.ValidateTlasDescriptor(m_Dx12Device, in descriptor);
 
             Span<RHIAccelStructInstance> asInstances = descriptor.Instances.Span;
             Vortice.Direct3D12.RaytracingInstanceDescription* nativeInstanceDescriptions = stackalloc Vortice.Direct3D12.RaytracingInstanceDescription[descriptor.Instances.Length];
@@ -204,12 +206,19 @@ namespace SharpGPU
         private Vortice.Direct3D12.ID3D12Resource? m_NativeCurveAabbBuffer;
         private Vortice.Direct3D12.RaytracingGeometryDescription[] m_NativeGeometryDescriptions;
         private Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription m_NativeAccelStructDescriptor;
+        private IntPtr[]? m_NativeOmmTriangleDescs;
+        private IntPtr[]? m_NativeOmmLinkageDescs;
+        private Vortice.Direct3D12.ID3D12Resource?[]? m_NativeOmmSpecialIndexBuffers;
 
         public Dx12BottomLevelAccelStruct(Dx12Device device, in RHIBottomLevelAccelStructDescriptor descriptor)
         {
             m_Dx12Device = device;
+            RHIOpacityMicromapContract.ValidateBlasDescriptor(device, in descriptor);
             m_Descriptor = descriptor;
             m_NativeCurveAabbBuffer = null;
+            m_NativeOmmTriangleDescs = null;
+            m_NativeOmmLinkageDescs = null;
+            m_NativeOmmSpecialIndexBuffers = null;
 
             int geometryCount = descriptor.Geometries.Length;
             if (geometryCount == 0)
@@ -248,10 +257,10 @@ namespace SharpGPU
                         {
                             throw new ArgumentException("DX12 triangle geometry descriptor has an unexpected type.", nameof(descriptor));
                         }
+                        RHIOpacityMicromapContract.ValidateTriangleAttachment(triangleGeometry);
                         Dx12Buffer indexBuffer = triangleGeometry.IndexBuffer as Dx12Buffer ?? throw new ArgumentException("DX12 acceleration-structure geometry requires a Dx12Buffer.", nameof(descriptor));
                         Dx12Buffer vertexBuffer = triangleGeometry.VertexBuffer as Dx12Buffer ?? throw new ArgumentException("DX12 acceleration-structure geometry requires a Dx12Buffer.", nameof(descriptor));
 
-                        nativeGeometryDescription.Type = Vortice.Direct3D12.RaytracingGeometryType.Triangles;
                         nativeGeometryDescription.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(asGeometry.GeometryFlag);
 
                         ref Vortice.Direct3D12.RaytracingGeometryTrianglesDescription nativeTriangleGeometry = ref nativeGeometryDescription.Triangles;
@@ -269,6 +278,19 @@ namespace SharpGPU
                         }
 
                         nativeTriangleGeometry.VertexFormat = vertexFormat;
+
+                        if (triangleGeometry.OpacityMicromap != null)
+                        {
+                            AttachOpacityMicromap(
+                                ref nativeGeometryDescription,
+                                i,
+                                triangleGeometry,
+                                nativeTriangleGeometry);
+                        }
+                        else
+                        {
+                            nativeGeometryDescription.Type = Vortice.Direct3D12.RaytracingGeometryType.Triangles;
+                        }
                         break;
 
                     case ERHIAccelStructGeometryType.Curves:
@@ -373,7 +395,7 @@ namespace SharpGPU
             Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs nativeAccelStructDescriptor = new Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs();
             {
                 nativeAccelStructDescriptor.Type = Vortice.Direct3D12.RaytracingAccelerationStructureType.BottomLevel;
-                nativeAccelStructDescriptor.Flags = Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.None;
+                nativeAccelStructDescriptor.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(descriptor.Flag);
                 nativeAccelStructDescriptor.Layout = Vortice.Direct3D12.ElementsLayout.Array;
                 nativeAccelStructDescriptor.DescriptorsCount = (uint)descriptor.Geometries.Length;
                 nativeAccelStructDescriptor.GeometryDescriptions = m_NativeGeometryDescriptions;
@@ -467,8 +489,135 @@ namespace SharpGPU
             };
         }
 
+        private void AttachOpacityMicromap(
+            ref Vortice.Direct3D12.RaytracingGeometryDescription nativeGeometryDescription,
+            in int geometryIndex,
+            in RHIAccelStructTriangles triangleGeometry,
+            in Vortice.Direct3D12.RaytracingGeometryTrianglesDescription triangleDesc)
+        {
+            Dx12OpacityMicromap micromap = triangleGeometry.OpacityMicromap as Dx12OpacityMicromap
+                ?? throw new ArgumentException("DX12 triangle OMM attachment requires a Dx12OpacityMicromap.");
+
+            m_NativeOmmTriangleDescs ??= new IntPtr[m_NativeGeometryDescriptions.Length];
+            m_NativeOmmLinkageDescs ??= new IntPtr[m_NativeGeometryDescriptions.Length];
+            m_NativeOmmSpecialIndexBuffers ??= new Vortice.Direct3D12.ID3D12Resource?[m_NativeGeometryDescriptions.Length];
+
+            ulong indexAddress;
+            Vortice.DXGI.Format indexFormat;
+            if (triangleGeometry.OpacityMicromapIndexBuffer != null)
+            {
+                Dx12Buffer indexBuffer = triangleGeometry.OpacityMicromapIndexBuffer as Dx12Buffer
+                    ?? throw new ArgumentException("DX12 OMM index buffer must be a Dx12Buffer.");
+                indexAddress = indexBuffer.NativeResource.GPUVirtualAddress + triangleGeometry.OpacityMicromapIndexOffset;
+                indexFormat = Dx12Utility.ConvertToDx12IndexFormat(triangleGeometry.OpacityMicromapIndexFormat);
+            }
+            else
+            {
+                uint triangleCount = triangleGeometry.IndexBuffer != null
+                    ? triangleGeometry.IndexCount / 3u
+                    : triangleGeometry.VertexCount / 3u;
+                if (triangleCount == 0)
+                {
+                    throw new InvalidOperationException("OMM special-index attachment requires at least one triangle.");
+                }
+
+                uint bufferSize = triangleCount * sizeof(uint);
+                Vortice.Direct3D12.ID3D12Resource specialIndexBuffer = Dx12RaytracingHelper.CreateBuffer(
+                    m_Dx12Device.NativeDevice,
+                    bufferSize,
+                    Vortice.Direct3D12.ResourceFlags.None,
+                    Vortice.Direct3D12.ResourceStates.GenericRead,
+                    Dx12RaytracingHelper.kUploadHeapProps);
+                m_NativeOmmSpecialIndexBuffers[geometryIndex] = specialIndexBuffer;
+
+                uint specialIndex = unchecked((uint)(int)triangleGeometry.OpacityMicromapSpecialIndex);
+                void* mapped = null;
+                specialIndexBuffer.Map(0, null, &mapped);
+                try
+                {
+                    uint* indices = (uint*)mapped;
+                    for (uint i = 0; i < triangleCount; ++i)
+                    {
+                        indices[i] = specialIndex;
+                    }
+                }
+                finally
+                {
+                    specialIndexBuffer.Unmap(0, null);
+                }
+
+                indexAddress = specialIndexBuffer.GPUVirtualAddress;
+                indexFormat = Vortice.DXGI.Format.R32_UInt;
+            }
+
+            IntPtr trianglesAlloc = (IntPtr)NativeMemory.Alloc((nuint)sizeof(Vortice.Direct3D12.RaytracingGeometryTrianglesDescription));
+            IntPtr linkageAlloc = (IntPtr)NativeMemory.Alloc((nuint)sizeof(Vortice.Direct3D12.RaytracingGeometryOmmLinkageDescription));
+            m_NativeOmmTriangleDescs[geometryIndex] = trianglesAlloc;
+            m_NativeOmmLinkageDescs[geometryIndex] = linkageAlloc;
+            *(Vortice.Direct3D12.RaytracingGeometryTrianglesDescription*)trianglesAlloc = triangleDesc;
+            uint indexStride = triangleGeometry.OpacityMicromapIndexStride == 0
+                ? (indexFormat == Vortice.DXGI.Format.R16_UInt ? 2u : 4u)
+                : triangleGeometry.OpacityMicromapIndexStride;
+            *(Vortice.Direct3D12.RaytracingGeometryOmmLinkageDescription*)linkageAlloc =
+                new Vortice.Direct3D12.RaytracingGeometryOmmLinkageDescription
+                {
+                    OpacityMicromapIndexBuffer = new Vortice.Direct3D12.GpuVirtualAddressAndStride(
+                        indexAddress,
+                        indexStride),
+                    OpacityMicromapIndexFormat = indexFormat,
+                    OpacityMicromapBaseLocation = 0,
+                    OpacityMicromapArray = micromap.ResultBuffer.GPUVirtualAddress,
+                };
+
+            nativeGeometryDescription.Type = Vortice.Direct3D12.RaytracingGeometryType.OmmTriangles;
+            nativeGeometryDescription.OmmTriangles = new Vortice.Direct3D12.RaytracingGeometryOmmTrianglesDescription
+            {
+                Triangles = trianglesAlloc,
+                OmmLinkage = linkageAlloc,
+            };
+        }
+
         protected override void Release()
         {
+            if (m_NativeOmmTriangleDescs != null)
+            {
+                for (int i = 0; i < m_NativeOmmTriangleDescs.Length; ++i)
+                {
+                    if (m_NativeOmmTriangleDescs[i] != IntPtr.Zero)
+                    {
+                        NativeMemory.Free(m_NativeOmmTriangleDescs[i].ToPointer());
+                        m_NativeOmmTriangleDescs[i] = IntPtr.Zero;
+                    }
+                }
+
+                m_NativeOmmTriangleDescs = null;
+            }
+
+            if (m_NativeOmmLinkageDescs != null)
+            {
+                for (int i = 0; i < m_NativeOmmLinkageDescs.Length; ++i)
+                {
+                    if (m_NativeOmmLinkageDescs[i] != IntPtr.Zero)
+                    {
+                        NativeMemory.Free(m_NativeOmmLinkageDescs[i].ToPointer());
+                        m_NativeOmmLinkageDescs[i] = IntPtr.Zero;
+                    }
+                }
+
+                m_NativeOmmLinkageDescs = null;
+            }
+
+            if (m_NativeOmmSpecialIndexBuffers != null)
+            {
+                for (int i = 0; i < m_NativeOmmSpecialIndexBuffers.Length; ++i)
+                {
+                    m_NativeOmmSpecialIndexBuffers[i]?.Release();
+                    m_NativeOmmSpecialIndexBuffers[i] = null;
+                }
+
+                m_NativeOmmSpecialIndexBuffers = null;
+            }
+
             if (m_NativeCurveAabbBuffer != null)
             {
                 m_NativeCurveAabbBuffer.Release();
@@ -477,6 +626,158 @@ namespace SharpGPU
             m_NativeResultBuffer.Release();
             m_NativeScratchBuffer.Release();
         }
+    }
+
+    internal unsafe class Dx12OpacityMicromap : RHIOpacityMicromap
+    {
+        public Dx12Device Device => m_Dx12Device;
+        public Vortice.Direct3D12.ID3D12Resource ResultBuffer => m_NativeResultBuffer;
+        public Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription NativeBuildDescription => m_NativeBuildDescription;
+
+        private Dx12Device m_Dx12Device;
+        private Vortice.Direct3D12.ID3D12Resource m_NativeResultBuffer;
+        private Vortice.Direct3D12.ID3D12Resource m_NativeScratchBuffer;
+        private IntPtr m_NativeArrayDesc;
+        private IntPtr m_NativeHistogram;
+        private Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription m_NativeBuildDescription;
+
+        public Dx12OpacityMicromap(Dx12Device device, in RHIOpacityMicromapBuildDescriptor descriptor)
+        {
+            m_Dx12Device = device;
+            m_Descriptor = descriptor;
+            Vortice.Direct3D12.RaytracingAccelerationStructurePrebuildInfo prebuild =
+                QueryPrebuildInfo(device, in descriptor, out m_NativeArrayDesc, out m_NativeHistogram);
+
+            m_NativeScratchBuffer = Dx12RaytracingHelper.CreateBuffer(
+                device.NativeDevice,
+                (uint)prebuild.ScratchDataSizeInBytes,
+                Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess,
+                Vortice.Direct3D12.ResourceStates.Common | Vortice.Direct3D12.ResourceStates.UnorderedAccess,
+                Dx12RaytracingHelper.kDefaultHeapProps);
+            m_NativeResultBuffer = Dx12RaytracingHelper.CreateBuffer(
+                device.NativeDevice,
+                (uint)prebuild.ResultDataMaxSizeInBytes,
+                Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess,
+                Vortice.Direct3D12.ResourceStates.Common | Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure,
+                Dx12RaytracingHelper.kDefaultHeapProps);
+
+            Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs inputs = CreateInputs(in descriptor, m_NativeArrayDesc);
+            m_NativeBuildDescription.Inputs = inputs;
+            m_NativeBuildDescription.DestinationAccelerationStructureData = m_NativeResultBuffer.GPUVirtualAddress;
+            m_NativeBuildDescription.ScratchAccelerationStructureData = m_NativeScratchBuffer.GPUVirtualAddress;
+        }
+
+        public static RHIOpacityMicromapMemoryRequirements QueryMemoryRequirements(
+            Dx12Device device,
+            in RHIOpacityMicromapBuildDescriptor descriptor)
+        {
+            Vortice.Direct3D12.RaytracingAccelerationStructurePrebuildInfo prebuild =
+                QueryPrebuildInfo(device, in descriptor, out IntPtr arrayDesc, out IntPtr histogram);
+            NativeMemory.Free(arrayDesc.ToPointer());
+            NativeMemory.Free(histogram.ToPointer());
+            return new RHIOpacityMicromapMemoryRequirements
+            {
+                ResultSizeInBytes = prebuild.ResultDataMaxSizeInBytes,
+                ScratchSizeInBytes = prebuild.ScratchDataSizeInBytes,
+                UpdateScratchSizeInBytes = prebuild.UpdateScratchDataSizeInBytes,
+            };
+        }
+
+        private static Vortice.Direct3D12.RaytracingAccelerationStructurePrebuildInfo QueryPrebuildInfo(
+            Dx12Device device,
+            in RHIOpacityMicromapBuildDescriptor descriptor,
+            out IntPtr arrayDesc,
+            out IntPtr histogram)
+        {
+            AllocateNativeArrayDesc(in descriptor, out arrayDesc, out histogram);
+            Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs inputs = CreateInputs(in descriptor, arrayDesc);
+            return device.NativeDevice.GetRaytracingAccelerationStructurePrebuildInfo(inputs);
+        }
+
+        private static Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs CreateInputs(
+            in RHIOpacityMicromapBuildDescriptor descriptor,
+            in IntPtr arrayDesc)
+        {
+            return new Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs
+            {
+                Type = Vortice.Direct3D12.RaytracingAccelerationStructureType.OpacityMicromapArray,
+                Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(descriptor.Flag),
+                Layout = Vortice.Direct3D12.ElementsLayout.Array,
+                DescriptorsCount = 1,
+                OpacityMicromapArrayDesc = arrayDesc,
+            };
+        }
+
+        private static void AllocateNativeArrayDesc(
+            in RHIOpacityMicromapBuildDescriptor descriptor,
+            out IntPtr arrayDesc,
+            out IntPtr histogram)
+        {
+            Dx12Buffer inputBuffer = descriptor.InputBuffer as Dx12Buffer
+                ?? throw new ArgumentException("DX12 opacity micromap input buffer must be a Dx12Buffer.");
+            Dx12Buffer triangleArrayBuffer = descriptor.TriangleArrayBuffer as Dx12Buffer
+                ?? throw new ArgumentException("DX12 opacity micromap triangle-array buffer must be a Dx12Buffer.");
+
+            int histogramBytes = descriptor.UsageCounts.Length * sizeof(Dx12OmmHistogramEntry);
+            histogram = (IntPtr)NativeMemory.Alloc((nuint)histogramBytes);
+            Dx12OmmHistogramEntry* histogramPtr = (Dx12OmmHistogramEntry*)histogram;
+            for (int i = 0; i < descriptor.UsageCounts.Length; ++i)
+            {
+                RHIOpacityMicromapUsageCount usage = descriptor.UsageCounts[i];
+                histogramPtr[i] = new Dx12OmmHistogramEntry
+                {
+                    Count = usage.Count,
+                    SubdivisionLevel = usage.SubdivisionLevel,
+                    Format = (uint)usage.Format,
+                };
+            }
+
+            arrayDesc = (IntPtr)NativeMemory.Alloc((nuint)sizeof(Dx12OmmArrayDesc));
+            Dx12OmmArrayDesc* arrayPtr = (Dx12OmmArrayDesc*)arrayDesc;
+            arrayPtr->NumOmmHistogramEntries = (uint)descriptor.UsageCounts.Length;
+            arrayPtr->pOmmHistogram = histogram;
+            arrayPtr->InputBuffer = inputBuffer.NativeResource.GPUVirtualAddress + descriptor.InputBufferOffset;
+            arrayPtr->PerOmmDescsStartAddress = triangleArrayBuffer.NativeResource.GPUVirtualAddress + descriptor.TriangleArrayOffset;
+            arrayPtr->PerOmmDescsStrideInBytes = descriptor.TriangleArrayStride == 0
+                ? (ulong)sizeof(Vortice.Direct3D12.RaytracingOpacityMicromapDescription)
+                : descriptor.TriangleArrayStride;
+        }
+
+        protected override void Release()
+        {
+            if (m_NativeArrayDesc != IntPtr.Zero)
+            {
+                NativeMemory.Free(m_NativeArrayDesc.ToPointer());
+                m_NativeArrayDesc = IntPtr.Zero;
+            }
+
+            if (m_NativeHistogram != IntPtr.Zero)
+            {
+                NativeMemory.Free(m_NativeHistogram.ToPointer());
+                m_NativeHistogram = IntPtr.Zero;
+            }
+
+            m_NativeResultBuffer.Release();
+            m_NativeScratchBuffer.Release();
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Dx12OmmHistogramEntry
+    {
+        public uint Count;
+        public uint SubdivisionLevel;
+        public uint Format;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Dx12OmmArrayDesc
+    {
+        public uint NumOmmHistogramEntries;
+        public IntPtr pOmmHistogram;
+        public ulong InputBuffer;
+        public ulong PerOmmDescsStartAddress;
+        public ulong PerOmmDescsStrideInBytes;
     }
 #pragma warning restore CA1416
 }

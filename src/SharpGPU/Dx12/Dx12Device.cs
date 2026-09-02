@@ -1291,6 +1291,16 @@ namespace SharpGPU
             return new Dx12BottomLevelAccelStruct(this, descriptor);
         }
 
+        protected override RHIOpacityMicromapMemoryRequirements GetOpacityMicromapMemoryRequirementsCore(in RHIOpacityMicromapBuildDescriptor descriptor)
+        {
+            return Dx12OpacityMicromap.QueryMemoryRequirements(this, in descriptor);
+        }
+
+        protected override RHIOpacityMicromap CreateOpacityMicromapCore(in RHIOpacityMicromapBuildDescriptor descriptor)
+        {
+            return new Dx12OpacityMicromap(this, in descriptor);
+        }
+
         public override RHIBindingTableLayout CreateBindingTableLayout(in RHIBindingTableLayoutDescriptor descriptor)
         {
             return new Dx12BindingTableLayout(this, descriptor);
@@ -1631,6 +1641,7 @@ namespace SharpGPU
             bool isDrawMultiIndirectSupported = true;
             bool isRaytracingSupported = false;
             bool isRaytracingInlineSupported = false;
+            bool isOpacityMicromapSupported = false;
             bool isHiddenSurfaceRemovalSupported = false;
             bool isBarycentricCoordSupported = false;
             bool isProgrammableSamplePositionSupported = false;
@@ -1780,17 +1791,25 @@ namespace SharpGPU
                 case Vortice.Direct3D12.RaytracingTier.Tier1_0:
                     isRaytracingSupported = true;
                     isRaytracingInlineSupported = false;
+                    isOpacityMicromapSupported = false;
                     break;
 
                 case Vortice.Direct3D12.RaytracingTier.Tier1_1:
+                    isRaytracingSupported = true;
+                    isRaytracingInlineSupported = true;
+                    isOpacityMicromapSupported = false;
+                    break;
+
                 case Vortice.Direct3D12.RaytracingTier.Tier1_2:
                     isRaytracingSupported = true;
                     isRaytracingInlineSupported = true;
+                    isOpacityMicromapSupported = true;
                     break;
 
                 case Vortice.Direct3D12.RaytracingTier.NotSupported:
                     isRaytracingSupported = false;
                     isRaytracingInlineSupported = false;
+                    isOpacityMicromapSupported = false;
                     break;
             }
 
@@ -2186,7 +2205,13 @@ namespace SharpGPU
                         isRaytracingInlineSupported,
                         "D3D12_FEATURE_D3D12_OPTIONS5.RaytracingTier",
                         "Inline ray queries require DXR tier 1.1.",
-                        tier: ERHICapabilityTier.Tier2)),
+                        tier: ERHICapabilityTier.Tier2),
+                    opacityMicromap: Probe(
+                        isOpacityMicromapSupported,
+                        "D3D12_FEATURE_D3D12_OPTIONS5.RaytracingTier >= Tier1_2 plus SharpGPU OMM factory",
+                        "DX12 opacity micromaps require RaytracingTier 1.2 and a factory/build path."),
+                    opacityMicromapSerialization: RHIOpacityMicromapContract.CreateUnavailableSerialization(
+                        "DX12 opacity micromap serialization contract")),
                 mesh: new RHIMeshCapabilities(
                     meshShader: Probe(
                         isMeshShadingSupported,

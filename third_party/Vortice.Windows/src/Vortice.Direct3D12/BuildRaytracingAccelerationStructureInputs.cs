@@ -23,6 +23,13 @@ public partial class BuildRaytracingAccelerationStructureInputs
 
     public RaytracingGeometryDescription[]? GeometryDescriptions { get; set; }
 
+    /// <summary>
+    /// Pointer to a native <c>D3D12_RAYTRACING_OPACITY_MICROMAP_ARRAY_DESC</c>
+    /// when <see cref="Type"/> is <see cref="RaytracingAccelerationStructureType.OpacityMicromapArray"/>.
+    /// Caller owns the allocation.
+    /// </summary>
+    public IntPtr OpacityMicromapArrayDesc { get; set; }
+
     #region Marshal
     [StructLayout(LayoutKind.Sequential, Pack = 0)]
     internal unsafe struct __Native
@@ -85,7 +92,11 @@ public partial class BuildRaytracingAccelerationStructureInputs
         @ref.NumDescs = DescriptorsCount;
         @ref.DescsLayout = Layout;
 
-        if (GeometryDescriptions != null
+        if (Type == RaytracingAccelerationStructureType.OpacityMicromapArray)
+        {
+            @ref.Union.pGeometryDescs = (void*)OpacityMicromapArrayDesc;
+        }
+        else if (GeometryDescriptions != null
             && GeometryDescriptions.Length > 0)
         {
             @ref.Union.pGeometryDescs = UnsafeUtilities.AllocToPointer(GeometryDescriptions);

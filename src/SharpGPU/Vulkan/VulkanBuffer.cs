@@ -34,15 +34,21 @@ namespace SharpGPU
                 ThrowIfDisposed();
                 m_VulkanDevice.Capabilities.Memory.GpuVirtualAddress.Require(
                     "Vulkan buffer device address");
-                VkBufferDeviceAddressInfo info = new()
-                {
-                    sType = VkStructureType.BufferDeviceAddressInfo,
-                    buffer = m_NativeBuffer,
-                };
-                return VulkanNative.vkGetBufferDeviceAddress(
-                    m_VulkanDevice.NativeDevice,
-                    &info);
+                return GetNativeDeviceAddress();
             }
+        }
+
+        internal ulong GetNativeDeviceAddress()
+        {
+            ThrowIfDisposed();
+            VkBufferDeviceAddressInfo info = new()
+            {
+                sType = VkStructureType.BufferDeviceAddressInfo,
+                buffer = m_NativeBuffer,
+            };
+            return VulkanNative.vkGetBufferDeviceAddress(
+                m_VulkanDevice.NativeDevice,
+                &info);
         }
 
         private VulkanDevice m_VulkanDevice;
@@ -63,6 +69,7 @@ namespace SharpGPU
 
             VkBufferCreateInfo bufferInfo =
                 VulkanMemoryUtility.BuildBufferCreateInfo(descriptor);
+            ApplyOpacityMicromapUsage(device, ref bufferInfo, in descriptor);
 
             try
             {
@@ -148,6 +155,7 @@ namespace SharpGPU
 
             VkBufferCreateInfo bufferInfo =
                 VulkanMemoryUtility.BuildBufferCreateInfo(descriptor);
+            ApplyOpacityMicromapUsage(device, ref bufferInfo, in descriptor);
             fixed (VkBuffer* bufferPtr = &m_NativeBuffer)
             {
                 VulkanUtility.CheckErrors(
@@ -328,6 +336,20 @@ namespace SharpGPU
             m_Placement?.Dispose();
             m_Placement = null;
             m_PlacedHeap = null;
+        }
+
+        private static void ApplyOpacityMicromapUsage(
+            VulkanDevice device,
+            ref VkBufferCreateInfo bufferInfo,
+            in RHIBufferDescriptor descriptor)
+        {
+            if (device.OpacityMicromapEnabled &&
+                (descriptor.UsageFlag & ERHIBufferUsage.AccelStruct) == ERHIBufferUsage.AccelStruct)
+            {
+                bufferInfo.usage |=
+                    VulkanOpacityMicromapNative.MicromapBuildInputReadOnly |
+                    VulkanOpacityMicromapNative.MicromapStorage;
+            }
         }
 
         private void ReleaseNativeAllocationAfterConstructionFailure()

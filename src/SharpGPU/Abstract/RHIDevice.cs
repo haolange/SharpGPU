@@ -911,6 +911,31 @@ namespace SharpGPU
         public abstract RHISampler CreateSampler(in RHISamplerDescriptor descriptor);
         public abstract RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor);
         public abstract RHIBottomLevelAccelStruct CreateBottomAccelerationStructure(in RHIBottomLevelAccelStructDescriptor descriptor);
+        public RHIOpacityMicromapMemoryRequirements GetOpacityMicromapMemoryRequirements(in RHIOpacityMicromapBuildDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.RayTracing.OpacityMicromap.Require("RayTracing.OpacityMicromap");
+            RHIOpacityMicromapContract.ValidateBuildDescriptor(in descriptor);
+            return GetOpacityMicromapMemoryRequirementsCore(in descriptor);
+        }
+
+        public RHIOpacityMicromap CreateOpacityMicromap(in RHIOpacityMicromapBuildDescriptor descriptor)
+        {
+            ThrowIfDisposed();
+            Capabilities.RayTracing.OpacityMicromap.Require("RayTracing.OpacityMicromap");
+            RHIOpacityMicromapContract.ValidateBuildDescriptor(in descriptor);
+            return CreateOpacityMicromapCore(in descriptor);
+        }
+
+        protected virtual RHIOpacityMicromapMemoryRequirements GetOpacityMicromapMemoryRequirementsCore(in RHIOpacityMicromapBuildDescriptor descriptor)
+        {
+            throw new NotSupportedException("RayTracing.OpacityMicromap has no factory path on this backend.");
+        }
+
+        protected virtual RHIOpacityMicromap CreateOpacityMicromapCore(in RHIOpacityMicromapBuildDescriptor descriptor)
+        {
+            throw new NotSupportedException("RayTracing.OpacityMicromap has no factory path on this backend.");
+        }
         public abstract RHIBindingTableLayout CreateBindingTableLayout(in RHIBindingTableLayoutDescriptor descriptor);
         public abstract RHIBindingTable CreateBindingTable(in RHIBindingTableDescriptor descriptor);
         public abstract RHIPipelineLayout CreatePipelineLayout(in RHIPipelineLayoutDescriptor descriptor);
@@ -1768,13 +1793,19 @@ namespace SharpGPU
     {
         public RHICapability Pipeline { get; }
         public RHICapability Inline { get; }
+        public RHICapability OpacityMicromap { get; }
+        public RHICapability OpacityMicromapSerialization { get; }
 
         public RHIRayTracingCapabilities(
             RHICapability pipeline,
-            RHICapability inline)
+            RHICapability inline,
+            RHICapability opacityMicromap,
+            RHICapability opacityMicromapSerialization)
         {
             Pipeline = pipeline;
             Inline = inline;
+            OpacityMicromap = opacityMicromap;
+            OpacityMicromapSerialization = opacityMicromapSerialization;
         }
     }
 
@@ -2000,7 +2031,9 @@ namespace SharpGPU
                     hdr: unavailable),
                 new RHIRayTracingCapabilities(
                     pipeline: unavailable,
-                    inline: unavailable),
+                    inline: unavailable,
+                    opacityMicromap: unavailable,
+                    opacityMicromapSerialization: unavailable),
                 new RHIMeshCapabilities(unavailable, unavailable),
                 new RHIMachineLearningCapabilities(unavailable),
                 new RHIWorkGraphCapabilities(

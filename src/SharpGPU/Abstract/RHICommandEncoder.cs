@@ -293,6 +293,39 @@ namespace SharpGPU
         public abstract void SetBindingTable(RHIBindingTable resourceTable, in uint tableIndex);
         public abstract void BuildAccelerationStructure(RHITopLevelAccelStruct topLevelAccelStruct);
         public abstract void BuildAccelerationStructure(RHIBottomLevelAccelStruct bottomLevelAccelStruct);
+        public virtual void BuildOpacityMicromap(RHIOpacityMicromap micromap)
+        {
+            ArgumentNullException.ThrowIfNull(micromap);
+            RequireOpacityMicromapCapability("BuildOpacityMicromap");
+            throw new NotSupportedException(
+                $"{GetType().Name} does not implement BuildOpacityMicromap.");
+        }
+
+        public virtual void CompactOpacityMicromap(RHIOpacityMicromap source, RHIOpacityMicromap destination)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+            ArgumentNullException.ThrowIfNull(destination);
+            RequireOpacityMicromapCapability("CompactOpacityMicromap");
+            if ((source.Descriptor.Flag & ERHIAccelStructFlag.AllowCompaction) == 0)
+            {
+                throw new InvalidOperationException(
+                    "CompactOpacityMicromap requires AllowCompaction on the source micromap.");
+            }
+
+            throw new NotSupportedException(
+                $"{GetType().Name} does not implement CompactOpacityMicromap.");
+        }
+
+        protected void RequireOpacityMicromapCapability(string operation)
+        {
+            RHICommandBuffer commandBuffer = m_CommandBuffer ??
+                throw new InvalidOperationException(
+                    "The ray-tracing encoder is not attached to a command buffer.");
+            RHIDevice device = commandBuffer.CommandQueue.RequireOwnerDevice();
+            device.Capabilities.RayTracing.OpacityMicromap.Require("RayTracing.OpacityMicromap");
+            _ = operation;
+        }
+
         public abstract void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable);
         public abstract void DispatchIndirect(RHIBuffer argsBuffer, in uint argsOffset, RHIFunctionTable functionTable);
         public virtual void EndPass()

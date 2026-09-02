@@ -1021,9 +1021,16 @@ namespace SharpGPU
             m_CallableGroupBase = m_HitGroupBase + m_HitGroupCount;
             m_CallableGroupCount = callableCount;
 
+            VkPipelineCreateFlags pipelineFlags = 0;
+            if (device.Capabilities.RayTracing.OpacityMicromap.Tier != ERHICapabilityTier.Unavailable)
+            {
+                pipelineFlags = VkPipelineCreateFlags.RayTracingOpacityMicromapEXT;
+            }
+
             VkRayTracingPipelineCreateInfoKHR pipelineInfo = new VkRayTracingPipelineCreateInfoKHR()
             {
                 sType = VkStructureType.RayTracingPipelineCreateInfoKHR,
+                flags = pipelineFlags,
                 stageCount = (uint)stageIdx,
                 pStages = stages,
                 groupCount = (uint)groupIdx,

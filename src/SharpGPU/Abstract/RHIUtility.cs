@@ -615,6 +615,12 @@ namespace SharpGPU
     {
         CopySrc = 0x01,
         CopyDst = 0x02,
+        /// <summary>
+        /// Acceleration-structure and opacity-micromap build input / storage.
+        /// Vulkan maps this bit to <c>MICROMAP_BUILD_INPUT_READ_ONLY</c> and micromap storage
+        /// when <c>VK_EXT_opacity_micromap</c> is enabled. CreateOpacityMicromap / Build
+        /// require this bit on OMM input, triangle-array, and per-triangle index buffers.
+        /// </summary>
         AccelStruct = 0x04,
         IndexBuffer = 0x08,
         VertexBuffer = 0x10,

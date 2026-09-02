@@ -30,7 +30,7 @@ public partial struct RaytracingPipelineConfig1 : IStateSubObjectDescription, IS
     #region Marshal
     unsafe IntPtr IStateSubObjectDescriptionMarshal.__MarshalAlloc(Dictionary<StateSubObject, IntPtr> subObjectLookup)
     {
-        var native = Marshal.AllocHGlobal(sizeof(RaytracingPipelineConfig));
+        var native = Marshal.AllocHGlobal(sizeof(RaytracingPipelineConfig1));
         Unsafe.WriteUnaligned(native.ToPointer(), this);
         return native;
     }

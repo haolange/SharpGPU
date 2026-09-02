@@ -6210,8 +6210,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             {
                 sType = VkStructureType.AccelerationStructureBuildGeometryInfoKHR,
                 type = VkAccelerationStructureTypeKHR.TopLevel,
-                flags = VkBuildAccelerationStructureFlagsKHR.PreferFastTrace |
-                        VkBuildAccelerationStructureFlagsKHR.AllowUpdate,
+                flags = VulkanAccelStructHelper.ComposeTopLevelBuildFlags(topLevelAccelStruct.Descriptor),
                 mode = VkBuildAccelerationStructureModeKHR.Build,
                 dstAccelerationStructure = vkTLAS.NativeAccelerationStructure,
                 geometryCount = 1,
@@ -6243,6 +6242,8 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             int geometryCount = descriptor.Geometries.Length;
             VkAccelerationStructureGeometryKHR* geometries = stackalloc VkAccelerationStructureGeometryKHR[Math.Max(geometryCount, 1)];
             VkAccelerationStructureBuildRangeInfoKHR* rangeInfos = stackalloc VkAccelerationStructureBuildRangeInfoKHR[Math.Max(geometryCount, 1)];
+            VulkanOpacityMicromapNative.VkAccelerationStructureTrianglesOpacityMicromapEXT* ommAttachments =
+                stackalloc VulkanOpacityMicromapNative.VkAccelerationStructureTrianglesOpacityMicromapEXT[Math.Max(geometryCount, 1)];
 
             for (int i = 0; i < geometryCount; ++i)
             {
@@ -6298,6 +6299,16 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                         {
                             primitiveCount = triangleGeometry.VertexCount / 3,
                         };
+                    }
+
+                    if (triangleGeometry.OpacityMicromap != null)
+                    {
+                        vkBLAS.FillOpacityMicromapAttachment(
+                            vkQueue.VulkanDevice,
+                            i,
+                            triangleGeometry,
+                            &ommAttachments[i]);
+                        geometries[i].geometry.triangles.pNext = &ommAttachments[i];
                     }
                 }
                 else if (geom.GeometryType == ERHIAccelStructGeometryType.AABB)
@@ -6371,7 +6382,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             {
                 sType = VkStructureType.AccelerationStructureBuildGeometryInfoKHR,
                 type = VkAccelerationStructureTypeKHR.BottomLevel,
-                flags = VkBuildAccelerationStructureFlagsKHR.PreferFastTrace,
+                flags = VulkanAccelStructHelper.ComposeBottomLevelBuildFlags(descriptor),
                 mode = VkBuildAccelerationStructureModeKHR.Build,
                 dstAccelerationStructure = vkBLAS.NativeAccelerationStructure,
                 geometryCount = (uint)geometryCount,
@@ -6381,6 +6392,88 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
 
             VkAccelerationStructureBuildRangeInfoKHR* pRangeInfos = rangeInfos;
             VulkanNative.vkCmdBuildAccelerationStructuresKHR(vkCmdBuf.NativeCommandBuffer, 1, &buildInfo, &pRangeInfos);
+            InsertAccelerationStructureBuildBarrier(vkCmdBuf);
+        }
+
+        public override void BuildOpacityMicromap(RHIOpacityMicromap micromap)
+        {
+            ArgumentNullException.ThrowIfNull(micromap);
+            RequireOpacityMicromapCapability("BuildOpacityMicromap");
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanOpacityMicromap vulkanMicromap = micromap as VulkanOpacityMicromap
+                ?? throw new ArgumentException("BuildOpacityMicromap requires a VulkanOpacityMicromap.", nameof(micromap));
+            VulkanOpacityMicromapNative.Api api = vulkanMicromap.Device.RequireOpacityMicromapApi();
+            VulkanOpacityMicromapNative.VkMicromapUsageEXT* usageCounts =
+                stackalloc VulkanOpacityMicromapNative.VkMicromapUsageEXT[vulkanMicromap.UsageCounts.Length];
+            vulkanMicromap.FillBuildInfo(usageCounts, out VulkanOpacityMicromapNative.VkMicromapBuildInfoEXT buildInfo);
+            api.CmdBuild(vkCmdBuf.NativeCommandBuffer, 1, &buildInfo);
+            InsertOpacityMicromapBuildBarrier(vkCmdBuf);
+        }
+
+        public override void CompactOpacityMicromap(RHIOpacityMicromap source, RHIOpacityMicromap destination)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+            ArgumentNullException.ThrowIfNull(destination);
+            RequireOpacityMicromapCapability("CompactOpacityMicromap");
+            if ((source.Descriptor.Flag & ERHIAccelStructFlag.AllowCompaction) == 0)
+            {
+                throw new InvalidOperationException(
+                    "CompactOpacityMicromap requires AllowCompaction on the source micromap.");
+            }
+
+            VulkanCommandBuffer vkCmdBuf = VulkanEncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            VulkanOpacityMicromap vulkanSource = source as VulkanOpacityMicromap
+                ?? throw new ArgumentException("CompactOpacityMicromap requires a VulkanOpacityMicromap source.", nameof(source));
+            VulkanOpacityMicromap vulkanDestination = destination as VulkanOpacityMicromap
+                ?? throw new ArgumentException("CompactOpacityMicromap requires a VulkanOpacityMicromap destination.", nameof(destination));
+            VulkanOpacityMicromapNative.Api api = vulkanSource.Device.RequireOpacityMicromapApi();
+            VulkanOpacityMicromapNative.VkCopyMicromapInfoEXT copyInfo = new()
+            {
+                sType = VulkanOpacityMicromapNative.CopyMicromapInfoStructureType,
+                src = vulkanSource.NativeMicromap,
+                dst = vulkanDestination.NativeMicromap,
+                mode = VulkanOpacityMicromapNative.CopyModeCompact,
+            };
+            api.CmdCopy(vkCmdBuf.NativeCommandBuffer, &copyInfo);
+            InsertOpacityMicromapBuildBarrier(vkCmdBuf);
+        }
+
+        private static void InsertOpacityMicromapBuildBarrier(VulkanCommandBuffer vkCmdBuf)
+        {
+            VulkanCommandQueue vkQueue = VulkanEncoderGuards.RequireCommandQueue(vkCmdBuf.CommandQueue)
+                ?? throw new InvalidOperationException("Vulkan OMM barrier requires a Vulkan command queue.");
+            VulkanDevice device = vkQueue.VulkanDevice;
+            if (device.UseSynchronization2)
+            {
+                VkMemoryBarrier2 memoryBarrier = new VkMemoryBarrier2()
+                {
+                    sType = VkStructureType.MemoryBarrier2,
+                    srcStageMask = VulkanOpacityMicromapNative.MicromapBuildStage,
+                    srcAccessMask = VulkanOpacityMicromapNative.MicromapWriteAccess,
+                    dstStageMask = VulkanOpacityMicromapNative.MicromapBuildStage |
+                        VkPipelineStageFlags2.AccelerationStructureBuildKHR,
+                    dstAccessMask = VulkanOpacityMicromapNative.MicromapReadAccess |
+                        VkAccessFlags2.AccelerationStructureReadKHR |
+                        VkAccessFlags2.AccelerationStructureWriteKHR,
+                };
+                VkDependencyInfo dependencyInfo = new VkDependencyInfo()
+                {
+                    sType = VkStructureType.DependencyInfo,
+                    memoryBarrierCount = 1,
+                    pMemoryBarriers = &memoryBarrier,
+                };
+                if (device.UseSynchronization2KhrCommand)
+                {
+                    VulkanNative.vkCmdPipelineBarrier2KHR(vkCmdBuf.NativeCommandBuffer, &dependencyInfo);
+                }
+                else
+                {
+                    VulkanNative.vkCmdPipelineBarrier2(vkCmdBuf.NativeCommandBuffer, &dependencyInfo);
+                }
+
+                return;
+            }
+
             InsertAccelerationStructureBuildBarrier(vkCmdBuf);
         }
 

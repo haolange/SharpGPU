@@ -104,6 +104,10 @@ namespace SharpGPU
 
         private bool m_RaytracingSupported;
         private bool m_RaytracingInlineSupported;
+        private bool m_OpacityMicromapSupported;
+        private string m_OpacityMicromapUnavailableReason =
+            "VK_EXT_opacity_micromap is not enabled.";
+        private VulkanOpacityMicromapNative.Api? m_OpacityMicromapApi;
         private bool m_MeshShadingSupported;
         private bool m_TaskShadingSupported;
         private bool m_MeshShaderQueriesSupported;
@@ -412,6 +416,7 @@ namespace SharpGPU
             bool hasDescriptorIndexingExtension = availableExtNames.Contains("VK_EXT_descriptor_indexing");
             bool hasDynamicRenderingExtension = availableExtNames.Contains("VK_KHR_dynamic_rendering");
             bool hasAccelStruct = availableExtNames.Contains("VK_KHR_acceleration_structure");
+            bool hasOpacityMicromap = availableExtNames.Contains(VulkanOpacityMicromapNative.ExtensionName);
             bool hasRTPipeline = availableExtNames.Contains("VK_KHR_ray_tracing_pipeline");
             bool hasDeferredOps = availableExtNames.Contains("VK_KHR_deferred_host_operations");
             bool hasRTQuery = availableExtNames.Contains("VK_KHR_ray_query");
@@ -550,6 +555,10 @@ namespace SharpGPU
             {
                 sType = VkStructureType.PhysicalDeviceAccelerationStructureFeaturesKHR,
             };
+            VulkanOpacityMicromapNative.VkPhysicalDeviceOpacityMicromapFeaturesEXT opacityMicromapFeaturesQuery = new()
+            {
+                sType = VulkanOpacityMicromapNative.PhysicalDeviceFeaturesStructureType,
+            };
             VkPhysicalDeviceMeshShaderFeaturesEXT meshFeaturesQuery = new VkPhysicalDeviceMeshShaderFeaturesEXT()
             {
                 sType = VkStructureType.PhysicalDeviceMeshShaderFeaturesEXT,
@@ -630,6 +639,11 @@ namespace SharpGPU
             {
                 accelFeaturesQuery.pNext = featureQueryChain;
                 featureQueryChain = &accelFeaturesQuery;
+            }
+            if (hasOpacityMicromap)
+            {
+                opacityMicromapFeaturesQuery.pNext = featureQueryChain;
+                featureQueryChain = &opacityMicromapFeaturesQuery;
             }
             if (hasMeshShader)
             {
@@ -783,6 +797,15 @@ namespace SharpGPU
                 swapchainMaintenanceExtension != null &&
                 swapchainMaintenanceFeaturesQuery.swapchainMaintenance1;
             bool accelFeatureSupported = hasAccelStruct && accelFeaturesQuery.accelerationStructure;
+            bool opacityMicromapFeatureSupported =
+                hasOpacityMicromap && opacityMicromapFeaturesQuery.micromap;
+            bool opacityMicromapShouldEnable =
+                opacityMicromapFeatureSupported
+                && accelFeatureSupported
+                && hasDeferredOps
+                && featureChainPlan.UseVulkan12Features
+                && vulkan12FeaturesQuery.bufferDeviceAddress
+                && synchronization2FeatureSupported;
             bool rtPipelineFeatureSupported = hasRTPipeline && rtPipelineFeaturesQuery.rayTracingPipeline;
             bool rtQueryFeatureSupported = hasRTQuery && rtQueryFeaturesQuery.rayQuery;
             bool meshShaderFeatureSupported = hasMeshShader && meshFeaturesQuery.meshShader;
@@ -883,6 +906,16 @@ namespace SharpGPU
                 {
                     deviceExtensions.Add("VK_KHR_ray_query");
                 }
+            }
+            else if (opacityMicromapShouldEnable)
+            {
+                deviceExtensions.Add("VK_KHR_acceleration_structure");
+                deviceExtensions.Add("VK_KHR_deferred_host_operations");
+            }
+
+            if (opacityMicromapShouldEnable)
+            {
+                deviceExtensions.Add(VulkanOpacityMicromapNative.ExtensionName);
             }
 
             if (meshSupported)
@@ -1122,6 +1155,13 @@ namespace SharpGPU
                     pNextChain = &rtPipelineFeatures;
                 }
             }
+            else if (opacityMicromapShouldEnable)
+            {
+                accelFeatures.sType = VkStructureType.PhysicalDeviceAccelerationStructureFeaturesKHR;
+                accelFeatures.accelerationStructure = true;
+                accelFeatures.pNext = pNextChain;
+                pNextChain = &accelFeatures;
+            }
 
             VkPhysicalDeviceMeshShaderFeaturesEXT meshFeatures = default;
             if (meshSupported)
@@ -1167,6 +1207,16 @@ namespace SharpGPU
                 pNextChain = &cooperativeMatrixFeatures;
             }
 
+            VulkanOpacityMicromapNative.VkPhysicalDeviceOpacityMicromapFeaturesEXT opacityMicromapFeatures = default;
+            if (opacityMicromapShouldEnable)
+            {
+                opacityMicromapFeatures.sType =
+                    VulkanOpacityMicromapNative.PhysicalDeviceFeaturesStructureType;
+                opacityMicromapFeatures.micromap = true;
+                opacityMicromapFeatures.pNext = pNextChain;
+                pNextChain = &opacityMicromapFeatures;
+            }
+
             VkDeviceCreateInfo deviceCreateInfo = new VkDeviceCreateInfo()
             {
                 sType = VkStructureType.DeviceCreateInfo,
@@ -1198,6 +1248,48 @@ namespace SharpGPU
 
             m_RaytracingSupported = rtSupported;
             m_RaytracingInlineSupported = rtInlineSupported;
+            if (!opacityMicromapShouldEnable)
+            {
+                m_OpacityMicromapSupported = false;
+                if (!hasOpacityMicromap)
+                {
+                    m_OpacityMicromapUnavailableReason =
+                        "VK_EXT_opacity_micromap is not listed by this physical device.";
+                }
+                else if (!opacityMicromapFeaturesQuery.micromap)
+                {
+                    m_OpacityMicromapUnavailableReason =
+                        "VK_EXT_opacity_micromap is listed but VkPhysicalDeviceOpacityMicromapFeaturesEXT.micromap is false.";
+                }
+                else if (!hasAccelStruct || !accelFeaturesQuery.accelerationStructure)
+                {
+                    m_OpacityMicromapUnavailableReason =
+                        "VK_EXT_opacity_micromap cannot be enabled because VK_KHR_acceleration_structure is missing or its accelerationStructure feature is false.";
+                }
+                else if (!synchronization2FeatureSupported)
+                {
+                    m_OpacityMicromapUnavailableReason =
+                        "VK_EXT_opacity_micromap cannot be enabled because Vulkan 1.3 synchronization2 and VK_KHR_synchronization2 are both unavailable.";
+                }
+                else
+                {
+                    m_OpacityMicromapUnavailableReason =
+                        "VK_EXT_opacity_micromap cannot be enabled because required acceleration-structure dependencies failed to enable.";
+                }
+            }
+            else if (!VulkanOpacityMicromapNative.TryLoad(
+                this,
+                out m_OpacityMicromapApi,
+                out string loadReason))
+            {
+                m_OpacityMicromapSupported = false;
+                m_OpacityMicromapUnavailableReason = loadReason;
+            }
+            else
+            {
+                m_OpacityMicromapSupported = true;
+                m_OpacityMicromapUnavailableReason = string.Empty;
+            }
             m_MeshShadingSupported = meshSupported;
             m_TaskShadingSupported = taskShaderFeatureSupported;
             m_MeshShaderQueriesSupported = meshSupported && meshShaderQueriesSupported;
@@ -1968,7 +2060,15 @@ namespace SharpGPU
                         "VkPhysicalDeviceRayQueryFeaturesKHR.rayQuery",
                         "Inline ray queries are unavailable.",
                         strategy: ERHICapabilityStrategy.NativeExtension,
-                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery)),
+                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery),
+                    opacityMicromap: Probe(
+                        m_OpacityMicromapSupported,
+                        "VK_EXT_opacity_micromap enabled plus vkCreateMicromapEXT / vkGetMicromapBuildSizesEXT / vkCmdBuildMicromapsEXT",
+                        m_OpacityMicromapUnavailableReason,
+                        strategy: ERHICapabilityStrategy.NativeExtension,
+                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery),
+                    opacityMicromapSerialization: RHIOpacityMicromapContract.CreateUnavailableSerialization(
+                        "Vulkan opacity micromap serialization contract")),
                 mesh: new RHIMeshCapabilities(
                     meshShader: VulkanMeshCapabilityFactory.CreatePublicMeshShaderCapability(
                         m_MeshShadingSupported,
@@ -2993,6 +3093,55 @@ namespace SharpGPU
         {
             return new VulkanBottomLevelAccelStruct(this, descriptor);
         }
+
+        protected override RHIOpacityMicromapMemoryRequirements GetOpacityMicromapMemoryRequirementsCore(in RHIOpacityMicromapBuildDescriptor descriptor)
+        {
+            return VulkanOpacityMicromap.QueryMemoryRequirements(this, in descriptor);
+        }
+
+        protected override RHIOpacityMicromap CreateOpacityMicromapCore(in RHIOpacityMicromapBuildDescriptor descriptor)
+        {
+            return new VulkanOpacityMicromap(this, in descriptor);
+        }
+
+        internal bool OpacityMicromapEnabled => m_OpacityMicromapSupported;
+
+        internal VulkanOpacityMicromapNative.Api RequireOpacityMicromapApi()
+        {
+            Capabilities.RayTracing.OpacityMicromap.Require("RayTracing.OpacityMicromap");
+            return m_OpacityMicromapApi
+                ?? throw new NotSupportedException(
+                    "VK_EXT_opacity_micromap function pointers are unavailable.");
+        }
+
+        internal IntPtr TryGetDeviceProcedure(string name)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(name);
+            IntPtr getDeviceProc = m_VulkanInstance.TryGetInstanceProcedure("vkGetDeviceProcAddr");
+            if (getDeviceProc != IntPtr.Zero)
+            {
+                PFN_vkGetDeviceProcAddr getter =
+                    Marshal.GetDelegateForFunctionPointer<PFN_vkGetDeviceProcAddr>(getDeviceProc);
+                byte* nativeName = (byte*)Marshal.StringToHGlobalAnsi(name);
+                try
+                {
+                    IntPtr address = getter(m_NativeDevice, nativeName);
+                    if (address != IntPtr.Zero)
+                    {
+                        return address;
+                    }
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal((IntPtr)nativeName);
+                }
+            }
+
+            return m_VulkanInstance.TryGetInstanceProcedure(name);
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        private unsafe delegate IntPtr PFN_vkGetDeviceProcAddr(VkDevice device, byte* name);
 
         public override RHIBindingTableLayout CreateBindingTableLayout(in RHIBindingTableLayoutDescriptor descriptor)
         {

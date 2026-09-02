@@ -1525,7 +1525,13 @@ namespace SharpGPU
                     inline: Probe(
                         isRayTracingSupported,
                         "MTLDevice ray-tracing properties plus Apple hardware-family qualification",
-                        "Inline Metal ray tracing is unavailable.")),
+                        "Inline Metal ray tracing is unavailable."),
+                    opacityMicromap: RHICapability.Unavailable(
+                        "Metal has no native opacity micromap object model.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU Metal factory surface"),
+                    opacityMicromapSerialization: RHIOpacityMicromapContract.CreateUnavailableSerialization(
+                        "SharpGPU Metal factory surface")),
                 mesh: new RHIMeshCapabilities(
                     meshShader: RHICapability.Unavailable(
                         "Metal mesh shaders are not exposed by the current SharpGPU factory surface.",

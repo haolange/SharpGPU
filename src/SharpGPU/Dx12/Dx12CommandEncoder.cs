@@ -2051,6 +2051,45 @@ namespace SharpGPU
             dx12CommandBuffer.NativeCommandList.ResourceBarrier(1, &uavBarrier);
         }
 
+        public override void BuildOpacityMicromap(RHIOpacityMicromap micromap)
+        {
+            ArgumentNullException.ThrowIfNull(micromap);
+            RequireOpacityMicromapCapability("BuildOpacityMicromap");
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            Dx12OpacityMicromap dx12Micromap = micromap as Dx12OpacityMicromap
+                ?? throw new ArgumentException("BuildOpacityMicromap requires a Dx12OpacityMicromap.", nameof(micromap));
+            Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription buildDescription = dx12Micromap.NativeBuildDescription;
+            dx12CommandBuffer.NativeCommandList.BuildRaytracingAccelerationStructure(buildDescription);
+
+            Vortice.Direct3D12.ResourceBarrier uavBarrier = Dx12ResourceBarrierUtil.InitUAV(dx12Micromap.ResultBuffer);
+            dx12CommandBuffer.NativeCommandList.ResourceBarrier(1, &uavBarrier);
+        }
+
+        public override void CompactOpacityMicromap(RHIOpacityMicromap source, RHIOpacityMicromap destination)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+            ArgumentNullException.ThrowIfNull(destination);
+            RequireOpacityMicromapCapability("CompactOpacityMicromap");
+            if ((source.Descriptor.Flag & ERHIAccelStructFlag.AllowCompaction) == 0)
+            {
+                throw new InvalidOperationException(
+                    "CompactOpacityMicromap requires AllowCompaction on the source micromap.");
+            }
+
+            Dx12CommandBuffer dx12CommandBuffer = Dx12EncoderGuards.RequireCommandBuffer(m_CommandBuffer);
+            Dx12OpacityMicromap dx12Source = source as Dx12OpacityMicromap
+                ?? throw new ArgumentException("CompactOpacityMicromap requires a Dx12OpacityMicromap source.", nameof(source));
+            Dx12OpacityMicromap dx12Destination = destination as Dx12OpacityMicromap
+                ?? throw new ArgumentException("CompactOpacityMicromap requires a Dx12OpacityMicromap destination.", nameof(destination));
+            dx12CommandBuffer.NativeCommandList.CopyRaytracingAccelerationStructure(
+                dx12Destination.ResultBuffer.GPUVirtualAddress,
+                dx12Source.ResultBuffer.GPUVirtualAddress,
+                Vortice.Direct3D12.RaytracingAccelerationStructureCopyMode.Compact);
+
+            Vortice.Direct3D12.ResourceBarrier uavBarrier = Dx12ResourceBarrierUtil.InitUAV(dx12Destination.ResultBuffer);
+            dx12CommandBuffer.NativeCommandList.ResourceBarrier(1, &uavBarrier);
+        }
+
         public override void Dispatch(in uint width, in uint height, in uint depth, RHIFunctionTable functionTable)
         {
             Dx12FunctionTable dx12FunctionTable = Dx12EncoderGuards.RequireFunctionTable(functionTable)

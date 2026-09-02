@@ -95,7 +95,7 @@ public sealed class SharpGPUFeatureReportTests
             $"\"SchemaRevision\": {SharpGPUFeatureReportDocument.CurrentSchemaRevision}",
             json,
             StringComparison.Ordinal);
-        Assert.Equal(4u, SharpGPUFeatureReportDocument.CurrentSchemaRevision);
+        Assert.Equal(5u, SharpGPUFeatureReportDocument.CurrentSchemaRevision);
         Assert.DoesNotContain(ArtifactPath.RepositoryRoot, json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("\"TimestampQueries\": true", json, StringComparison.Ordinal);
         Assert.Contains("\"Capabilities\":", json, StringComparison.Ordinal);
@@ -256,8 +256,12 @@ public sealed class SharpGPUFeatureReportTests
             "\"Name\": \"MachineLearning.CooperativeMatrix\"",
             json,
             StringComparison.Ordinal);
-        Assert.DoesNotContain(
+        Assert.Contains(
             "\"Name\": \"RayTracing.OpacityMicromap\"",
+            json,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"Name\": \"RayTracing.OpacityMicromapSerialization\"",
             json,
             StringComparison.Ordinal);
         Assert.DoesNotContain(
@@ -351,6 +355,15 @@ public sealed class SharpGPUFeatureReportTests
                 schema3,
                 JsonOptions.Indented));
 
+        string schema4 = canonical.Replace(
+            $"\"SchemaRevision\": {SharpGPUFeatureReportDocument.CurrentSchemaRevision}",
+            "\"SchemaRevision\": 4",
+            StringComparison.Ordinal);
+        Assert.ThrowsAny<Exception>(() =>
+            JsonSerializer.Deserialize<SharpGPUFeatureReportDocument>(
+                schema4,
+                JsonOptions.Indented));
+
         string unknownField = canonical.Replace(
             "{",
             "{\"TimestampQueries\":true,",
@@ -432,7 +445,7 @@ public sealed class UnsupportedBackendContractTests
 
 internal sealed record SharpGPUFeatureReportDocument
 {
-    public const uint CurrentSchemaRevision = 4;
+    public const uint CurrentSchemaRevision = 5;
 
     public uint SchemaRevision { get; }
     public SharpGPUEnvironmentReport Environment { get; }

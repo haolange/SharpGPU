@@ -1071,6 +1071,7 @@ namespace SharpGPU
             if ((buildFlag & ERHIAccelStructFlag.PreferFastTrace) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PreferFastTrace; 
             if ((buildFlag & ERHIAccelStructFlag.PreferFastBuild) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PreferFastBuild;
             if ((buildFlag & ERHIAccelStructFlag.AllowCompaction) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.AllowCompaction;
+            if ((buildFlag & ERHIAccelStructFlag.AllowDisableOmms) != 0) result |= Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.AllowDisableOmms;
 
             return result;
         }

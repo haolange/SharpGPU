@@ -670,7 +670,14 @@ namespace SharpGPU
             }
 
             stateSubObjects.Add(new Vortice.Direct3D12.StateSubObject(new Vortice.Direct3D12.RaytracingShaderConfig(descriptor.MaxPayloadSize, descriptor.MaxAttributeSize)));
-            stateSubObjects.Add(new Vortice.Direct3D12.StateSubObject(new Vortice.Direct3D12.RaytracingPipelineConfig(descriptor.MaxRecursionDepth)));
+            Vortice.Direct3D12.RaytracingPipelineFlags pipelineFlags = Vortice.Direct3D12.RaytracingPipelineFlags.None;
+            if (device.Capabilities.RayTracing.OpacityMicromap.Tier != ERHICapabilityTier.Unavailable)
+            {
+                pipelineFlags = Vortice.Direct3D12.RaytracingPipelineFlags.AllowOpacityMicromaps;
+            }
+
+            stateSubObjects.Add(new Vortice.Direct3D12.StateSubObject(
+                new Vortice.Direct3D12.RaytracingPipelineConfig1(descriptor.MaxRecursionDepth, pipelineFlags)));
             stateSubObjects.Add(new Vortice.Direct3D12.StateSubObject(new Vortice.Direct3D12.GlobalRootSignature(globalPipelineLayout.NativeRootSignature)));
 
             Vortice.Direct3D12.StateObjectDescription stateObjectDesc = new Vortice.Direct3D12.StateObjectDescription(Vortice.Direct3D12.StateObjectType.RaytracingPipeline, stateSubObjects.ToArray());

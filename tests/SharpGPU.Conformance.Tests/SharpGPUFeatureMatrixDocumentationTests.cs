@@ -21,6 +21,7 @@ public sealed class SharpGPUFeatureMatrixDocumentationTests
             "MachineLearning",
             "IndirectCommandBuffer",
             "Raytracing",
+            "OpacityMicromap",
             "MeshShading",
             "DescriptorIndexing",
             "StorageQueue",

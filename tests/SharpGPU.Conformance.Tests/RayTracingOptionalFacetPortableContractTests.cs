@@ -11,7 +11,7 @@ public sealed class RayTracingOptionalFacetPortableContractTests
     [Fact]
     public void WithdrawnP3AndP8Symbols_AreAbsentFromPublicSurface()
     {
-        Assert.Null(GetPublicInstanceProperty(typeof(RHIRayTracingCapabilities), "OpacityMicromap"));
+        Assert.NotNull(GetPublicInstanceProperty(typeof(RHIRayTracingCapabilities), "OpacityMicromap"));
         Assert.Null(GetPublicInstanceProperty(typeof(RHIRayTracingCapabilities), "ShaderExecutionReordering"));
         Assert.Null(GetPublicInstanceProperty(typeof(RHIRayTracingCapabilities), "Motion"));
         Assert.NotNull(GetPublicInstanceProperty(typeof(RHIRayTracingCapabilities), "Pipeline"));
