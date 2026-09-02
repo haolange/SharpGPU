@@ -6,7 +6,7 @@
 		<AssemblyName>SharpGPU</AssemblyName>
 		<RootNamespace>SharpGPU</RootNamespace>
 		<PackageId>SharpGPU</PackageId>
-		<VersionPrefix>0.1.0</VersionPrefix>
+		<VersionPrefix>0.2.0</VersionPrefix>
 		<VersionSuffix>preview.1</VersionSuffix>
 		<Authors>InfinityBrowser Contributors</Authors>
 		<Company>InfinityBrowser Contributors</Company>

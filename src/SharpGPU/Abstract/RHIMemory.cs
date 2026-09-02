@@ -14,68 +14,6 @@ namespace SharpGPU
         External,
     }
 
-    public readonly struct RHIExternalNtHandle
-    {
-        public IntPtr Handle { get; }
-        public ERHIExternalHandleKind HandleKind { get; }
-
-        public RHIExternalNtHandle(
-            IntPtr handle,
-            ERHIExternalHandleKind handleKind = ERHIExternalHandleKind.Win32NtShared)
-        {
-            Handle = handle;
-            HandleKind = handleKind;
-        }
-    }
-
-    public readonly struct RHIExternalResourceExport
-    {
-        public RHIExternalNtHandle Handle { get; }
-        public RHIAdapterIdentity Adapter { get; }
-
-        public RHIExternalResourceExport(
-            in RHIExternalNtHandle handle,
-            in RHIAdapterIdentity adapter)
-        {
-            Handle = handle;
-            Adapter = adapter;
-        }
-    }
-
-    public readonly struct RHIExternalBufferImportDescriptor
-    {
-        public RHIExternalNtHandle Handle { get; }
-        public RHIAdapterIdentity ExpectedAdapter { get; }
-        public RHIBufferDescriptor Buffer { get; }
-
-        public RHIExternalBufferImportDescriptor(
-            in RHIExternalNtHandle handle,
-            in RHIBufferDescriptor buffer,
-            RHIAdapterIdentity expectedAdapter = default)
-        {
-            Handle = handle;
-            Buffer = buffer;
-            ExpectedAdapter = expectedAdapter;
-        }
-    }
-
-    public readonly struct RHIExternalTextureImportDescriptor
-    {
-        public RHIExternalNtHandle Handle { get; }
-        public RHIAdapterIdentity ExpectedAdapter { get; }
-        public RHITextureDescriptor Texture { get; }
-
-        public RHIExternalTextureImportDescriptor(
-            in RHIExternalNtHandle handle,
-            in RHITextureDescriptor texture,
-            RHIAdapterIdentity expectedAdapter = default)
-        {
-            Handle = handle;
-            Texture = texture;
-            ExpectedAdapter = expectedAdapter;
-        }
-    }
-
     internal enum ERHIMemoryResourceKind : byte
     {
         Buffer,

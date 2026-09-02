@@ -8,7 +8,7 @@ using Xunit;
 namespace SharpGPU.Conformance.Tests;
 
 [Trait("Category", "SharpGpuPortable")]
-public sealed class FunctionLibraryAndExternalPortableContractTests
+public sealed class FunctionLibraryPortableContractTests
 {
     [Fact]
     public void FunctionLibraryView_CarriesLibraryDigestWithoutOwningBytecode()
@@ -200,18 +200,8 @@ public sealed class FunctionLibraryAndExternalPortableContractTests
     }
 
     [Fact]
-    public void ExternalFence64Types_ExistAndCoreFenceHasNoValue()
+    public void CoreFenceAndSemaphore_RemainBinaryWithoutValue()
     {
-        Assert.True(Enum.IsDefined(ERHIExternalFence64Direction.Export));
-        Assert.True(Enum.IsDefined(ERHIExternalFence64Direction.Import));
-        Assert.True(Enum.IsDefined(ERHIExternalHandleKind.Win32NtShared));
-        Assert.NotNull(typeof(RHIExternalFence64));
-        Assert.NotNull(typeof(RHIExternalFence64CreateDescriptor));
-        Assert.NotNull(typeof(RHIExternalFence64ImportDescriptor));
-        Assert.NotNull(typeof(RHIExternalFence64Export));
-        Assert.NotNull(typeof(RHIDevice).GetMethod(nameof(RHIDevice.CreateExternalFence64)));
-        Assert.NotNull(typeof(RHIDevice).GetMethod(nameof(RHIDevice.ImportExternalFence64)));
-        Assert.NotNull(typeof(RHIDevice).GetMethod(nameof(RHIDevice.ExportExternalFence64)));
         Assert.Null(
             typeof(RHIFence).GetProperty(
                 "Value",
@@ -220,52 +210,6 @@ public sealed class FunctionLibraryAndExternalPortableContractTests
             typeof(RHISemaphore).GetProperty(
                 "Value",
                 BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static));
-    }
-
-    [Fact]
-    public void MetalAndUnprobed_ExternalFence64AndMultiGpu_StayUnavailable()
-    {
-        RHIDeviceCapabilities unprobed = RHIDeviceCapabilities.CreateUnprobed("ADR-0066");
-        Assert.Equal(
-            ERHICapabilityTier.Unavailable,
-            unprobed.Synchronization.ExternalFence64.Tier);
-        Assert.Equal(ERHICapabilityTier.Unavailable, unprobed.MultiGpu.MultiGpu.Tier);
-        Assert.Equal(0u, unprobed.MultiGpu.NodeMask);
-
-        foreach (ERHIBackend backend in new[]
-                 {
-                     ERHIBackend.DirectX12,
-                     ERHIBackend.Vulkan,
-                     ERHIBackend.Metal,
-                 })
-        {
-            if (!FeatureContractContext.TryCreateInstance(backend, out RHIInstance? instance, out _))
-            {
-                continue;
-            }
-
-            using (instance)
-            {
-                RHIDevice device = instance.GetDevice(0);
-                Assert.Equal(ERHICapabilityTier.Unavailable, device.Capabilities.MultiGpu.MultiGpu.Tier);
-                Assert.Equal(0u, device.Capabilities.MultiGpu.NodeMask);
-
-                if (backend == ERHIBackend.Metal)
-                {
-                    Assert.Equal(
-                        ERHICapabilityTier.Unavailable,
-                        device.Capabilities.Synchronization.ExternalFence64.Tier);
-                    Assert.Equal(
-                        ERHICapabilityTier.Unavailable,
-                        device.Capabilities.Memory.ExternalImport.Tier);
-                    Assert.Equal(
-                        ERHICapabilityTier.Unavailable,
-                        device.Capabilities.Memory.ExternalExport.Tier);
-                    Assert.Throws<NotSupportedException>(() =>
-                        device.CreateExternalFence64(new RHIExternalFence64CreateDescriptor()));
-                }
-            }
-        }
     }
 
     [Fact]

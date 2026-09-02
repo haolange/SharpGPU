@@ -179,7 +179,6 @@ public sealed class VulkanCapabilityFailClosedContractTests
             unavailable,
             unavailable,
             unavailable,
-            unavailable,
             unavailable);
     }
 }

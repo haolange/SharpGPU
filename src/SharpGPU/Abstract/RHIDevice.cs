@@ -270,6 +270,7 @@ namespace SharpGPU
         public abstract ERHIBackend BackendType { get; }
         public RHIDeviceLimit? Limit => m_Limit;
         public RHIDeviceCapabilities Capabilities => m_Capabilities;
+        public RHIAdapterIdentity AdapterIdentity => m_AdapterIdentity;
         public int ComputeQueueCount => m_ComputeQueueCount;
         public int TransferQueueCount => m_TransferQueueCount;
         public int GraphicsQueueCount => m_GraphicsQueueCount;
@@ -285,6 +286,7 @@ namespace SharpGPU
         protected ERHIDeviceType m_Type;
         protected RHIDeviceLimit? m_Limit;
         protected RHIDeviceCapabilities m_Capabilities = RHIDeviceCapabilities.CreateUnprobed("RHIDevice subclass default");
+        protected RHIAdapterIdentity m_AdapterIdentity;
         protected int m_ComputeQueueCount;
         protected int m_TransferQueueCount;
         protected int m_GraphicsQueueCount;
@@ -360,66 +362,6 @@ namespace SharpGPU
         public abstract RHISwapChain CreateSwapChain(in RHISwapChainDescriptor descriptor);
         public abstract RHIFence CreateFence();
         public abstract RHISemaphore CreateSemaphore();
-        public virtual RHIExternalFence64 CreateExternalFence64(
-            in RHIExternalFence64CreateDescriptor descriptor)
-        {
-            ThrowIfDisposed();
-            Capabilities.Synchronization.ExternalFence64.Require(
-                "Synchronization.ExternalFence64");
-            throw new NotSupportedException(
-                $"{BackendType} does not implement ExternalFence64 creation.");
-        }
-        public virtual RHIExternalFence64 ImportExternalFence64(
-            in RHIExternalFence64ImportDescriptor descriptor)
-        {
-            ThrowIfDisposed();
-            Capabilities.Synchronization.ExternalFence64.Require(
-                "Synchronization.ExternalFence64");
-            throw new NotSupportedException(
-                $"{BackendType} does not implement ExternalFence64 import.");
-        }
-        public virtual RHIExternalFence64Export ExportExternalFence64(
-            RHIExternalFence64 fence)
-        {
-            ThrowIfDisposed();
-            ArgumentNullException.ThrowIfNull(fence);
-            Capabilities.Synchronization.ExternalFence64.Require(
-                "Synchronization.ExternalFence64");
-            throw new NotSupportedException(
-                $"{BackendType} does not implement ExternalFence64 export.");
-        }
-        public virtual RHIExternalResourceExport ExportBufferNtHandle(RHIBuffer buffer)
-        {
-            ThrowIfDisposed();
-            ArgumentNullException.ThrowIfNull(buffer);
-            Capabilities.Memory.ExternalExport.Require("Memory.ExternalExport");
-            throw new NotSupportedException(
-                $"{BackendType} does not implement buffer NT-handle export.");
-        }
-        public virtual RHIExternalResourceExport ExportTextureNtHandle(RHITexture texture)
-        {
-            ThrowIfDisposed();
-            ArgumentNullException.ThrowIfNull(texture);
-            Capabilities.Memory.ExternalExport.Require("Memory.ExternalExport");
-            throw new NotSupportedException(
-                $"{BackendType} does not implement texture NT-handle export.");
-        }
-        public virtual RHIBuffer ImportBufferNtHandle(
-            in RHIExternalBufferImportDescriptor descriptor)
-        {
-            ThrowIfDisposed();
-            Capabilities.Memory.ExternalImport.Require("Memory.ExternalImport");
-            throw new NotSupportedException(
-                $"{BackendType} does not implement buffer NT-handle import.");
-        }
-        public virtual RHITexture ImportTextureNtHandle(
-            in RHIExternalTextureImportDescriptor descriptor)
-        {
-            ThrowIfDisposed();
-            Capabilities.Memory.ExternalImport.Require("Memory.ExternalImport");
-            throw new NotSupportedException(
-                $"{BackendType} does not implement texture NT-handle import.");
-        }
         public abstract RHIStorageQueue CreateStorageQueue();
         public abstract RHIQuery CreateQuery(in RHIQueryDescriptor descriptor);
         public abstract RHIHeap CreateHeap(in RHIHeapDescription descriptor);
@@ -788,8 +730,7 @@ namespace SharpGPU
         SupportedStorageCompressionFormatMask,
         FunctionLibraryReusablePipelineClassMask,
         FunctionLibraryMaxEntryCount,
-        FunctionLibrarySupportedPayloadKindMask,
-        MultiGpuNodeMask
+        FunctionLibrarySupportedPayloadKindMask
     }
 
     /// <summary>
@@ -1164,22 +1105,19 @@ namespace SharpGPU
         public RHICapability PipelineStatisticsQueries { get; }
         public RHICapability EnhancedBarriers { get; }
         public RHICapability CalibratedTimestamps { get; }
-        public RHICapability ExternalFence64 { get; }
 
         public RHISynchronizationCapabilities(
             RHICapability timestampQueries,
             RHICapability occlusionQueries,
             RHICapability pipelineStatisticsQueries,
             RHICapability enhancedBarriers,
-            RHICapability calibratedTimestamps,
-            RHICapability externalFence64)
+            RHICapability calibratedTimestamps)
         {
             TimestampQueries = timestampQueries;
             OcclusionQueries = occlusionQueries;
             PipelineStatisticsQueries = pipelineStatisticsQueries;
             EnhancedBarriers = enhancedBarriers;
             CalibratedTimestamps = calibratedTimestamps;
-            ExternalFence64 = externalFence64;
         }
     }
 
@@ -1197,8 +1135,6 @@ namespace SharpGPU
         public RHICapability Residency { get; }
         public RHICapability BudgetQuery { get; }
         public RHICapability SparseAliasing { get; }
-        public RHICapability ExternalImport { get; }
-        public RHICapability ExternalExport { get; }
 
         public RHIMemoryCapabilities(
             RHICapability unifiedMemory,
@@ -1212,9 +1148,7 @@ namespace SharpGPU
             RHICapability sparseTileGeometry,
             RHICapability residency,
             RHICapability budgetQuery,
-            RHICapability sparseAliasing,
-            RHICapability externalImport,
-            RHICapability externalExport)
+            RHICapability sparseAliasing)
         {
             UnifiedMemory = unifiedMemory;
             PlacedResources = placedResources;
@@ -1228,8 +1162,6 @@ namespace SharpGPU
             Residency = residency;
             BudgetQuery = budgetQuery;
             SparseAliasing = sparseAliasing;
-            ExternalImport = externalImport;
-            ExternalExport = externalExport;
         }
 
         internal RHICapability RequireSparseTexture(
@@ -1456,28 +1388,6 @@ namespace SharpGPU
         }
     }
 
-    public sealed class RHIMultiGpuCapabilities
-    {
-        public RHICapability MultiGpu { get; }
-        public uint NodeMask { get; }
-
-        public RHIMultiGpuCapabilities(RHICapability multiGpu, uint nodeMask = 0)
-        {
-            MultiGpu = multiGpu;
-            NodeMask = nodeMask;
-        }
-
-        internal static RHIMultiGpuCapabilities CreateUnavailable(string probeSource)
-        {
-            return new RHIMultiGpuCapabilities(
-                RHICapability.Unavailable(
-                    "Explicit multi-adapter / multi-GPU is not modeled. Node mask stays 0.",
-                    ERHICapabilityProbeKind.BackendContract,
-                    probeSource),
-                nodeMask: 0);
-        }
-    }
-
     public sealed class RHIPresentationCapabilities
     {
         public RHICapability SwapChain { get; }
@@ -1496,22 +1406,13 @@ namespace SharpGPU
     {
         public RHICapability Pipeline { get; }
         public RHICapability Inline { get; }
-        public RHICapability OpacityMicromap { get; }
-        public RHICapability ShaderExecutionReordering { get; }
-        public RHICapability Motion { get; }
 
         public RHIRayTracingCapabilities(
             RHICapability pipeline,
-            RHICapability inline,
-            RHICapability opacityMicromap,
-            RHICapability shaderExecutionReordering,
-            RHICapability motion)
+            RHICapability inline)
         {
             Pipeline = pipeline;
             Inline = inline;
-            OpacityMicromap = opacityMicromap;
-            ShaderExecutionReordering = shaderExecutionReordering;
-            Motion = motion;
         }
     }
 
@@ -1674,7 +1575,6 @@ namespace SharpGPU
         public RHIIndirectCommandBufferCapabilities IndirectCommandBuffer { get; }
         public RHIComputeCapabilities Compute { get; }
         public RHIFunctionLibraryCapabilities FunctionLibrary { get; }
-        public RHIMultiGpuCapabilities MultiGpu { get; }
 
         internal static RHIDeviceCapabilities CreateUnprobed(string probeSource)
         {
@@ -1717,8 +1617,7 @@ namespace SharpGPU
                     occlusionQueries: unavailable,
                     pipelineStatisticsQueries: unavailable,
                     enhancedBarriers: unavailable,
-                    calibratedTimestamps: unavailable,
-                    externalFence64: unavailable),
+                    calibratedTimestamps: unavailable),
                 new RHIMemoryCapabilities(
                     unifiedMemory: unavailable,
                     placedResources: unavailable,
@@ -1731,9 +1630,7 @@ namespace SharpGPU
                     sparseTileGeometry: unavailable,
                     residency: unavailable,
                     budgetQuery: unavailable,
-                    sparseAliasing: unavailable,
-                    externalImport: unavailable,
-                    externalExport: unavailable),
+                    sparseAliasing: unavailable),
                 new RHIStorageCapabilities(unavailable, unavailable, unavailable, unavailable),
                 new RHIPipelineCacheCapabilities(unavailable),
                 new RHIPresentationCapabilities(
@@ -1741,10 +1638,7 @@ namespace SharpGPU
                     hdr: unavailable),
                 new RHIRayTracingCapabilities(
                     pipeline: unavailable,
-                    inline: unavailable,
-                    opacityMicromap: unavailable,
-                    shaderExecutionReordering: unavailable,
-                    motion: unavailable),
+                    inline: unavailable),
                 new RHIMeshCapabilities(unavailable, unavailable),
                 new RHIMachineLearningCapabilities(unavailable),
                 new RHIWorkGraphCapabilities(
@@ -1772,8 +1666,7 @@ namespace SharpGPU
                     cooperativeMatrix: unavailable),
                 RHIFunctionLibraryCapabilities.CreateUnavailable(
                     "The RHIDevice subclass has not published a native capability probe.",
-                    probeSource),
-                RHIMultiGpuCapabilities.CreateUnavailable(probeSource));
+                    probeSource));
         }
 
         public RHIDeviceCapabilities(
@@ -1790,8 +1683,7 @@ namespace SharpGPU
             RHIWorkGraphCapabilities workGraph,
             RHIIndirectCommandBufferCapabilities indirectCommandBuffer,
             RHIComputeCapabilities compute,
-            RHIFunctionLibraryCapabilities functionLibrary,
-            RHIMultiGpuCapabilities multiGpu)
+            RHIFunctionLibraryCapabilities functionLibrary)
         {
             Raster = raster ?? throw new ArgumentNullException(nameof(raster));
             Binding = binding ?? throw new ArgumentNullException(nameof(binding));
@@ -1807,7 +1699,6 @@ namespace SharpGPU
             IndirectCommandBuffer = indirectCommandBuffer ?? throw new ArgumentNullException(nameof(indirectCommandBuffer));
             Compute = compute ?? throw new ArgumentNullException(nameof(compute));
             FunctionLibrary = functionLibrary ?? throw new ArgumentNullException(nameof(functionLibrary));
-            MultiGpu = multiGpu ?? throw new ArgumentNullException(nameof(multiGpu));
         }
     }
     #endregion

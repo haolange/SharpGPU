@@ -15,7 +15,7 @@ documented exception/status model.
 
 | Platform | Artifact | Current status |
 |---|---|---|
-| Windows x64 | `docs/Artifacts/SharpGPU/feature-report-win-x64.json` | Regenerated 2026-09-01 after RFC-0026 HAL completion; schema revision 2; pipeline ABI 8. Not a substitute for matching-host qualified gates |
+| Windows x64 | `docs/Artifacts/SharpGPU/feature-report-win-x64.json` | Regenerated after G1 clean break; schema revision 3; pipeline ABI 8. Not a substitute for matching-host qualified gates |
 | Android ARM64 | `docs/Artifacts/SharpGPU/feature-report-android-arm64.json` | Historical pre-ADR-0064 API30/ARM64/Adreno650 lifecycle evidence only; current attachment qualification is unverified |
 | Linux x64 | none (do not invent placeholders) | `BLOCKED_PLATFORM` / Unverified until matching-host Vulkan qualification passes (`P13-LINUX`) |
 | macOS ARM64 | none (current report name intentionally absent) | Historical bytes are preserved as `docs/Artifacts/SharpGPU/historical-pre-adr0064-feature-report-macos-arm64.json`; a matching Apple host must regenerate the current report |
@@ -63,7 +63,7 @@ A Successful native capability probe is never a substitute for a Passed Qualifie
 | SamplerFeedback | `Raster.SamplerFeedback`, `CreateSamplerFeedbackMap` | DX12-only typed facet | create-time pairing; encoder clear/resolve/decode/copy | Vulkan/Metal Unavailable; no pairing on encoder |
 | CooperativeMatrix | `Compute.CooperativeMatrix`, `QueryCooperativeMatrixConfigs` | Typed capability | Vulkan `VK_KHR_cooperative_matrix` enumeration | DX12 Unavailable (vendored SDK has no WaveMMA query); not an ML facet |
 | FunctionLibrary | `FunctionLibrary` reusable pipeline class mask + library views | Typed capability + API contract | Vulkan/Metal raster/compute views share native container; DX12 raster/compute reuse Unavailable | view after library dispose fail-closed; ABI 8 keys use content digest |
-| ExternalFence64 | `Synchronization.ExternalFence64` / `Memory.ExternalImport` / `ExternalExport` | Typed optional facet (ADR-0066) | Windows DX12 NT fence + Vulkan win32 D3D12-fence value | core `RHIFence`/`RHISemaphore` stay binary; MultiGpu Unavailable |
+| AdapterIdentity | `RHIDevice.AdapterIdentity` (Instance-domain LUID / UUID) | Device / Instance fact | DX12 DXGI LUID; Vulkan `deviceUUID` / `deviceLUID` when valid; Metal `registryID` as LUID with `HasDeviceUuid=false` | not a MultiGPU capability; no `NodeMask` placeholder |
 
 ## Contract Rules
 

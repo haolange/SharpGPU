@@ -108,10 +108,8 @@ namespace SharpGPU
         internal bool SupportsDirectML => m_DirectMLDevice != null && m_DirectMLCommandRecorder != null;
         internal RHICapability EnhancedBarriers => Capabilities.Synchronization.EnhancedBarriers;
         internal RHICapability NativeRenderPass => Capabilities.Raster.NativeRenderPass;
-        internal RHIAdapterIdentity AdapterIdentity => m_AdapterIdentity;
 
         private Dx12Instance m_Dx12Instance;
-        private RHIAdapterIdentity m_AdapterIdentity;
         private Vortice.DXGI.IDXGIAdapter1? m_DXGIAdapter;
         private Vortice.Direct3D12.ID3D12Device10? m_NativeDevice;
         private Dx12NullDescriptorCache? m_NullDescriptors;
@@ -207,197 +205,6 @@ namespace SharpGPU
         {
             ThrowIfDeviceUnavailable();
             return new Dx12Semaphore(this);
-        }
-
-        public override RHIExternalFence64 CreateExternalFence64(
-            in RHIExternalFence64CreateDescriptor descriptor)
-        {
-            ThrowIfDeviceUnavailable();
-            Capabilities.Synchronization.ExternalFence64.Require(
-                "Synchronization.ExternalFence64");
-            Vortice.Direct3D12.ID3D12Fence? fence;
-            SharpGen.Runtime.Result result = NativeDevice.CreateFence(
-                descriptor.InitialValue,
-                Vortice.Direct3D12.FenceFlags.Shared,
-                out fence);
-            return new Dx12ExternalFence64(
-                this,
-                Dx12Utility.RequireCreatedObject(
-                    fence,
-                    result,
-                    "ID3D12Device.CreateFence(SHARED)"),
-                ERHIExternalFence64Direction.Export,
-                m_AdapterIdentity);
-        }
-
-        public override RHIExternalFence64 ImportExternalFence64(
-            in RHIExternalFence64ImportDescriptor descriptor)
-        {
-            ThrowIfDeviceUnavailable();
-            Capabilities.Synchronization.ExternalFence64.Require(
-                "Synchronization.ExternalFence64");
-            if (descriptor.Handle == IntPtr.Zero)
-            {
-                throw new ArgumentException("Import handle is null.", nameof(descriptor));
-            }
-            if (descriptor.HandleKind != ERHIExternalHandleKind.Win32NtShared)
-            {
-                throw new NotSupportedException(
-                    $"DX12 ExternalFence64 only imports Win32 NT shared handles, not {descriptor.HandleKind}.");
-            }
-
-            RequireMatchingSharedAdapter(descriptor.ExpectedAdapter, "ExternalFence64 import");
-            IntPtr owned = RHIWin32NtHandle.Duplicate(descriptor.Handle);
-            try
-            {
-                Vortice.Direct3D12.ID3D12Fence imported =
-                    NativeDevice.OpenSharedHandle<Vortice.Direct3D12.ID3D12Fence>(owned);
-                return new Dx12ExternalFence64(
-                    this,
-                    imported,
-                    ERHIExternalFence64Direction.Import,
-                    m_AdapterIdentity,
-                    owned);
-            }
-            catch
-            {
-                RHIWin32NtHandle.Close(owned);
-                throw;
-            }
-        }
-
-        public override RHIExternalFence64Export ExportExternalFence64(RHIExternalFence64 fence)
-        {
-            ThrowIfDeviceUnavailable();
-            ArgumentNullException.ThrowIfNull(fence);
-            Capabilities.Synchronization.ExternalFence64.Require(
-                "Synchronization.ExternalFence64");
-            if (fence is not Dx12ExternalFence64 dx12Fence ||
-                !ReferenceEquals(dx12Fence.OwnerDevice, this))
-            {
-                throw new ArgumentException(
-                    "DX12 ExternalFence64 export requires a fence created by this device.",
-                    nameof(fence));
-            }
-
-            IntPtr handle = NativeDevice.CreateSharedHandle(dx12Fence.NativeFence, null, null!);
-            if (handle == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("ID3D12Device.CreateSharedHandle returned a null NT handle.");
-            }
-
-            return new RHIExternalFence64Export(
-                handle,
-                dx12Fence.GetCompletedValue(),
-                ERHIExternalHandleKind.Win32NtShared,
-                dx12Fence.Adapter);
-        }
-
-        public override RHIExternalResourceExport ExportBufferNtHandle(RHIBuffer buffer)
-        {
-            ThrowIfDeviceUnavailable();
-            ArgumentNullException.ThrowIfNull(buffer);
-            Capabilities.Memory.ExternalExport.Require("Memory.ExternalExport");
-            if (buffer is not Dx12Buffer dx12Buffer || !ReferenceEquals(dx12Buffer.Dx12Device, this))
-            {
-                throw new ArgumentException("DX12 buffer export requires a buffer created by this device.", nameof(buffer));
-            }
-
-            IntPtr handle = NativeDevice.CreateSharedHandle(dx12Buffer.NativeResource, null, null!);
-            if (handle == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("ID3D12Device.CreateSharedHandle returned a null buffer NT handle.");
-            }
-
-            return new RHIExternalResourceExport(
-                new RHIExternalNtHandle(handle),
-                m_AdapterIdentity);
-        }
-
-        public override RHIExternalResourceExport ExportTextureNtHandle(RHITexture texture)
-        {
-            ThrowIfDeviceUnavailable();
-            ArgumentNullException.ThrowIfNull(texture);
-            Capabilities.Memory.ExternalExport.Require("Memory.ExternalExport");
-            if (texture is not Dx12Texture dx12Texture || !ReferenceEquals(dx12Texture.Dx12Device, this))
-            {
-                throw new ArgumentException("DX12 texture export requires a texture created by this device.", nameof(texture));
-            }
-
-            IntPtr handle = NativeDevice.CreateSharedHandle(dx12Texture.NativeResource, null, null!);
-            if (handle == IntPtr.Zero)
-            {
-                throw new InvalidOperationException("ID3D12Device.CreateSharedHandle returned a null texture NT handle.");
-            }
-
-            return new RHIExternalResourceExport(
-                new RHIExternalNtHandle(handle),
-                m_AdapterIdentity);
-        }
-
-        public override RHIBuffer ImportBufferNtHandle(in RHIExternalBufferImportDescriptor descriptor)
-        {
-            ThrowIfDeviceUnavailable();
-            Capabilities.Memory.ExternalImport.Require("Memory.ExternalImport");
-            if (descriptor.Handle.Handle == IntPtr.Zero)
-            {
-                throw new ArgumentException("Import handle is null.", nameof(descriptor));
-            }
-
-            RequireMatchingSharedAdapter(
-                descriptor.ExpectedAdapter,
-                "buffer NT-handle import");
-            IntPtr owned = RHIWin32NtHandle.Duplicate(descriptor.Handle.Handle);
-            Vortice.Direct3D12.ID3D12Resource resource;
-            try
-            {
-                resource = NativeDevice.OpenSharedHandle<Vortice.Direct3D12.ID3D12Resource>(owned);
-            }
-            catch
-            {
-                RHIWin32NtHandle.Close(owned);
-                throw;
-            }
-
-            RHIWin32NtHandle.Close(owned);
-            return new Dx12Buffer(this, descriptor.Buffer, resource);
-        }
-
-        public override RHITexture ImportTextureNtHandle(in RHIExternalTextureImportDescriptor descriptor)
-        {
-            ThrowIfDeviceUnavailable();
-            Capabilities.Memory.ExternalImport.Require("Memory.ExternalImport");
-            if (descriptor.Handle.Handle == IntPtr.Zero)
-            {
-                throw new ArgumentException("Import handle is null.", nameof(descriptor));
-            }
-
-            RequireMatchingSharedAdapter(
-                descriptor.ExpectedAdapter,
-                "texture NT-handle import");
-            IntPtr owned = RHIWin32NtHandle.Duplicate(descriptor.Handle.Handle);
-            Vortice.Direct3D12.ID3D12Resource resource;
-            try
-            {
-                resource = NativeDevice.OpenSharedHandle<Vortice.Direct3D12.ID3D12Resource>(owned);
-            }
-            catch
-            {
-                RHIWin32NtHandle.Close(owned);
-                throw;
-            }
-
-            RHIWin32NtHandle.Close(owned);
-            return new Dx12Texture(this, descriptor.Texture, resource);
-        }
-
-        private void RequireMatchingSharedAdapter(
-            in RHIAdapterIdentity expected,
-            string operation)
-        {
-            // DXGI GetSharedResourceAdapterLuid does not accept fence NT handles.
-            // Adapter identity is the device LUID captured at creation (ADR-0066).
-            m_AdapterIdentity.RequireMatch(expected, operation);
         }
 
         public override RHIStorageQueue CreateStorageQueue()
@@ -2168,12 +1975,7 @@ namespace SharpGPU
                         isEnhancedBarriersSupported,
                         "D3D12_FEATURE_D3D12_OPTIONS12.EnhancedBarriersSupported",
                         "Enhanced barriers are unavailable."),
-                    calibratedTimestamps: ProbeDx12ClockCalibration(),
-                    externalFence64: RHICapability.Available(
-                        ERHICapabilityTier.Tier1,
-                        ERHICapabilityStrategy.CoreApi,
-                        ERHICapabilityProbeKind.ApiVersion,
-                        "ID3D12Device.CreateFence(SHARED) + CreateSharedHandle / OpenSharedHandle")),
+                    calibratedTimestamps: ProbeDx12ClockCalibration()),
                 memory: CreateDx12MemoryCapabilities(
                     isUnifiedMemorySupported,
                     unifiedMemoryUnavailableReason,
@@ -2207,10 +2009,7 @@ namespace SharpGPU
                         isRaytracingInlineSupported,
                         "D3D12_FEATURE_D3D12_OPTIONS5.RaytracingTier",
                         "Inline ray queries require DXR tier 1.1.",
-                        tier: ERHICapabilityTier.Tier2),
-                    opacityMicromap: CreateDx12RayTracingOptionalFacetUnavailable(),
-                    shaderExecutionReordering: CreateDx12RayTracingOptionalFacetUnavailable(),
-                    motion: CreateDx12RayTracingOptionalFacetUnavailable()),
+                        tier: ERHICapabilityTier.Tier2)),
                 mesh: new RHIMeshCapabilities(
                     meshShader: Probe(
                         isMeshShadingSupported,
@@ -2251,9 +2050,7 @@ namespace SharpGPU
                         "D3D12_FEATURE_D3D12_OPTIONS9")),
                 functionLibrary: CreateDx12FunctionLibraryCapabilities(
                     isRaytracingSupported,
-                    isWorkgraphSupported),
-                multiGpu: RHIMultiGpuCapabilities.CreateUnavailable(
-                    "D3D12 node-mask / explicit multi-adapter"));
+                    isWorkgraphSupported));
         }
 
         public override int QueryCooperativeMatrixConfigs(
@@ -2263,14 +2060,6 @@ namespace SharpGPU
             return CopyCooperativeMatrixConfigs(
                 ReadOnlySpan<RHICooperativeMatrixConfig>.Empty,
                 destination);
-        }
-
-        private static RHICapability CreateDx12RayTracingOptionalFacetUnavailable()
-        {
-            return RHICapability.Unavailable(
-                "Vendored Agility SDK / d3d12.h documents RaytracingTier 1.0/1.1 only; DXR 1.2 Opacity Micromap / SER / Motion APIs are not present. Upgrade requires an independent ADR-0050 change.",
-                ERHICapabilityProbeKind.NativeFeatureQuery,
-                "D3D12_FEATURE_D3D12_OPTIONS5.RaytracingTier");
         }
 
         private RHICapability ProbeDx12ClockCalibration()
@@ -2419,17 +2208,7 @@ namespace SharpGPU
                 sparseAliasing: ProbeSparse(
                     tiled,
                     mappedTier,
-                    "DX12 tiled-resource aliasing onto a shared heap requires TiledResourcesTier 1 or higher."),
-                externalImport: RHICapability.Available(
-                    ERHICapabilityTier.Tier1,
-                    ERHICapabilityStrategy.CoreApi,
-                    ERHICapabilityProbeKind.ApiVersion,
-                    "ID3D12Device.OpenSharedHandle NT resource import"),
-                externalExport: RHICapability.Available(
-                    ERHICapabilityTier.Tier1,
-                    ERHICapabilityStrategy.CoreApi,
-                    ERHICapabilityProbeKind.ApiVersion,
-                    "ID3D12Device.CreateSharedHandle NT resource export"));
+                    "DX12 tiled-resource aliasing onto a shared heap requires TiledResourcesTier 1 or higher."));
         }
 
         private static RHIFunctionLibraryCapabilities CreateDx12FunctionLibraryCapabilities(

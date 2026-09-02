@@ -91,6 +91,11 @@ public sealed class SharpGPUFeatureReportTests
         string path = ArtifactPath.Resolve(GetFeatureReportFileName());
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         string json = JsonSerializer.Serialize(document, JsonOptions.Indented);
+        Assert.Contains(
+            $"\"SchemaRevision\": {SharpGPUFeatureReportDocument.CurrentSchemaRevision}",
+            json,
+            StringComparison.Ordinal);
+        Assert.Equal(3u, SharpGPUFeatureReportDocument.CurrentSchemaRevision);
         Assert.DoesNotContain(ArtifactPath.RepositoryRoot, json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("\"TimestampQueries\": true", json, StringComparison.Ordinal);
         Assert.Contains("\"Capabilities\":", json, StringComparison.Ordinal);
@@ -171,15 +176,15 @@ public sealed class SharpGPUFeatureReportTests
             "\"Name\": \"Synchronization.CalibratedTimestamps\"",
             json,
             StringComparison.Ordinal);
-        Assert.Contains(
+        Assert.DoesNotContain(
             "\"Name\": \"Synchronization.ExternalFence64\"",
             json,
             StringComparison.Ordinal);
-        Assert.Contains(
+        Assert.DoesNotContain(
             "\"Name\": \"Memory.ExternalImport\"",
             json,
             StringComparison.Ordinal);
-        Assert.Contains(
+        Assert.DoesNotContain(
             "\"Name\": \"Memory.ExternalExport\"",
             json,
             StringComparison.Ordinal);
@@ -191,7 +196,7 @@ public sealed class SharpGPUFeatureReportTests
             "\"Name\": \"FunctionLibrary.RasterComputeReuse\"",
             json,
             StringComparison.Ordinal);
-        Assert.Contains(
+        Assert.DoesNotContain(
             "\"Name\": \"MultiGpu.MultiGpu\"",
             json,
             StringComparison.Ordinal);
@@ -251,15 +256,15 @@ public sealed class SharpGPUFeatureReportTests
             "\"Name\": \"MachineLearning.CooperativeMatrix\"",
             json,
             StringComparison.Ordinal);
-        Assert.Contains(
+        Assert.DoesNotContain(
             "\"Name\": \"RayTracing.OpacityMicromap\"",
             json,
             StringComparison.Ordinal);
-        Assert.Contains(
+        Assert.DoesNotContain(
             "\"Name\": \"RayTracing.ShaderExecutionReordering\"",
             json,
             StringComparison.Ordinal);
-        Assert.Contains(
+        Assert.DoesNotContain(
             "\"Name\": \"RayTracing.Motion\"",
             json,
             StringComparison.Ordinal);
@@ -326,6 +331,15 @@ public sealed class SharpGPUFeatureReportTests
         Assert.ThrowsAny<Exception>(() =>
             JsonSerializer.Deserialize<SharpGPUFeatureReportDocument>(
                 retiredSchema,
+                JsonOptions.Indented));
+
+        string schema2 = canonical.Replace(
+            $"\"SchemaRevision\": {SharpGPUFeatureReportDocument.CurrentSchemaRevision}",
+            "\"SchemaRevision\": 2",
+            StringComparison.Ordinal);
+        Assert.ThrowsAny<Exception>(() =>
+            JsonSerializer.Deserialize<SharpGPUFeatureReportDocument>(
+                schema2,
                 JsonOptions.Indented));
 
         string unknownField = canonical.Replace(
@@ -409,7 +423,7 @@ public sealed class UnsupportedBackendContractTests
 
 internal sealed record SharpGPUFeatureReportDocument
 {
-    public const uint CurrentSchemaRevision = 2;
+    public const uint CurrentSchemaRevision = 3;
 
     public uint SchemaRevision { get; }
     public SharpGPUEnvironmentReport Environment { get; }
@@ -427,7 +441,7 @@ internal sealed record SharpGPUFeatureReportDocument
             throw new ArgumentOutOfRangeException(
                 nameof(schemaRevision),
                 schemaRevision,
-                $"SharpGPU feature report schema must be {CurrentSchemaRevision}.");
+                $"SharpGPU feature report schema {schemaRevision} is Incompatible with current schema {CurrentSchemaRevision}.");
         }
 
         SchemaRevision = schemaRevision;

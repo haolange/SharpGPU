@@ -67,6 +67,9 @@ namespace SharpGPU
             m_VendorId.IntValue = (uint)ERHIVendorType.Apple;
             m_DeviceId.IntValue = (uint)(m_NativeDevice.RegistryID & uint.MaxValue);
             m_DriverVersion = "Metal-" + Environment.OSVersion.Version.ToString();
+            m_AdapterIdentity = new RHIAdapterIdentity(
+                unchecked((long)m_NativeDevice.RegistryID),
+                Guid.Empty);
             m_SupportsMetal3 = SafeSupportsFamily(MTLGPUFamily.Metal3);
             m_SupportsMetal4 = SafeSupportsFamily(MTLGPUFamily.Metal4);
             m_SupportsNativeArgumentTable = m_SupportsMetal4 && SafeSupportsSelector(s_NewArgumentTableWithDescriptorError);
@@ -1276,11 +1279,7 @@ namespace SharpGPU
                     calibratedTimestamps: RHICapability.Unavailable(
                         "SharpMetal MTLDevice.SampleTimestamps passes timestamps by value and cannot return a calibrated CPU/GPU pair.",
                         ERHICapabilityProbeKind.BackendContract,
-                        "MTLDevice.sampleTimestamps:gpuTimestamp:"),
-                    externalFence64: RHICapability.Unavailable(
-                        "ExternalFence64 is Win32 NT shared fence only. Metal has no matching handle contract.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "ADR-0066 ExternalFence64")),
+                        "MTLDevice.sampleTimestamps:gpuTimestamp:")),
                 memory: new RHIMemoryCapabilities(
                     unifiedMemory: Probe(
                         m_NativeDevice.HasUnifiedMemory,
@@ -1340,15 +1339,7 @@ namespace SharpGPU
                     sparseAliasing: RHICapability.Unavailable(
                         "Metal sparse aliasing is not implemented.",
                         ERHICapabilityProbeKind.BackendContract,
-                        "SharpGPU Metal sparse-texture contract"),
-                    externalImport: RHICapability.Unavailable(
-                        "Win32 NT handle import is not available on Metal.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "ADR-0066 external memory"),
-                    externalExport: RHICapability.Unavailable(
-                        "Win32 NT handle export is not available on Metal.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "ADR-0066 external memory")),
+                        "SharpGPU Metal sparse-texture contract")),
                 storage: MetalStorageQueue.CreateCapabilities(this),
                 pipelineCache: new RHIPipelineCacheCapabilities(
                     nativeCache: RHICapability.Unavailable(
@@ -1375,13 +1366,7 @@ namespace SharpGPU
                     inline: Probe(
                         isRayTracingSupported,
                         "MTLDevice ray-tracing properties plus Apple hardware-family qualification",
-                        "Inline Metal ray tracing is unavailable."),
-                    opacityMicromap: CreateMetalRayTracingOptionalFacetUnavailable(
-                        "Apple Metal ray tracing has no SharpGPU Opacity Micromap lowering."),
-                    shaderExecutionReordering: CreateMetalRayTracingOptionalFacetUnavailable(
-                        "Apple Metal ray tracing has no SharpGPU Shader Execution Reordering lowering."),
-                    motion: CreateMetalRayTracingOptionalFacetUnavailable(
-                        "Apple Metal ray tracing has no SharpGPU Motion lowering.")),
+                        "Inline Metal ray tracing is unavailable.")),
                 mesh: new RHIMeshCapabilities(
                     meshShader: RHICapability.Unavailable(
                         "Metal mesh shaders are not exposed by the current SharpGPU factory surface.",
@@ -1424,9 +1409,7 @@ namespace SharpGPU
                         ERHICapabilityProbeKind.BackendContract,
                         "SharpMetal MTLDevice")),
                 functionLibrary: CreateMetalFunctionLibraryCapabilities(
-                    isRayTracingSupported),
-                multiGpu: RHIMultiGpuCapabilities.CreateUnavailable(
-                    "Metal explicit multi-adapter"));
+                    isRayTracingSupported));
         }
 
         private static RHIFunctionLibraryCapabilities CreateMetalFunctionLibraryCapabilities(
@@ -1444,14 +1427,6 @@ namespace SharpGPU
                 RHIFunctionLibraryCapabilities.PayloadKindBit(ERHIShaderPayloadKind.MetalLibrary) |
                     RHIFunctionLibraryCapabilities.PayloadKindBit(ERHIShaderPayloadKind.MslSource),
                 rasterComputeUnavailableReason: null);
-        }
-
-        private static RHICapability CreateMetalRayTracingOptionalFacetUnavailable(string reason)
-        {
-            return RHICapability.Unavailable(
-                reason,
-                ERHICapabilityProbeKind.BackendContract,
-                "SharpGPU Metal ray-tracing factory surface");
         }
 
         private RHICapabilityLimits ProbeMetalSparseTileSizeBytes()

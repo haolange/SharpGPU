@@ -6,18 +6,22 @@
 | 状态 | Accepted |
 | 维护者 | CGBull |
 | 创建日期 | 2026-08-30 |
-| 最后更新 | 2026-09-01 |
+| 最后更新 | 2026-09-03 |
 | 相关链接 | `ADR-0054` · `ADR-0064` · `ADR-0065` · `ADR-0066` · `RFC-0021` · `RFC-0026` · `TASK-20260901-sharpgpu-hal-completion` · `CANONICAL-VERIFICATION` |
 
 # SharpGPU 2026 三平台 Feature Audit
+
+## 2026-09-03 addendum（G1 withdrawal）
+
+G1 撤回 2026-09-01 误记为已交付的占位：`RayTracing.OpacityMicromap` / `ShaderExecutionReordering` / `Motion` 字段已从公共面删除（真实对象模型改期 G4）；P8 ExternalFence64 / NT share import-export / `Memory.ExternalImport|ExternalExport` / `Synchronization.ExternalFence64` 整面删除，`ADR-0066` 现为 Superseded；`RHIMultiGpuCapabilities` / `Capabilities.MultiGpu` / `NodeMask` 占位删除。保留核心 RT Pipeline/Inline、Function Library、本进程 `ERHIResourceAllocationMode.External` wrap，以及 Device 级 `AdapterIdentity`（LUID / UUID）。
 
 ## 2026-09-01 addendum（RFC-0026）
 
 本审计正文仍是 2026-08-30 的历史快照。RFC-0026 / TASK-20260901 已关闭其中列出的 P0 真相问题，并补齐 typed optional facets。当前实现事实以源码与 `docs/Canonical/VERIFICATION.md` 为准，不把本文件 8/30 结论当成仍有效的 capability 表。
 
-已关闭（相对 8/30 正文）：DX12 VRS 硬编码与 Vulkan/Metal no-op setter；DX12 mesh 人为压制；Sampler Feedback 公共域；wave size 硬编码；Vulkan cooperative matrix 枚举；ExternalFence64（ADR-0066）；Function Library raster/compute 复用（DX12 该路径仍诚实 Unavailable）；Storage 解压/取消/优先级按原生探测。
+已关闭（相对 8/30 正文）：DX12 VRS 硬编码与 Vulkan/Metal no-op setter；DX12 mesh 人为压制；Sampler Feedback 公共域；wave size 硬编码；Vulkan cooperative matrix 枚举；Function Library raster/compute 复用（DX12 该路径仍诚实 Unavailable）；Storage 解压/取消/优先级按原生探测。2026-09-01 曾把 ExternalFence64（ADR-0066）记为已关闭；该面已于 2026-09-03 G1 撤回，见上条 addendum。
 
-仍诚实 Unavailable / 阻塞：vendored Agility SDK 无 DXR 1.2 OMM/SER/Motion；Metal pipeline cache（ADR-0065）；Metal matching host；Linux/Android matching host；本机 Vulkan qualified 缺 `VK_EXT_rasterization_order_attachment_access`。
+仍诚实 Unavailable / 阻塞：vendored Agility SDK 无 DXR 1.2 OMM/SER/Motion 对象模型（占位字段已删）；Metal pipeline cache（ADR-0065）；Metal matching host；Linux/Android matching host；本机 Vulkan qualified 缺 `VK_EXT_rasterization_order_attachment_access`。
 
 审计日期：2026-08-30（Asia/Shanghai）；addendum 2026-09-01  
 仓库快照：`main`，commit `789b898bcc3619d7729a000c869d200aad1b2232`  

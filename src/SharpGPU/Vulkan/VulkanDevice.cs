@@ -89,10 +89,6 @@ namespace SharpGPU
         internal bool SupportsSparseQueueFamily(uint queueFamilyIndex) =>
             m_SparseBindingSupported &&
             m_SparseQueueFamilies.Contains(queueFamilyIndex);
-        internal RHIAdapterIdentity AdapterIdentity => m_AdapterIdentity;
-        internal bool ExternalFence64Supported => m_ExternalFence64Supported;
-        internal bool ExternalMemoryWin32Supported => m_ExternalMemoryWin32Supported;
-
         private VulkanInstance m_VulkanInstance;
         private VkDevice m_NativeDevice;
         private VkPhysicalDevice m_PhysicalDevice;
@@ -107,14 +103,7 @@ namespace SharpGPU
         private int m_TransferQueueFamilyIndex = -1;
 
         private bool m_RaytracingSupported;
-        private bool m_ExternalFence64Supported;
-        private bool m_ExternalMemoryWin32Supported;
-        private RHIAdapterIdentity m_AdapterIdentity;
         private bool m_RaytracingInlineSupported;
-        private bool m_OpacityMicromapExtensionListed;
-        private bool m_NvInvocationReorderExtensionListed;
-        private bool m_ExtInvocationReorderExtensionListed;
-        private bool m_NvMotionBlurExtensionListed;
         private bool m_MeshShadingSupported;
         private bool m_TaskShadingSupported;
         private RHICapabilityLimits m_MeshShaderLimits;
@@ -425,12 +414,6 @@ namespace SharpGPU
             bool hasRTPipeline = availableExtNames.Contains("VK_KHR_ray_tracing_pipeline");
             bool hasDeferredOps = availableExtNames.Contains("VK_KHR_deferred_host_operations");
             bool hasRTQuery = availableExtNames.Contains("VK_KHR_ray_query");
-            bool hasOpacityMicromap = availableExtNames.Contains("VK_EXT_opacity_micromap");
-            bool hasNvInvocationReorder = availableExtNames.Contains(
-                "VK_NV_ray_tracing_invocation_reorder");
-            bool hasExtInvocationReorder = availableExtNames.Contains(
-                "VK_EXT_ray_tracing_invocation_reorder");
-            bool hasNvMotionBlur = availableExtNames.Contains("VK_NV_ray_tracing_motion_blur");
             bool hasMeshShader = availableExtNames.Contains("VK_EXT_mesh_shader");
             bool hasFragmentShadingRate = availableExtNames.Contains("VK_KHR_fragment_shading_rate");
             bool hasCalibratedTimestampsKhr = availableExtNames.Contains(
@@ -459,13 +442,6 @@ namespace SharpGPU
                 VulkanWaveAndCooperativeMatrixNative.SubgroupSizeControlExtensionName);
             bool hasCooperativeMatrixExtension = availableExtNames.Contains(
                 VulkanWaveAndCooperativeMatrixNative.CooperativeMatrixExtensionName);
-            bool hasExternalSemaphore = availableExtNames.Contains("VK_KHR_external_semaphore");
-            bool hasExternalSemaphoreWin32 = availableExtNames.Contains("VK_KHR_external_semaphore_win32");
-            bool enableExternalSemaphoreWin32 =
-                OperatingSystem.IsWindows() &&
-                hasExternalSemaphore &&
-                hasExternalSemaphoreWin32;
-            bool enableExternalMemoryWin32 = false;
             string? swapchainMaintenanceExtension =
                 availableExtNames.Contains("VK_KHR_swapchain_maintenance1")
                     ? "VK_KHR_swapchain_maintenance1"
@@ -943,21 +919,7 @@ namespace SharpGPU
                 deviceExtensions.Add(
                     VulkanWaveAndCooperativeMatrixNative.CooperativeMatrixExtensionName);
             }
-            if (enableExternalSemaphoreWin32)
-            {
-                deviceExtensions.Add("VK_KHR_external_semaphore");
-                deviceExtensions.Add("VK_KHR_external_semaphore_win32");
-            }
-            if (enableExternalMemoryWin32)
-            {
-                deviceExtensions.Add("VK_KHR_external_memory");
-                deviceExtensions.Add("VK_KHR_external_memory_win32");
-            }
 
-            m_ExternalFence64Supported =
-                enableExternalSemaphoreWin32 &&
-                vulkan12FeaturesQuery.timelineSemaphore;
-            m_ExternalMemoryWin32Supported = enableExternalMemoryWin32;
             m_AdapterIdentity = QueryAdapterIdentity(m_PhysicalDevice);
 
             IntPtr* extensionPtrs = stackalloc IntPtr[deviceExtensions.Count];
@@ -1233,10 +1195,6 @@ namespace SharpGPU
 
             m_RaytracingSupported = rtSupported;
             m_RaytracingInlineSupported = rtInlineSupported;
-            m_OpacityMicromapExtensionListed = hasOpacityMicromap;
-            m_NvInvocationReorderExtensionListed = hasNvInvocationReorder;
-            m_ExtInvocationReorderExtensionListed = hasExtInvocationReorder;
-            m_NvMotionBlurExtensionListed = hasNvMotionBlur;
             m_MeshShadingSupported = meshSupported;
             m_TaskShadingSupported = taskShaderFeatureSupported;
             m_MeshShaderLimits = QueryMeshShaderLimits(hasMeshShader);
@@ -1898,15 +1856,7 @@ namespace SharpGPU
                                 new RHICapabilityLimit(
                                     ERHICapabilityLimitKind.CalibratedTimestampMaxDeviation,
                                     m_CalibratedTimestampMaxDeviation))
-                            : default),
-                    externalFence64: Probe(
-                        m_ExternalFence64Supported,
-                        "VK_KHR_external_semaphore + VK_KHR_external_semaphore_win32 + D3D12 fence handle type",
-                        OperatingSystem.IsWindows()
-                            ? "Vulkan win32 external semaphore or D3D12 fence handle type is unavailable."
-                            : "ExternalFence64 is Win32 NT shared fence only.",
-                        strategy: ERHICapabilityStrategy.NativeExtension,
-                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery)),
+                            : default)),
                 memory: new RHIMemoryCapabilities(
                     unifiedMemory: Probe(
                         hasUnifiedMemory,
@@ -1959,15 +1909,7 @@ namespace SharpGPU
                     sparseAliasing: RHICapability.Unavailable(
                         "Vulkan sparse image creation does not set SparseAliased and SharpGPU has no sparse-aliasing path.",
                         ERHICapabilityProbeKind.BackendContract,
-                        "SharpGPU Vulkan sparse-aliasing contract"),
-                    externalImport: RHICapability.Unavailable(
-                        "SharpGPU does not implement Vulkan Win32 NT buffer/texture import. Extensions may exist, but the HAL path is not shipped.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "ADR-0066 Vulkan external memory"),
-                    externalExport: RHICapability.Unavailable(
-                        "SharpGPU does not implement Vulkan Win32 NT buffer/texture export. Extensions may exist, but the HAL path is not shipped.",
-                        ERHICapabilityProbeKind.BackendContract,
-                        "ADR-0066 Vulkan external memory")),
+                        "SharpGPU Vulkan sparse-aliasing contract")),
                 storage: new RHIStorageCapabilities(
                     nativeGpuFileIo: RHICapability.Unavailable(
                         "Vulkan has no SharpGPU-supported official native GPU file-I/O queue.",
@@ -2017,16 +1959,7 @@ namespace SharpGPU
                         "VkPhysicalDeviceRayQueryFeaturesKHR.rayQuery",
                         "Inline ray queries are unavailable.",
                         strategy: ERHICapabilityStrategy.NativeExtension,
-                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery),
-                    opacityMicromap: CreateUnusedVulkanRayTracingFacet(
-                        m_OpacityMicromapExtensionListed,
-                        "VK_EXT_opacity_micromap",
-                        "SharpGPU has no micromap object or command path."),
-                    shaderExecutionReordering: CreateUnusedVulkanShaderExecutionReorderingFacet(),
-                    motion: CreateUnusedVulkanRayTracingFacet(
-                        m_NvMotionBlurExtensionListed,
-                        "VK_NV_ray_tracing_motion_blur",
-                        "SharpGPU has no motion-instance or motion-triangle build path.")),
+                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery)),
                 mesh: new RHIMeshCapabilities(
                     meshShader: VulkanMeshCapabilityFactory.CreatePublicMeshShaderCapability(
                         m_MeshShadingSupported,
@@ -2084,9 +2017,7 @@ namespace SharpGPU
                         VulkanWaveAndCooperativeMatrixNative.CreateCooperativeMatrixLimits(
                             m_WaveProbe))),
                 functionLibrary: CreateVulkanFunctionLibraryCapabilities(
-                    m_RaytracingSupported),
-                multiGpu: RHIMultiGpuCapabilities.CreateUnavailable(
-                    "Vulkan explicit multi-adapter"));
+                    m_RaytracingSupported));
         }
 
         private static RHIFunctionLibraryCapabilities CreateVulkanFunctionLibraryCapabilities(
@@ -2138,36 +2069,6 @@ namespace SharpGPU
             }
 
             return new RHIAdapterIdentity(luid, deviceUuid);
-        }
-
-        private static RHICapability CreateUnusedVulkanRayTracingFacet(
-            bool listed,
-            string extensionName,
-            string missingPath)
-        {
-            string reason = listed
-                ? $"{extensionName} is listed but not enabled; {missingPath}"
-                : $"{extensionName} is not listed; {missingPath}";
-            return RHICapability.Unavailable(
-                reason,
-                ERHICapabilityProbeKind.NativeExtensionQuery,
-                extensionName);
-        }
-
-        private RHICapability CreateUnusedVulkanShaderExecutionReorderingFacet()
-        {
-            const string ExtensionNames =
-                "VK_NV_ray_tracing_invocation_reorder / VK_EXT_ray_tracing_invocation_reorder";
-            bool listed =
-                m_NvInvocationReorderExtensionListed ||
-                m_ExtInvocationReorderExtensionListed;
-            string reason = listed
-                ? $"{ExtensionNames} are listed but not enabled; SharpGPU has no HitObject or invocation-reorder command path. VK_EXT_shader_replicated_composites is not Shader Execution Reordering."
-                : $"{ExtensionNames} are not listed; SharpGPU has no HitObject or invocation-reorder command path. VK_EXT_shader_replicated_composites is not Shader Execution Reordering.";
-            return RHICapability.Unavailable(
-                reason,
-                ERHICapabilityProbeKind.NativeExtensionQuery,
-                ExtensionNames);
         }
 
         private void CreateCommandQueues(in int computeQueueCount, in int transferQueueCount, in int graphicsQueueCount)
@@ -2238,42 +2139,6 @@ namespace SharpGPU
         {
             ThrowIfDeviceUnavailable();
             return new VulkanSemaphore(this);
-        }
-
-        public override RHIExternalFence64 CreateExternalFence64(
-            in RHIExternalFence64CreateDescriptor descriptor)
-        {
-            ThrowIfDeviceUnavailable();
-            Capabilities.Synchronization.ExternalFence64.Require(
-                "Synchronization.ExternalFence64");
-            return VulkanExternalFence64.Create(this, descriptor);
-        }
-
-        public override RHIExternalFence64 ImportExternalFence64(
-            in RHIExternalFence64ImportDescriptor descriptor)
-        {
-            ThrowIfDeviceUnavailable();
-            Capabilities.Synchronization.ExternalFence64.Require(
-                "Synchronization.ExternalFence64");
-            return VulkanExternalFence64.Import(this, descriptor);
-        }
-
-        public override RHIExternalFence64Export ExportExternalFence64(
-            RHIExternalFence64 fence)
-        {
-            ThrowIfDeviceUnavailable();
-            ArgumentNullException.ThrowIfNull(fence);
-            Capabilities.Synchronization.ExternalFence64.Require(
-                "Synchronization.ExternalFence64");
-            if (fence is not VulkanExternalFence64 vulkanFence ||
-                !ReferenceEquals(vulkanFence.OwnerDevice, this))
-            {
-                throw new ArgumentException(
-                    "Vulkan ExternalFence64 export requires a fence created by this device.",
-                    nameof(fence));
-            }
-
-            return vulkanFence.Export();
         }
 
         public override RHIStorageQueue CreateStorageQueue()

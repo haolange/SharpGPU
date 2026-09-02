@@ -14,6 +14,35 @@ namespace SharpGPU
         public int GraphicsQueueRequestCount;
     }
 
+    public readonly struct RHIAdapterIdentity
+    {
+        public long Luid { get; }
+        public Guid DeviceUuid { get; }
+        public bool HasLuid => Luid != 0;
+        public bool HasDeviceUuid => DeviceUuid != Guid.Empty;
+
+        public RHIAdapterIdentity(long luid, Guid deviceUuid)
+        {
+            Luid = luid;
+            DeviceUuid = deviceUuid;
+        }
+
+        public void RequireMatch(in RHIAdapterIdentity expected, string operation)
+        {
+            if (expected.HasLuid && HasLuid && expected.Luid != Luid)
+            {
+                throw new InvalidOperationException(
+                    $"{operation} failed because adapter LUID {expected.Luid:X16} does not match {Luid:X16}.");
+            }
+
+            if (expected.HasDeviceUuid && HasDeviceUuid && expected.DeviceUuid != DeviceUuid)
+            {
+                throw new InvalidOperationException(
+                    $"{operation} failed because adapter UUID {expected.DeviceUuid} does not match {DeviceUuid}.");
+            }
+        }
+    }
+
     public abstract class RHIInstance : Disposal
     {
         public abstract int DeviceCount
