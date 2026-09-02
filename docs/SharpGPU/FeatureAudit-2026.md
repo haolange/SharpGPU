@@ -11,9 +11,13 @@
 
 # SharpGPU 2026 三平台 Feature Audit
 
+## 2026-09-03 addendum（G5-T17 Windows re-run）
+
+实现者复跑 SHA `89cc0096728b0c8fcc0ef1ba975cb832dddf96cc`。数字以 `docs/Canonical/VERIFICATION.md` CURRENT 为准。G5-T17 账本仍 PENDING（Exit Gate 是 Luna）。全量 VulkanQualified 仍 `BLOCKED_DEVICE`（ROAA，未弱化）。接力：`docs/Artifacts/SharpGPU/rfc0026-g5-t17-cross-platform-handoff.md`。
+
 ## 2026-09-03 addendum（G5-T16 public HAL）
 
-G0–G4 之后的现行公共面以源码与 `docs/Canonical/VERIFICATION.md` CURRENT（SHA `11d5a8c1ba2bb9d131a96458d22e12ff167e3041`）为准。8/30 正文、9/01 addendum、以及下条 G1 addendum 中“OMM/SER/Motion 无对象模型 / ExternalFence64 已关闭 / VRS no-op”等句不再是现行事实。
+G0–G4 之后的现行公共面以源码与 `docs/Canonical/VERIFICATION.md` CURRENT 为准（T16 当时盖章 SHA `11d5a8c1ba2bb9d131a96458d22e12ff167e3041`；T17 复跑后 CURRENT SHA 见上条）。8/30 正文、9/01 addendum、以及下条 G1 addendum 中“OMM/SER/Motion 无对象模型 / ExternalFence64 已关闭 / VRS no-op”等句不再是现行事实。
 
 - 仍是 21 RHI 域，无第 22 域。
 - P3 Unavailable 占位已删。OMM 已交付（G4-T13，AccelStruct 对象模型）。SER 无 capability 字段、无 HitObject 公共 API（G4-T14 `BLOCKED_SDK_BINDING`）。Motion 已交付（G4-T15：Vulkan NV Available，DX12 Unavailable，Metal compile-level）。
