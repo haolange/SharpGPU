@@ -20,6 +20,7 @@
     <const from-macro="D3D12_ERROR_(.*)" cpp-type="int" name="$1" class="Vortice.Direct3D12.ResultCode" result="true" />
     <define struct="Vortice.Direct3D12.CpuDescriptorHandle" sizeof="8" />
     <define struct="Vortice.Direct3D12.RaytracingInstanceDescription" sizeof="64" />
+    <define struct="Vortice.Direct3D12.RaytracingOpacityMicromapDescription" sizeof="8" />
 
     <define enum="Vortice.Direct3D12.Shader" sizeof="1" />
 
@@ -50,6 +51,7 @@
     <bind from="D3D12_REGISTER_COMPONENT_MASK_FLAG" to="Vortice.Direct3D12.Shader.RegisterComponentMaskFlags" />
     <bind from="VORTICE_MATRIX3X4" to="Vortice.Mathematics.Matrix3x4" />
     <bind from="D3D12_RAYTRACING_INSTANCE_DESC" to="Vortice.Direct3D12.RaytracingInstanceDescription" />
+    <bind from="D3D12_RAYTRACING_OPACITY_MICROMAP_DESC" to="Vortice.Direct3D12.RaytracingOpacityMicromapDescription" />
   </bindings>
 
   <naming>
@@ -802,6 +804,25 @@
     <remove field="D3D12_RT_FORMAT_ARRAY::.*"/>
 
     <map enum="D3D12_RAYTRACING_INSTANCE_FLAGS" name="RaytracingInstanceFlags" type="byte" />
+    <map enum-item="D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_OMM_2_STATE" name="ForceOmm2State"/>
+    <map enum-item="D3D12_RAYTRACING_INSTANCE_FLAG_DISABLE_OMMS" name="DisableOmms"/>
+    <map enum-item="D3D12_RAYTRACING_OPACITY_MICROMAP_FORMAT_OC1_2_STATE" name="Oc1_2State"/>
+    <map enum-item="D3D12_RAYTRACING_OPACITY_MICROMAP_FORMAT_OC1_4_STATE" name="Oc1_4State"/>
+    <map enum-item="D3D12_RAYTRACING_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_TRANSPARENT" name="FullyTransparent"/>
+    <map enum-item="D3D12_RAYTRACING_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_OPAQUE" name="FullyOpaque"/>
+    <map enum-item="D3D12_RAYTRACING_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_UNKNOWN_TRANSPARENT" name="FullyUnknownTransparent"/>
+    <map enum-item="D3D12_RAYTRACING_OPACITY_MICROMAP_SPECIAL_INDEX_FULLY_UNKNOWN_OPAQUE" name="FullyUnknownOpaque"/>
+    <map enum-item="D3D12_RAYTRACING_OPACITY_MICROMAP_STATE_TRANSPARENT" name="Transparent"/>
+    <map enum-item="D3D12_RAYTRACING_OPACITY_MICROMAP_STATE_OPAQUE" name="Opaque"/>
+    <map enum-item="D3D12_RAYTRACING_OPACITY_MICROMAP_STATE_UNKNOWN_TRANSPARENT" name="UnknownTransparent"/>
+    <map enum-item="D3D12_RAYTRACING_OPACITY_MICROMAP_STATE_UNKNOWN_OPAQUE" name="UnknownOpaque"/>
+    <map enum-item="D3D12_RAYTRACING_GEOMETRY_TYPE_OMM_TRIANGLES" name="OmmTriangles"/>
+    <map enum-item="D3D12_RAY_FLAG_FORCE_OMM_2_STATE" name="ForceOmm2State"/>
+    <map enum-item="D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_OMM_UPDATE" name="AllowOmmUpdate"/>
+    <map enum-item="D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_DISABLE_OMMS" name="AllowDisableOmms"/>
+    <map struct="D3D12_RAYTRACING_GEOMETRY_OMM_TRIANGLES_DESC" name="RaytracingGeometryOmmTrianglesDescription" />
+    <map struct="D3D12_RAYTRACING_GEOMETRY_OMM_LINKAGE_DESC" name="RaytracingGeometryOmmLinkageDescription" />
+    <remove struct="D3D12_RAYTRACING_OPACITY_MICROMAP_DESC"/>
 
     <map struct="D3D12_RENDER_PASS_RENDER_TARGET_DESC" name="RenderPassRenderTargetDescription" native="true" marshal="true" />
     <map struct="D3D12_RENDER_PASS_ENDING_ACCESS" name="RenderPassEndingAccess" native="true" marshal="true" />

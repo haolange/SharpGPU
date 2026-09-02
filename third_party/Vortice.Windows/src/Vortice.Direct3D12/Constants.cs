@@ -377,6 +377,8 @@ public static partial class D3D12
     public const int RaytracingShaderRecordByteAlignment = 32;
     public const int RaytracingShaderTableByteAlignment = 64;
     public const int RaytracingTransform3x4ByteAlignment = 16;
+    public const int RaytracingOpacityMicromapArrayByteAlignment = 128;
+    public const int RaytracingOpacityMicromapOc1MaxSubdivisionLevel = 12;
 
     public const int RequestBlendObjectCountPerDevice = 4096;
     public const int RequestBufferResourceTexelCount2ToExp = 27;

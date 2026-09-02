@@ -1783,6 +1783,7 @@ namespace SharpGPU
                     break;
 
                 case Vortice.Direct3D12.RaytracingTier.Tier1_1:
+                case Vortice.Direct3D12.RaytracingTier.Tier1_2:
                     isRaytracingSupported = true;
                     isRaytracingInlineSupported = true;
                     break;
