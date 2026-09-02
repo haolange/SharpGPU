@@ -31,17 +31,22 @@ namespace SharpGPU
         private VkBuffer m_NativeInstanceBuffer;
         private VkDeviceMemory m_NativeInstanceMemory;
         private ulong m_InstanceBufferSize;
+        private bool m_UsesMotion;
 
         public VulkanTopLevelAccelStruct(VulkanDevice device, in RHITopLevelAccelStructDescriptor descriptor)
         {
             m_VulkanDevice = device;
             m_Descriptor = descriptor;
             RHIOpacityMicromapContract.ValidateTlasDescriptor(device, in descriptor);
+            RHIAccelStructMotionContract.ValidateTlasDescriptor(device, in descriptor);
+            m_UsesMotion = RHIAccelStructMotionContract.UsesMotionFlag(descriptor.Flag);
 
             uint instanceCount = (uint)descriptor.Instances.Length;
 
-            // Create instance buffer for VkAccelerationStructureInstanceKHR data
-            ulong instanceDataSize = Math.Max(instanceCount, 1u) * (ulong)sizeof(VkAccelerationStructureInstanceRaw);
+            ulong instanceStride = m_UsesMotion
+                ? (ulong)VulkanRayTracingMotionNative.MotionInstanceByteCount
+                : (ulong)sizeof(VkAccelerationStructureInstanceRaw);
+            ulong instanceDataSize = Math.Max(instanceCount, 1u) * instanceStride;
             ulong instanceBufferSize = descriptor.Offset + instanceDataSize;
             m_InstanceBufferSize = instanceBufferSize;
             VulkanAccelStructHelper.CreateDeviceAddressBuffer(device, instanceBufferSize,
@@ -96,6 +101,7 @@ namespace SharpGPU
                 out m_NativeBuffer, out m_NativeMemory);
 
             // Create acceleration structure
+            VulkanRayTracingMotionNative.VkAccelerationStructureMotionInfoNV motionInfo = default;
             VkAccelerationStructureCreateInfoKHR createInfo = new VkAccelerationStructureCreateInfoKHR()
             {
                 sType = VkStructureType.AccelerationStructureCreateInfoKHR,
@@ -103,6 +109,13 @@ namespace SharpGPU
                 size = sizeInfo.accelerationStructureSize,
                 type = VkAccelerationStructureTypeKHR.TopLevel,
             };
+            if (m_UsesMotion)
+            {
+                createInfo.createFlags = VulkanRayTracingMotionNative.CreateMotionBit;
+                motionInfo.sType = VulkanRayTracingMotionNative.MotionInfoStructureType;
+                motionInfo.maxInstances = Math.Max(instanceCount, 1u);
+                createInfo.pNext = &motionInfo;
+            }
 
             fixed (VkAccelerationStructureKHR* asPtr = &m_NativeAccelStruct)
             {
@@ -120,9 +133,11 @@ namespace SharpGPU
 
         public override void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
         {
-            m_Descriptor = descriptor;
             RHIOpacityMicromapContract.ValidateTlasDescriptor(m_VulkanDevice, in descriptor);
+            RHIAccelStructMotionContract.ValidateTlasDescriptor(m_VulkanDevice, in descriptor);
+            RHIAccelStructMotionContract.RejectMotionModeSwitch(m_UsesMotion, descriptor.Flag);
             UploadInstanceData(descriptor);
+            m_Descriptor = descriptor;
         }
 
         private void UploadInstanceData(in RHITopLevelAccelStructDescriptor descriptor)
@@ -133,25 +148,59 @@ namespace SharpGPU
                 return;
             }
 
-            ulong byteSize = (ulong)(instanceCount * sizeof(VkAccelerationStructureInstanceRaw));
+            ulong instanceStride = m_UsesMotion
+                ? (ulong)VulkanRayTracingMotionNative.MotionInstanceByteCount
+                : (ulong)sizeof(VkAccelerationStructureInstanceRaw);
+            ulong byteSize = (ulong)instanceCount * instanceStride;
             ulong uploadOffset = descriptor.Offset;
             if (uploadOffset + byteSize > m_InstanceBufferSize)
             {
                 throw new InvalidOperationException("TLAS instance upload exceeds allocated instance buffer size.");
             }
-            VkAccelerationStructureInstanceRaw* rawInstances = stackalloc VkAccelerationStructureInstanceRaw[instanceCount];
 
+            byte[] packed = new byte[checked((int)byteSize)];
             Span<RHIAccelStructInstance> instances = descriptor.Instances.Span;
-            for (int i = 0; i < instanceCount; ++i)
+            fixed (byte* packedPtr = packed)
             {
-                rawInstances[i] = BuildRawInstance(in instances[i]);
+                if (m_UsesMotion)
+                {
+                    if (sizeof(VulkanRayTracingMotionNative.VkAccelerationStructureMotionInstanceNV) !=
+                        VulkanRayTracingMotionNative.MotionInstanceByteCount)
+                    {
+                        throw new InvalidOperationException(
+                            "Vulkan motion-instance struct size must be the 160-byte spec stride.");
+                    }
+
+                    for (int i = 0; i < instanceCount; ++i)
+                    {
+                        VulkanRayTracingMotionNative.VkAccelerationStructureMotionInstanceNV motion =
+                            BuildMotionInstance(in instances[i]);
+                        Buffer.MemoryCopy(
+                            &motion,
+                            packedPtr + ((long)i * VulkanRayTracingMotionNative.MotionInstanceByteCount),
+                            VulkanRayTracingMotionNative.MotionInstanceByteCount,
+                            VulkanRayTracingMotionNative.MotionInstanceByteCount);
+                    }
+                }
+                else
+                {
+                    VkAccelerationStructureInstanceRaw* rawInstances =
+                        (VkAccelerationStructureInstanceRaw*)packedPtr;
+                    for (int i = 0; i < instanceCount; ++i)
+                    {
+                        rawInstances[i] = BuildRawInstance(in instances[i]);
+                    }
+                }
             }
 
             void* mapped = null;
             VulkanUtility.CheckErrors(VulkanNative.vkMapMemory(m_VulkanDevice.NativeDevice, m_NativeInstanceMemory, uploadOffset, byteSize, 0, &mapped));
             try
             {
-                Buffer.MemoryCopy(rawInstances, mapped, byteSize, byteSize);
+                fixed (byte* packedPtr = packed)
+                {
+                    Buffer.MemoryCopy(packedPtr, mapped, (long)byteSize, (long)byteSize);
+                }
             }
             finally
             {
@@ -187,6 +236,128 @@ namespace SharpGPU
             raw.instanceSbtRecordOffsetAndFlags = sbtRecordOffset | (geometryInstanceFlags << 24);
             raw.accelerationStructureReference = GetAccelerationStructureDeviceAddress(vkBLAS.NativeAccelerationStructure);
             return raw;
+        }
+
+        private VulkanRayTracingMotionNative.VkAccelerationStructureMotionInstanceNV BuildMotionInstance(
+            in RHIAccelStructInstance instance)
+        {
+            VulkanBottomLevelAccelStruct vkBLAS = instance.BottomLevelAccelStruct as VulkanBottomLevelAccelStruct
+                ?? throw new InvalidOperationException("TLAS instance references a non-Vulkan BLAS.");
+
+            uint instanceCustomIndex = instance.InstanceID & 0x00FFFFFFu;
+            uint instanceMask = (uint)instance.InstanceMask & 0xFFu;
+            uint sbtRecordOffset = instance.HitGroupIndex & 0x00FFFFFFu;
+            uint geometryInstanceFlags = ((uint)ConvertToVkGeometryInstanceFlags(instance.Flag)) & 0xFFu;
+            uint packedCustomIndexAndMask = instanceCustomIndex | (instanceMask << 24);
+            uint packedSbtAndFlags = sbtRecordOffset | (geometryInstanceFlags << 24);
+            ulong accelerationStructureReference = GetAccelerationStructureDeviceAddress(vkBLAS.NativeAccelerationStructure);
+
+            VulkanRayTracingMotionNative.VkAccelerationStructureMotionInstanceNV motion = default;
+            if (instance.MotionType == ERHIAccelStructMotionInstanceType.Srt)
+            {
+                motion.type = VulkanRayTracingMotionNative.MotionInstanceTypeSrt;
+                motion.data.srtMotionInstance.transformT0 = ConvertToSrt(instance.MotionSrtT0);
+                motion.data.srtMotionInstance.transformT1 = ConvertToSrt(instance.MotionSrtT1);
+                motion.data.srtMotionInstance.instanceCustomIndexAndMask = packedCustomIndexAndMask;
+                motion.data.srtMotionInstance.instanceSbtRecordOffsetAndFlags = packedSbtAndFlags;
+                motion.data.srtMotionInstance.accelerationStructureReference = accelerationStructureReference;
+                return motion;
+            }
+
+            if (instance.MotionType == ERHIAccelStructMotionInstanceType.Matrix)
+            {
+                motion.type = VulkanRayTracingMotionNative.MotionInstanceTypeMatrix;
+                WriteTransform(ref motion.data.matrixMotionInstance, useEndTransform: false, instance.TransformMatrix);
+                WriteTransform(ref motion.data.matrixMotionInstance, useEndTransform: true, instance.MotionTransformMatrix);
+                motion.data.matrixMotionInstance.instanceCustomIndexAndMask = packedCustomIndexAndMask;
+                motion.data.matrixMotionInstance.instanceSbtRecordOffsetAndFlags = packedSbtAndFlags;
+                motion.data.matrixMotionInstance.accelerationStructureReference = accelerationStructureReference;
+                return motion;
+            }
+
+            motion.type = VulkanRayTracingMotionNative.MotionInstanceTypeStatic;
+            WriteStaticTransform(ref motion.data.staticInstance, instance.TransformMatrix);
+            motion.data.staticInstance.instanceCustomIndexAndMask = packedCustomIndexAndMask;
+            motion.data.staticInstance.instanceSbtRecordOffsetAndFlags = packedSbtAndFlags;
+            motion.data.staticInstance.accelerationStructureReference = accelerationStructureReference;
+            return motion;
+        }
+
+        private static VulkanRayTracingMotionNative.VkSRTDataNV ConvertToSrt(in RHIAccelStructSrtTransform transform)
+        {
+            return new VulkanRayTracingMotionNative.VkSRTDataNV
+            {
+                sx = transform.Sx,
+                a = transform.A,
+                b = transform.B,
+                pvx = transform.Pvx,
+                sy = transform.Sy,
+                c = transform.C,
+                pvy = transform.Pvy,
+                sz = transform.Sz,
+                pvz = transform.Pvz,
+                qx = transform.Qx,
+                qy = transform.Qy,
+                qz = transform.Qz,
+                qw = transform.Qw,
+                tx = transform.Tx,
+                ty = transform.Ty,
+                tz = transform.Tz,
+            };
+        }
+
+        private static void WriteTransform(
+            ref VulkanRayTracingMotionNative.VkAccelerationStructureMatrixMotionInstanceNV native,
+            in bool useEndTransform,
+            in SharpGPU.Mathematics.float4x4 matrix)
+        {
+            if (useEndTransform)
+            {
+                native.transformT1[0] = matrix.c0.x;
+                native.transformT1[1] = matrix.c1.x;
+                native.transformT1[2] = matrix.c2.x;
+                native.transformT1[3] = matrix.c3.x;
+                native.transformT1[4] = matrix.c0.y;
+                native.transformT1[5] = matrix.c1.y;
+                native.transformT1[6] = matrix.c2.y;
+                native.transformT1[7] = matrix.c3.y;
+                native.transformT1[8] = matrix.c0.z;
+                native.transformT1[9] = matrix.c1.z;
+                native.transformT1[10] = matrix.c2.z;
+                native.transformT1[11] = matrix.c3.z;
+                return;
+            }
+
+            native.transformT0[0] = matrix.c0.x;
+            native.transformT0[1] = matrix.c1.x;
+            native.transformT0[2] = matrix.c2.x;
+            native.transformT0[3] = matrix.c3.x;
+            native.transformT0[4] = matrix.c0.y;
+            native.transformT0[5] = matrix.c1.y;
+            native.transformT0[6] = matrix.c2.y;
+            native.transformT0[7] = matrix.c3.y;
+            native.transformT0[8] = matrix.c0.z;
+            native.transformT0[9] = matrix.c1.z;
+            native.transformT0[10] = matrix.c2.z;
+            native.transformT0[11] = matrix.c3.z;
+        }
+
+        private static void WriteStaticTransform(
+            ref VulkanRayTracingMotionNative.VkAccelerationStructureInstanceRaw native,
+            in SharpGPU.Mathematics.float4x4 matrix)
+        {
+            native.transform[0] = matrix.c0.x;
+            native.transform[1] = matrix.c1.x;
+            native.transform[2] = matrix.c2.x;
+            native.transform[3] = matrix.c3.x;
+            native.transform[4] = matrix.c0.y;
+            native.transform[5] = matrix.c1.y;
+            native.transform[6] = matrix.c2.y;
+            native.transform[7] = matrix.c3.y;
+            native.transform[8] = matrix.c0.z;
+            native.transform[9] = matrix.c1.z;
+            native.transform[10] = matrix.c2.z;
+            native.transform[11] = matrix.c3.z;
         }
 
         private ulong GetAccelerationStructureDeviceAddress(VkAccelerationStructureKHR accelerationStructure)
@@ -275,6 +446,7 @@ namespace SharpGPU
         {
             m_VulkanDevice = device;
             RHIOpacityMicromapContract.ValidateBlasDescriptor(device, in descriptor);
+            RHIAccelStructMotionContract.ValidateBlasDescriptor(device, in descriptor);
             m_Descriptor = descriptor;
 
             int geometryCount = descriptor.Geometries.Length;
@@ -287,6 +459,8 @@ namespace SharpGPU
             m_NativeOmmUsageCounts = geometryCount > 0 ? new IntPtr[geometryCount] : Array.Empty<IntPtr>();
             VulkanOpacityMicromapNative.VkAccelerationStructureTrianglesOpacityMicromapEXT* ommAttachments =
                 stackalloc VulkanOpacityMicromapNative.VkAccelerationStructureTrianglesOpacityMicromapEXT[Math.Max(geometryCount, 1)];
+            VulkanRayTracingMotionNative.VkAccelerationStructureGeometryMotionTrianglesDataNV* motionAttachments =
+                stackalloc VulkanRayTracingMotionNative.VkAccelerationStructureGeometryMotionTrianglesDataNV[Math.Max(geometryCount, 1)];
 
             for (int i = 0; i < geometryCount; ++i)
             {
@@ -339,6 +513,8 @@ namespace SharpGPU
                     }
 
                     RHIOpacityMicromapContract.ValidateTriangleAttachment(triangleGeometry);
+                    RHIAccelStructMotionContract.ValidateTriangleAttachment(triangleGeometry);
+                    void* triangleNext = null;
                     if (triangleGeometry.OpacityMicromap != null)
                     {
                         FillOpacityMicromapAttachment(
@@ -346,8 +522,20 @@ namespace SharpGPU
                             i,
                             triangleGeometry,
                             &ommAttachments[i]);
-                        geometries[i].geometry.triangles.pNext = &ommAttachments[i];
+                        triangleNext = &ommAttachments[i];
                     }
+
+                    if (RHIAccelStructMotionContract.UsesMotionFlag(descriptor.Flag) &&
+                        RHIAccelStructMotionContract.HasMotionTriangles(triangleGeometry))
+                    {
+                        FillMotionTriangleAttachment(
+                            triangleGeometry,
+                            &motionAttachments[i]);
+                        motionAttachments[i].pNext = triangleNext;
+                        triangleNext = &motionAttachments[i];
+                    }
+
+                    geometries[i].geometry.triangles.pNext = triangleNext;
                 }
                 else if (geom.GeometryType == ERHIAccelStructGeometryType.AABB)
                 {
@@ -509,6 +697,10 @@ namespace SharpGPU
                 size = sizeInfo.accelerationStructureSize,
                 type = VkAccelerationStructureTypeKHR.BottomLevel,
             };
+            if (RHIAccelStructMotionContract.UsesMotionFlag(descriptor.Flag))
+            {
+                createInfo.createFlags = VulkanRayTracingMotionNative.CreateMotionBit;
+            }
 
             fixed (VkAccelerationStructureKHR* asPtr = &m_NativeAccelStruct)
             {
@@ -520,6 +712,23 @@ namespace SharpGPU
                 VkBufferUsageFlags.StorageBuffer | VkBufferUsageFlags.ShaderDeviceAddress,
                 VkMemoryPropertyFlags.DeviceLocal,
                 out m_NativeScratchBuffer, out m_NativeScratchMemory);
+        }
+
+        internal static void FillMotionTriangleAttachment(
+            in RHIAccelStructTriangles triangleGeometry,
+            VulkanRayTracingMotionNative.VkAccelerationStructureGeometryMotionTrianglesDataNV* attachment)
+        {
+            VulkanBuffer motionVertexBuffer = triangleGeometry.MotionVertexBuffer as VulkanBuffer
+                ?? throw new InvalidOperationException("Vulkan motion triangles require a Vulkan MotionVertexBuffer.");
+            RHIAccelStructMotionContract.ResolveMotionVertexStride(in triangleGeometry);
+            *attachment = new VulkanRayTracingMotionNative.VkAccelerationStructureGeometryMotionTrianglesDataNV
+            {
+                sType = VulkanRayTracingMotionNative.GeometryMotionTrianglesStructureType,
+                vertexData = new VkDeviceOrHostAddressConstKHR
+                {
+                    deviceAddress = motionVertexBuffer.GetNativeDeviceAddress() + triangleGeometry.MotionVertexOffset,
+                },
+            };
         }
 
         internal void FillOpacityMicromapAttachment(
@@ -795,6 +1004,11 @@ namespace SharpGPU
                 flags |= VkBuildAccelerationStructureFlagsKHR.AllowDisableOpacityMicromapsEXT;
             }
 
+            if (RHIAccelStructMotionContract.UsesMotionFlag(descriptor.Flag))
+            {
+                flags |= VulkanRayTracingMotionNative.BuildMotionBit;
+            }
+
             return flags;
         }
 
@@ -805,6 +1019,11 @@ namespace SharpGPU
             if (RHIOpacityMicromapContract.BlasAllowsDisableOmms(descriptor))
             {
                 flags |= VkBuildAccelerationStructureFlagsKHR.AllowDisableOpacityMicromapsEXT;
+            }
+
+            if (RHIAccelStructMotionContract.UsesMotionFlag(descriptor.Flag))
+            {
+                flags |= VulkanRayTracingMotionNative.BuildMotionBit;
             }
 
             return flags;

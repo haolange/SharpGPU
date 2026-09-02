@@ -9,9 +9,11 @@ namespace SharpGPU.Conformance.Tests;
 public sealed class SharpGPUPipelineCacheContractTests
 {
     [Fact]
-    public void PipelineAbiRevision_IsEightAfterFunctionLibraryViewMetadata()
+    public void PipelineAbiRevision_IsNineAfterMotionPublicDescriptor()
     {
-        Assert.Equal(8u, RHIPipelineCacheIdentity.CurrentPipelineAbiRevision);
+        Assert.Equal(9u, RHIPipelineCacheIdentity.CurrentPipelineAbiRevision);
+        // ABI 9 is an incompatible revision for the Motion public descriptor change.
+        // Acceleration-structure identity is not written into the pipeline-cache key.
 
         RHIPipelineCacheIdentity identity = new(
             ERHIBackend.DirectX12,
@@ -19,10 +21,10 @@ public sealed class SharpGPUPipelineCacheContractTests
             0x744c,
             "driver-A");
         byte[] current = RHIPipelineCacheBlob.Encode(identity, new byte[] { 2, 4, 6, 8 });
-        byte[] revision7 = (byte[])current.Clone();
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(revision7.AsSpan(12, 4), 7);
+        byte[] revision8 = (byte[])current.Clone();
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(revision8.AsSpan(12, 4), 8);
         RHIPipelineCacheImportResult oldRevision =
-            RHIPipelineCacheBlob.TryDecode(revision7, identity, out _);
+            RHIPipelineCacheBlob.TryDecode(revision8, identity, out _);
         Assert.Equal(ERHIPipelineCacheImportStatus.Incompatible, oldRevision.Status);
     }
 

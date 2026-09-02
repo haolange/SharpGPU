@@ -1795,17 +1795,20 @@ namespace SharpGPU
         public RHICapability Inline { get; }
         public RHICapability OpacityMicromap { get; }
         public RHICapability OpacityMicromapSerialization { get; }
+        public RHICapability Motion { get; }
 
         public RHIRayTracingCapabilities(
             RHICapability pipeline,
             RHICapability inline,
             RHICapability opacityMicromap,
-            RHICapability opacityMicromapSerialization)
+            RHICapability opacityMicromapSerialization,
+            RHICapability motion)
         {
             Pipeline = pipeline;
             Inline = inline;
             OpacityMicromap = opacityMicromap;
             OpacityMicromapSerialization = opacityMicromapSerialization;
+            Motion = motion;
         }
     }
 
@@ -2033,7 +2036,8 @@ namespace SharpGPU
                     pipeline: unavailable,
                     inline: unavailable,
                     opacityMicromap: unavailable,
-                    opacityMicromapSerialization: unavailable),
+                    opacityMicromapSerialization: unavailable,
+                    motion: unavailable),
                 new RHIMeshCapabilities(unavailable, unavailable),
                 new RHIMachineLearningCapabilities(unavailable),
                 new RHIWorkGraphCapabilities(

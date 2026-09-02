@@ -73,6 +73,7 @@ namespace SharpGPU
             m_Descriptor = descriptor;
             m_DescriptionHeapIndex = -1;
             RHIOpacityMicromapContract.ValidateTlasDescriptor(device, in descriptor);
+            RHIAccelStructMotionContract.ValidateTlasDescriptor(device, in descriptor);
             Span<RHIAccelStructInstance> asInstances = descriptor.Instances.Span;
             Vortice.Direct3D12.RaytracingInstanceDescription* nativeInstanceDescriptions = stackalloc Vortice.Direct3D12.RaytracingInstanceDescription[descriptor.Instances.Length];
 
@@ -135,11 +136,17 @@ namespace SharpGPU
 
         public override void UpdateAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
         {
-            m_Descriptor = descriptor;
             RHIOpacityMicromapContract.ValidateTlasDescriptor(m_Dx12Device, in descriptor);
+            RHIAccelStructMotionContract.ValidateTlasDescriptor(m_Dx12Device, in descriptor);
+            RHIAccelStructMotionContract.RejectMotionModeSwitch(
+                RHIAccelStructMotionContract.UsesMotionFlag(m_Descriptor.Flag),
+                descriptor.Flag);
 
             Span<RHIAccelStructInstance> asInstances = descriptor.Instances.Span;
             Vortice.Direct3D12.RaytracingInstanceDescription* nativeInstanceDescriptions = stackalloc Vortice.Direct3D12.RaytracingInstanceDescription[descriptor.Instances.Length];
+            Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags nativeFlags =
+                Dx12Utility.ConvertToDx12AccelStructGeometryFlag(descriptor.Flag) |
+                Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PerformUpdate;
 
             for (int i = 0; i < descriptor.Instances.Length; ++i)
             {
@@ -169,7 +176,7 @@ namespace SharpGPU
             Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs nativeAccelStructDescriptor = new Vortice.Direct3D12.BuildRaytracingAccelerationStructureInputs();
             {
                 nativeAccelStructDescriptor.Type = Vortice.Direct3D12.RaytracingAccelerationStructureType.TopLevel;
-                nativeAccelStructDescriptor.Flags = Dx12Utility.ConvertToDx12AccelStructGeometryFlag(descriptor.Flag) | Vortice.Direct3D12.RaytracingAccelerationStructureBuildFlags.PerformUpdate;
+                nativeAccelStructDescriptor.Flags = nativeFlags;
                 nativeAccelStructDescriptor.Layout = Vortice.Direct3D12.ElementsLayout.Array;
                 nativeAccelStructDescriptor.DescriptorsCount = (uint)descriptor.Instances.Length;
                 nativeAccelStructDescriptor.InstanceDescriptions = m_NativeInstancesBuffer.GPUVirtualAddress + descriptor.Offset;
@@ -179,6 +186,7 @@ namespace SharpGPU
             m_NativeAccelStructDescriptor.DestinationAccelerationStructureData = m_NativeResultBuffer.GPUVirtualAddress;
             m_NativeAccelStructDescriptor.SourceAccelerationStructureData = m_NativeResultBuffer.GPUVirtualAddress;
             m_NativeAccelStructDescriptor.ScratchAccelerationStructureData = m_NativeScratchBuffer.GPUVirtualAddress;
+            m_Descriptor = descriptor;
         }
 
         protected override void Release()
@@ -214,6 +222,7 @@ namespace SharpGPU
         {
             m_Dx12Device = device;
             RHIOpacityMicromapContract.ValidateBlasDescriptor(device, in descriptor);
+            RHIAccelStructMotionContract.ValidateBlasDescriptor(device, in descriptor);
             m_Descriptor = descriptor;
             m_NativeCurveAabbBuffer = null;
             m_NativeOmmTriangleDescs = null;
@@ -258,6 +267,7 @@ namespace SharpGPU
                             throw new ArgumentException("DX12 triangle geometry descriptor has an unexpected type.", nameof(descriptor));
                         }
                         RHIOpacityMicromapContract.ValidateTriangleAttachment(triangleGeometry);
+                        RHIAccelStructMotionContract.ValidateTriangleAttachment(triangleGeometry);
                         Dx12Buffer indexBuffer = triangleGeometry.IndexBuffer as Dx12Buffer ?? throw new ArgumentException("DX12 acceleration-structure geometry requires a Dx12Buffer.", nameof(descriptor));
                         Dx12Buffer vertexBuffer = triangleGeometry.VertexBuffer as Dx12Buffer ?? throw new ArgumentException("DX12 acceleration-structure geometry requires a Dx12Buffer.", nameof(descriptor));
 

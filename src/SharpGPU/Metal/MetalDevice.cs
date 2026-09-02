@@ -1238,6 +1238,8 @@ namespace SharpGPU
             {
                 Console.WriteLine($"[MetalDevice] Ray tracing capability appears software-emulated on '{deviceName}'; disabling RT for MTL4 runtime stability.");
             }
+
+            bool isMotionSupported = isRayTracingSupported && m_NativeDevice.SupportsPrimitiveMotionBlur;
             bool isMetal3 = m_SupportsMetal3;
             bool isTimestampSupported = TryProbeTimestampCounterHeap(out string? timestampUnavailableReason);
             m_TimestampQueriesUnavailableReason = timestampUnavailableReason;
@@ -1531,7 +1533,13 @@ namespace SharpGPU
                         ERHICapabilityProbeKind.BackendContract,
                         "SharpGPU Metal factory surface"),
                     opacityMicromapSerialization: RHIOpacityMicromapContract.CreateUnavailableSerialization(
-                        "SharpGPU Metal factory surface")),
+                        "SharpGPU Metal factory surface"),
+                    motion: Probe(
+                        isMotionSupported,
+                        "MTLDevice.supportsPrimitiveMotionBlur plus MTLAccelerationStructureMotionTriangleGeometryDescriptor / MotionInstanceDescriptor",
+                        !isRayTracingSupported
+                            ? "Metal motion acceleration structures require hardware ray tracing."
+                            : "MTLDevice.supportsPrimitiveMotionBlur is false.")),
                 mesh: new RHIMeshCapabilities(
                     meshShader: RHICapability.Unavailable(
                         "Metal mesh shaders are not exposed by the current SharpGPU factory surface.",

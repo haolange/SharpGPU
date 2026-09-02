@@ -2211,7 +2211,11 @@ namespace SharpGPU
                         "D3D12_FEATURE_D3D12_OPTIONS5.RaytracingTier >= Tier1_2 plus SharpGPU OMM factory",
                         "DX12 opacity micromaps require RaytracingTier 1.2 and a factory/build path."),
                     opacityMicromapSerialization: RHIOpacityMicromapContract.CreateUnavailableSerialization(
-                        "DX12 opacity micromap serialization contract")),
+                        "DX12 opacity micromap serialization contract"),
+                    motion: RHICapability.Unavailable(
+                        "D3D12 has no standard motion-blur acceleration-structure API.",
+                        ERHICapabilityProbeKind.BackendContract,
+                        "SharpGPU DX12 factory surface")),
                 mesh: new RHIMeshCapabilities(
                     meshShader: Probe(
                         isMeshShadingSupported,

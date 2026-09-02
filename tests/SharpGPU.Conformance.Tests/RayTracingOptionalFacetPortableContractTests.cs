@@ -13,7 +13,7 @@ public sealed class RayTracingOptionalFacetPortableContractTests
     {
         Assert.NotNull(GetPublicInstanceProperty(typeof(RHIRayTracingCapabilities), "OpacityMicromap"));
         Assert.Null(GetPublicInstanceProperty(typeof(RHIRayTracingCapabilities), "ShaderExecutionReordering"));
-        Assert.Null(GetPublicInstanceProperty(typeof(RHIRayTracingCapabilities), "Motion"));
+        Assert.NotNull(GetPublicInstanceProperty(typeof(RHIRayTracingCapabilities), "Motion"));
         Assert.NotNull(GetPublicInstanceProperty(typeof(RHIRayTracingCapabilities), "Pipeline"));
         Assert.NotNull(GetPublicInstanceProperty(typeof(RHIRayTracingCapabilities), "Inline"));
 

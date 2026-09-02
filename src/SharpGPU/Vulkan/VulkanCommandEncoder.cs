@@ -6244,6 +6244,8 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
             VkAccelerationStructureBuildRangeInfoKHR* rangeInfos = stackalloc VkAccelerationStructureBuildRangeInfoKHR[Math.Max(geometryCount, 1)];
             VulkanOpacityMicromapNative.VkAccelerationStructureTrianglesOpacityMicromapEXT* ommAttachments =
                 stackalloc VulkanOpacityMicromapNative.VkAccelerationStructureTrianglesOpacityMicromapEXT[Math.Max(geometryCount, 1)];
+            VulkanRayTracingMotionNative.VkAccelerationStructureGeometryMotionTrianglesDataNV* motionAttachments =
+                stackalloc VulkanRayTracingMotionNative.VkAccelerationStructureGeometryMotionTrianglesDataNV[Math.Max(geometryCount, 1)];
 
             for (int i = 0; i < geometryCount; ++i)
             {
@@ -6301,6 +6303,7 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                         };
                     }
 
+                    void* triangleNext = null;
                     if (triangleGeometry.OpacityMicromap != null)
                     {
                         vkBLAS.FillOpacityMicromapAttachment(
@@ -6308,8 +6311,20 @@ internal unsafe sealed class VulkanRasterSubpassEncoder :
                             i,
                             triangleGeometry,
                             &ommAttachments[i]);
-                        geometries[i].geometry.triangles.pNext = &ommAttachments[i];
+                        triangleNext = &ommAttachments[i];
                     }
+
+                    if (RHIAccelStructMotionContract.UsesMotionFlag(descriptor.Flag) &&
+                        RHIAccelStructMotionContract.HasMotionTriangles(triangleGeometry))
+                    {
+                        VulkanBottomLevelAccelStruct.FillMotionTriangleAttachment(
+                            triangleGeometry,
+                            &motionAttachments[i]);
+                        motionAttachments[i].pNext = triangleNext;
+                        triangleNext = &motionAttachments[i];
+                    }
+
+                    geometries[i].geometry.triangles.pNext = triangleNext;
                 }
                 else if (geom.GeometryType == ERHIAccelStructGeometryType.AABB)
                 {

@@ -1163,7 +1163,9 @@ namespace SharpGPU
     internal readonly struct RHIPipelineCacheIdentity
     {
         public const uint CurrentSchemaRevision = 3;
-        public const uint CurrentPipelineAbiRevision = 8;
+        // Revision 9 is an incompatible bump for the Motion public descriptor change.
+        // Acceleration-structure descriptors are not part of the pipeline-cache key.
+        public const uint CurrentPipelineAbiRevision = 9;
 
         public ERHIBackend Backend { get; }
         public uint VendorId { get; }

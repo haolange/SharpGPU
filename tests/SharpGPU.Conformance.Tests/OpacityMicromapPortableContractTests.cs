@@ -43,6 +43,7 @@ namespace SharpGPU.Conformance.Tests
                 unavailable,
                 unavailable,
                 unavailable,
+                unavailable,
                 unavailable);
             Assert.Equal(ERHICapabilityTier.Unavailable, unprobed.OpacityMicromap.Tier);
             Assert.Equal(ERHICapabilityTier.Unavailable, unprobed.OpacityMicromapSerialization.Tier);

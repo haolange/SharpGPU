@@ -108,6 +108,9 @@ namespace SharpGPU
         private string m_OpacityMicromapUnavailableReason =
             "VK_EXT_opacity_micromap is not enabled.";
         private VulkanOpacityMicromapNative.Api? m_OpacityMicromapApi;
+        private bool m_RayTracingMotionSupported;
+        private string m_RayTracingMotionUnavailableReason =
+            "VK_NV_ray_tracing_motion_blur is not enabled.";
         private bool m_MeshShadingSupported;
         private bool m_TaskShadingSupported;
         private bool m_MeshShaderQueriesSupported;
@@ -417,6 +420,7 @@ namespace SharpGPU
             bool hasDynamicRenderingExtension = availableExtNames.Contains("VK_KHR_dynamic_rendering");
             bool hasAccelStruct = availableExtNames.Contains("VK_KHR_acceleration_structure");
             bool hasOpacityMicromap = availableExtNames.Contains(VulkanOpacityMicromapNative.ExtensionName);
+            bool hasRayTracingMotion = availableExtNames.Contains(VulkanRayTracingMotionNative.ExtensionName);
             bool hasRTPipeline = availableExtNames.Contains("VK_KHR_ray_tracing_pipeline");
             bool hasDeferredOps = availableExtNames.Contains("VK_KHR_deferred_host_operations");
             bool hasRTQuery = availableExtNames.Contains("VK_KHR_ray_query");
@@ -559,6 +563,10 @@ namespace SharpGPU
             {
                 sType = VulkanOpacityMicromapNative.PhysicalDeviceFeaturesStructureType,
             };
+            VulkanRayTracingMotionNative.VkPhysicalDeviceRayTracingMotionBlurFeaturesNV motionFeaturesQuery = new()
+            {
+                sType = VulkanRayTracingMotionNative.PhysicalDeviceFeaturesStructureType,
+            };
             VkPhysicalDeviceMeshShaderFeaturesEXT meshFeaturesQuery = new VkPhysicalDeviceMeshShaderFeaturesEXT()
             {
                 sType = VkStructureType.PhysicalDeviceMeshShaderFeaturesEXT,
@@ -644,6 +652,11 @@ namespace SharpGPU
             {
                 opacityMicromapFeaturesQuery.pNext = featureQueryChain;
                 featureQueryChain = &opacityMicromapFeaturesQuery;
+            }
+            if (hasRayTracingMotion)
+            {
+                motionFeaturesQuery.pNext = featureQueryChain;
+                featureQueryChain = &motionFeaturesQuery;
             }
             if (hasMeshShader)
             {
@@ -807,6 +820,16 @@ namespace SharpGPU
                 && vulkan12FeaturesQuery.bufferDeviceAddress
                 && synchronization2FeatureSupported;
             bool rtPipelineFeatureSupported = hasRTPipeline && rtPipelineFeaturesQuery.rayTracingPipeline;
+            bool rayTracingMotionFeatureSupported =
+                hasRayTracingMotion && motionFeaturesQuery.rayTracingMotionBlur;
+            bool rayTracingMotionShouldEnable =
+                rayTracingMotionFeatureSupported
+                && accelFeatureSupported
+                && hasDeferredOps
+                && hasRTPipeline
+                && rtPipelineFeatureSupported
+                && featureChainPlan.UseVulkan12Features
+                && vulkan12FeaturesQuery.bufferDeviceAddress;
             bool rtQueryFeatureSupported = hasRTQuery && rtQueryFeaturesQuery.rayQuery;
             bool meshShaderFeatureSupported = hasMeshShader && meshFeaturesQuery.meshShader;
             bool taskShaderFeatureSupported = hasMeshShader && meshFeaturesQuery.taskShader;
@@ -907,15 +930,24 @@ namespace SharpGPU
                     deviceExtensions.Add("VK_KHR_ray_query");
                 }
             }
-            else if (opacityMicromapShouldEnable)
+            else if (opacityMicromapShouldEnable || rayTracingMotionShouldEnable)
             {
                 deviceExtensions.Add("VK_KHR_acceleration_structure");
                 deviceExtensions.Add("VK_KHR_deferred_host_operations");
+                if (rayTracingMotionShouldEnable)
+                {
+                    deviceExtensions.Add("VK_KHR_ray_tracing_pipeline");
+                }
             }
 
             if (opacityMicromapShouldEnable)
             {
                 deviceExtensions.Add(VulkanOpacityMicromapNative.ExtensionName);
+            }
+
+            if (rayTracingMotionShouldEnable)
+            {
+                deviceExtensions.Add(VulkanRayTracingMotionNative.ExtensionName);
             }
 
             if (meshSupported)
@@ -1155,12 +1187,22 @@ namespace SharpGPU
                     pNextChain = &rtPipelineFeatures;
                 }
             }
-            else if (opacityMicromapShouldEnable)
+            else if (opacityMicromapShouldEnable || rayTracingMotionShouldEnable)
             {
                 accelFeatures.sType = VkStructureType.PhysicalDeviceAccelerationStructureFeaturesKHR;
                 accelFeatures.accelerationStructure = true;
                 accelFeatures.pNext = pNextChain;
-                pNextChain = &accelFeatures;
+                if (rayTracingMotionShouldEnable)
+                {
+                    rtPipelineFeatures.sType = VkStructureType.PhysicalDeviceRayTracingPipelineFeaturesKHR;
+                    rtPipelineFeatures.rayTracingPipeline = true;
+                    rtPipelineFeatures.pNext = &accelFeatures;
+                    pNextChain = &rtPipelineFeatures;
+                }
+                else
+                {
+                    pNextChain = &accelFeatures;
+                }
             }
 
             VkPhysicalDeviceMeshShaderFeaturesEXT meshFeatures = default;
@@ -1215,6 +1257,18 @@ namespace SharpGPU
                 opacityMicromapFeatures.micromap = true;
                 opacityMicromapFeatures.pNext = pNextChain;
                 pNextChain = &opacityMicromapFeatures;
+            }
+
+            VulkanRayTracingMotionNative.VkPhysicalDeviceRayTracingMotionBlurFeaturesNV motionFeatures = default;
+            if (rayTracingMotionShouldEnable)
+            {
+                motionFeatures.sType =
+                    VulkanRayTracingMotionNative.PhysicalDeviceFeaturesStructureType;
+                motionFeatures.rayTracingMotionBlur = true;
+                motionFeatures.rayTracingMotionBlurPipelineTraceRaysIndirect =
+                    motionFeaturesQuery.rayTracingMotionBlurPipelineTraceRaysIndirect;
+                motionFeatures.pNext = pNextChain;
+                pNextChain = &motionFeatures;
             }
 
             VkDeviceCreateInfo deviceCreateInfo = new VkDeviceCreateInfo()
@@ -1290,6 +1344,47 @@ namespace SharpGPU
                 m_OpacityMicromapSupported = true;
                 m_OpacityMicromapUnavailableReason = string.Empty;
             }
+
+            if (!rayTracingMotionShouldEnable)
+            {
+                m_RayTracingMotionSupported = false;
+                if (!hasRayTracingMotion)
+                {
+                    m_RayTracingMotionUnavailableReason =
+                        "VK_NV_ray_tracing_motion_blur is not listed by this physical device.";
+                }
+                else if (!motionFeaturesQuery.rayTracingMotionBlur)
+                {
+                    m_RayTracingMotionUnavailableReason =
+                        "VK_NV_ray_tracing_motion_blur is listed but VkPhysicalDeviceRayTracingMotionBlurFeaturesNV.rayTracingMotionBlur is false.";
+                }
+                else if (!hasAccelStruct || !accelFeaturesQuery.accelerationStructure)
+                {
+                    m_RayTracingMotionUnavailableReason =
+                        "VK_NV_ray_tracing_motion_blur cannot be enabled because VK_KHR_acceleration_structure is missing or its accelerationStructure feature is false.";
+                }
+                else if (!hasRTPipeline || !rtPipelineFeaturesQuery.rayTracingPipeline)
+                {
+                    m_RayTracingMotionUnavailableReason =
+                        "VK_NV_ray_tracing_motion_blur cannot be enabled because VK_KHR_ray_tracing_pipeline is missing or its rayTracingPipeline feature is false.";
+                }
+                else
+                {
+                    m_RayTracingMotionUnavailableReason =
+                        "VK_NV_ray_tracing_motion_blur cannot be enabled because required acceleration-structure or ray-tracing-pipeline dependencies failed to enable.";
+                }
+            }
+            else if (!VulkanRayTracingMotionNative.TryLoad(this, out string motionLoadReason))
+            {
+                m_RayTracingMotionSupported = false;
+                m_RayTracingMotionUnavailableReason = motionLoadReason;
+            }
+            else
+            {
+                m_RayTracingMotionSupported = true;
+                m_RayTracingMotionUnavailableReason = string.Empty;
+            }
+
             m_MeshShadingSupported = meshSupported;
             m_TaskShadingSupported = taskShaderFeatureSupported;
             m_MeshShaderQueriesSupported = meshSupported && meshShaderQueriesSupported;
@@ -2068,7 +2163,13 @@ namespace SharpGPU
                         strategy: ERHICapabilityStrategy.NativeExtension,
                         probeKind: ERHICapabilityProbeKind.NativeExtensionQuery),
                     opacityMicromapSerialization: RHIOpacityMicromapContract.CreateUnavailableSerialization(
-                        "Vulkan opacity micromap serialization contract")),
+                        "Vulkan opacity micromap serialization contract"),
+                    motion: Probe(
+                        m_RayTracingMotionSupported,
+                        "VK_NV_ray_tracing_motion_blur enabled plus VkPhysicalDeviceRayTracingMotionBlurFeaturesNV.rayTracingMotionBlur, VK_KHR_ray_tracing_pipeline, VkPhysicalDeviceAccelerationStructureFeaturesKHR, and acceleration-structure / ray-tracing-pipeline function pointers",
+                        m_RayTracingMotionUnavailableReason,
+                        strategy: ERHICapabilityStrategy.NativeExtension,
+                        probeKind: ERHICapabilityProbeKind.NativeExtensionQuery)),
                 mesh: new RHIMeshCapabilities(
                     meshShader: VulkanMeshCapabilityFactory.CreatePublicMeshShaderCapability(
                         m_MeshShadingSupported,
@@ -3105,6 +3206,8 @@ namespace SharpGPU
         }
 
         internal bool OpacityMicromapEnabled => m_OpacityMicromapSupported;
+
+        internal bool RayTracingMotionEnabled => m_RayTracingMotionSupported;
 
         internal VulkanOpacityMicromapNative.Api RequireOpacityMicromapApi()
         {

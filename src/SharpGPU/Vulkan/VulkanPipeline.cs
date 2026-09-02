@@ -1024,7 +1024,18 @@ namespace SharpGPU
             VkPipelineCreateFlags pipelineFlags = 0;
             if (device.Capabilities.RayTracing.OpacityMicromap.Tier != ERHICapabilityTier.Unavailable)
             {
-                pipelineFlags = VkPipelineCreateFlags.RayTracingOpacityMicromapEXT;
+                pipelineFlags |= VkPipelineCreateFlags.RayTracingOpacityMicromapEXT;
+            }
+
+            if (device.Capabilities.RayTracing.Motion.Tier != ERHICapabilityTier.Unavailable)
+            {
+                if (!device.RayTracingMotionEnabled)
+                {
+                    throw new NotSupportedException(
+                        "RayTracing.Motion is Available but VK_NV_ray_tracing_motion_blur was not enabled; VK_PIPELINE_CREATE_RAY_TRACING_ALLOW_MOTION_BIT_NV cannot be applied.");
+                }
+
+                pipelineFlags |= VulkanRayTracingMotionNative.PipelineAllowMotionBit;
             }
 
             VkRayTracingPipelineCreateInfoKHR pipelineInfo = new VkRayTracingPipelineCreateInfoKHR()
