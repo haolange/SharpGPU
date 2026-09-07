@@ -152,3 +152,66 @@ the consuming workspace manifest. IE uses its root stack.lock.json; standalone
 consumers own their manifest and do not need an IE checkout. Package consumers
 use the project dependency versions and NuGet lock files. There is no product-local
 stack.lock.json: the removed copies were not read by any build or setup tool.
+
+## Agility UTF-8 and application deployment qualification
+
+The current native-boundary regression is Dx12AgilityPathMarshallingTests.
+The full source suite passed 292/292 in Debug and Release with no skipped tests.
+Isolated output must supply the product source roots for architecture tests:
+
+```powershell
+$env:INFINITYSTACK_SHARPGPU_ROOT = $PWD.Path
+$env:INFINITYSTACK_SHARPSHADER_ROOT = 'PATH_TO_SHARPSHADER_CHECKOUT'
+$sourceProps = @(
+  '-p:StackReferenceMode=Source', '-p:Platform=x64',
+  "-p:StackProductRoot=$(Join-Path $PWD 'artifacts/agility-verification')",
+  "-p:StackLocalProps=$(Join-Path $PWD 'stack.local.props')",
+  '-p:UseSharedCompilation=false', '-p:NuGetAudit=false',
+  '-p:RestoreUseStaticGraphEvaluation=false', '-m:1', '-nr:false'
+)
+dotnet test tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj -c Debug @sourceProps
+dotnet test tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj -c Release @sourceProps
+dotnet pack src/SharpGPU/SharpGPU.csproj -c Release @sourceProps -o artifacts/agility-packages
+```
+
+The actual repaired package contains 14 RID-native entries, with zero duplicate
+entries and no pack warnings. Source and fresh-cache package combined consumers
+also pass real DX12/Vulkan compute and drawing after copying output to a new
+Chinese/emoji directory and running from C:/Windows. The missing-application-SDK
+negative case fails explicitly. These short API runs do not qualify a 55-second
+window/resource scenario. Maintained binding details and exact evidence are in
+docs/SharpGPU/VorticeAgilityPathPatch.md. Full package conformance and downstream
+IE revalidation remain pending for this revision.
+
+## DirectStorage path and pinned binding generation
+
+After the DirectStorage long-path repair, Source Debug and Release each pass
+293/293 with no skipped tests. SharpGPUDirectStorageQualifiedTests covers actual
+buffer/texture readback, including a texture source longer than MAX_PATH. The
+application SDK deployment test requires both SDK files in Source and Package;
+Package also requires the RID-native payload. Current Package Release passes 289/289 with no skipped tests.
+
+Direct3D12 and its DirectX/DXGI dependencies regenerate and compile with the
+pinned SDK on the Windows x64 qualification host (zero errors, 172 warnings).
+The generation output remains separate from checked-in generated files.
+
+```powershell
+$generationRoot = Join-Path $PWD 'artifacts/binding-regeneration'
+dotnet build third_party/Vortice.Windows/src/Vortice.Direct3D12/Vortice.Direct3D12.csproj `
+  -c Release -p:Platform=x64 -p:GenerateVorticeBindings=true `
+  -p:StackReferenceMode=Source "-p:StackProductRoot=$generationRoot" `
+  "-p:StackLocalProps=$(Join-Path $PWD 'stack.local.props')" `
+  -p:UseSharedCompilation=false -p:NuGetAudit=false -m:1 -nr:false
+```
+
+Current full Package Release evidence is
+agility-path-fix/package-conformance-storage-r2/test-results/package-storage-release-r2.trx
+under the consuming IE task evidence root. Build the complete local feed first,
+then restore into an empty cache using that single feed. Do not offer a global
+package directory containing older same-version products as an additional feed;
+compare restored product nupkg hashes to the intended feed before testing.
+
+DirectML and DirectStorage also regenerate and compile through the same
+GenerateVorticeBindings entry, with zero errors (13 and 1 warnings respectively).
+The DirectStorage mapping warning for RegisterComponentMaskFlags is retained
+in binding-regeneration-Vortice.DirectStorage.log; it is not suppressed.

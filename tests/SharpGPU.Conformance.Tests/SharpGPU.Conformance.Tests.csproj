@@ -3,6 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DefineConstants>$(DefineConstants);SHARPGPU_ENABLE_DX12</DefineConstants>
     <Platforms>x64;ARM64</Platforms>
   </PropertyGroup>

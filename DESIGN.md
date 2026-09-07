@@ -7,3 +7,5 @@ The runtime baseline is .NET 10; compiler generators retain their appropriate ne
 Output and intermediate paths are isolated by project, platform, RID, configuration and SDK target framework. Native packages use runtimes/<rid>/native; host integrations select their explicit deployment layout. Products must not infer Infinity Engine location or a developer drive from the current directory.
 
 Public native-backed operations enforce platform and ownership boundaries. No capability downgrade or compatibility implementation is permitted to conceal unsupported execution. Current extraction acceptance is tracked by InfinityBrowser TASK-20260907-INFINITYSTACK-EXTRACTION; this document is not a claim that migration gates have passed.
+
+DX12 requires successful Agility device-factory initialization using the application D3D12 directory and UTF-8 paths. Source references and packages both deploy these assets; missing assets fail explicitly. The maintained binding and evidence are described in docs/SharpGPU/VorticeAgilityPathPatch.md.

@@ -1576,29 +1576,24 @@ namespace SharpGPU
         {
             device = null;
 
-            if (Dx12Agility.TryGetDeviceFactory(out Vortice.Direct3D12.ID3D12DeviceFactory? deviceFactory))
+            Vortice.Direct3D12.ID3D12DeviceFactory deviceFactory = Dx12Agility.GetDeviceFactory();
+            SharpGen.Runtime.Result result = deviceFactory.CreateDevice(m_DXGIAdapter!, featureLevel, out Vortice.Direct3D12.ID3D12Device? baseDevice);
+            if (result.Failure || baseDevice == null)
             {
-                SharpGen.Runtime.Result result = deviceFactory!.CreateDevice(m_DXGIAdapter!, featureLevel, out Vortice.Direct3D12.ID3D12Device? baseDevice);
-                if (result.Failure || baseDevice == null)
-                {
-                    return result;
-                }
-
-                try
-                {
-                    device = baseDevice.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12Device10>()
-                        ?? throw new InvalidOperationException($"DX12 Agility device for '{m_Name}' does not expose ID3D12Device10 at feature level {featureLevel}. {Dx12Agility.Diagnostic}");
-                    return SharpGen.Runtime.Result.Ok;
-                }
-                finally
-                {
-                    baseDevice.Release();
-                }
+                return result;
             }
 
-            return Vortice.Direct3D12.D3D12.D3D12CreateDevice(m_DXGIAdapter!, featureLevel, out device);
+            try
+            {
+                device = baseDevice.QueryInterfaceOrNull<Vortice.Direct3D12.ID3D12Device10>()
+                    ?? throw new InvalidOperationException($"DX12 Agility device for '{m_Name}' does not expose ID3D12Device10 at feature level {featureLevel}. {Dx12Agility.Diagnostic}");
+                return SharpGen.Runtime.Result.Ok;
+            }
+            finally
+            {
+                baseDevice.Release();
+            }
         }
-
         private void CheckFeatureSupport()
         {
             int uniformBufferAlignment = 256;

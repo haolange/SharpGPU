@@ -25,7 +25,7 @@ namespace SharpGPU
 
         private void CreateDX12Factory(in RHIInstanceDescriptor descriptor)
         {
-            Dx12Agility.EnsureInitialized();
+            _ = Dx12Agility.GetDeviceFactory();
             Dx12DeviceLossDiagnostics.Configure(
                 descriptor.EnableDebugLayer ||
                 descriptor.EnableValidation);
@@ -133,24 +133,15 @@ namespace SharpGPU
 
     #region Agility
 #pragma warning disable CA1416
-internal static class Dx12Agility
+    internal static class Dx12Agility
     {
         internal const uint SDKVersion = 619;
-            private static readonly Guid s_D3D12DebugClassId = new Guid("F2352AEB-DD84-49FE-B97B-A9DCFDCC1B4F");
+        private static readonly Guid s_D3D12DebugClassId = new Guid("F2352AEB-DD84-49FE-B97B-A9DCFDCC1B4F");
 
         private static readonly object s_Lock = new object();
-        private static bool s_Initialized;
+        private static volatile bool s_Initialized;
         private static ID3D12DeviceFactory? s_DeviceFactory;
         private static string s_Diagnostic = "DX12 Agility SDK has not been initialized.";
-
-        internal static bool IsDeviceFactoryAvailable
-        {
-            get
-            {
-                EnsureInitialized();
-                return s_DeviceFactory != null;
-            }
-        }
 
         internal static string Diagnostic
         {
@@ -161,24 +152,16 @@ internal static class Dx12Agility
             }
         }
 
-        internal static bool TryGetDeviceFactory(out ID3D12DeviceFactory? deviceFactory)
+        internal static ID3D12DeviceFactory GetDeviceFactory()
         {
             EnsureInitialized();
-            deviceFactory = s_DeviceFactory;
-            return deviceFactory != null;
+            return s_DeviceFactory ?? throw new InvalidOperationException(s_Diagnostic);
         }
 
         internal static SharpGen.Runtime.Result GetDebugInterface(out Vortice.Direct3D12.Debug.ID3D12Debug? debug)
         {
-            EnsureInitialized();
-            if (s_DeviceFactory != null)
-            {
-                return s_DeviceFactory.GetConfigurationInterface(s_D3D12DebugClassId, out debug);
-            }
-
-            return D3D12.D3D12GetDebugInterface(out debug);
+            return GetDeviceFactory().GetConfigurationInterface(s_D3D12DebugClassId, out debug);
         }
-
         internal static void EnsureInitialized()
         {
             if (s_Initialized)
@@ -193,11 +176,10 @@ internal static class Dx12Agility
                     return;
                 }
 
-                s_Initialized = true;
-
                 if (!OperatingSystem.IsWindows())
                 {
                     s_Diagnostic = "DX12 Agility SDK is only initialized on Windows.";
+                    s_Initialized = true;
                     return;
                 }
 
@@ -231,6 +213,10 @@ internal static class Dx12Agility
                 catch (Exception ex)
                 {
                     s_Diagnostic = $"DX12 Agility SDK initialization failed: {ex.GetType().Name}: {ex.Message}";
+                }
+                finally
+                {
+                    s_Initialized = true;
                 }
             }
         }

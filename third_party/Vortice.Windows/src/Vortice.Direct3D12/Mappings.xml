@@ -1037,7 +1037,8 @@
     <map method="ID3D12SDKConfiguration::SetSDKVersion" hresult="true" check="false"/>
 
     <!-- ID3D12SDKConfiguration1 methods -->
-    <map method="ID3D12SDKConfiguration1::CreateDeviceFactory" visibility="private" hresult="true" check="false"/>
+    <!-- SDKPath is UTF-8, not the default ANSI string marshalling. Implemented in ID3D12SDKConfiguration1.cs. -->
+    <remove method="ID3D12SDKConfiguration1::CreateDeviceFactory" />
 
     <!-- ID3D12Debug1 -->
     <map method="ID3D12Debug1::SetEnableGPUBasedValidation" property="false" />

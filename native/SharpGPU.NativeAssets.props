@@ -15,24 +15,28 @@
       <Link>runtimes/win-x64/native/D3D12Core.dll</Link>
       <ExpectedHash>4bfb82f456269e3ef45cca0f612ddbd3650c99160d285dae1febf7883468c64c</ExpectedHash>
       <Deployment>Microsoft/D3D12Agility/Win/AMD64/D3D12Core.dll</Deployment>
+      <ApplicationLocal>true</ApplicationLocal>
       <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     </SharpGpuNativeAsset>
     <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)microsoft.direct3d.d3d12/1.619.3/build/native/bin/x64/d3d12SDKLayers.dll">
       <Link>runtimes/win-x64/native/d3d12SDKLayers.dll</Link>
       <ExpectedHash>959b835dd6c41c68293d7d426ce92fe66c79d89df8296df8beba2342142dbae0</ExpectedHash>
       <Deployment>Microsoft/D3D12Agility/Win/AMD64/d3d12SDKLayers.dll</Deployment>
+      <ApplicationLocal>true</ApplicationLocal>
       <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     </SharpGpuNativeAsset>
     <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)microsoft.direct3d.d3d12/1.619.3/build/native/bin/arm64/D3D12Core.dll">
       <Link>runtimes/win-arm64/native/D3D12Core.dll</Link>
       <ExpectedHash>7f40a9bb595cfa46fe48d2670455d671ed133d4360e38d2f1e84b1e762169f2c</ExpectedHash>
       <Deployment>Microsoft/D3D12Agility/Win/ARM64/D3D12Core.dll</Deployment>
+      <ApplicationLocal>true</ApplicationLocal>
       <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
     </SharpGpuNativeAsset>
     <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)microsoft.direct3d.d3d12/1.619.3/build/native/bin/arm64/d3d12SDKLayers.dll">
       <Link>runtimes/win-arm64/native/d3d12SDKLayers.dll</Link>
       <ExpectedHash>3df67e6135640fd54703e3d9dfea6a60544768bce478572b90eacb74a42fbb3e</ExpectedHash>
       <Deployment>Microsoft/D3D12Agility/Win/ARM64/d3d12SDKLayers.dll</Deployment>
+      <ApplicationLocal>true</ApplicationLocal>
       <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
     </SharpGpuNativeAsset>
     <PackageDownload Include="vortice.directml" Version="[3.8.3]" />
@@ -99,12 +103,25 @@
       <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
     </SharpGpuNativeAsset>
   </ItemGroup>
+  <PropertyGroup>
+    <_SharpGpuApplicationRid>$(RuntimeIdentifier)</_SharpGpuApplicationRid>
+    <_SharpGpuApplicationRid Condition="'$(_SharpGpuApplicationRid)' == '' and $([MSBuild]::IsOSPlatform('Windows')) and '$(Platform)' == 'ARM64'">win-arm64</_SharpGpuApplicationRid>
+    <_SharpGpuApplicationRid Condition="'$(_SharpGpuApplicationRid)' == '' and $([MSBuild]::IsOSPlatform('Windows'))">win-x64</_SharpGpuApplicationRid>
+  </PropertyGroup>
   <ItemGroup>
     <!-- Use unqualified item metadata here.  Qualified metadata expansion is
          not applied when an existing item list is re-included, which silently
          flattened every native asset into the package root. -->
-    <Content Include="@(SharpGpuNativeAsset)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="true" PackagePath="%(Link)" Link="%(Link)" />
+    <Content Include="@(SharpGpuNativeAsset)" Exclude="@(SharpGpuNativeAsset->WithMetadataValue('RuntimeIdentifier', '$(_SharpGpuApplicationRid)')->WithMetadataValue('ApplicationLocal', 'true'))" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="true" PackagePath="%(Link)" Link="%(Link)" />
     <None Include="$(MSBuildThisFileDirectory)licenses/**/*" Pack="true" PackagePath="licenses/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+  <!-- ProjectReference does not import buildTransitive targets into the consuming app.
+       Forward the application-local SDK as copy items as well as RID package assets. -->
+
+  <ItemGroup>
+    <Content Include="@(SharpGpuNativeAsset->WithMetadataValue('RuntimeIdentifier', '$(_SharpGpuApplicationRid)')->WithMetadataValue('ApplicationLocal', 'true'))"
+             Link="D3D12/%(Filename)%(Extension)" Pack="true" PackagePath="runtimes/%(RuntimeIdentifier)/native/%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="VerifySharpGpuNativeAssets" BeforeTargets="PrepareForBuild;_GetPackageFiles">
     <Error Condition="!Exists('%(SharpGpuNativeAsset.Identity)')" Text="Missing native asset %(SharpGpuNativeAsset.Identity). Restore the pinned native download packages." />

@@ -29,13 +29,17 @@ public sealed class SharpGPUPackageConsumptionContractTests
     }
 
     [Fact]
-    public void Package_ShouldExposeRidNativeLayoutWithoutRootFlattening()
+    public void NativeDeployment_ShouldExposeApplicationSdkAndPreservePackageRidLayout()
     {
         if (!OperatingSystem.IsWindows())
         {
             return;
         }
 
+        string applicationSdk = Path.Combine(AppContext.BaseDirectory, "D3D12");
+        Assert.True(File.Exists(Path.Combine(applicationSdk, "D3D12Core.dll")));
+        Assert.True(File.Exists(Path.Combine(applicationSdk, "d3d12SDKLayers.dll")));
+#if !SHARPGPU_SOURCE_LAYOUT_TESTS
         string nativeDirectory = Path.Combine(
             AppContext.BaseDirectory,
             "runtimes",
@@ -46,6 +50,7 @@ public sealed class SharpGPUPackageConsumptionContractTests
         Assert.True(
             File.Exists(Path.Combine(nativeDirectory, "D3D12Core.dll")),
             $"SharpGPU native runtime is missing from '{nativeDirectory}'.");
+#endif
         Assert.False(File.Exists(Path.Combine(AppContext.BaseDirectory, "D3D12Core.dll")));
     }
 }

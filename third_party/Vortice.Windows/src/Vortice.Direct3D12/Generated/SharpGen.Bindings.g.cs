@@ -14291,19 +14291,6 @@ namespace Vortice.Direct3D12
         }
 
         public static explicit operator ID3D12SDKConfiguration1(System.IntPtr nativePtr) => nativePtr == System.IntPtr.Zero ? null : new ID3D12SDKConfiguration1(nativePtr);
-        /// <unmanaged>HRESULT ID3D12SDKConfiguration1::CreateDeviceFactory([In] UINT SDKVersion, [In] const char* SDKPath, [In] const GUID&amp; riid, [Out] void** ppvFactory)</unmanaged>
-        /// <unmanaged-short>ID3D12SDKConfiguration1::CreateDeviceFactory</unmanaged-short>
-        private unsafe SharpGen.Runtime.Result CreateDeviceFactory(uint sDKVersion, string sDKPath, System.Guid riid, out System.IntPtr ppvFactory)
-        {
-            System.IntPtr sDKPath_;
-            SharpGen.Runtime.Result __result__;
-            sDKPath_ = System.Runtime.InteropServices.Marshal.StringToHGlobalAnsi(sDKPath);
-            fixed (void* ppvFactory_ = &ppvFactory)
-                __result__ = (SharpGen.Runtime.Result)((delegate* unmanaged[Stdcall]<System.IntPtr, uint, void*, void*, void*, int> )this[4])(NativePointer, sDKVersion, (void*)sDKPath_, &riid, ppvFactory_);
-            System.Runtime.InteropServices.Marshal.FreeHGlobal(sDKPath_);
-            return __result__;
-        }
-
         /// <unmanaged>void ID3D12SDKConfiguration1::FreeUnusedSDKs()</unmanaged>
         /// <unmanaged-short>ID3D12SDKConfiguration1::FreeUnusedSDKs</unmanaged-short>
         public unsafe void FreeUnusedSDKs()

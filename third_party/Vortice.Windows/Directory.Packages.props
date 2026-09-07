@@ -22,5 +22,5 @@
     <PackageVersion Include="NUnit3TestAdapter" Version="5.2.0" />
   </ItemGroup>
 
-  <ItemGroup><PackageVersion Include="SharpGen.Runtime" Version="2.4.2-beta" /></ItemGroup>
+  <ItemGroup><PackageVersion Include="SharpGen.Runtime" Version="2.4.2-beta" Condition="'$(GenerateVorticeBindings)' != 'true'" /></ItemGroup>
 </Project>

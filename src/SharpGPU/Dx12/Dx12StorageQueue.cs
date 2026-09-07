@@ -60,7 +60,14 @@ namespace SharpGPU
                 ?? throw new InvalidOperationException("The DirectStorage factory is not initialized.");
             try
             {
-                IDStorageFile storageFile = factory.OpenFile<IDStorageFile>(absPath);
+                string nativePath = Path.GetFullPath(absPath);
+                if (nativePath.Length >= 260 && !nativePath.StartsWith(@"\\?\", StringComparison.Ordinal))
+                {
+                    nativePath = nativePath.StartsWith(@"\\", StringComparison.Ordinal)
+                        ? @"\\?\UNC\" + nativePath.Substring(2)
+                        : @"\\?\" + nativePath;
+                }
+                IDStorageFile storageFile = factory.OpenFile<IDStorageFile>(nativePath);
                 nint handle = (nint)Interlocked.Increment(ref m_NextFileHandle);
                 m_DStorageFilesByHandle.Add(handle, storageFile);
                 m_FilePathByHandle.Add(handle, absPath);

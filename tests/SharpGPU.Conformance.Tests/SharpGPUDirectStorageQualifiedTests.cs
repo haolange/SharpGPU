@@ -123,9 +123,11 @@ public sealed class SharpGPUDirectStorageQualifiedTests
         }
     }
 
-    [Fact]
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     [Trait("Category", "SharpGpuDirectStorageQualified")]
-    public void Dx12_NativeDirectStorage_ShouldReadTextureAndRoundTripToCpu()
+    public void Dx12_NativeDirectStorage_ShouldReadTextureAndRoundTripToCpu(bool longPath)
     {
         if (!FeatureContractContext.TryCreateDx12(
                 out FeatureContractContext? context,
@@ -160,9 +162,16 @@ public sealed class SharpGPUDirectStorageQualifiedTests
                     .CopyTo(conditionedSource.AsSpan(row * rowPitch, tightRowBytes));
             }
 
-            string sourcePath = Path.Combine(
-                AppContext.BaseDirectory,
-                $"SharpGPU.DirectStorage.Texture.{Guid.NewGuid():N}.bin");
+            string sourceRoot = Path.Combine(AppContext.BaseDirectory, $"SharpGPU.Storage.{Guid.NewGuid():N}");
+            string sourceDirectory = longPath
+                ? Path.Combine(sourceRoot, new string('a', 120), new string('b', 120))
+                : sourceRoot;
+            string sourcePath = Path.Combine(sourceDirectory, "texture.bin");
+            Directory.CreateDirectory(sourceDirectory);
+            if (longPath)
+            {
+                Assert.True(sourcePath.Length > 260);
+            }
             try
             {
                 File.WriteAllBytes(sourcePath, conditionedSource);
@@ -271,6 +280,12 @@ public sealed class SharpGPUDirectStorageQualifiedTests
                 if (File.Exists(sourcePath))
                 {
                     File.Delete(sourcePath);
+                }
+                Directory.Delete(sourceDirectory);
+                if (longPath)
+                {
+                    Directory.Delete(Path.GetDirectoryName(sourceDirectory)!);
+                    Directory.Delete(sourceRoot);
                 }
             }
         }

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <Import Project="Sdk.props" Sdk="SharpGenTools.Sdk/2.4.2-beta" Condition="'$(GenerateVorticeBindings)' == 'true'" />
+  <Import Project="Sdk.props" Sdk="SharpGenTools.Sdk" Version="2.4.2-beta" Condition="'$(GenerateVorticeBindings)' == 'true'" />
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -38,5 +38,5 @@
   <ItemGroup Condition="'$(GenerateVorticeBindings)' == 'true'">
     <Compile Remove="Generated/**/*.cs" />
   </ItemGroup>
-  <Import Project="Sdk.targets" Sdk="SharpGenTools.Sdk/2.4.2-beta" Condition="'$(GenerateVorticeBindings)' == 'true'" />
+  <Import Project="Sdk.targets" Sdk="SharpGenTools.Sdk" Version="2.4.2-beta" Condition="'$(GenerateVorticeBindings)' == 'true'" />
 </Project>
