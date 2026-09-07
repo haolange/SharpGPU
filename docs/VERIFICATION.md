@@ -4,7 +4,7 @@ This file is the authority for the independent SharpGPU repository. All
 commands use the .NET 10 SDK and run from the repository root. `Source` and
 `Package` are graph-wide modes; do not combine project references from one mode
 with packages from the other. `stack.local.props` is an ignored machine
-mapping. A handoff records the corresponding `stack.lock.json` revisions.
+mapping. A handoff records the corresponding the consuming workspace revision manifest revisions.
 
 ## Windows x64 source gates
 
@@ -27,9 +27,9 @@ dotnet restore src/SharpGPU/SharpGPU.csproj @props
 dotnet build src/SharpGPU/SharpGPU.csproj @props
 dotnet restore tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj @props
 dotnet build tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj @props
-dotnet test tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj \
-  @props --no-build --no-restore \
-  --logger "trx;LogFileName=source-release.trx" \
+dotnet test tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj `
+  @props --no-build --no-restore `
+  --logger "trx;LogFileName=source-release.trx" `
   --results-directory "$out/test-results/source-release"
 ```
 
@@ -108,11 +108,11 @@ $props = @(
   "-p:RestoreIgnoreFailedSources=true", "-p:RestoreForceEvaluate=true",
   "-m:1", "-nr:false"
 )
-dotnet restore tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj @props \
+dotnet restore tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj @props `
   --source $gpu --source $shader --source $math --source $metal --source $ie
 dotnet build tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj @props --no-restore
-dotnet test tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj @props \
-  --no-build --no-restore --logger "trx;LogFileName=package-full.trx" \
+dotnet test tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj @props `
+  --no-build --no-restore --logger "trx;LogFileName=package-full.trx" `
   --results-directory "D:/Projects/InfinityStack/SharpGPU/artifacts/verification-r12/test-results/package-full"
 ```
 
@@ -146,3 +146,9 @@ contains the five `SharpGPU.Vortice.*` Windows packages and the pinned
 binding. A
 changed runtime or package revision invalidates the corresponding source,
 package and IE consumer evidence and requires a fresh run.
+
+Source handoff records this repository HEAD and every mapped dependency HEAD in
+the consuming workspace manifest. IE uses its root stack.lock.json; standalone
+consumers own their manifest and do not need an IE checkout. Package consumers
+use the project dependency versions and NuGet lock files. There is no product-local
+stack.lock.json: the removed copies were not read by any build or setup tool.
