@@ -3361,6 +3361,33 @@ namespace SharpGPU
 
         protected override void Release()
         {
+            // Vulkan does not make in-flight work safe to tear down for us.
+            // Several independent RHI instances may be created in one host
+            // (for example, the conformance runner), so drain the device
+            // before releasing queues, descriptor pools, and child objects.
+            // A lost device still has to follow the normal destruction path;
+            // keep that path best-effort instead of masking the original loss.
+            if (m_NativeDevice.Handle != 0)
+            {
+                try
+                {
+                    Vortice.Vulkan.VkResult idleResult =
+                        VulkanNative.vkDeviceWaitIdle(m_NativeDevice);
+                    if (idleResult != Vortice.Vulkan.VkResult.Success)
+                    {
+                        System.Diagnostics.Trace.TraceWarning(
+                            "Vulkan device idle wait returned {0} during release.",
+                            idleResult);
+                    }
+                }
+                catch (Exception exception)
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        "Vulkan device idle wait failed during release: {0}",
+                        exception.Message);
+                }
+            }
+
             if (m_CommandQueueMap != null)
             {
                 foreach (var kvp in m_CommandQueueMap)

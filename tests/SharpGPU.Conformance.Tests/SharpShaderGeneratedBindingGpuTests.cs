@@ -139,10 +139,11 @@ namespace SharpGPU.Conformance.Tests
                 new RHIInstanceDescriptor
                 {
                     Backend = backend,
-                    SurfaceKind =
-                        backend == ERHIBackend.Vulkan
-                            ? GetVulkanSurfaceKind()
-                            : ERHINativeSurfaceKind.Headless,
+                    // This is a compute-only conformance path. It does not
+                    // create a swapchain, so requiring a native window would
+                    // add an unrelated surface/loader dependency and make a
+                    // headless test host unsafe.
+                    SurfaceKind = ERHINativeSurfaceKind.Headless,
                     EnableDebugLayer = backend == ERHIBackend.DirectX12,
                     EnableValidation = backend == ERHIBackend.Vulkan,
                     GraphicsQueueRequestCount = 1,
@@ -491,41 +492,6 @@ namespace SharpGPU.Conformance.Tests
                     "Vulkan: validationRequest=true, validationLayerEnabled=false, build=Release(layer enabling is compiled out), debugMessengerErrors=0, deviceStatus=Success.");
 #endif
             }
-        }
-
-        private static ERHINativeSurfaceKind GetVulkanSurfaceKind()
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                return ERHINativeSurfaceKind.Win32Hwnd;
-            }
-
-            if (OperatingSystem.IsLinux())
-            {
-                return string.IsNullOrWhiteSpace(
-                        Environment.GetEnvironmentVariable(
-                            "WAYLAND_DISPLAY"))
-                    ? ERHINativeSurfaceKind.X11Window
-                    : ERHINativeSurfaceKind.WaylandSurface;
-            }
-
-            if (OperatingSystem.IsMacOS())
-            {
-                return ERHINativeSurfaceKind.AppKitNsWindow;
-            }
-
-            if (OperatingSystem.IsIOS())
-            {
-                return ERHINativeSurfaceKind.UIKitUiWindow;
-            }
-
-            if (OperatingSystem.IsAndroid())
-            {
-                return ERHINativeSurfaceKind.AndroidNativeWindow;
-            }
-
-            throw new PlatformNotSupportedException(
-                "The generated-binding Vulkan conformance test requires a platform surface extension because SharpGPU enables VK_KHR_swapchain.");
         }
 
         private static void AssertPlan(
