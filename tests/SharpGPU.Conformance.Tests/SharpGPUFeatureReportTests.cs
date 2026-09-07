@@ -88,7 +88,7 @@ public sealed class SharpGPUFeatureReportTests
             SharpGPUEnvironmentReport.Capture(),
             reports,
             scenarios);
-        string path = ArtifactPath.Resolve(GetFeatureReportFileName());
+        string path = Path.Combine(AppContext.BaseDirectory, "artifacts", "SharpGPU", GetFeatureReportFileName());
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         string json = JsonSerializer.Serialize(document, JsonOptions.Indented);
         Assert.Contains(
@@ -96,7 +96,8 @@ public sealed class SharpGPUFeatureReportTests
             json,
             StringComparison.Ordinal);
         Assert.Equal(6u, SharpGPUFeatureReportDocument.CurrentSchemaRevision);
-        if (ArtifactPath.RepositoryRoot is string repositoryRoot)
+        Assert.DoesNotContain(AppContext.BaseDirectory, json, StringComparison.OrdinalIgnoreCase);
+        if (Environment.GetEnvironmentVariable("INFINITYSTACK_SHARPGPU_ROOT") is string repositoryRoot)
         {
             Assert.DoesNotContain(repositoryRoot, json, StringComparison.OrdinalIgnoreCase);
         }
@@ -616,35 +617,6 @@ internal sealed record SharpGPUFeatureReport(
         uint minor = (version >> 12) & 0x3ff;
         uint patch = version & 0xfff;
         return $"Vulkan {major}.{minor}.{patch}";
-    }
-}
-
-internal static class ArtifactPath
-{
-    public static string Resolve(string fileName)
-    {
-        string? root = TryFindRepositoryRoot();
-        return root is not null
-            ? Path.Combine(root, "docs", "Artifacts", "SharpGPU", fileName)
-            : Path.Combine(AppContext.BaseDirectory, "artifacts", "SharpGPU", fileName);
-    }
-
-    public static string? RepositoryRoot => TryFindRepositoryRoot();
-
-    private static string? TryFindRepositoryRoot()
-    {
-        DirectoryInfo? directory = new(AppContext.BaseDirectory);
-        while (directory != null)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "InfinityBrowser.sln")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        return null;
     }
 }
 

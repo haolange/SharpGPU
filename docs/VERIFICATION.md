@@ -215,3 +215,11 @@ DirectML and DirectStorage also regenerate and compile through the same
 GenerateVorticeBindings entry, with zero errors (13 and 1 warnings respectively).
 The DirectStorage mapping warning for RegisterComponentMaskFlags is retained
 in binding-regeneration-Vortice.DirectStorage.log; it is not suppressed.
+
+FeatureReport_ShouldWriteJson writes to
+<AppContext.BaseDirectory>/artifacts/SharpGPU/feature-report-<platform>-<arch>.json.
+It never searches for InfinityBrowser.sln or writes a consuming repository's
+tracked docs. Source and Package report tests both pass 2/2 after this ownership
+cleanup; reports are under their respective isolated test output directories.
+The explicit INFINITYSTACK_SHARPGPU_ROOT value is used only by the report's
+path-privacy assertion, not to choose a write destination.
