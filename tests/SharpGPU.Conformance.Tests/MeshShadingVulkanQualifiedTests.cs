@@ -2,7 +2,7 @@
 using Xunit;
 using System;
 using SharpGPU;
-using SharpGPU.Mathematics;
+using SharpMath;
 using System.Runtime.InteropServices;
 using SharpShader.HLSLCrossCompiler;
 

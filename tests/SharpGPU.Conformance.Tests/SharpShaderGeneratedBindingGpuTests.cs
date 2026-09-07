@@ -5,7 +5,7 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using SharpGPU;
-using SharpGPU.Mathematics;
+using SharpMath;
 using SharpShader.Compilation;
 using SharpShader.HLSLCrossCompiler;
 using SharpShader.SharpGPU;

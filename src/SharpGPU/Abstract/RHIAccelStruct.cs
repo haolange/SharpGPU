@@ -1,5 +1,5 @@
 using SharpGPU.Core;
-using SharpGPU.Mathematics;
+using SharpMath;
 using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 using System.IO;

@@ -1,0 +1,44 @@
+{
+  "sourceRepository": "https://github.com/haolange/InfinityBrowser.git",
+  "sourceCommit": "7689191334cf562bd34d4a420149bde12e8b66b6",
+  "extractedCommit": "4b9f02e183c3a799ea3fc22dd5851933e6c6c560",
+  "routes": [
+    {
+      "source": "Source/Graphics/SharpGPU/",
+      "destination": "src/SharpGPU/"
+    },
+    {
+      "source": "Engine/Source/Runtime/Graphics/SharpGPU/",
+      "destination": "src/SharpGPU/"
+    },
+    {
+      "source": "Engine/Source/ThirdParty/Vortice.Windows/",
+      "destination": "third_party/Vortice.Windows/"
+    },
+    {
+      "source": "Source/ThirdParty/Vortice.Windows/",
+      "destination": "third_party/Vortice.Windows/"
+    },
+    {
+      "source": "Engine/Source/Developer/Tools/SharpGPU.MLCook/",
+      "destination": "tools/SharpGPU.MLCook/"
+    },
+    {
+      "source": "Engine/Source/Developer/Benchmarks/SharpGPU.Benchmarks/",
+      "destination": "benchmarks/SharpGPU.Benchmarks/"
+    },
+    {
+      "source": "Engine/Source/Developer/Tests/SharpGPU.Conformance.Tests/",
+      "destination": "tests/SharpGPU.Conformance.Tests/"
+    },
+    {
+      "source": "docs/SharpGPU/",
+      "destination": "docs/SharpGPU/"
+    }
+  ],
+  "verifiedCurrentFiles": 1311,
+  "reachableCommits": 129,
+  "previousRemoteMain": "c22a90f6917f2d76b72932cde8a8d5415332cf8b",
+  "adoptedCommit": "2f97421464aa115608c78418f4ec99db72c8aa1e",
+  "targetRepository": "https://github.com/haolange/SharpGPU.git"
+}

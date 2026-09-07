@@ -1,6 +1,6 @@
 using System;
 using SharpMetal.Metal;
-using SharpGPU.Mathematics;
+using SharpMath;
 using SharpMetal.Foundation;
 using SharpMetal.ObjectiveCCore;
 using System.Collections.Generic;

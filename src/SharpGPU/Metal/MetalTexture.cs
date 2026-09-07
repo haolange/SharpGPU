@@ -160,7 +160,7 @@ namespace SharpGPU
             return new RHITextureDescriptor
             {
                 MipCount = (uint)Math.Max(1, nativeTexture.MipmapLevelCount),
-                Extent = new SharpGPU.Mathematics.uint3((uint)Math.Max(1, nativeTexture.Width), (uint)Math.Max(1, nativeTexture.Height), (uint)Math.Max(1, nativeTexture.ArrayLength)),
+                Extent = new SharpMath.uint3((uint)Math.Max(1, nativeTexture.Width), (uint)Math.Max(1, nativeTexture.Height), (uint)Math.Max(1, nativeTexture.ArrayLength)),
                 Format = MetalUtility.ConvertToRhiPixelFormat(nativeTexture.PixelFormat),
                 SampleCount = nativeTexture.SampleCount switch
                 {

@@ -2,7 +2,7 @@ using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.IO;
-using SharpGPU.Mathematics;
+using SharpMath;
 using System.Collections.Generic;
 using System.Text;
 using System.Runtime.InteropServices;

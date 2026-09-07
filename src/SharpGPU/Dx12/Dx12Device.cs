@@ -1,5 +1,5 @@
 using SharpGPU.Collections;
-using SharpGPU.Mathematics;
+using SharpMath;
 using System.Collections.Generic;
 using System.Text;
 using System;
@@ -2491,11 +2491,13 @@ namespace SharpGPU
 
         private void CreateDirectMLObjects()
         {
-            if (!ThirdPartyNativeLibraryResolver.TryResolve("DirectML.dll", out _, out _))
+            ThirdPartyNativeLibraryResolver.EnsureDirectMLResolverRegistered();
+            if (!ThirdPartyNativeLibraryResolver.TryResolve("DirectML.dll", out nint runtimeProbe, out _))
             {
                 return;
             }
 
+            System.Runtime.InteropServices.NativeLibrary.Free(runtimeProbe);
             Vortice.DirectML.IDMLDevice? directMLDevice = null;
             Vortice.DirectML.IDMLDevice1? directMLDevice1 = null;
             Vortice.DirectML.IDMLCommandRecorder? commandRecorder = null;

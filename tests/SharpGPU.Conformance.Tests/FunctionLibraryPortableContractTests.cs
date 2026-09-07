@@ -34,7 +34,7 @@ public sealed class FunctionLibraryPortableContractTests
         string key = RHIPipelineCacheKeyBuilder.CreateComputeKey(
             new RHIComputePipelineDescriptor
             {
-                ThreadSize = new SharpGPU.Mathematics.uint3(1, 1, 1),
+                ThreadSize = new SharpMath.uint3(1, 1, 1),
                 ComputeFunction = view,
                 PipelineLayout = layout,
             },
@@ -49,7 +49,7 @@ public sealed class FunctionLibraryPortableContractTests
         string directKey = RHIPipelineCacheKeyBuilder.CreateComputeKey(
             new RHIComputePipelineDescriptor
             {
-                ThreadSize = new SharpGPU.Mathematics.uint3(1, 1, 1),
+                ThreadSize = new SharpMath.uint3(1, 1, 1),
                 ComputeFunction = direct,
                 PipelineLayout = layout,
             },
@@ -86,7 +86,7 @@ public sealed class FunctionLibraryPortableContractTests
             RHIPipelineCacheKeyBuilder.CreateComputeKey(
                 new RHIComputePipelineDescriptor
                 {
-                    ThreadSize = new SharpGPU.Mathematics.uint3(1, 1, 1),
+                    ThreadSize = new SharpMath.uint3(1, 1, 1),
                     ComputeFunction = view,
                     PipelineLayout = layout,
                 },

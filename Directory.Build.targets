@@ -1,0 +1,20 @@
+<Project>
+  <!-- Defaults also apply to transitive references added by the SDK during target execution. -->
+  <ItemDefinitionGroup>
+    <ProjectReference>
+      <AdditionalProperties>Configuration=$(Configuration);Platform=$(Platform);RuntimeIdentifier=$(RuntimeIdentifier);StackReferenceMode=$(StackReferenceMode);StackLocalProps=$(StackLocalProps);StackProductRoot=$(StackProductRoot)</AdditionalProperties>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <Target Name="ValidateStackReferenceMode" BeforeTargets="CollectPackageReferences;PrepareForBuild">
+    <Error Condition="'$(StackReferenceMode)' != 'Source' and '$(StackReferenceMode)' != 'Package'" Text="StackReferenceMode must be Source or Package." />
+    <Error Condition="'%(ProjectReference.StackProduct)' != '' and '$(StackReferenceMode)' != 'Source'" Text="Stack source reference %(ProjectReference.Identity) is active in Package mode." />
+    <Error Condition="'%(ProjectReference.StackProduct)' != '' and '%(ProjectReference.StackRoot)' == ''" Text="Missing source checkout mapping: %(ProjectReference.StackProduct)Root. Configure stack.local.props." />
+    <Error Condition="'%(ProjectReference.StackProduct)' != '' and !Exists('%(ProjectReference.StackRoot)/%(ProjectReference.StackProduct).product.props')" Text="Source repository identity mismatch or missing checkout: %(ProjectReference.StackProduct) at %(ProjectReference.StackRoot). Run the stack configuration check." />
+    <Error Condition="'%(ProjectReference.StackProduct)' != '' and !Exists('%(ProjectReference.Identity)')" Text="Missing source project: %(ProjectReference.Identity). No package fallback is allowed." />
+    <ItemGroup Condition="'$(StackReferenceMode)' == 'Source'">
+      <_StackPackageConflict Include="@(PackageReference)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(PackageReference.Identity)', '^Sharp(Math|Metal|GPU|Shader|Neural|LLM)([.]|$)'))" />
+    </ItemGroup>
+    <Error Condition="'@(_StackPackageConflict)' != ''" Text="Stack source/package conflict: @(_StackPackageConflict). Source mode applies to the complete product graph." />
+  </Target>
+  <Import Project="$(SharpGPURoot)/buildTransitive/SharpGPU.targets" Condition="'$(StackReferenceMode)' == 'Source' and Exists('$(SharpGPURoot)/buildTransitive/SharpGPU.targets')" />
+</Project>

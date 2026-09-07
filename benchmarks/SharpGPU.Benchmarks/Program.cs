@@ -490,7 +490,7 @@ namespace SharpGPU.Benchmarks
             RHIFunction function = CompileBindingTableBenchmarkFunction(context.Device);
             RHIComputePipeline pipeline = context.Device.CreateComputePipeline(new RHIComputePipelineDescriptor
             {
-                ThreadSize = new SharpGPU.Mathematics.uint3(1, 1, 1),
+                ThreadSize = new SharpMath.uint3(1, 1, 1),
                 ComputeFunction = function,
                 PipelineLayout = pipelineLayout,
             });
@@ -1578,9 +1578,9 @@ void WorkNode(ThreadNodeInputRecord<InputRecord> input)
             public override void WriteTimestamp(in uint index) { }
             public override void ResolveQuery(RHIQuery query, in uint startIndex, in uint queriesCount) { }
             public override void CopyBufferToBuffer(RHIBuffer srcBuffer, in int srcOffset, RHIBuffer dstBuffer, in int dstOffset, in int size) => m_CopyBytes += size;
-            public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in SharpGPU.Mathematics.int3 size) => throw new NotSupportedException();
-            public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in SharpGPU.Mathematics.int3 size) => throw new NotSupportedException();
-            public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in SharpGPU.Mathematics.int3 size) => throw new NotSupportedException();
+            public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in SharpMath.int3 size) => throw new NotSupportedException();
+            public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in SharpMath.int3 size) => throw new NotSupportedException();
+            public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in SharpMath.int3 size) => throw new NotSupportedException();
             internal override void EndPassCore() { }
             protected override void Release() => _ = m_CopyBytes;
         }

@@ -4,7 +4,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 using SharpGPU;
-using SharpGPU.Mathematics;
+using SharpMath;
 using SharpMetal.Foundation;
 using SharpMetal.Metal;
 using Xunit;

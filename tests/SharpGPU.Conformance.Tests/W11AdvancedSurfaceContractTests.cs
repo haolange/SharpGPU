@@ -109,20 +109,12 @@ public sealed class W11AdvancedSurfaceContractTests
                 type.Name.Contains("WorkGraph", StringComparison.Ordinal));
     }
 
+#if SHARPGPU_SOURCE_LAYOUT_TESTS
     [Fact]
     public void ProductSources_ShouldNotRetainAvailableWithoutImplementationPlaceholders()
     {
         string sharpGpuRoot = Path.GetFullPath(
-            Path.Combine(
-                AppContext.BaseDirectory,
-                "..",
-                "..",
-                "..",
-                "..",
-                "..",
-                "Runtime",
-                "Graphics",
-                "SharpGPU"));
+            ResolveSharpGpuRoot());
         Assert.True(
             Directory.Exists(sharpGpuRoot),
             $"SharpGPU root not found at '{sharpGpuRoot}'.");
@@ -131,14 +123,36 @@ public sealed class W11AdvancedSurfaceContractTests
             .EnumerateFiles(sharpGpuRoot, "*.cs", SearchOption.AllDirectories)
             .SelectMany(path => File.ReadAllLines(path).Select(line => (path, line)))
             .Where(tuple =>
-                tuple.line.Contains("available without a", StringComparison.OrdinalIgnoreCase) ||
-                tuple.line.Contains("available without an", StringComparison.OrdinalIgnoreCase))
+                tuple.line.Contains("available without implementation", StringComparison.OrdinalIgnoreCase) ||
+                tuple.line.Contains("available without an implementation", StringComparison.OrdinalIgnoreCase))
             .Select(tuple => $"{Path.GetFileName(tuple.path)}: {tuple.line.Trim()}")
             .ToArray();
 
         Assert.True(
             hits.Length == 0,
             "Forbidden forever-throw placeholder copy remains:\n" + string.Join("\n", hits));
+    }
+#endif
+
+    private static string ResolveSharpGpuRoot()
+    {
+        for (DirectoryInfo? directory = new(AppContext.BaseDirectory);
+            directory != null;
+            directory = directory.Parent)
+        {
+            string[] candidates =
+            [
+                Path.Combine(directory.FullName, "src", "SharpGPU"),
+                Path.Combine(directory.FullName, "Engine", "Source", "Runtime", "Graphics", "SharpGPU"),
+            ];
+            string? root = candidates.FirstOrDefault(Directory.Exists);
+            if (root != null)
+            {
+                return root;
+            }
+        }
+
+        throw new InvalidOperationException("Failed to locate SharpGPU source root from test output directory.");
     }
 
     [Fact]

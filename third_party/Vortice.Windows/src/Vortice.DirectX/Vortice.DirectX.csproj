@@ -1,9 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
-  <Sdk Name="SharpGenTools.Sdk" Version="$(SharpGenVersion)" />
+  <Import Project="Sdk.props" Sdk="SharpGenTools.Sdk/2.4.2-beta" Condition="'$(GenerateVorticeBindings)' == 'true'" />
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0;net10.0;net8.0-windows10.0.22621;net9.0-windows10.0.22621;net10.0-windows10.0.22621</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Vortice</RootNamespace>
     <Description>Core DirectX library.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -78,4 +78,11 @@
     </AssemblyAttribute>
   </ItemGroup>
 
+  <ItemGroup Condition="'$(GenerateVorticeBindings)' != 'true'">
+    <PackageReference Include="SharpGen.Runtime" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(GenerateVorticeBindings)' == 'true'">
+    <Compile Remove="Generated/**/*.cs" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="SharpGenTools.Sdk/2.4.2-beta" Condition="'$(GenerateVorticeBindings)' == 'true'" />
 </Project>

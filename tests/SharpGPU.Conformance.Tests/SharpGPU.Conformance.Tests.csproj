@@ -3,14 +3,15 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <Nullable>enable</Nullable>
+    <DefineConstants>$(DefineConstants);SHARPGPU_ENABLE_DX12</DefineConstants>
     <Platforms>x64;ARM64</Platforms>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(InfinityBuildOS)' == 'Win' or '$(InfinityBuildOS)' == 'Linux'">
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows')) or $([MSBuild]::IsOSPlatform('Linux'))">
     <DefineConstants>$(DefineConstants);SHARPGPU_VULKAN_QUALIFICATION_HOST</DefineConstants>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(InfinityBuildOS)' == 'macOS'">
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
     <DefineConstants>$(DefineConstants);SHARPGPU_METAL_QUALIFICATION_HOST</DefineConstants>
   </PropertyGroup>
 
@@ -28,10 +29,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../../Runtime/Graphics/SharpGPU/SharpGPU.csproj" />
-    <ProjectReference Include="../../../Runtime/Graphics/SharpShader/SharpShader.csproj" />
-    <ProjectReference Include="../../../Runtime/Graphics/SharpShader/SharpGPU/SharpShader.SharpGPU.csproj" />
-    <ProjectReference Include="../../../Runtime/Graphics/SharpShader/CSharp/SharpShader.CSharp.csproj" />
+    <ProjectReference Include="../../src/SharpGPU/SharpGPU.csproj" Condition="'$(StackReferenceMode)' == 'Source'" />
+    <ProjectReference Include="$(SharpShaderRoot)/src/SharpShader/SharpShader.csproj"  Condition="'$(StackReferenceMode)' == 'Source'" StackProduct="SharpShader" StackRoot="$(SharpShaderRoot)" />
+    <ProjectReference Include="$(SharpShaderRoot)/src/SharpShader/SharpGPU/SharpShader.SharpGPU.csproj"  Condition="'$(StackReferenceMode)' == 'Source'" StackProduct="SharpShader" StackRoot="$(SharpShaderRoot)" />
+    <ProjectReference Include="$(SharpShaderRoot)/src/SharpShader/CSharp/SharpShader.CSharp.csproj"  Condition="'$(StackReferenceMode)' == 'Source'" StackProduct="SharpShader" StackRoot="$(SharpShaderRoot)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,5 +43,24 @@
   <ItemGroup Condition="Exists('Fixtures/MetalML')">
     <None Include="Fixtures/MetalML/**/*" CopyToOutputDirectory="PreserveNewest" Link="Fixtures/MetalML/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
+  <ItemGroup Condition="Exists('TestData/SharpGPU.MLCook')">
+    <None Include="TestData/SharpGPU.MLCook/**/*" CopyToOutputDirectory="PreserveNewest" Link="TestData/SharpGPU.MLCook/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
 
+
+  <PropertyGroup><Version>$(StackPackageVersion)</Version><RepositoryUrl>https://github.com/haolange/SharpGPU</RepositoryUrl></PropertyGroup>
+  <PropertyGroup Condition="'$(StackReferenceMode)' == 'Source'">
+    <DefineConstants>$(DefineConstants);SHARPGPU_SOURCE_LAYOUT_TESTS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(StackReferenceMode)' == 'Package'">
+    <!-- These assertions inspect the independent checkout's source layout;
+         package mode has an equivalent public-artifact contract below. -->
+    <Compile Remove="RhiDomainMirrorContractTests.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="SharpGPU" Version="$(StackPackageVersion)" Condition="'$(StackReferenceMode)' == 'Package'" />
+    <PackageReference Include="SharpShader" Version="$(StackPackageVersion)" Condition="'$(StackReferenceMode)' == 'Package'" />
+    <PackageReference Include="SharpShader.SharpGPU" Version="$(StackPackageVersion)" Condition="'$(StackReferenceMode)' == 'Package'" />
+    <PackageReference Include="SharpShader.CSharp" Version="$(StackPackageVersion)" Condition="'$(StackReferenceMode)' == 'Package'" />
+  </ItemGroup>
 </Project>

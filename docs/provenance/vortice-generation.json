@@ -1,0 +1,326 @@
+{
+  "generator": "SharpGenTools.Sdk",
+  "generatorVersion": "2.4.2-beta",
+  "windowsSdk": "10.0.26100.0",
+  "projects": [
+    {
+      "project": "Vortice.DirectX",
+      "generated": [
+        {
+          "path": "third_party/Vortice.Windows/src/Vortice.DirectX/Generated/SharpGen.Bindings.g.cs",
+          "sha256": "261eb6a7e7243a72742cc76be9724a8675d814173f7b2a9a1044bc7d94dd2fe3"
+        },
+        {
+          "path": "third_party/Vortice.Windows/src/Vortice.DirectX/Generated/Vortice.DirectX.BindMapping.xml",
+          "sha256": "7f42ac31b657871a433afe32e176e2fbef42a03411d5ae63922b2e6442994fdf"
+        }
+      ]
+    },
+    {
+      "project": "Vortice.DXGI",
+      "generated": [
+        {
+          "path": "third_party/Vortice.Windows/src/Vortice.DXGI/Generated/SharpGen.Bindings.g.cs",
+          "sha256": "a6d3b4094ad468bddf52775377455faae6bb6c7339c473b8eade07edbc2d217b"
+        },
+        {
+          "path": "third_party/Vortice.Windows/src/Vortice.DXGI/Generated/Vortice.DXGI.BindMapping.xml",
+          "sha256": "d67531e2c1fd3f307996f044f68894bf7ccae86f261fb61dafb5dd1323154365"
+        }
+      ]
+    },
+    {
+      "project": "Vortice.Direct3D12",
+      "generated": [
+        {
+          "path": "third_party/Vortice.Windows/src/Vortice.Direct3D12/Generated/SharpGen.Bindings.g.cs",
+          "sha256": "98a3678f34cc89204d3c0fec8469f6a386b10bdccb1927850d46e27f8a864136"
+        },
+        {
+          "path": "third_party/Vortice.Windows/src/Vortice.Direct3D12/Generated/Vortice.Direct3D12.BindMapping.xml",
+          "sha256": "1498232cb787e205f20560737275bbdca70e860046937866e36c91882abab03b"
+        }
+      ]
+    },
+    {
+      "project": "Vortice.DirectML",
+      "generated": [
+        {
+          "path": "third_party/Vortice.Windows/src/Vortice.DirectML/Generated/SharpGen.Bindings.g.cs",
+          "sha256": "88cab7bb15eb13d2966b1cddab65a125a20018270bae6a3afaf2688f3a52df41"
+        },
+        {
+          "path": "third_party/Vortice.Windows/src/Vortice.DirectML/Generated/Vortice.DirectML.BindMapping.xml",
+          "sha256": "a4dd6a32f3689a7b1bd059935792aa4bcbc01cde89559ed278386c805af8f815"
+        }
+      ]
+    },
+    {
+      "project": "Vortice.DirectStorage",
+      "generated": [
+        {
+          "path": "third_party/Vortice.Windows/src/Vortice.DirectStorage/Generated/SharpGen.Bindings.g.cs",
+          "sha256": "e69bb73dae688f612bdd33116b5f4101e6b4f4b28763389d7e7d7b62b5287a34"
+        },
+        {
+          "path": "third_party/Vortice.Windows/src/Vortice.DirectStorage/Generated/Vortice.DirectStorage.BindMapping.xml",
+          "sha256": "bbd54ab0cda4c88da3d34565d22dc87b3162e60a898cfad4bbb00c447363e9fa"
+        }
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/DirectStorage/dstorage.h",
+      "sha256": "7924424816ae74b0847968a51ab00c327963d94bd857d985f031c91d26f14123"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/DirectStorage/dstorageerr.h",
+      "sha256": "21174e7d9e9372e65f2434a8075784979cd2e8bd725c6049623dbe5843b578a9"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/directx/d3d12.h",
+      "sha256": "da8a55c799bee4d531f07c9692bc3329ae158dd2da7e0b002ca73e41a3a1babc"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/directx/d3d12compatibility.h",
+      "sha256": "49c90e78c6729d086770cecc0b037b118cd63fa87c1fa7237771eadb59c28d2c"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/directx/d3d12sdklayers.h",
+      "sha256": "4ce498ed59868ec1174a18428b789d84ac1e5a82fa6f4b5798738ffa04cbaae0"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/directx/d3d12shader.h",
+      "sha256": "5d8af6cdc1689dbfd38147b8253ddcd81a0fb74832cfd538e1a5d2923df07a9c"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/directx/d3d12video.h",
+      "sha256": "5180b5d22028ade2f6f41d9e61124fbe77f11679fb850005c6773c3fa5570415"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/directx/d3dcommon.h",
+      "sha256": "8c236985415516302faf0cb725fa78312cb1ac05ba866e29eeab23d695a0f5cb"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/directx/DirectML.h",
+      "sha256": "3daeed73aa64905c07b6f5394c7b45eabf0ac17bbca54b1584c871e03e4f54ad"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/directx/dxcore.h",
+      "sha256": "63810a79e8cf27becb12be85af84e9a09acef613b23bc866f63cc7c3f54e72dc"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/directx/dxcore_interface.h",
+      "sha256": "4d6cc2c2f1540df29c1dc73f2a9a09e7d7b7fe375a1a1ee804b1775bdb232352"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/directx/dxgicommon.h",
+      "sha256": "10b795959eef2771c5f4d20c49b20d56353cf9439e49667c391f32b9e74b09f6"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/directx/dxgiformat.h",
+      "sha256": "0ac14d7da595c528e0f14c64685d83596c392d36a0ab49ce2ecab05299e6c0d0"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/dxc/dxcapi.h",
+      "sha256": "f8487a553e9f3a0500ef1957414576b7bae4796f694d5f07d3a78a77cbdb44e2"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/dxc/dxcerrors.h",
+      "sha256": "848ff3904d619816377212c9eb8e66454ecc021817876ce56afb5c4da0f0a22a"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/dxc/dxcisense.h",
+      "sha256": "4d944fc32f2253376bd98f5b071a1d045bd422d36997138938b85ab21e91439f"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/dwrite.h",
+      "sha256": "9faa1b381a28093ab14d73667e52e01f21ab23c1c28e352ff29d6cbd95dbe96a"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/dwrite_1.h",
+      "sha256": "e908253b65dd19357fac00303bae2f3fa90acc3c5726b0ad7d321d394f58c966"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/dwrite_2.h",
+      "sha256": "284a73d13f1419a92d81994d933599c492e32c9fbd59babe7fca9f48d35821df"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/dwrite_3.h",
+      "sha256": "8a825ac1142ad1ac1590d3806b77a6513643db596ea9dd039f165c180b076d84"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/dwrite_core.h",
+      "sha256": "d6e8b62f20ec79e5998f3d9f314cbfeade294c8f3eb3c676e57e041d49a17dc9"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/Microsoft.UI.Composition.Interop.h",
+      "sha256": "09d01f519f7fa55feb5903bc1707221af3afd58b9e00202ed650d4e0066a382b"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/Microsoft.UI.Input.InputCursor.Interop.h",
+      "sha256": "1bd6b5b28126c3a4e9620e1e6b9795bb1103836562c6aac8ee22ca7e30fe9be5"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/Microsoft.UI.Interop.h",
+      "sha256": "8c523da904fd683b84c385174d6e593927b9299c38cd1b0ea3d562ea0c94461e"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/microsoft.ui.xaml.hosting.desktopwindowxamlsource.h",
+      "sha256": "6967b04191dc86fa10382b90a4d77be344ff5995506f868ff36cc0cb34a65dcc"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/microsoft.ui.xaml.hosting.referencetracker.h",
+      "sha256": "0cc1236f7772142c0f4fb10cc999e1599cc9d31d7f24dcfecc2b3affae7ad1c5"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/microsoft.ui.xaml.media.dxinterop.h",
+      "sha256": "fcb9c144db1c51e5cec10709bdefa7313e45b81eec1994ed9603438951fa5053"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/microsoft.ui.xaml.window.h",
+      "sha256": "0ba83fd1e67f3f479bc27e49e55c1550b4e7f723a04384d1b6acf986a1b4d781"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/winrt/Microsoft.UI.Composition.Interop.h",
+      "sha256": "5315a01defd2ec9d10c4fdc6ba16e250635de911f8770f7616b79c48d2b026a8"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/winrt/Microsoft.UI.Input.InputCursor.Interop.h",
+      "sha256": "d2d1c97906f8bd97ef79fc5cd9436677deb41e84b79ee173ef7ba7b82cdd03f0"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/winrt/Microsoft.UI.Interop.h",
+      "sha256": "fe799ea427171c42a9895acf463e5a6042554a4af5474134b038095adcccdb1a"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/winrtdirect3d11.h",
+      "sha256": "7d2bfc68f200a8cf1b61a088eaf86cbd760a025a6a1f40e64d38b63dae8592f6"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/winrtdirectxcommon.h",
+      "sha256": "d24b9b461aa82302bbd41f3700e046c89149c7ba69ad15a4f69adda22a895a6d"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/WinUI/xamlom.winui.h",
+      "sha256": "c5ec481766ef93a0612d9de39dddb1f6836c8974d20fd6268fed82d7e02ea3ad"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/xapo.h",
+      "sha256": "d0d13bbc0abdef8eb9400a1e1b7fefc2fcafd6c6888bfd15e0e52a4f12327f61"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/xapofx.h",
+      "sha256": "e686dd2e7bdafcf6aee597559f1bb88404bf3b383883730cc2a57501590cdd19"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/xaudio2.h",
+      "sha256": "423fa5e0183afe9bc1941b0475ca43a20741057e253f410871d09afd1df00fa5"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/native/include/xaudio2fx.h",
+      "sha256": "2940f421f91bec40ee88941999fcfeec50ac7dce2b299fa9428d67e232aa4173"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.D3DCompiler/Mappings.xml",
+      "sha256": "17579063ee73c8b309b8f991cf9aa89f539b3801d67df4cc41d375886fd5fff9"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.Direct2D1/Documentation.xml",
+      "sha256": "9c008683c9df5ebd7343429f3f018e49eb755f5efbc441d062d6b14273cef8df"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.Direct2D1/Mappings.xml",
+      "sha256": "e5244e90196abf2d20bbb63becd91204fd8eff1ffe5b16b66f24022f5a028137"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.Direct3D11/Documentation.xml",
+      "sha256": "af7f7c964823443c390d51dcb1324be3237e17c0b2528cf30fa71645d855e3ec"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.Direct3D11/Mappings.xml",
+      "sha256": "4d1e779161dd9c4d03bfe67b7b14c8d1b59966684b8ad731754d7cf07a667df4"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.Direct3D12/Documentation.xml",
+      "sha256": "97e25420743635a27319d675bd60b8ce14306c61396caada7ae843125875c26d"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.Direct3D12/Mappings.xml",
+      "sha256": "64f4f9d93674e4d52a7297858c81fc4267b1ea04e4cd7fcf97e925f7471e5aae"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.Direct3D9/Documentation.xml",
+      "sha256": "ce17d2eba59d5d19b0b4506ceb82b044d3ae9f645e044661f5f64a5c4bfecd52"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.Direct3D9/Mappings.xml",
+      "sha256": "b6a827c9944cbeac5f3d1ad363541f743d8e60334def44cd8081ba53c071b054"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.DirectComposition/Documentation.xml",
+      "sha256": "86a7c1d760456acf138830753042127c2cd5f27fefcf3c598f134ef4249520c7"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.DirectComposition/Mappings.xml",
+      "sha256": "5fbb18813ed17922fbef049ad9d1c5233109efd35e45ccbb127a655fea9d37c5"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.DirectInput/Mappings.xml",
+      "sha256": "6d8e0c0c739c73637d0e047b795fba4a1adbce2261c95d9b081e37017da1da71"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.DirectML/Documentation.xml",
+      "sha256": "05c1a075fde60b711dd5d5e5bbec3a09ef1f646ee2706aedea2b50642e6d56a1"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.DirectML/Mappings.xml",
+      "sha256": "9bfdede23f69aec9325d54413d8a291b7748d9c4418b046c0a5ce6a952ed06b4"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.DirectSound/Mappings.xml",
+      "sha256": "e722ed690d9a57184ab1fb2092a255273ba3c0d00426fa40674943e495d3ab1c"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.DirectStorage/Mappings.xml",
+      "sha256": "739b97f76c0dc0ae4189db1af563d88bea29e313a49b0e1236b8e7ad803fe095"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.DirectX/Mappings.xml",
+      "sha256": "484df857350c7987cb028f462e1c9f973b825e549173ab121575bf369a9dc82d"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.Dxc/Mappings.xml",
+      "sha256": "92d64b37e705a613c28caef591ea3a4424d931eaf66fac13e4fdda4480529a24"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.DXGI/Documentation.xml",
+      "sha256": "f4ca23aac8a7ee0b8d155c910a49c05c2c175a85d3aa532115b4f83395cd0f7a"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.DXGI/Mappings.xml",
+      "sha256": "a1b9242e329666a656efeb11dc725c7b0100f4b869d13e40423b7ca15aae93d7"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.MediaFoundation/Mappings.xml",
+      "sha256": "b7a2da4b519bde6923f323c18565ee1d0f1902f769ffd6e544d373bd2c338632"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.UIAnimation/Mappings.xml",
+      "sha256": "4add91c38c9b248b50bb12455a253fef796d8147882f20d9c337583d3fe47b6a"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.WinUI/Mappings.xml",
+      "sha256": "7aee571ba38d8b201b2c2afbe4dba12c0d3d4e47185573e29af258d1162e000f"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.XAudio2/Documentation.xml",
+      "sha256": "4eca694c41ecc639818719b10681548eafaa0d06b0e98647156b7b4156bef117"
+    },
+    {
+      "path": "third_party/Vortice.Windows/src/Vortice.XAudio2/Mappings.xml",
+      "sha256": "347679f60c4fede648f72fb39252f5240cc9432f009ffd5d0da7500c92c8c4f2"
+    }
+  ]
+}

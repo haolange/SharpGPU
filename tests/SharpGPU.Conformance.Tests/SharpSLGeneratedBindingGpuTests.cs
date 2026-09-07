@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using System.Runtime.InteropServices;
 using SharpGPU;
-using SharpGPU.Mathematics;
+using SharpMath;
 using SharpShader.Compilation;
 using SharpShader.CSharp;
 using SharpShader.SharpGPU;
@@ -209,7 +209,7 @@ namespace SharpGPU.Conformance.Tests
         }
 
         private const string WriteConstantSource = @"
-using Infinity.Mathmatics;
+using SharpMath;
 using SharpShader.CSharp.ShaderLib;
 
 public static class WriteConstantShader

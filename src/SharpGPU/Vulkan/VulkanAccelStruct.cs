@@ -309,7 +309,7 @@ namespace SharpGPU
         private static void WriteTransform(
             ref VulkanRayTracingMotionNative.VkAccelerationStructureMatrixMotionInstanceNV native,
             in bool useEndTransform,
-            in SharpGPU.Mathematics.float4x4 matrix)
+            in SharpMath.float4x4 matrix)
         {
             if (useEndTransform)
             {
@@ -344,7 +344,7 @@ namespace SharpGPU
 
         private static void WriteStaticTransform(
             ref VulkanRayTracingMotionNative.VkAccelerationStructureInstanceRaw native,
-            in SharpGPU.Mathematics.float4x4 matrix)
+            in SharpMath.float4x4 matrix)
         {
             native.transform[0] = matrix.c0.x;
             native.transform[1] = matrix.c1.x;

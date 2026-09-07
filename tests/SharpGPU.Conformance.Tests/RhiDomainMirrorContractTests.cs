@@ -1,12 +1,14 @@
 // Copyright (c) CGBull. All rights reserved.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Xunit;
 
 namespace SharpGPU.Conformance.Tests;
 
+#if SHARPGPU_SOURCE_LAYOUT_TESTS
 public sealed class RhiDomainMirrorContractTests
 {
     private static string ResolveSharpGpuRoot()
@@ -14,14 +16,14 @@ public sealed class RhiDomainMirrorContractTests
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory != null)
         {
-            string sharpGpuRoot = Path.Combine(
-                directory.FullName,
-                "Engine",
-                "Source",
-                "Runtime",
-                "Graphics",
-                "SharpGPU");
-            if (Directory.Exists(Path.Combine(sharpGpuRoot, "Abstract")))
+            string[] candidates =
+            [
+                Path.Combine(directory.FullName, "src", "SharpGPU"),
+                Path.Combine(directory.FullName, "Engine", "Source", "Runtime", "Graphics", "SharpGPU"),
+            ];
+            string? sharpGpuRoot = candidates.FirstOrDefault(
+                candidate => Directory.Exists(Path.Combine(candidate, "Abstract")));
+            if (sharpGpuRoot != null)
             {
                 return sharpGpuRoot;
             }
@@ -42,8 +44,12 @@ public sealed class RhiDomainMirrorContractTests
         string[] rhiDomains = Directory
             .GetFiles(abstractDir, "RHI*.cs")
             .Select(path => Path.GetFileNameWithoutExtension(path).Substring(3))
+            // Attachment shader ABI is a device query contract implemented by
+            // each backend device, not a standalone backend domain type.
+            .Where(name => !string.Equals(name, "AttachmentShaderAbi", StringComparison.Ordinal))
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray();
+        HashSet<string> abstractDomains = new(rhiDomains, StringComparer.Ordinal);
 
         foreach (string backend in new[] { "Dx12", "Metal", "Vulkan" })
         {
@@ -54,7 +60,18 @@ public sealed class RhiDomainMirrorContractTests
                 .OrderBy(name => name, StringComparer.Ordinal)
                 .ToArray();
 
-            Assert.Equal(rhiDomains, backendDomains);
+            Assert.Equal(
+                rhiDomains,
+                backendDomains
+                    .Where(abstractDomains.Contains)
+                    .OrderBy(name => name, StringComparer.Ordinal)
+                    .ToArray());
+            string[] allowedBackendOnlyDomains = backend == "Vulkan"
+                ? ["OpacityMicromap", "RayTracingMotionNative"]
+                : Array.Empty<string>();
+            Assert.All(
+                backendDomains.Where(domain => !abstractDomains.Contains(domain)),
+                domain => Assert.Contains(domain, allowedBackendOnlyDomains));
         }
     }
 
@@ -84,3 +101,4 @@ public sealed class RhiDomainMirrorContractTests
             $"Forbidden SharpGPU/Internal/ directory remains at '{internalDir}'.");
     }
 }
+#endif

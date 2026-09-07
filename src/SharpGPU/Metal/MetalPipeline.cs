@@ -6,7 +6,7 @@ using System.Text;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using SharpMetal.Metal;
-using SharpGPU.Mathematics;
+using SharpMath;
 using SharpMetal.Foundation;
 using SharpMetal.ObjectiveCCore;
 using System.Collections.Generic;
@@ -100,7 +100,7 @@ namespace SharpGPU
     internal sealed class MetalComputePipeline : RHIComputePipeline
     {
         public MTLComputePipelineState NativePipelineState => m_NativePipelineState;
-        public SharpGPU.Mathematics.uint3 ThreadgroupSize => m_Descriptor.ThreadSize;
+        public SharpMath.uint3 ThreadgroupSize => m_Descriptor.ThreadSize;
 
         private MTLComputePipelineState m_NativePipelineState;
 

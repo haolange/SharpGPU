@@ -1,0 +1,116 @@
+<Project>
+  <!-- NuGet normally supplies NuGetPackageRoot during restore.  Pack and
+       direct MSBuild evaluation can run before that property is imported, so
+       resolve the same global-packages location explicitly (while honoring a
+       caller-provided RestorePackagesPath). -->
+  <PropertyGroup>
+    <_SharpGpuGlobalPackagesRoot Condition="'$(RestorePackagesPath)' != ''">$(RestorePackagesPath)</_SharpGpuGlobalPackagesRoot>
+    <_SharpGpuGlobalPackagesRoot Condition="'$(_SharpGpuGlobalPackagesRoot)' == '' and '$(NuGetPackageRoot)' != ''">$(NuGetPackageRoot)</_SharpGpuGlobalPackagesRoot>
+    <_SharpGpuGlobalPackagesRoot Condition="'$(_SharpGpuGlobalPackagesRoot)' == ''">$(UserProfile)\.nuget\packages\</_SharpGpuGlobalPackagesRoot>
+    <_SharpGpuGlobalPackagesRoot Condition="!$(_SharpGpuGlobalPackagesRoot.EndsWith('\'))">$(_SharpGpuGlobalPackagesRoot)\</_SharpGpuGlobalPackagesRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageDownload Include="microsoft.direct3d.d3d12" Version="[1.619.3]" />
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)microsoft.direct3d.d3d12/1.619.3/build/native/bin/x64/D3D12Core.dll">
+      <Link>runtimes/win-x64/native/D3D12Core.dll</Link>
+      <ExpectedHash>4bfb82f456269e3ef45cca0f612ddbd3650c99160d285dae1febf7883468c64c</ExpectedHash>
+      <Deployment>Microsoft/D3D12Agility/Win/AMD64/D3D12Core.dll</Deployment>
+      <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)microsoft.direct3d.d3d12/1.619.3/build/native/bin/x64/d3d12SDKLayers.dll">
+      <Link>runtimes/win-x64/native/d3d12SDKLayers.dll</Link>
+      <ExpectedHash>959b835dd6c41c68293d7d426ce92fe66c79d89df8296df8beba2342142dbae0</ExpectedHash>
+      <Deployment>Microsoft/D3D12Agility/Win/AMD64/d3d12SDKLayers.dll</Deployment>
+      <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)microsoft.direct3d.d3d12/1.619.3/build/native/bin/arm64/D3D12Core.dll">
+      <Link>runtimes/win-arm64/native/D3D12Core.dll</Link>
+      <ExpectedHash>7f40a9bb595cfa46fe48d2670455d671ed133d4360e38d2f1e84b1e762169f2c</ExpectedHash>
+      <Deployment>Microsoft/D3D12Agility/Win/ARM64/D3D12Core.dll</Deployment>
+      <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)microsoft.direct3d.d3d12/1.619.3/build/native/bin/arm64/d3d12SDKLayers.dll">
+      <Link>runtimes/win-arm64/native/d3d12SDKLayers.dll</Link>
+      <ExpectedHash>3df67e6135640fd54703e3d9dfea6a60544768bce478572b90eacb74a42fbb3e</ExpectedHash>
+      <Deployment>Microsoft/D3D12Agility/Win/ARM64/d3d12SDKLayers.dll</Deployment>
+      <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+    <PackageDownload Include="vortice.directml" Version="[3.8.3]" />
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)vortice.directml/3.8.3/runtimes/win-x64/DirectML.Debug.dll">
+      <Link>runtimes/win-x64/native/DirectML.Debug.dll</Link>
+      <ExpectedHash>0916c4b13b60395e4a7b4eb864f6e6e8dfa9f328483e07cac92636be732c14bd</ExpectedHash>
+      <Deployment>Microsoft/DirectML/Win/AMD64/DirectML.Debug.dll</Deployment>
+      <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)vortice.directml/3.8.3/runtimes/win-x64/DirectML.dll">
+      <Link>runtimes/win-x64/native/DirectML.dll</Link>
+      <ExpectedHash>18c82a9c06141f7e96241adad1a35bebf4780a72d8eeeb107ec12f748391b3f5</ExpectedHash>
+      <Deployment>Microsoft/DirectML/Win/AMD64/DirectML.dll</Deployment>
+      <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)vortice.directml/3.8.3/runtimes/win-arm64/DirectML.Debug.dll">
+      <Link>runtimes/win-arm64/native/DirectML.Debug.dll</Link>
+      <ExpectedHash>b39f3864df13a6d19d7c391cc15270f2a11ce731c6bbe757a0c8d9f1b0a26d9e</ExpectedHash>
+      <Deployment>Microsoft/DirectML/Win/ARM64/DirectML.Debug.dll</Deployment>
+      <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)vortice.directml/3.8.3/runtimes/win-arm64/DirectML.dll">
+      <Link>runtimes/win-arm64/native/DirectML.dll</Link>
+      <ExpectedHash>90a9239c79e9754d436aa8c3b26cdbd24be47106a967259b3ce9559d47ac766d</ExpectedHash>
+      <Deployment>Microsoft/DirectML/Win/ARM64/DirectML.dll</Deployment>
+      <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+    <PackageDownload Include="vortice.directstorage" Version="[3.8.3]" />
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)vortice.directstorage/3.8.3/runtimes/win-x64/native/dstorage.dll">
+      <Link>runtimes/win-x64/native/dstorage.dll</Link>
+      <ExpectedHash>1347296498710391508ef8c605298c73c1610c6610576819192959193d2bf036</ExpectedHash>
+      <Deployment>Microsoft/DirectStorage/Win/AMD64/dstorage.dll</Deployment>
+      <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)vortice.directstorage/3.8.3/runtimes/win-x64/native/dstoragecore.dll">
+      <Link>runtimes/win-x64/native/dstoragecore.dll</Link>
+      <ExpectedHash>149baf4193dc1e5cc235702a96c9d3e2117b753d537ed505afe3fc022dc96acf</ExpectedHash>
+      <Deployment>Microsoft/DirectStorage/Win/AMD64/dstoragecore.dll</Deployment>
+      <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)vortice.directstorage/3.8.3/runtimes/win-arm64/native/dstorage.dll">
+      <Link>runtimes/win-arm64/native/dstorage.dll</Link>
+      <ExpectedHash>eb9580f8625c3be077d02224f703df9aa6d3f48297ee730fa6536049dfe3c129</ExpectedHash>
+      <Deployment>Microsoft/DirectStorage/Win/ARM64/dstorage.dll</Deployment>
+      <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)vortice.directstorage/3.8.3/runtimes/win-arm64/native/dstoragecore.dll">
+      <Link>runtimes/win-arm64/native/dstoragecore.dll</Link>
+      <ExpectedHash>5ee23d213c44d6f68ec929090cec68177cafbd74ce293017e6324ea6c83a41cd</ExpectedHash>
+      <Deployment>Microsoft/DirectStorage/Win/ARM64/dstoragecore.dll</Deployment>
+      <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+    <PackageDownload Include="vortice.pix.native" Version="[1.0.1]" />
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)vortice.pix.native/1.0.1/runtimes/win-x64/native/WinPixEventRuntime.dll">
+      <Link>runtimes/win-x64/native/WinPixEventRuntime.dll</Link>
+      <ExpectedHash>81adcfd8253c3489be720da7e30f16004dc9a1f02a8b418c6c3aef4993032e6d</ExpectedHash>
+      <Deployment>Microsoft/PIX/Win/AMD64/WinPixEventRuntime.dll</Deployment>
+      <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+    <SharpGpuNativeAsset Include="$(_SharpGpuGlobalPackagesRoot)vortice.pix.native/1.0.1/runtimes/win-arm64/native/WinPixEventRuntime.dll">
+      <Link>runtimes/win-arm64/native/WinPixEventRuntime.dll</Link>
+      <ExpectedHash>e0f5fa0e861cf71d77ff6e2b765d31e65ef00819eb1a1ae3689d847f71994ec5</ExpectedHash>
+      <Deployment>Microsoft/PIX/Win/ARM64/WinPixEventRuntime.dll</Deployment>
+      <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+    </SharpGpuNativeAsset>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Use unqualified item metadata here.  Qualified metadata expansion is
+         not applied when an existing item list is re-included, which silently
+         flattened every native asset into the package root. -->
+    <Content Include="@(SharpGpuNativeAsset)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="true" PackagePath="%(Link)" Link="%(Link)" />
+    <None Include="$(MSBuildThisFileDirectory)licenses/**/*" Pack="true" PackagePath="licenses/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+  <Target Name="VerifySharpGpuNativeAssets" BeforeTargets="PrepareForBuild;_GetPackageFiles">
+    <Error Condition="!Exists('%(SharpGpuNativeAsset.Identity)')" Text="Missing native asset %(SharpGpuNativeAsset.Identity). Restore the pinned native download packages." />
+    <GetFileHash Files="@(SharpGpuNativeAsset)" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Items" ItemName="_VerifiedSharpGpuNativeAsset" />
+    </GetFileHash>
+    <Error Condition="'%(_VerifiedSharpGpuNativeAsset.FileHash)' != '%(_VerifiedSharpGpuNativeAsset.ExpectedHash)'" Text="Native asset hash mismatch: %(_VerifiedSharpGpuNativeAsset.Identity). Restore the pinned package from a trusted source." />
+  </Target>
+</Project>

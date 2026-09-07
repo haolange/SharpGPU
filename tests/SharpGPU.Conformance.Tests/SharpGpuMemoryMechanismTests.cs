@@ -4,7 +4,7 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using SharpGPU;
-using SharpGPU.Mathematics;
+using SharpMath;
 using Xunit;
 
 namespace SharpGPU.Conformance.Tests;

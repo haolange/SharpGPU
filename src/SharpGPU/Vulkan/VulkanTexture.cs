@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Vortice.Vulkan;
-using SharpGPU.Mathematics;
+using SharpMath;
 
 namespace SharpGPU
 {

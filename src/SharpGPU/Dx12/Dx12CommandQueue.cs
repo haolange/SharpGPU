@@ -505,9 +505,9 @@ namespace SharpGPU
         }
 
         private static void ValidateTileRange(
-            in SharpGPU.Mathematics.uint3 offset,
-            in SharpGPU.Mathematics.uint3 extent,
-            in SharpGPU.Mathematics.uint3 available,
+            in SharpMath.uint3 offset,
+            in SharpMath.uint3 extent,
+            in SharpMath.uint3 available,
             string argumentDescription)
         {
             if ((ulong)offset.x + extent.x > available.x ||

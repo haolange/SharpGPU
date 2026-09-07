@@ -1,4 +1,4 @@
-using SharpGPU.Mathematics;
+using SharpMath;
 using SharpMetal.Foundation;
 using SharpMetal.Metal;
 using SharpMetal.ObjectiveCCore;

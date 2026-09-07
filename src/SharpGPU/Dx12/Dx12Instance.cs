@@ -136,8 +136,7 @@ namespace SharpGPU
 internal static class Dx12Agility
     {
         internal const uint SDKVersion = 619;
-        internal const string SDKPath = ".\\D3D12\\";
-        private static readonly Guid s_D3D12DebugClassId = new Guid("F2352AEB-DD84-49FE-B97B-A9DCFDCC1B4F");
+            private static readonly Guid s_D3D12DebugClassId = new Guid("F2352AEB-DD84-49FE-B97B-A9DCFDCC1B4F");
 
         private static readonly object s_Lock = new object();
         private static bool s_Initialized;
@@ -238,10 +237,12 @@ internal static class Dx12Agility
 
         private static string ResolveSDKPath()
         {
-            string outputRelativePath = Path.Combine(AppContext.BaseDirectory, "D3D12") + Path.DirectorySeparatorChar;
-            return File.Exists(Path.Combine(outputRelativePath, "D3D12Core.dll"))
-                ? outputRelativePath
-                : SDKPath;
+            string directory = Path.Combine(AppContext.BaseDirectory, "D3D12") + Path.DirectorySeparatorChar;
+            if (!File.Exists(Path.Combine(directory, "D3D12Core.dll")))
+            {
+                throw new DllNotFoundException($"The DirectX 12 Agility runtime is missing from '{directory}'.");
+            }
+            return directory;
         }
     }
 #pragma warning restore CA1416

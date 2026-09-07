@@ -1,6 +1,6 @@
 using System;
 using SharpMetal.Metal;
-using SharpGPU.Mathematics;
+using SharpMath;
 using SharpMetal.Foundation;
 using SharpMetal.QuartzCore;
 using SharpMetal.ObjectiveCCore;

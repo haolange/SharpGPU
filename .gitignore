@@ -1,0 +1,8 @@
+artifacts/
+**/bin/
+**/obj/
+stack.local.props
+.vs/
+**/TestResults/
+*.trx
+native/runtimes/

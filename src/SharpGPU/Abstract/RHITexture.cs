@@ -1,6 +1,6 @@
 using System;
 using SharpGPU.Core;
-using SharpGPU.Mathematics;
+using SharpMath;
 
 namespace SharpGPU
 {

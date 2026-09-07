@@ -1,7 +1,7 @@
 using System;
 using System.Numerics;
 using Vortice.Vulkan;
-using SharpGPU.Mathematics;
+using SharpMath;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
 

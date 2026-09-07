@@ -1,6 +1,6 @@
 using System;
 using Vortice.Vulkan;
-using SharpGPU.Mathematics;
+using SharpMath;
 
 namespace SharpGPU
 {

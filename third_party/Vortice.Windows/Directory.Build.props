@@ -1,4 +1,5 @@
 <Project>
+  <Import Project="../../Directory.Build.props" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <RepoRootPath>$(MSBuildThisFileDirectory)</RepoRootPath>
@@ -54,4 +55,10 @@
     <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)Vortice.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <PackageId>SharpGPU.$(MSBuildProjectName)</PackageId>
+    <Version>3.8.3-sharpgpu.1</Version>
+    <RepositoryUrl>https://github.com/haolange/SharpGPU</RepositoryUrl>
+    <PackageOutputPath>$(StackProductRoot)/artifacts/packages</PackageOutputPath>
+  </PropertyGroup>
 </Project>

@@ -1,471 +1,197 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using System.Diagnostics;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 namespace SharpGPU
 {
-
-internal readonly struct ThirdPartyNativeLibraryProfile
-{
-    public readonly string Vendor;
-    public readonly string Library;
-    public readonly string WindowsFileName;
-    public readonly string LinuxFileName;
-    public readonly string MacFileName;
-
-    public ThirdPartyNativeLibraryProfile(string vendor, string library, string? windowsFileName, string? linuxFileName, string? macFileName)
+    internal static class ThirdPartyNativeLibraryResolver
     {
-        Vendor = vendor;
-        Library = library;
-        WindowsFileName = windowsFileName ?? string.Empty;
-        LinuxFileName = linuxFileName ?? string.Empty;
-        MacFileName = macFileName ?? string.Empty;
-    }
-}
+        private static readonly object s_Sync = new();
+        private static readonly HashSet<Assembly> s_RegisteredAssemblies = new();
+        private static bool s_DirectMLRegistered;
 
-internal static class ThirdPartyNativeLibraryResolver
-{
-    public const string ThirdPartyRootEnvironmentVariableName = "INFINITY_THIRDPARTY_NATIVE_ROOT";
-    private const string VendorMicrosoft = "Microsoft";
-    private static readonly object s_Sync = new();
-    private static readonly HashSet<Assembly> s_RegisteredAssemblies = new();
-
-    private static readonly Dictionary<string, ThirdPartyNativeLibraryProfile> s_LibraryProfiles = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["dxcompiler"] = new(VendorMicrosoft, "DXC", "dxcompiler.dll", "libdxcompiler.so", "libdxcompiler.dylib"),
-        ["dxil"] = new(VendorMicrosoft, "DXC", "dxil.dll", string.Empty, string.Empty),
-        ["directml"] = new(VendorMicrosoft, "DirectML", "DirectML.dll", string.Empty, string.Empty),
-        ["directml.debug"] = new(VendorMicrosoft, "DirectML", "DirectML.Debug.dll", string.Empty, string.Empty),
-        ["dstoragecore"] = new(VendorMicrosoft, "DirectStorage", "dstoragecore.dll", string.Empty, string.Empty),
-        ["dstorage"] = new(VendorMicrosoft, "DirectStorage", "dstorage.dll", string.Empty, string.Empty),
-        ["winpixeventruntime"] = new(VendorMicrosoft, "PIX", "WinPixEventRuntime.dll", string.Empty, string.Empty),
-    };
-
-    public static void EnsureResolverRegistered(Assembly assembly)
-    {
-        if (assembly == null)
+        public static void EnsureResolverRegistered(Assembly assembly)
         {
-            return;
-        }
-
-        lock (s_Sync)
-        {
-            if (s_RegisteredAssemblies.Contains(assembly))
+            ArgumentNullException.ThrowIfNull(assembly);
+            lock (s_Sync)
             {
-                return;
-            }
-
-            try
-            {
+                if (s_RegisteredAssemblies.Contains(assembly))
+                {
+                    return;
+                }
                 NativeLibrary.SetDllImportResolver(assembly, ResolveLibraryImport);
-            }
-            catch (InvalidOperationException)
-            {
-                // If resolver was already set by another initialization path, continue.
-            }
-
-            s_RegisteredAssemblies.Add(assembly);
-        }
-    }
-
-    public static IEnumerable<string> EnumerateCandidates(string libraryName)
-    {
-        return EnumerateCandidates(
-            libraryName,
-            Environment.GetEnvironmentVariable(
-                ThirdPartyRootEnvironmentVariableName));
-    }
-
-    internal static IEnumerable<string> EnumerateCandidatesWithExplicitRootsForTesting(
-        string libraryName,
-        string? explicitRoots)
-    {
-        return EnumerateCandidates(libraryName, explicitRoots);
-    }
-
-    private static IEnumerable<string> EnumerateCandidates(string libraryName, string? explicitRoots)
-    {
-        if (!TryEnumerateCandidates(libraryName, explicitRoots, out IEnumerable<string> candidates))
-        {
-            return Array.Empty<string>();
-        }
-
-        return candidates;
-    }
-
-    public static bool TryResolve(string libraryName, out nint handle, out string? resolvedPath)
-    {
-        handle = 0;
-        resolvedPath = null;
-
-        string? explicitRoots =
-            Environment.GetEnvironmentVariable(
-                ThirdPartyRootEnvironmentVariableName);
-        if (!TryEnumerateCandidates(
-                libraryName, explicitRoots, out IEnumerable<string> candidates))
-        {
-            return false;
-        }
-
-        List<string> candidateList = new();
-        foreach (string candidate in candidates)
-        {
-            if (!string.IsNullOrWhiteSpace(candidate))
-            {
-                candidateList.Add(candidate);
+                s_RegisteredAssemblies.Add(assembly);
             }
         }
 
-        string normalized = NormalizeLibraryName(libraryName);
-        Debug.WriteLine($"[ThirdPartyNativeLibraryResolver] candidates for '{normalized}': {string.Join(", ", candidateList)}");
-
-        foreach (string candidate in candidateList)
+        public static void EnsureDirectMLResolverRegistered()
         {
-            if (NativeLibrary.TryLoad(candidate, out handle))
+            lock (s_Sync)
             {
-                resolvedPath = candidate;
-                bool fromThirdParty = candidate.Contains($"{Path.DirectorySeparatorChar}ThirdParty{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
-                    || candidate.Contains($"{Path.AltDirectorySeparatorChar}ThirdParty{Path.AltDirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
-                Debug.WriteLine($"[ThirdPartyNativeLibraryResolver] loaded '{normalized}' from '{candidate}' (fromThirdParty={fromThirdParty})");
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public static nint ResolveLibraryImport(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
-    {
-        if (TryResolve(libraryName, out nint handle, out _))
-        {
-            return handle;
-        }
-
-        return 0;
-    }
-
-    private static bool TryEnumerateCandidates(
-        string libraryName,
-        string? explicitRoots,
-        out IEnumerable<string> candidates)
-    {
-        candidates = Array.Empty<string>();
-        string normalized = NormalizeLibraryName(libraryName);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            return false;
-        }
-
-        if (!s_LibraryProfiles.TryGetValue(normalized, out ThirdPartyNativeLibraryProfile profile))
-        {
-            return false;
-        }
-
-        string? osFolder = ResolveBuildOsFolder();
-        if (string.IsNullOrWhiteSpace(osFolder))
-        {
-            return false;
-        }
-
-        string archFolder = ResolveBuildArchFolder();
-        if (string.IsNullOrWhiteSpace(archFolder))
-        {
-            return false;
-        }
-
-        string? nativeFileName = ResolveLibraryFileName(profile, osFolder);
-        if (string.IsNullOrWhiteSpace(nativeFileName))
-        {
-            return false;
-        }
-
-        List<string> candidateList = new();
-        HashSet<string> emitted = new(StringComparer.OrdinalIgnoreCase);
-        foreach (string root in EnumerateThirdPartyRoots(explicitRoots))
-        {
-            foreach (string candidate in EnumerateCandidateLibraryPaths(root, profile, osFolder, archFolder, nativeFileName))
-            {
-                if (emitted.Add(candidate))
+                if (!s_DirectMLRegistered)
                 {
-                    candidateList.Add(candidate);
+                    Vortice.DirectML.DML.ResolveLibrary += ResolveLibraryImport;
+                    s_DirectMLRegistered = true;
                 }
             }
         }
 
-        candidates = candidateList;
-        return true;
-    }
-
-    private static IEnumerable<string> EnumerateCandidateLibraryPaths(string root, ThirdPartyNativeLibraryProfile profile, string osFolder, string archFolder, string nativeFileName)
-    {
-        string normalizedRoot = TryResolveDirectoryExplicitPath(root);
-        if (string.IsNullOrWhiteSpace(normalizedRoot))
+        public static IEnumerable<string> EnumerateCandidates(string libraryName)
         {
-            yield break;
-        }
-
-        string rootName = Path.GetFileName(normalizedRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        string vendor = profile.Vendor;
-
-        string normalizedVendorRoot;
-        if (rootName.Equals("ThirdParty", StringComparison.OrdinalIgnoreCase))
-        {
-            normalizedVendorRoot = Path.Combine(normalizedRoot, vendor);
-        }
-        else if (rootName.Equals("Binaries", StringComparison.OrdinalIgnoreCase))
-        {
-            normalizedVendorRoot = Path.Combine(normalizedRoot, "ThirdParty", vendor);
-        }
-        else if (rootName.Equals(vendor, StringComparison.OrdinalIgnoreCase))
-        {
-            normalizedVendorRoot = normalizedRoot;
-        }
-        else if (!rootName.Equals("Binaries", StringComparison.OrdinalIgnoreCase))
-        {
-            normalizedVendorRoot = Path.Combine(normalizedRoot, "ThirdParty", vendor);
-        }
-        else
-        {
-            normalizedVendorRoot = Path.Combine(normalizedRoot, vendor);
-        }
-
-        HashSet<string> emitted = new(StringComparer.OrdinalIgnoreCase);
-        static string? TryNormalize(string candidate)
-        {
-            return string.IsNullOrWhiteSpace(candidate) ? null : candidate;
-        }
-
-        if (!rootName.Equals("Binaries", StringComparison.OrdinalIgnoreCase))
-        {
-            string? rootCandidate0 = TryNormalize(Path.Combine(normalizedRoot, "Binaries", "ThirdParty", vendor));
-            if (!string.IsNullOrWhiteSpace(rootCandidate0))
+            if (!OperatingSystem.IsWindows())
             {
-                string candidate = Path.Combine(rootCandidate0, profile.Library, osFolder, archFolder, nativeFileName);
-                if (emitted.Add(candidate))
+                yield break;
+            }
+            string name = Path.GetFileName(libraryName).ToLowerInvariant();
+            (string Library, string File)? profile = name switch
+            {
+                "directml" or "directml.dll" => ("DirectML", "DirectML.dll"),
+                "directml.debug" or "directml.debug.dll" => ("DirectML", "DirectML.Debug.dll"),
+                "dstorage" or "dstorage.dll" => ("DirectStorage", "dstorage.dll"),
+                "dstoragecore" or "dstoragecore.dll" => ("DirectStorage", "dstoragecore.dll"),
+                "winpixeventruntime" or "winpixeventruntime.dll" => ("PIX", "WinPixEventRuntime.dll"),
+                _ => null,
+            };
+            if (profile.HasValue)
+            {
+                yield return SharpGpuNativeLibraries.Resolve(profile.Value.Library, profile.Value.File);
+            }
+        }
+
+        // This seam is intentionally internal: IE's integration tests verify
+        // the explicit repository/native layout without changing runtime
+        // discovery policy or exposing test-only path enumeration publicly.
+        internal static IEnumerable<string> EnumerateCandidatesWithExplicitRootsForTesting(
+            string libraryName,
+            string? explicitRoots)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                yield break;
+            }
+
+            string name = Path.GetFileName(libraryName).ToLowerInvariant();
+            (string Library, string File)? profile = name switch
+            {
+                "directml" or "directml.dll" => ("DirectML", "DirectML.dll"),
+                "directml.debug" or "directml.debug.dll" => ("DirectML", "DirectML.Debug.dll"),
+                "dstorage" or "dstorage.dll" => ("DirectStorage", "dstorage.dll"),
+                "dstoragecore" or "dstoragecore.dll" => ("DirectStorage", "dstoragecore.dll"),
+                "winpixeventruntime" or "winpixeventruntime.dll" => ("PIX", "WinPixEventRuntime.dll"),
+                _ => null,
+            };
+
+            if (!profile.HasValue)
+            {
+                yield break;
+            }
+
+            string arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture switch
+            {
+                System.Runtime.InteropServices.Architecture.X64 => "AMD64",
+                System.Runtime.InteropServices.Architecture.Arm64 => "ARM64",
+                _ => string.Empty,
+            };
+            if (string.IsNullOrEmpty(arch))
+            {
+                yield break;
+            }
+
+            HashSet<string> emitted = new(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(explicitRoots))
+            {
+                foreach (string rawRoot in explicitRoots.Split(
+                    Path.PathSeparator,
+                    StringSplitOptions.RemoveEmptyEntries))
                 {
-                    yield return candidate;
-                }
-            }
-        }
-
-        string? rootCandidate1 = TryNormalize(Path.Combine(normalizedRoot, "ThirdParty", vendor));
-        if (!string.IsNullOrWhiteSpace(rootCandidate1))
-        {
-            string candidate = Path.Combine(rootCandidate1, profile.Library, osFolder, archFolder, nativeFileName);
-            if (emitted.Add(candidate))
-            {
-                yield return candidate;
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(normalizedVendorRoot))
-        {
-            string candidate = Path.Combine(normalizedVendorRoot, profile.Library, osFolder, archFolder, nativeFileName);
-            if (emitted.Add(candidate))
-            {
-                yield return candidate;
-            }
-        }
-
-        string? rootCandidate3 = TryNormalize(Path.Combine(normalizedRoot, vendor, "ThirdParty"));
-        if (!string.IsNullOrWhiteSpace(rootCandidate3))
-        {
-            string candidate = Path.Combine(rootCandidate3, profile.Library, osFolder, archFolder, nativeFileName);
-            if (emitted.Add(candidate))
-            {
-                yield return candidate;
-            }
-        }
-    }
-
-    private static IEnumerable<string> EnumerateThirdPartyRoots(string? explicitRoots)
-    {
-        HashSet<string> emitted = new(StringComparer.OrdinalIgnoreCase);
-        List<string> repositoryRoots = new();
-
-        foreach (string explicitRoot in EnumerateExplicitThirdPartyRoots(explicitRoots))
-        {
-            if (emitted.Add(explicitRoot))
-            {
-                yield return explicitRoot;
-            }
-        }
-
-        foreach (string root in SearchRepositoryRoots())
-        {
-            if (emitted.Add(root))
-            {
-                repositoryRoots.Add(root);
-                yield return root;
-            }
-        }
-
-        foreach (string binariesRoot in EnumerateBinariesRoots(repositoryRoots))
-        {
-            if (emitted.Add(binariesRoot))
-            {
-                yield return binariesRoot;
-            }
-        }
-    }
-
-    private static IEnumerable<string> EnumerateExplicitThirdPartyRoots(string? explicitRoots)
-    {
-        if (string.IsNullOrWhiteSpace(explicitRoots))
-        {
-            yield break;
-        }
-
-        foreach (string? root in explicitRoots.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (string.IsNullOrWhiteSpace(root))
-            {
-                continue;
-            }
-
-            string candidate = TryResolveDirectoryExplicitPath(root);
-            if (!string.IsNullOrWhiteSpace(candidate))
-            {
-                yield return candidate;
-            }
-        }
-    }
-
-    private static IEnumerable<string> EnumerateBinariesRoots(IEnumerable<string> repositoryRoots)
-    {
-        foreach (string repositoryRoot in repositoryRoots)
-        {
-            string binariesRoot = TryResolveDirectoryExplicitPath(Path.Combine(repositoryRoot, "Binaries"));
-            if (!string.IsNullOrWhiteSpace(binariesRoot))
-            {
-                yield return binariesRoot;
-            }
-        }
-    }
-
-    private static string TryResolveDirectoryExplicitPath(string candidateRoot)
-    {
-        if (string.IsNullOrWhiteSpace(candidateRoot))
-        {
-            return string.Empty;
-        }
-
-        try
-        {
-            string normalized = Path.GetFullPath(candidateRoot);
-            if (Directory.Exists(normalized))
-            {
-                return normalized;
-            }
-        }
-        catch
-        {
-        }
-
-        return string.Empty;
-    }
-
-    private static IEnumerable<string> SearchRepositoryRoots()
-    {
-        HashSet<string> emitted = new(StringComparer.OrdinalIgnoreCase);
-        foreach (string start in EnumerateSearchRoots())
-        {
-            DirectoryInfo? current = new(start);
-            for (int i = 0; i < 16 && current != null; i++)
-            {
-                string candidate = Path.Combine(current.FullName, "Binaries");
-                if (Directory.Exists(candidate))
-                {
-                    string root = current.FullName;
-                    if (emitted.Add(root))
+                    string root;
+                    try
                     {
-                        yield return root;
+                        root = Path.GetFullPath(rawRoot);
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    if (!Directory.Exists(root))
+                    {
+                        continue;
+                    }
+
+                    string candidate = Path.Combine(
+                        root,
+                        "Binaries",
+                        "ThirdParty",
+                        "Microsoft",
+                        profile.Value.Library,
+                        "Win",
+                        arch,
+                        profile.Value.File);
+                    if (emitted.Add(candidate))
+                    {
+                        yield return candidate;
+                    }
+
+                    string rootName = Path.GetFileName(
+                        root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    string? canonical = rootName.Equals("Binaries", StringComparison.OrdinalIgnoreCase)
+                        ? Path.Combine(root, "ThirdParty", "Microsoft")
+                        : rootName.Equals("ThirdParty", StringComparison.OrdinalIgnoreCase)
+                            ? Path.Combine(root, "Microsoft")
+                            : rootName.Equals("Microsoft", StringComparison.OrdinalIgnoreCase)
+                                ? root
+                                : Path.Combine(root, "ThirdParty", "Microsoft");
+                    candidate = Path.Combine(
+                        canonical,
+                        profile.Value.Library,
+                        "Win",
+                        arch,
+                        profile.Value.File);
+                    if (emitted.Add(candidate))
+                    {
+                        yield return candidate;
                     }
                 }
+            }
 
-                current = current.Parent;
+            // Preserve the normal configured candidate as an auto-discovery
+            // fallback when an explicit root is absent or invalid.
+            string fallback = SharpGpuNativeLibraries.Resolve(
+                profile.Value.Library,
+                profile.Value.File);
+            if (emitted.Add(fallback))
+            {
+                yield return fallback;
             }
         }
+
+        // Successful callers own one native load reference and must release probes.
+        public static bool TryResolve(string libraryName, out nint handle, out string? resolvedPath)
+        {
+            foreach (string candidate in EnumerateCandidates(libraryName))
+            {
+                if (NativeLibrary.TryLoad(candidate, out handle))
+                {
+                    resolvedPath = candidate;
+                    return true;
+                }
+            }
+            handle = 0;
+            resolvedPath = null;
+            return false;
+        }
+
+        public static nint ResolveLibraryImport(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+        {
+            foreach (string candidate in EnumerateCandidates(libraryName))
+            {
+                // A configured runtime never silently resolves another version from PATH.
+                return NativeLibrary.Load(candidate);
+            }
+            return 0;
+        }
     }
-
-    private static IEnumerable<string> EnumerateSearchRoots()
-    {
-        string? baseDirectory = AppContext.BaseDirectory;
-        if (!string.IsNullOrWhiteSpace(baseDirectory))
-        {
-            yield return baseDirectory;
-        }
-
-        string cwd = Directory.GetCurrentDirectory();
-        if (!string.IsNullOrWhiteSpace(cwd))
-        {
-            yield return cwd;
-        }
-    }
-
-    private static string ResolveLibraryFileName(ThirdPartyNativeLibraryProfile profile, string osFolder)
-    {
-        return osFolder switch
-        {
-            "Win" => profile.WindowsFileName,
-            "Linux" => profile.LinuxFileName,
-            "macOS" => profile.MacFileName,
-            _ => string.Empty,
-        };
-    }
-
-    private static string ResolveBuildOsFolder()
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return "Win";
-        }
-
-        if (OperatingSystem.IsLinux())
-        {
-            return "Linux";
-        }
-
-        if (OperatingSystem.IsMacOS())
-        {
-            return "macOS";
-        }
-
-        return string.Empty;
-    }
-
-    private static string ResolveBuildArchFolder()
-    {
-        if (RuntimeInformation.ProcessArchitecture == Architecture.X64)
-        {
-            return "AMD64";
-        }
-
-        if (RuntimeInformation.ProcessArchitecture == Architecture.Arm64)
-        {
-            return "ARM64";
-        }
-
-        return string.Empty;
-    }
-
-    private static string NormalizeLibraryName(string? libraryName)
-    {
-        if (string.IsNullOrWhiteSpace(libraryName))
-        {
-            return string.Empty;
-        }
-
-        string fileName = Path.GetFileNameWithoutExtension(libraryName.Trim());
-        if (fileName.StartsWith("lib", StringComparison.OrdinalIgnoreCase))
-        {
-            fileName = fileName.Substring(3);
-        }
-
-        return fileName;
-    }
-}
 }

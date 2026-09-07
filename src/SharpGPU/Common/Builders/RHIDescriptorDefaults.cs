@@ -1,5 +1,5 @@
 using System;
-using SharpGPU.Mathematics;
+using SharpMath;
 
 namespace SharpGPU.Builders
 {

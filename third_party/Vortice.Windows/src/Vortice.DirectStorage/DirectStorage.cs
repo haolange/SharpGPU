@@ -77,9 +77,9 @@ public static partial class DirectStorage
         {
             var resolvers = resolveLibrary.GetInvocationList();
 
-            foreach (DllImportResolver resolver in resolvers)
+            for (int index = resolvers.Length - 1; index >= 0; index--)
             {
-                nativeLibrary = resolver(libraryName, assembly, searchPath);
+                nativeLibrary = ((DllImportResolver)resolvers[index])(libraryName, assembly, searchPath);
 
                 if (nativeLibrary != IntPtr.Zero)
                 {

@@ -1,4 +1,4 @@
-using SharpGPU.Mathematics;
+using SharpMath;
 using System.Diagnostics;
 using System;
 

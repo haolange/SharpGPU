@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using Xunit;
 
 namespace SharpGPU.Conformance.Tests;
@@ -9,10 +10,7 @@ public sealed class SharpGPUFeatureMatrixDocumentationTests
     [Fact]
     public void FeatureMatrix_ShouldContainPublicContractRows()
     {
-        string path = Path.Combine(FindRepositoryRoot(), "docs", "SharpGPU", "FeatureMatrix.md");
-        Assert.True(File.Exists(path), $"Missing SharpGPU feature matrix: {path}");
-
-        string markdown = File.ReadAllText(path);
+        string markdown = LoadFeatureMatrix();
         string[] requiredRows =
         {
             "TimestampQueries",
@@ -37,7 +35,23 @@ public sealed class SharpGPUFeatureMatrixDocumentationTests
         }
     }
 
-    private static string FindRepositoryRoot()
+    private static string LoadFeatureMatrix()
+    {
+        string? repositoryRoot = TryFindRepositoryRoot();
+        if (repositoryRoot != null)
+        {
+            string path = Path.Combine(repositoryRoot, "docs", "SharpGPU", "FeatureMatrix.md");
+            Assert.True(File.Exists(path), $"Missing SharpGPU feature matrix: {path}");
+            return File.ReadAllText(path);
+        }
+
+        using Stream? resource = typeof(RHIInstance).Assembly.GetManifestResourceStream("SharpGPU.FeatureMatrix.md");
+        Assert.NotNull(resource);
+        using StreamReader reader = new(resource!);
+        return reader.ReadToEnd();
+    }
+
+    private static string? TryFindRepositoryRoot()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory != null)
@@ -50,6 +64,6 @@ public sealed class SharpGPUFeatureMatrixDocumentationTests
             directory = directory.Parent;
         }
 
-        throw new InvalidOperationException("Failed to locate repository root from test output directory.");
+        return null;
     }
 }

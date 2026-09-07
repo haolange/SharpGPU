@@ -95,140 +95,8 @@ public sealed class PresentationLifecycleContractTests
         string root = FindRepositoryRoot();
         string sharpGpu = Path.Combine(
             root,
-            "Engine",
-            "Source",
-            "Runtime",
-            "Graphics",
+            "src",
             "SharpGPU");
-        string renderContextPath = Path.Combine(
-            root,
-            "Engine",
-            "Source",
-            "Runtime",
-            "Rendering",
-            "Core",
-            "RenderContext.cs");
-        string renderContext = File.ReadAllText(renderContextPath);
-
-        string endFrame = ExtractMethodBody(
-            renderContext,
-            "public void EndFrame()");
-        string beginFrame = ExtractMethodBody(
-            renderContext,
-            "public bool BeginFrame()");
-        Assert.Contains(
-            "HasAcquireWait",
-            beginFrame,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "Submit(finalizePresentation: false);",
-            beginFrame,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "SubmitTerminalFences(m_CommandQueues);",
-            beginFrame,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "Renderer frame acquisition and acquire-signal",
-            beginFrame,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            ".WaitIdle(",
-            endFrame,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "DrainPresentation(",
-            endFrame,
-            StringComparison.Ordinal);
-
-        int endFrameTry = endFrame.IndexOf(
-            "try",
-            StringComparison.Ordinal);
-        int frameSubmit = endFrame.IndexOf(
-            "Submit(finalizePresentation: true);",
-            StringComparison.Ordinal);
-        int clearExecutionPool = endFrame.IndexOf(
-            "m_CommandBufferExecutePool.Clear();",
-            StringComparison.Ordinal);
-        int clearActiveFrame = endFrame.LastIndexOf(
-            "m_ActiveFrameResourceIndex = -1;",
-            StringComparison.Ordinal);
-        Assert.True(endFrameTry >= 0);
-        Assert.True(frameSubmit > endFrameTry);
-        Assert.True(clearExecutionPool > frameSubmit);
-        Assert.True(clearActiveFrame > clearExecutionPool);
-        Assert.Contains(
-            "if (slot.HasAcquireWait)",
-            endFrame,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "m_Device.State == ERHIDeviceState.Operational",
-            endFrame,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "imageState.HasRenderCompleteWait",
-            endFrame,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "imageState.MarkRenderCompleteWaitSubmitted();",
-            endFrame,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "new(waitSemaphores: waits)",
-            endFrame,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "slot.MarkQueueUsed(",
-            endFrame,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "ExceptionDispatchInfo",
-            endFrame,
-            StringComparison.Ordinal);
-
-        string drainPresentation = ExtractMethodBody(
-            renderContext,
-            "private void DrainPresentation()");
-        Assert.Contains(
-            "DrainFrameResources();",
-            drainPresentation,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "DrainPresentCompletions();",
-            drainPresentation,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "WaitIdle",
-            drainPresentation,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "MaintenanceStrategy",
-            drainPresentation,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "QueueIdle",
-            drainPresentation,
-            StringComparison.Ordinal);
-
-        Assert.Equal(
-            4,
-            CountOccurrences(
-                renderContext,
-                "DrainPresentation();"));
-
-        Assert.DoesNotContain(
-            "WaitIdle",
-            renderContext,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "QueueIdle",
-            renderContext,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "MaintenanceStrategy",
-            renderContext,
-            StringComparison.Ordinal);
-
         foreach (string path in Directory.EnumerateFiles(
                      sharpGpu,
                      "*SwapChain*.cs",
@@ -299,38 +167,6 @@ public sealed class PresentationLifecycleContractTests
             "CAMetalDrawable Present does not consume RHI semaphores",
             metalSwapChain,
             StringComparison.Ordinal);
-
-        string reclaim = ExtractMethodBody(
-            renderContext,
-            "internal void Reclaim(");
-        Assert.Contains(
-            "m_QueueUsed[queueIndex]",
-            reclaim,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "before its terminal fence is submitted",
-            reclaim,
-            StringComparison.Ordinal);
-
-        string frameSlotDispose = ExtractMethodBody(
-            renderContext,
-            "public void Dispose()");
-        Assert.Contains(
-            "m_Device.State == ERHIDeviceState.Operational",
-            frameSlotDispose,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "m_CommandBuffers[i].Dispose();",
-            frameSlotDispose,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "m_CompletionCallbacks[i]();",
-            frameSlotDispose,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "must be fence-drained before disposal",
-            frameSlotDispose,
-            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -339,48 +175,8 @@ public sealed class PresentationLifecycleContractTests
         string root = FindRepositoryRoot();
         string sharpGpu = Path.Combine(
             root,
-            "Engine",
-            "Source",
-            "Runtime",
-            "Graphics",
+            "src",
             "SharpGPU");
-        string renderContext = File.ReadAllText(Path.Combine(
-            root,
-            "Engine",
-            "Source",
-            "Runtime",
-            "Rendering",
-            "Core",
-            "RenderContext.cs"));
-
-        string resolveBackend = ExtractMethodBody(
-            renderContext,
-            "private static ERHIBackend ResolveBackend()");
-        Assert.DoesNotContain(
-            "Falling back",
-            resolveBackend,
-            StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(
-            "throw new ArgumentException(",
-            resolveBackend,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "throw new NotSupportedException(",
-            resolveBackend,
-            StringComparison.Ordinal);
-
-        string beginFrame = ExtractMethodBody(
-            renderContext,
-            "public bool BeginFrame()");
-        Assert.Contains(
-            "m_ScreenSize.x == 0",
-            beginFrame,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "m_ScreenSize.y == 0",
-            beginFrame,
-            StringComparison.Ordinal);
-
         string swapChainBase = File.ReadAllText(Path.Combine(
             sharpGpu,
             "Abstract",
@@ -449,14 +245,6 @@ public sealed class PresentationLifecycleContractTests
             "nativeBackBuffer.Release();",
             dx12,
             StringComparison.Ordinal);
-        Assert.Contains(
-            "m_RenderCompleteWaitPending",
-            renderContext,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "must be consumed before disposal",
-            renderContext,
-            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -464,10 +252,7 @@ public sealed class PresentationLifecycleContractTests
     {
         string path = Path.Combine(
             FindRepositoryRoot(),
-            "Engine",
-            "Source",
-            "Runtime",
-            "Graphics",
+            "src",
             "SharpGPU",
             "Vulkan",
             "VulkanDevice.cs");
@@ -547,106 +332,11 @@ public sealed class PresentationLifecycleContractTests
     }
 
     [Fact]
-    public void AndroidSurfaceLifecycle_ShouldSerializeGenerationAndDrainBeforeRelease()
-    {
-        string path = Path.Combine(
-            FindRepositoryRoot(),
-            "Engine",
-            "Source",
-            "Programs",
-            "AndroidGame",
-            "MainActivity.cs");
-        string source = File.ReadAllText(path);
-
-        Assert.Contains(
-            "ConfigChanges.Orientation",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "ConfigChanges.ScreenSize",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "_surfaceTransitionSequence",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "BeginSurfaceGeneration()",
-            source,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            ".GetAwaiter().GetResult()",
-            source,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "async void",
-            source,
-            StringComparison.Ordinal);
-
-        string update = ExtractMethodBody(
-            source,
-            "private async Task StartOrResizeSessionAsync(");
-        Assert.Contains(
-            "announcedGeneration < _surfaceGeneration",
-            update,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "ref _surfaceTransitionSequence",
-            update,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "candidateWindowOwned = true;",
-            update,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "if (candidateWindowOwned)",
-            update,
-            StringComparison.Ordinal);
-        Assert.True(
-            CountOccurrences(
-                update,
-                "ref _surfaceTransitionSequence") >= 3);
-
-        int acquireWindow = update.IndexOf(
-            "ANativeWindow_fromSurface(",
-            StringComparison.Ordinal);
-        int startSession = update.IndexOf(
-            "await session.StartAsync();",
-            StringComparison.Ordinal);
-        int postStartSequenceCheck = update.IndexOf(
-            "sequence != Volatile.Read(",
-            startSession,
-            StringComparison.Ordinal);
-        int candidateCleanup = update.LastIndexOf(
-            "ReleaseNativeWindow(candidateWindow);",
-            StringComparison.Ordinal);
-        Assert.True(acquireWindow >= 0);
-        Assert.True(startSession > acquireWindow);
-        Assert.True(postStartSequenceCheck > startSession);
-        Assert.True(candidateCleanup > postStartSequenceCheck);
-
-        string destroy = ExtractMethodBody(
-            source,
-            "private async Task DestroySurfaceAsync(long sequence)");
-        int suspend = destroy.IndexOf(
-            "SuspendRenderSurface()",
-            StringComparison.Ordinal);
-        int release = destroy.IndexOf(
-            "ReleaseNativeWindow()",
-            StringComparison.Ordinal);
-        Assert.True(suspend >= 0);
-        Assert.True(release > suspend);
-    }
-
-    [Fact]
     public void Dx12AndVulkanQueueDeviceLoss_ShouldPoisonOwnerAfterRollback()
     {
         string sharpGpu = Path.Combine(
             FindRepositoryRoot(),
-            "Engine",
-            "Source",
-            "Runtime",
-            "Graphics",
+            "src",
             "SharpGPU");
         string[] backendQueuePaths =
         {
@@ -786,7 +476,7 @@ public sealed class PresentationLifecycleContractTests
         {
             if (File.Exists(Path.Combine(
                     directory.FullName,
-                    "InfinityBrowser.sln")))
+                    "src", "SharpGPU", "SharpGPU.csproj")))
             {
                 return directory.FullName;
             }

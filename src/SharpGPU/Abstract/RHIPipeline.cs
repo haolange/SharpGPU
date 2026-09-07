@@ -4,7 +4,7 @@ using System.Text;
 using System.Security.Cryptography;
 using System.IO;
 using SharpGPU.Core;
-using SharpGPU.Mathematics;
+using SharpMath;
 
 namespace SharpGPU
 {

@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using SharpGPU;
-using SharpGPU.Mathematics;
+using SharpMath;
 
 namespace SharpGPU.Conformance.Tests
 {

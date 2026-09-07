@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -11,7 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Runtime\Graphics\SharpGPU\SharpGPU.csproj" />
+    <ProjectReference Include="../../src/SharpGPU/SharpGPU.csproj" Condition="'$(StackReferenceMode)' == 'Source'" />
+    <PackageReference Include="SharpGPU" Version="$(StackPackageVersion)" Condition="'$(StackReferenceMode)' == 'Package'" />
   </ItemGroup>
 
+
+  <PropertyGroup><Version>$(StackPackageVersion)</Version><RepositoryUrl>https://github.com/haolange/SharpGPU</RepositoryUrl></PropertyGroup>
 </Project>

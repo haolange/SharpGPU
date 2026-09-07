@@ -136,7 +136,7 @@ namespace SharpGPU
             in RHITextureDescriptor descriptor,
             Dx12Texture pairedTexture,
             ERHISamplerFeedbackMode mode,
-            SharpGPU.Mathematics.uint3 mipRegion)
+            SharpMath.uint3 mipRegion)
         {
             Vortice.Direct3D12.HeapProperties heapProperties = new(
                 Vortice.Direct3D12.HeapType.Default);

@@ -1,6 +1,6 @@
 using System;
 using SharpGPU;
-using SharpGPU.Mathematics;
+using SharpMath;
 using Xunit;
 #if SHARPGPU_ENABLE_DX12
 using Vortice.Direct3D12;

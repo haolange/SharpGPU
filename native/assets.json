@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "library": "D3D12Agility",
+      "rid": "win-x64",
+      "path": "native/runtimes/win-x64/native/D3D12Core.dll",
+      "sha256": "4bfb82f456269e3ef45cca0f612ddbd3650c99160d285dae1febf7883468c64c",
+      "bytes": 5024056,
+      "deployment": "Microsoft/D3D12Agility/Win/AMD64/D3D12Core.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "microsoft.direct3d.d3d12",
+        "version": "1.619.3",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/microsoft.direct3d.d3d12/1.619.3/microsoft.direct3d.d3d12.1.619.3.nupkg",
+        "archiveSha256": "43a7d5a3973812eb4b42623fae5275c790a005b8e48b8d7f5bb43cef39e073c5",
+        "member": "build/native/bin/x64/D3D12Core.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    },
+    {
+      "library": "D3D12Agility",
+      "rid": "win-x64",
+      "path": "native/runtimes/win-x64/native/d3d12SDKLayers.dll",
+      "sha256": "959b835dd6c41c68293d7d426ce92fe66c79d89df8296df8beba2342142dbae0",
+      "bytes": 4962104,
+      "deployment": "Microsoft/D3D12Agility/Win/AMD64/d3d12SDKLayers.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "microsoft.direct3d.d3d12",
+        "version": "1.619.3",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/microsoft.direct3d.d3d12/1.619.3/microsoft.direct3d.d3d12.1.619.3.nupkg",
+        "archiveSha256": "43a7d5a3973812eb4b42623fae5275c790a005b8e48b8d7f5bb43cef39e073c5",
+        "member": "build/native/bin/x64/d3d12SDKLayers.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    },
+    {
+      "library": "D3D12Agility",
+      "rid": "win-arm64",
+      "path": "native/runtimes/win-arm64/native/D3D12Core.dll",
+      "sha256": "7f40a9bb595cfa46fe48d2670455d671ed133d4360e38d2f1e84b1e762169f2c",
+      "bytes": 5023032,
+      "deployment": "Microsoft/D3D12Agility/Win/ARM64/D3D12Core.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "microsoft.direct3d.d3d12",
+        "version": "1.619.3",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/microsoft.direct3d.d3d12/1.619.3/microsoft.direct3d.d3d12.1.619.3.nupkg",
+        "archiveSha256": "43a7d5a3973812eb4b42623fae5275c790a005b8e48b8d7f5bb43cef39e073c5",
+        "member": "build/native/bin/arm64/D3D12Core.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    },
+    {
+      "library": "D3D12Agility",
+      "rid": "win-arm64",
+      "path": "native/runtimes/win-arm64/native/d3d12SDKLayers.dll",
+      "sha256": "3df67e6135640fd54703e3d9dfea6a60544768bce478572b90eacb74a42fbb3e",
+      "bytes": 5097312,
+      "deployment": "Microsoft/D3D12Agility/Win/ARM64/d3d12SDKLayers.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "microsoft.direct3d.d3d12",
+        "version": "1.619.3",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/microsoft.direct3d.d3d12/1.619.3/microsoft.direct3d.d3d12.1.619.3.nupkg",
+        "archiveSha256": "43a7d5a3973812eb4b42623fae5275c790a005b8e48b8d7f5bb43cef39e073c5",
+        "member": "build/native/bin/arm64/d3d12SDKLayers.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    },
+    {
+      "library": "DirectML",
+      "rid": "win-x64",
+      "path": "native/runtimes/win-x64/native/DirectML.Debug.dll",
+      "sha256": "0916c4b13b60395e4a7b4eb864f6e6e8dfa9f328483e07cac92636be732c14bd",
+      "bytes": 2248624,
+      "deployment": "Microsoft/DirectML/Win/AMD64/DirectML.Debug.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "vortice.directml",
+        "version": "3.8.3",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/vortice.directml/3.8.3/vortice.directml.3.8.3.nupkg",
+        "archiveSha256": "a0cd9052430ea7dfe67a454bf787d30ff07d1c632216b7b7043d78cbf7ea3074",
+        "member": "runtimes/win-x64/DirectML.Debug.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    },
+    {
+      "library": "DirectML",
+      "rid": "win-x64",
+      "path": "native/runtimes/win-x64/native/DirectML.dll",
+      "sha256": "18c82a9c06141f7e96241adad1a35bebf4780a72d8eeeb107ec12f748391b3f5",
+      "bytes": 18527264,
+      "deployment": "Microsoft/DirectML/Win/AMD64/DirectML.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "vortice.directml",
+        "version": "3.8.3",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/vortice.directml/3.8.3/vortice.directml.3.8.3.nupkg",
+        "archiveSha256": "a0cd9052430ea7dfe67a454bf787d30ff07d1c632216b7b7043d78cbf7ea3074",
+        "member": "runtimes/win-x64/DirectML.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    },
+    {
+      "library": "DirectML",
+      "rid": "win-arm64",
+      "path": "native/runtimes/win-arm64/native/DirectML.Debug.dll",
+      "sha256": "b39f3864df13a6d19d7c391cc15270f2a11ce731c6bbe757a0c8d9f1b0a26d9e",
+      "bytes": 2397728,
+      "deployment": "Microsoft/DirectML/Win/ARM64/DirectML.Debug.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "vortice.directml",
+        "version": "3.8.3",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/vortice.directml/3.8.3/vortice.directml.3.8.3.nupkg",
+        "archiveSha256": "a0cd9052430ea7dfe67a454bf787d30ff07d1c632216b7b7043d78cbf7ea3074",
+        "member": "runtimes/win-arm64/DirectML.Debug.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    },
+    {
+      "library": "DirectML",
+      "rid": "win-arm64",
+      "path": "native/runtimes/win-arm64/native/DirectML.dll",
+      "sha256": "90a9239c79e9754d436aa8c3b26cdbd24be47106a967259b3ce9559d47ac766d",
+      "bytes": 18444832,
+      "deployment": "Microsoft/DirectML/Win/ARM64/DirectML.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "vortice.directml",
+        "version": "3.8.3",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/vortice.directml/3.8.3/vortice.directml.3.8.3.nupkg",
+        "archiveSha256": "a0cd9052430ea7dfe67a454bf787d30ff07d1c632216b7b7043d78cbf7ea3074",
+        "member": "runtimes/win-arm64/DirectML.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    },
+    {
+      "library": "DirectStorage",
+      "rid": "win-x64",
+      "path": "native/runtimes/win-x64/native/dstorage.dll",
+      "sha256": "1347296498710391508ef8c605298c73c1610c6610576819192959193d2bf036",
+      "bytes": 198592,
+      "deployment": "Microsoft/DirectStorage/Win/AMD64/dstorage.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "vortice.directstorage",
+        "version": "3.8.3",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/vortice.directstorage/3.8.3/vortice.directstorage.3.8.3.nupkg",
+        "archiveSha256": "792f51fbbe2b6c23fe014fba7f26ffdcdcba1957c871e8fd397fd40b9c185694",
+        "member": "runtimes/win-x64/native/dstorage.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    },
+    {
+      "library": "DirectStorage",
+      "rid": "win-x64",
+      "path": "native/runtimes/win-x64/native/dstoragecore.dll",
+      "sha256": "149baf4193dc1e5cc235702a96c9d3e2117b753d537ed505afe3fc022dc96acf",
+      "bytes": 1461184,
+      "deployment": "Microsoft/DirectStorage/Win/AMD64/dstoragecore.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "vortice.directstorage",
+        "version": "3.8.3",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/vortice.directstorage/3.8.3/vortice.directstorage.3.8.3.nupkg",
+        "archiveSha256": "792f51fbbe2b6c23fe014fba7f26ffdcdcba1957c871e8fd397fd40b9c185694",
+        "member": "runtimes/win-x64/native/dstoragecore.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    },
+    {
+      "library": "DirectStorage",
+      "rid": "win-arm64",
+      "path": "native/runtimes/win-arm64/native/dstorage.dll",
+      "sha256": "eb9580f8625c3be077d02224f703df9aa6d3f48297ee730fa6536049dfe3c129",
+      "bytes": 184768,
+      "deployment": "Microsoft/DirectStorage/Win/ARM64/dstorage.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "vortice.directstorage",
+        "version": "3.8.3",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/vortice.directstorage/3.8.3/vortice.directstorage.3.8.3.nupkg",
+        "archiveSha256": "792f51fbbe2b6c23fe014fba7f26ffdcdcba1957c871e8fd397fd40b9c185694",
+        "member": "runtimes/win-arm64/native/dstorage.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    },
+    {
+      "library": "DirectStorage",
+      "rid": "win-arm64",
+      "path": "native/runtimes/win-arm64/native/dstoragecore.dll",
+      "sha256": "5ee23d213c44d6f68ec929090cec68177cafbd74ce293017e6324ea6c83a41cd",
+      "bytes": 1441712,
+      "deployment": "Microsoft/DirectStorage/Win/ARM64/dstoragecore.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "vortice.directstorage",
+        "version": "3.8.3",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/vortice.directstorage/3.8.3/vortice.directstorage.3.8.3.nupkg",
+        "archiveSha256": "792f51fbbe2b6c23fe014fba7f26ffdcdcba1957c871e8fd397fd40b9c185694",
+        "member": "runtimes/win-arm64/native/dstoragecore.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    },
+    {
+      "library": "PIX",
+      "rid": "win-x64",
+      "path": "native/runtimes/win-x64/native/WinPixEventRuntime.dll",
+      "sha256": "81adcfd8253c3489be720da7e30f16004dc9a1f02a8b418c6c3aef4993032e6d",
+      "bytes": 58368,
+      "deployment": "Microsoft/PIX/Win/AMD64/WinPixEventRuntime.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "vortice.pix.native",
+        "version": "1.0.1",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/vortice.pix.native/1.0.1/vortice.pix.native.1.0.1.nupkg",
+        "archiveSha256": "8913e84b8d8739e2874f298071f0b516f388f0e569ad90abc052dff06639c4e5",
+        "member": "runtimes/win-x64/native/WinPixEventRuntime.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    },
+    {
+      "library": "PIX",
+      "rid": "win-arm64",
+      "path": "native/runtimes/win-arm64/native/WinPixEventRuntime.dll",
+      "sha256": "e0f5fa0e861cf71d77ff6e2b765d31e65ef00819eb1a1ae3689d847f71994ec5",
+      "bytes": 58736,
+      "deployment": "Microsoft/PIX/Win/ARM64/WinPixEventRuntime.dll",
+      "source": {
+        "kind": "nuget",
+        "package": "vortice.pix.native",
+        "version": "1.0.1",
+        "archiveUrl": "https://api.nuget.org/v3-flatcontainer/vortice.pix.native/1.0.1/vortice.pix.native.1.0.1.nupkg",
+        "archiveSha256": "8913e84b8d8739e2874f298071f0b516f388f0e569ad90abc052dff06639c4e5",
+        "member": "runtimes/win-arm64/native/WinPixEventRuntime.dll",
+        "redistribution": "TODO(UNVERIFIED): review preserved native terms before public release"
+      }
+    }
+  ]
+}

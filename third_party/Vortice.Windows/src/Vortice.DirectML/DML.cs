@@ -1,4 +1,4 @@
-﻿// Copyright © Aaron Sun, Amer Koleci, and Contributors.
+// Copyright © Aaron Sun, Amer Koleci, and Contributors.
 // Licensed under the MIT License (MIT). See LICENSE in the repository root for more information.
 
 using Vortice.Direct3D12;
@@ -92,9 +92,9 @@ public static partial class DML
         {
             var resolvers = resolveLibrary.GetInvocationList();
 
-            foreach (DllImportResolver resolver in resolvers)
+            for (int index = resolvers.Length - 1; index >= 0; index--)
             {
-                nativeLibrary = resolver(libraryName, assembly, searchPath);
+                nativeLibrary = ((DllImportResolver)resolvers[index])(libraryName, assembly, searchPath);
 
                 if (nativeLibrary != IntPtr.Zero)
                 {

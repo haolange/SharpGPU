@@ -96,7 +96,10 @@ public sealed class SharpGPUFeatureReportTests
             json,
             StringComparison.Ordinal);
         Assert.Equal(6u, SharpGPUFeatureReportDocument.CurrentSchemaRevision);
-        Assert.DoesNotContain(ArtifactPath.RepositoryRoot, json, StringComparison.OrdinalIgnoreCase);
+        if (ArtifactPath.RepositoryRoot is string repositoryRoot)
+        {
+            Assert.DoesNotContain(repositoryRoot, json, StringComparison.OrdinalIgnoreCase);
+        }
         Assert.DoesNotContain("\"TimestampQueries\": true", json, StringComparison.Ordinal);
         Assert.Contains("\"Capabilities\":", json, StringComparison.Ordinal);
         Assert.Contains("\"Scenarios\":", json, StringComparison.Ordinal);
@@ -620,13 +623,15 @@ internal static class ArtifactPath
 {
     public static string Resolve(string fileName)
     {
-        string root = FindRepositoryRoot();
-        return Path.Combine(root, "docs", "Artifacts", "SharpGPU", fileName);
+        string? root = TryFindRepositoryRoot();
+        return root is not null
+            ? Path.Combine(root, "docs", "Artifacts", "SharpGPU", fileName)
+            : Path.Combine(AppContext.BaseDirectory, "artifacts", "SharpGPU", fileName);
     }
 
-    public static string RepositoryRoot => FindRepositoryRoot();
+    public static string? RepositoryRoot => TryFindRepositoryRoot();
 
-    private static string FindRepositoryRoot()
+    private static string? TryFindRepositoryRoot()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory != null)
@@ -639,7 +644,7 @@ internal static class ArtifactPath
             directory = directory.Parent;
         }
 
-        throw new InvalidOperationException("Failed to locate repository root from test output directory.");
+        return null;
     }
 }
 

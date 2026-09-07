@@ -1,0 +1,23 @@
+<Project>
+  <Import Project="SharpGPU.product.props" />
+  <PropertyGroup>
+    <StackProductRoot>$(MSBuildThisFileDirectory)</StackProductRoot>
+    <StackLocalProps Condition="'$(StackLocalProps)' == ''">$(StackProductRoot)/stack.local.props</StackLocalProps>
+  </PropertyGroup>
+  <Import Project="$(StackLocalProps)" Condition="Exists('$(StackLocalProps)')" />
+  <PropertyGroup>
+    <StackReferenceMode Condition="'$(StackReferenceMode)' == ''">Package</StackReferenceMode>
+    <StackPackageVersion>0.4.0-preview.1</StackPackageVersion>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Platform Condition="'$(Platform)' == ''">AnyCPU</Platform>
+    <_StackOutputRid Condition="'$(RuntimeIdentifier)' == ''">portable</_StackOutputRid>
+    <_StackOutputRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_StackOutputRid>
+    <BaseOutputPath>$(StackProductRoot)/artifacts/bin/$(MSBuildProjectName)/$(StackReferenceMode)/$(Platform)/$(_StackOutputRid)/</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(StackProductRoot)/artifacts/obj/$(MSBuildProjectName)/$(StackReferenceMode)/$(Platform)/$(_StackOutputRid)/</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)$(Configuration)/</MSBuildProjectExtensionsPath>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(StackProductRoot)/artifacts/**;**/bin/**;**/obj/**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,18 @@
+<Project>
+  <Target Name="DeploySharpGpuAgility" AfterTargets="Build;Publish" Condition="'$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe' or '$(IsTestProject)' == 'true'">
+    <PropertyGroup>
+      <_SharpGpuRid>$(RuntimeIdentifier)</_SharpGpuRid>
+      <_SharpGpuRid Condition="'$(_SharpGpuRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</_SharpGpuRid>
+      <_SharpGpuIsWindows>$([System.String]::Copy('$(_SharpGpuRid)').StartsWith('win-'))</_SharpGpuIsWindows>
+    </PropertyGroup>
+    <ItemGroup>
+      <_SharpGpuAgility Remove="@(_SharpGpuAgility)" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(_SharpGpuIsWindows)' == 'true'">
+      <_SharpGpuAgility Include="$(TargetDir)runtimes/$(_SharpGpuRid)/native/D3D12Core.dll;$(TargetDir)runtimes/$(_SharpGpuRid)/native/d3d12SDKLayers.dll" Condition="Exists('$(TargetDir)runtimes/$(_SharpGpuRid)/native/D3D12Core.dll')" />
+      <_SharpGpuAgility Include="$(TargetDir)D3D12Core.dll;$(TargetDir)d3d12SDKLayers.dll" Condition="!Exists('$(TargetDir)runtimes/$(_SharpGpuRid)/native/D3D12Core.dll') and Exists('$(TargetDir)D3D12Core.dll')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_SharpGpuAgility)" DestinationFolder="$(TargetDir)D3D12" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SharpGpuAgility)" DestinationFolder="$(PublishDir)D3D12" SkipUnchangedFiles="true" Condition="'$(PublishDir)' != '' and Exists('$(PublishDir)')" />
+  </Target>
+</Project>

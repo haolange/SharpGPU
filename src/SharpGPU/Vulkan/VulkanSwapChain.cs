@@ -1,6 +1,6 @@
 using System;
 using Vortice.Vulkan;
-using SharpGPU.Mathematics;
+using SharpMath;
 #if !INFINITY_TARGET_ANDROID
 using SharpMetal.QuartzCore;
 using SharpMetal.ObjectiveCCore;

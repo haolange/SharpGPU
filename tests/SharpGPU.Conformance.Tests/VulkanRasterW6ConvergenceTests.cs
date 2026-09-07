@@ -1,6 +1,6 @@
 using System;
 using SharpGPU;
-using SharpGPU.Mathematics;
+using SharpMath;
 using Vortice.Vulkan;
 using Xunit;
 

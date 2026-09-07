@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><OutputType>Exe</OutputType><IsPackable>false</IsPackable><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup Condition="'$(StackReferenceMode)' == 'Source'">
+    <ProjectReference Include="../../src/SharpGPU/SharpGPU.csproj" />
+    <ProjectReference Include="$(SharpShaderRoot)/src/SharpShader/CSharp/SharpShader.CSharp.csproj" StackProduct="SharpShader" StackRoot="$(SharpShaderRoot)" />
+    <ProjectReference Include="$(SharpShaderRoot)/src/SharpShader/SharpGPU/SharpShader.SharpGPU.csproj" StackProduct="SharpShader" StackRoot="$(SharpShaderRoot)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(StackReferenceMode)' == 'Package'">
+    <PackageReference Include="SharpGPU" Version="$(StackPackageVersion)" />
+    <PackageReference Include="SharpShader.CSharp" Version="$(StackPackageVersion)" />
+    <PackageReference Include="SharpShader.SharpGPU" Version="$(StackPackageVersion)" />
+  </ItemGroup>
+</Project>

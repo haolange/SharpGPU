@@ -196,14 +196,14 @@ public sealed class SharpGPUPipelineCacheContractTests
 
         RHIComputePipelineDescriptor baseline = new()
         {
-            ThreadSize = new SharpGPU.Mathematics.uint3(8, 8, 1),
+            ThreadSize = new SharpMath.uint3(8, 8, 1),
             ComputeFunction = shaderA,
             PipelineLayout = layoutA,
         };
         RHIComputePipelineDescriptor differentBytecode = baseline;
         differentBytecode.ComputeFunction = shaderB;
         RHIComputePipelineDescriptor differentThreads = baseline;
-        differentThreads.ThreadSize = new SharpGPU.Mathematics.uint3(16, 8, 1);
+        differentThreads.ThreadSize = new SharpMath.uint3(16, 8, 1);
         RHIComputePipelineDescriptor differentLayout = baseline;
         differentLayout.PipelineLayout = layoutB;
 

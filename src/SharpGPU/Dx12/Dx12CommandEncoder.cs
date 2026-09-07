@@ -1,11 +1,11 @@
 using System;
 using System.Diagnostics;
 using SharpGPU.Collections;
-using SharpGPU.Mathematics;
+using SharpMath;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
-using Viewport = SharpGPU.Mathematics.Viewport;
+using Viewport = SharpMath.Viewport;
 
 namespace SharpGPU
 {

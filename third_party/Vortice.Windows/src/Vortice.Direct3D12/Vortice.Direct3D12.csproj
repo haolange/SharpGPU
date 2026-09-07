@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <Sdk Name="SharpGenTools.Sdk" Version="$(SharpGenVersion)" />
+  <Import Project="Sdk.props" Sdk="SharpGenTools.Sdk/2.4.2-beta" Condition="'$(GenerateVorticeBindings)' == 'true'" />
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <Description>Direct3D12 bindings</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
@@ -22,4 +22,11 @@
     <ProjectReference Include="..\Vortice.DXGI\Vortice.DXGI.csproj" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(GenerateVorticeBindings)' != 'true'">
+    <PackageReference Include="SharpGen.Runtime" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(GenerateVorticeBindings)' == 'true'">
+    <Compile Remove="Generated/**/*.cs" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="SharpGenTools.Sdk/2.4.2-beta" Condition="'$(GenerateVorticeBindings)' == 'true'" />
 </Project>

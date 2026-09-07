@@ -3,11 +3,11 @@ using System.Numerics;
 using Vortice.Vulkan;
 using System.Diagnostics;
 using System.Threading;
-using SharpGPU.Mathematics;
+using SharpMath;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
-using Viewport = SharpGPU.Mathematics.Viewport;
+using Viewport = SharpMath.Viewport;
 
 namespace SharpGPU
 {

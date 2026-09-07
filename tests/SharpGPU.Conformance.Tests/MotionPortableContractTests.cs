@@ -2,7 +2,7 @@ using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using SharpGPU;
-using SharpGPU.Mathematics;
+using SharpMath;
 using Xunit;
 
 namespace SharpGPU.Conformance.Tests
