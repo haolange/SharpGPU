@@ -3,33 +3,34 @@
   "products": {
     "SharpMath": {
       "repository": "https://github.com/haolange/SharpMath.git",
-      "commit": "e814fe0029f2c722b58a22441ab08eb326a75309",
+      "commit": "6b629775f1fbf53f01afff585025dc76ed9c930a",
       "version": "0.4.0-preview.1"
     },
     "SharpMetal": {
       "repository": "https://github.com/haolange/SharpMetal.git",
-      "commit": "159368386a6e02e549f35c49dc2ce8eb7baa1736",
+      "commit": "c3fae2d2350fdc07343fe01b8bbfcb0fe19c2582",
       "version": "0.4.0-preview.1"
     },
     "SharpGPU": {
       "repository": "https://github.com/haolange/SharpGPU.git",
-      "commit": "2f97421464aa115608c78418f4ec99db72c8aa1e",
+      "commit": "4662022b4e6e0fce2e73340060e246c3a804510b",
       "version": "0.4.0-preview.1"
     },
     "SharpShader": {
       "repository": "https://github.com/haolange/SharpShader.git",
-      "commit": "523a84292db327a55c1c794eae0e063e855da215",
+      "commit": "f5f13becb62402614313d656d6392a47c6a89fb1",
       "version": "0.4.0-preview.1"
     },
     "SharpNeural": {
       "repository": "https://github.com/haolange/SharpNeural.git",
-      "commit": "79a48742860b70fa423e1f912f91681fc8578f58",
+      "commit": "b260402d949d3f568c6aec975bdf59d3030ce4d5",
       "version": "0.4.0-preview.1"
     },
     "SharpLLM": {
       "repository": "https://github.com/haolange/SharpLLM.git",
-      "commit": "4fd54960854d78d2774d7b9e5d4ef2359b6f346c",
+      "commit": "af5ac5db7ea99ad59686657570a54d2c353cac8f",
       "version": "0.4.0-preview.1"
     }
   }
 }
+
