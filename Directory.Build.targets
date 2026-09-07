@@ -5,6 +5,26 @@
       <AdditionalProperties>Configuration=$(Configuration);Platform=$(Platform);RuntimeIdentifier=$(RuntimeIdentifier);StackReferenceMode=$(StackReferenceMode);StackLocalProps=$(StackLocalProps);StackProductRoot=$(StackProductRoot)</AdditionalProperties>
     </ProjectReference>
   </ItemDefinitionGroup>
+  <!--
+    Solution builds remove Configuration/Platform from every project
+    reference before ResolveProjectReferences. Keep those two selected
+    properties for the external product graph while leaving target-framework
+    negotiation and runtime selection to the SDK.
+  -->
+  <Target Name="PreserveStackProductProjectReferenceConfiguration"
+          AfterTargets="AssignProjectConfiguration;_SplitProjectReferencesByFileExistence;_GetProjectReferenceTargetFrameworkProperties">
+    <ItemGroup>
+      <_ProjectReferenceWithConfiguration Update="@(_ProjectReferenceWithConfiguration)">
+        <GlobalPropertiesToRemove>$([System.String]::Copy('%(_ProjectReferenceWithConfiguration.GlobalPropertiesToRemove)').Replace('Configuration','').Replace('Platform',''))</GlobalPropertiesToRemove>
+      </_ProjectReferenceWithConfiguration>
+      <ProjectReferenceWithConfiguration Update="@(ProjectReferenceWithConfiguration)">
+        <GlobalPropertiesToRemove>$([System.String]::Copy('%(ProjectReferenceWithConfiguration.GlobalPropertiesToRemove)').Replace('Configuration','').Replace('Platform',''))</GlobalPropertiesToRemove>
+      </ProjectReferenceWithConfiguration>
+      <_MSBuildProjectReferenceExistent Update="@(_MSBuildProjectReferenceExistent)">
+        <GlobalPropertiesToRemove>$([System.String]::Copy('%(_MSBuildProjectReferenceExistent.GlobalPropertiesToRemove)').Replace('Configuration','').Replace('Platform',''))</GlobalPropertiesToRemove>
+      </_MSBuildProjectReferenceExistent>
+    </ItemGroup>
+  </Target>
   <Target Name="ValidateStackReferenceMode" BeforeTargets="CollectPackageReferences;PrepareForBuild">
     <Error Condition="'$(StackReferenceMode)' != 'Source' and '$(StackReferenceMode)' != 'Package'" Text="StackReferenceMode must be Source or Package." />
     <Error Condition="'%(ProjectReference.StackProduct)' != '' and '$(StackReferenceMode)' != 'Source'" Text="Stack source reference %(ProjectReference.Identity) is active in Package mode." />
