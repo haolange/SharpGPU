@@ -13,7 +13,7 @@
     },
     "SharpGPU": {
       "repository": "https://github.com/haolange/SharpGPU.git",
-      "commit": "4662022b4e6e0fce2e73340060e246c3a804510b",
+      "commit": "0a0df2f",
       "version": "0.4.0-preview.1"
     },
     "SharpShader": {
