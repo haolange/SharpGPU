@@ -9,3 +9,7 @@ Output and intermediate paths are isolated by project, platform, RID, configurat
 Public native-backed operations enforce platform and ownership boundaries. No capability downgrade or compatibility implementation is permitted to conceal unsupported execution. Current extraction acceptance is tracked by InfinityBrowser TASK-20260907-INFINITYSTACK-EXTRACTION; this document is not a claim that migration gates have passed.
 
 DX12 requires successful Agility device-factory initialization using the application D3D12 directory and UTF-8 paths. Source references and packages both deploy these assets; missing assets fail explicitly. The maintained binding and evidence are described in docs/SharpGPU/VorticeAgilityPathPatch.md.
+
+Backend implementation tests belong to the independent conformance harness. Infinity.Rendering.Tests has no product friend access. Test migration provenance is recorded in docs/provenance/backend-test-migration.json. Native configuration tests exercise actual Configure/Resolve behavior in isolated load contexts; product code does not contain a separate engine-path enumerator solely for tests.
+
+Windows native DLL loading uses extended-length local/UNC paths at the native boundary, while reported/configured locations remain canonical ordinary paths. This prevents loader path limits from silently selecting shorter runtime directories in deep application layouts.

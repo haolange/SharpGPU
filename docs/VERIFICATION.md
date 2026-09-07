@@ -223,3 +223,41 @@ tracked docs. Source and Package report tests both pass 2/2 after this ownership
 cleanup; reports are under their respective isolated test output directories.
 The explicit INFINITYSTACK_SHARPGPU_ROOT value is used only by the report's
 path-privacy assertion, not to choose a write destination.
+
+## Backend test ownership cutover (2026-09-08)
+
+The independent conformance harness owns the migrated backend, barrier,
+function-table, API and bytecode-ownership tests listed in
+`docs/provenance/backend-test-migration.json`. No friend grant to
+`Infinity.Rendering.Tests` remains. The six old engine-path enumeration tests
+were not runtime coverage: their unused product helper was removed. Two new
+isolated-load-context cases exercise the real native configuration validation,
+resolution and first-use freeze behavior.
+
+The source Debug and Release harnesses both pass 356/356, zero skipped, in the
+consuming workspace evidence directory
+`Engine/Intermediate/InfinityStack/20260907/agility-path-fix/test-results/`
+(`full-cutover-Debug.trx`, `full-cutover-Release.trx`). These totals include
+platform-guarded contracts; they do not qualify an Apple or Linux runtime on
+Windows. Package revalidation and actual IE native-directory selection remain
+pending. The FeatureMatrix documentation update after the builds requires a
+resource rebuild; it does not alter backend code or the measured test cases.
+
+## Native DLL long-path regression (2026-09-08)
+
+After the native loader fix, complete Source Debug and Release each pass 356/356,
+zero skipped (full-native-loader-Debug.trx and full-native-loader-Release.trx in
+the consuming workspace agility-path-fix/test-results evidence directory).
+The IE source integration also passes 252/252 in both configurations, including
+actual process-module assertions for DirectML, PIX (Debug) and DirectStorage.
+The original failure is retained as storage-load-error.trx: Windows returned
+0x800700CE while loading the configured dstoragecore.dll. Extended-length paths
+at the NativeLibrary boundary resolve it without shortening the fixture path.
+Native Metal and other unmatched hosts are not qualified by these Windows runs.
+Fresh Package Release verification passes 352/352, zero skipped, in
+package-native-loader/test-results/package-native-loader.trx. The consumed
+archive hash matches the feed archive:
+DB3F41FA45258203849BAFA8876D149DE81B7D17012C4B43F7F53C4BD644CEAB.
+The package contains 14 native entries and no duplicate ZIP entries. Current IE
+Package and generated Host runtime qualification remains owned by the integration
+workspace; older integration package evidence predates this loader fix.

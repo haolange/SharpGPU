@@ -1,0 +1,82 @@
+[
+  {
+    "sourceCommit": "fea907ff0f5442bfc55b8d2316caaa85f867c32a",
+    "change": "Namespace only; assertions and platform guards retained.",
+    "sourceSha256": "BD3CE7615514F864716FFF5129CED1F1464B8D7EF6DF484B5D95C5DE5FC8969E",
+    "sourcePath": "Engine/Source/Developer/Tests/Infinity.Rendering.Tests/DirectMLBackendTests.cs",
+    "sourceRepository": "https://github.com/haolange/InfinityBrowser.git",
+    "destination": "tests/SharpGPU.Conformance.Tests/DirectMLBackendTests.cs"
+  },
+  {
+    "sourceCommit": "fea907ff0f5442bfc55b8d2316caaa85f867c32a",
+    "change": "Namespace only; assertions and platform guards retained.",
+    "sourceSha256": "B8C37EE376B3BDBA434216CBA6E1AA7A52713AC7A83CC8076BC503410AE46893",
+    "sourcePath": "Engine/Source/Developer/Tests/Infinity.Rendering.Tests/MetalBackendTests.cs",
+    "sourceRepository": "https://github.com/haolange/InfinityBrowser.git",
+    "destination": "tests/SharpGPU.Conformance.Tests/MetalBackendTests.cs"
+  },
+  {
+    "sourceCommit": "fea907ff0f5442bfc55b8d2316caaa85f867c32a",
+    "change": "Namespace only; assertions and platform guards retained.",
+    "sourceSha256": "417BEB405B16ED2709646F849B5829437AF904835BDB6A70B49C57C9FE41439A",
+    "sourcePath": "Engine/Source/Developer/Tests/Infinity.Rendering.Tests/MetalBindingPolicyTests.cs",
+    "sourceRepository": "https://github.com/haolange/InfinityBrowser.git",
+    "destination": "tests/SharpGPU.Conformance.Tests/MetalBindingPolicyTests.cs"
+  },
+  {
+    "sourceCommit": "fea907ff0f5442bfc55b8d2316caaa85f867c32a",
+    "change": "Namespace only; assertions and platform guards retained.",
+    "sourceSha256": "22D15DB17607A7027E9BC91B46AABB0AE675242BBE3EF8DC6414367D1CE53450",
+    "sourcePath": "Engine/Source/Developer/Tests/Infinity.Rendering.Tests/MetalBindingTablePlanTests.cs",
+    "sourceRepository": "https://github.com/haolange/InfinityBrowser.git",
+    "destination": "tests/SharpGPU.Conformance.Tests/MetalBindingTablePlanTests.cs"
+  },
+  {
+    "sourceCommit": "fea907ff0f5442bfc55b8d2316caaa85f867c32a",
+    "change": "Namespace only; assertions and platform guards retained.",
+    "sourceSha256": "7374622F409A3EFF8F456336DEB11D5E3DC80C13D31E189A3C477E7B1F81BEA3",
+    "sourcePath": "Engine/Source/Developer/Tests/Infinity.Rendering.Tests/RayFunctionTableApiTests.cs",
+    "sourceRepository": "https://github.com/haolange/InfinityBrowser.git",
+    "destination": "tests/SharpGPU.Conformance.Tests/RayFunctionTableApiTests.cs"
+  },
+  {
+    "sourceCommit": "fea907ff0f5442bfc55b8d2316caaa85f867c32a",
+    "change": "Namespace only; assertions and platform guards retained.",
+    "sourceSha256": "FFBC26D858D06C6F01844D041E3548832A9B75B08D1067CFE301377A059A3805",
+    "sourcePath": "Engine/Source/Developer/Tests/Infinity.Rendering.Tests/BarrierModelTests.cs",
+    "sourceRepository": "https://github.com/haolange/InfinityBrowser.git",
+    "destination": "tests/SharpGPU.Conformance.Tests/BarrierModelTests.cs"
+  },
+  {
+    "sourceCommit": "fea907ff0f5442bfc55b8d2316caaa85f867c32a",
+    "change": "Namespace only; assertions and platform guards retained.",
+    "sourceSha256": "1B368CA5AD2A2916A3C013AA65FA2F8E30E07FF97CBF7C15EA2B0E1CD071E83E",
+    "sourcePath": "Engine/Source/Developer/Tests/Infinity.Rendering.Tests/VulkanBarrierMappingTests.cs",
+    "sourceRepository": "https://github.com/haolange/InfinityBrowser.git",
+    "destination": "tests/SharpGPU.Conformance.Tests/VulkanBarrierMappingTests.cs"
+  },
+  {
+    "sourceCommit": "fea907ff0f5442bfc55b8d2316caaa85f867c32a",
+    "change": "Namespace only; assertions and platform guards retained.",
+    "sourceSha256": "DF415D4E20E474F21FD06BC268B175816272A4955304ED0274F84CDABF89FFE1",
+    "sourcePath": "Engine/Source/Developer/Tests/Infinity.Rendering.Tests/Dx12BarrierMappingTests.cs",
+    "sourceRepository": "https://github.com/haolange/InfinityBrowser.git",
+    "destination": "tests/SharpGPU.Conformance.Tests/Dx12BarrierMappingTests.cs"
+  },
+  {
+    "sourceRepository": "https://github.com/haolange/InfinityBrowser.git",
+    "sourceSha256": "4024317D6C923BC81E6FC8003E8EDE9E1FA06E7B47F527038B86651CCFB212C0",
+    "sourceCommit": "fea907ff0f5442bfc55b8d2316caaa85f867c32a",
+    "sourcePath": "Engine/Source/Developer/Tests/Infinity.Rendering.Tests/HybridHLSLCrossCompilerMigrationTests.cs",
+    "change": "Two bytecode ownership methods only; use typed backend constructors instead of reflection. IE asset and Android assertions retained at source.",
+    "destination": "tests/SharpGPU.Conformance.Tests/Dx12BytecodeOwnershipTests.cs"
+  },
+  {
+    "sourcePath": "Engine/Source/Developer/Tests/Infinity.Rendering.Tests/SharpGPUPublicApiTests.cs",
+    "sourceSha256": "2BCC55CEF26D2E4B6A5780725A7605BB6A0FE7099CCB5BC7A0FBC6C1472E72B7",
+    "destination": "tests/SharpGPU.Conformance.Tests/SharpGPUPublicApiTests.cs",
+    "sourceCommit": "fea907ff0f5442bfc55b8d2316caaa85f867c32a",
+    "change": "Namespace only; assertions and platform guards retained.",
+    "sourceRepository": "https://github.com/haolange/InfinityBrowser.git"
+  }
+]

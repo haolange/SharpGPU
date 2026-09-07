@@ -2,7 +2,7 @@
 
 This matrix describes the active SharpGPU public contract. Runtime facts come
 from `RHIDevice.Capabilities`; platform qualification outcomes come from the
-typed per-platform reports under `docs/Artifacts/SharpGPU/`. Capability and
+typed per-platform reports under `<AppContext.BaseDirectory>/artifacts/SharpGPU/`. Capability and
 qualification are deliberately separate: a successful native probe is not a
 substitute for a passed runtime scenario.
 
@@ -13,17 +13,20 @@ documented exception/status model.
 
 ## Platform Qualification Artifacts
 
-| Platform | Artifact | Current status |
+| Platform | Artifact | Qualification boundary |
 |---|---|---|
-| Windows x64 | `docs/Artifacts/SharpGPU/feature-report-win-x64.json` | G5-T17 implementer re-run HEAD `89cc0096728b0c8fcc0ef1ba975cb832dddf96cc` + uncommitted CS0165 fix (Exit Gate still Luna; do not invent a SHA): schema revision 6; pipeline ABI 9; SER capability absent. Matching-host counts in `VERIFICATION.md` CURRENT: Portable 192/192, WindowsQualified 20/20, DirectStorage 3/3, FeatureReport 2/2, PipelineCache 12/12, SharpShaderAttachment 43/43, RendererFrameResourceQualified 29/29. Independent MotionVulkan 2/2, OMM Vulkan 1/1, Mesh Vulkan 1/1. Full `SharpGpuVulkanQualified` still `BLOCKED_DEVICE` (ROAA; 7 passed / 1 failed / 0 skip). Capability reflection is not a substitute for those qualified gates |
-| Android ARM64 | `docs/Artifacts/SharpGPU/feature-report-android-arm64.json` | Historical pre-ADR-0064 API30/ARM64/Adreno650 lifecycle evidence only; current attachment qualification is unverified |
-| Linux x64 | none (do not invent placeholders) | `BLOCKED_PLATFORM` / Unverified until matching-host Vulkan qualification passes (`P13-LINUX`) |
-| macOS ARM64 | none (current report name intentionally absent) | Historical bytes are preserved as `docs/Artifacts/SharpGPU/historical-pre-adr0064-feature-report-macos-arm64.json`; a matching Apple host must regenerate the current report |
-| iOS/iPadOS ARM64 | `docs/Artifacts/SharpGPU/feature-report-ios-arm64.json` | Historical pre-ADR-0064 physical-device lifecycle evidence only; current attachment qualification is unverified |
+| Windows x64 | Test output `artifacts/SharpGPU/feature-report-win-x64.json` | See `docs/VERIFICATION.md` for measured source/package gates and device limitations. Reports describe the device actually tested. |
+| Android ARM64 | No current independent-product report | `BLOCKED_PLATFORM`: requires an Android ARM64 device and current binaries. |
+| Linux x64 | No current independent-product report | `BLOCKED_PLATFORM`: requires a matching Vulkan host. |
+| macOS ARM64 | No current independent-product report | `BLOCKED_PLATFORM`: requires an Apple ARM64 host. |
+| iOS/iPadOS ARM64 | No current independent-product report | `BLOCKED_PLATFORM`: requires a matching physical device. |
+
+Historical engine reports do not qualify the independent product. Generate reports
+from the tested binaries; do not write them into a consuming repository.
 
 ## Hard Gate Categories (RFC-0021)
 
-Aligned with `docs/Canonical/VERIFICATION.md` and conformance `Trait("Category", ...)`.
+Aligned with `docs/VERIFICATION.md` and conformance `Trait("Category", ...)`.
 
 | Category | Runs on ordinary hosted CI? | Matching host/device required for PASSED |
 |---|---|---|
