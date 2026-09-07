@@ -13,6 +13,16 @@ public sealed class RhiDomainMirrorContractTests
 {
     private static string ResolveSharpGpuRoot()
     {
+        string? configuredRoot = Environment.GetEnvironmentVariable("INFINITYSTACK_SHARPGPU_ROOT");
+        if (!string.IsNullOrWhiteSpace(configuredRoot))
+        {
+            string configuredSourceRoot = Path.Combine(configuredRoot, "src", "SharpGPU");
+            if (Directory.Exists(Path.Combine(configuredSourceRoot, "Abstract")))
+            {
+                return Path.GetFullPath(configuredSourceRoot);
+            }
+        }
+
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory != null)
         {

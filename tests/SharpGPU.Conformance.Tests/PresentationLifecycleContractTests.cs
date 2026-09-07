@@ -471,6 +471,13 @@ public sealed class PresentationLifecycleContractTests
 
     private static string FindRepositoryRoot()
     {
+        string? configuredRoot = Environment.GetEnvironmentVariable("INFINITYSTACK_SHARPGPU_ROOT");
+        if (!string.IsNullOrWhiteSpace(configuredRoot)
+            && File.Exists(Path.Combine(configuredRoot, "src", "SharpGPU", "SharpGPU.csproj")))
+        {
+            return Path.GetFullPath(configuredRoot);
+        }
+
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
         while (directory != null)
         {

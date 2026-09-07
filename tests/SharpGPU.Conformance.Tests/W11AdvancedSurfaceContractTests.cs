@@ -136,6 +136,16 @@ public sealed class W11AdvancedSurfaceContractTests
 
     private static string ResolveSharpGpuRoot()
     {
+        string? configuredRoot = Environment.GetEnvironmentVariable("INFINITYSTACK_SHARPGPU_ROOT");
+        if (!string.IsNullOrWhiteSpace(configuredRoot))
+        {
+            string configuredSourceRoot = Path.Combine(configuredRoot, "src", "SharpGPU");
+            if (Directory.Exists(configuredSourceRoot))
+            {
+                return Path.GetFullPath(configuredSourceRoot);
+            }
+        }
+
         for (DirectoryInfo? directory = new(AppContext.BaseDirectory);
             directory != null;
             directory = directory.Parent)

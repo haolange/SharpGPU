@@ -67,6 +67,13 @@ namespace SharpGPU.Conformance.Tests
 
         private static string FindRepositoryRoot()
         {
+            string? configuredRoot = Environment.GetEnvironmentVariable("INFINITYSTACK_SHARPGPU_ROOT");
+            if (!string.IsNullOrWhiteSpace(configuredRoot)
+                && File.Exists(Path.Combine(configuredRoot, "SharpGPU.product.props")))
+            {
+                return Path.GetFullPath(configuredRoot);
+            }
+
             DirectoryInfo? directory = new(AppContext.BaseDirectory);
             while (directory != null)
             {
