@@ -6,6 +6,7 @@ using SharpGPU.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Linq;
+using System.Reflection;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
@@ -1339,6 +1340,64 @@ internal static unsafe class VulkanNative
         private static readonly ConcurrentDictionary<nint, nint> s_PhysicalToInstance = new();
         private static readonly ConcurrentDictionary<nint, nint> s_QueueToDevice = new();
         private static readonly ConcurrentDictionary<nint, nint> s_CommandBufferToDevice = new();
+
+        // Vortice.Vulkan 3.2.1 keeps dispatch tables in private static
+        // ConcurrentDictionaries and does not evict entries after native
+        // destruction. SharpGPU pins this integration boundary and evicts
+        // each handle after vkDestroy* has returned. A changed Vortice
+        // layout fails loudly during type initialization instead of reusing
+        // a stale dispatch table.
+        private static readonly FieldInfo s_VorticeInstanceTablesField =
+            GetRequiredVorticeCacheField(
+                "s_instanceTables",
+                typeof(ConcurrentDictionary<VkInstance, VkInstanceApi>));
+        private static readonly FieldInfo s_VorticeDeviceTablesField =
+            GetRequiredVorticeCacheField(
+                "s_deviceTables",
+                typeof(ConcurrentDictionary<VkDevice, VkDeviceApi>));
+
+        private static FieldInfo GetRequiredVorticeCacheField(
+            string fieldName,
+            Type expectedType)
+        {
+            FieldInfo? field = typeof(Vulkan).GetField(
+                fieldName,
+                BindingFlags.Static | BindingFlags.NonPublic);
+            if (field is null || field.FieldType != expectedType)
+            {
+                throw new InvalidOperationException(
+                    $"SharpGPU requires pinned Vortice.Vulkan field {fieldName} " +
+                    $"with type {expectedType.FullName}.");
+            }
+
+            return field;
+        }
+
+        private static void EvictVorticeInstance(VkInstance instance)
+        {
+            object? cache = s_VorticeInstanceTablesField.GetValue(null);
+            if (cache is ConcurrentDictionary<VkInstance, VkInstanceApi> table)
+            {
+                table.TryRemove(instance, out _);
+                return;
+            }
+
+            throw new InvalidOperationException(
+                "Pinned Vortice.Vulkan instance dispatch table has an unexpected runtime type.");
+        }
+
+        private static void EvictVorticeDevice(VkDevice device)
+        {
+            object? cache = s_VorticeDeviceTablesField.GetValue(null);
+            if (cache is ConcurrentDictionary<VkDevice, VkDeviceApi> table)
+            {
+                table.TryRemove(device, out _);
+                return;
+            }
+
+            throw new InvalidOperationException(
+                "Pinned Vortice.Vulkan device dispatch table has an unexpected runtime type.");
+        }
         private static readonly ConcurrentDictionary<nint, PFN_vkCreateWaylandSurfaceKHR> s_CreateWaylandSurface = new();
         private static nint s_VulkanLoader;
         private static PFN_vkGetInstanceProcAddr? s_GetInstanceProcAddr;
@@ -1369,8 +1428,15 @@ internal static unsafe class VulkanNative
         private static void RegisterInstance(VkInstance instance) => GetInstanceApi(instance);
         private static void UnregisterInstance(VkInstance instance)
         {
-            s_InstanceApis.TryRemove(instance.Handle, out _);
-            foreach (nint physicalHandle in s_PhysicalToInstance.Where(kv => kv.Value == instance.Handle).Select(kv => kv.Key).ToArray()) s_PhysicalToInstance.TryRemove(physicalHandle, out _);
+            try
+            {
+                EvictVorticeInstance(instance);
+            }
+            finally
+            {
+                s_InstanceApis.TryRemove(instance.Handle, out _);
+                foreach (nint physicalHandle in s_PhysicalToInstance.Where(kv => kv.Value == instance.Handle).Select(kv => kv.Key).ToArray()) s_PhysicalToInstance.TryRemove(physicalHandle, out _);
+            }
         }
         private static void RegisterPhysicalDevice(VkInstance instance, VkPhysicalDevice physicalDevice) => s_PhysicalToInstance[physicalDevice.Handle] = instance.Handle;
         private static void RegisterDevice(VkPhysicalDevice physicalDevice, VkDevice device)
@@ -1381,9 +1447,16 @@ internal static unsafe class VulkanNative
         }
         private static void UnregisterDevice(VkDevice device)
         {
-            s_DeviceApis.TryRemove(device.Handle, out _);
-            foreach (nint queueHandle in s_QueueToDevice.Where(kv => kv.Value == device.Handle).Select(kv => kv.Key).ToArray()) s_QueueToDevice.TryRemove(queueHandle, out _);
-            foreach (nint commandBufferHandle in s_CommandBufferToDevice.Where(kv => kv.Value == device.Handle).Select(kv => kv.Key).ToArray()) s_CommandBufferToDevice.TryRemove(commandBufferHandle, out _);
+            try
+            {
+                EvictVorticeDevice(device);
+            }
+            finally
+            {
+                s_DeviceApis.TryRemove(device.Handle, out _);
+                foreach (nint queueHandle in s_QueueToDevice.Where(kv => kv.Value == device.Handle).Select(kv => kv.Key).ToArray()) s_QueueToDevice.TryRemove(queueHandle, out _);
+                foreach (nint commandBufferHandle in s_CommandBufferToDevice.Where(kv => kv.Value == device.Handle).Select(kv => kv.Key).ToArray()) s_CommandBufferToDevice.TryRemove(commandBufferHandle, out _);
+            }
         }
         private static void RegisterQueue(VkDevice device, VkQueue queue) => s_QueueToDevice[queue.Handle] = device.Handle;
         private static void RegisterCommandBuffers(VkDevice device, uint count, VkCommandBuffer* commandBuffers)

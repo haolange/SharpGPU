@@ -41,15 +41,15 @@ The expected RTX 5090 Vulkan local-read capability message is recorded as
 `BLOCKED_PLATFORM` by the test and is not converted into a pass claim.
 
 The Debug source build completed with zero errors (224 compiler warnings in the
-test project). A full Debug run is **BLOCKED_PLATFORM**: the native Vulkan
-test host has nondeterministic access violations after multiple independent
-Vulkan instances (`vkAllocateCommandBuffers` / `vkCreatePipelineLayout`).
-The focused Vulkan memory test passes 1/1, the generated-binding test passes
-alone, and Release passes 289/289. Evidence is retained under
-`artifacts/verification-r12/test-debug-full-r7.log`,
-`test-debug-full-r8-single-node.log`, and
-`test-debug-memory-vulkan-r1.log`; this is a host/driver qualification
-boundary, not a skipped assertion or a Debug pass.
+test project). After the dispatch-table lifetime fix, the full Debug run passed
+**290/290**. The Release source run with the same explicit
+`INFINITYSTACK_SHARPGPU_ROOT` mapping also passed **290/290**. Both runs create
+and destroy independent Vulkan instances with validation disabled/enabled in
+alternating order and allocate a graphics command buffer after every creation.
+The previously observed `vkAllocateCommandBuffers` / `vkCreatePipelineLayout`
+access violations did not recur. Evidence is retained under
+`artifacts/verification-r12/test-results/source-debug-full-after-vk-fix.trx` and
+`source-release-after-vk-fix-root-mapped.trx`.
 
 The independent Release sample is a real compute and draw workload. From a
 different working directory it selected the RTX 5090 for DirectX 12 and
@@ -59,9 +59,13 @@ output is `artifacts/verification-r12/sample-source-release-r2.log`.
 
 ## Package graph and native assets
 
-Pack the library and its five custom Vortice packages from the same source
-revision. SharpGPU owns the patched bindings; the upstream Vortice identities
-must not enter the graph.
+Pack the library and its five custom Windows Vortice packages from the same
+source revision. SharpGPU owns those generated bindings, patches and
+provenance. Vulkan remains pinned to the exact `Vortice.Vulkan` 3.2.1 ABI used
+by the product; its native dispatch-table lifetime is guarded by the
+SharpGPU integration and the private-table layout is checked at startup. Do
+not substitute another Vulkan binding revision without rerunning the source
+and package lifetime gates.
 
 ```powershell
 $out = Join-Path $PWD "artifacts/verification-r12"
@@ -112,12 +116,16 @@ dotnet test tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj @
   --results-directory "D:/Projects/InfinityStack/SharpGPU/artifacts/verification-r12/test-results/package-full"
 ```
 
-The isolated Package graph passed **285/285**. This includes the embedded
-feature matrix/native manifest checks, RID layout checks, all portable contract
-tests, and the Windows DX12/Vulkan workloads. The matching run is
-`artifacts/verification-r12/test-results/package-full-final.trx`, with the
-Release/x64 restore and build output in `restore-package-final.log` and
-`build-package-final.log`.
+The isolated Package graph built from the fixed SharpGPU package passed
+**286/286**. This includes the embedded feature matrix/native manifest checks,
+RID layout checks, all portable contract tests, the alternating-validation
+Vulkan dispatch-table regression, and the Windows DX12/Vulkan workloads. The
+matching run is
+`artifacts/verification-r12/test-results/package-full-after-vk-fix-isolated.trx`,
+with the Release/x64 restore and build output retained beside it. The maintained
+binding record is `docs/SharpGPU/VorticeVulkanDispatchTablePatch.md`. The package
+run uses a private NuGet cache and local feed so a global cache cannot supply an
+older assembly with the same version.
 
 ## Platform boundary
 
@@ -133,6 +141,8 @@ the package. No platform gate is weakened to claim portability.
 
 Before accepting a revision, run `git diff --check`, inspect the package
 contents and `native/assets.json` hashes, and verify that the dependency graph
-contains `SharpGPU.Vortice.*` rather than upstream Vortice replacements. A
+contains the five `SharpGPU.Vortice.*` Windows packages and the pinned
+`Vortice.Vulkan` 3.2.1 dependency, with no replacement or unpinned custom
+binding. A
 changed runtime or package revision invalidates the corresponding source,
 package and IE consumer evidence and requires a fresh run.
