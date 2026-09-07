@@ -261,3 +261,84 @@ DB3F41FA45258203849BAFA8876D149DE81B7D17012C4B43F7F53C4BD644CEAB.
 The package contains 14 native entries and no duplicate ZIP entries. Current IE
 Package and generated Host runtime qualification remains owned by the integration
 workspace; older integration package evidence predates this loader fix.
+
+## Windows source graph CI
+
+The product-owned `eng/ci.json` lists the explicit build/test projects and
+pins dependency commits only. The product's own checkout is not pinned inside
+itself. `eng/Verify.ps1` accepts a directory containing named dependency
+checkouts, validates their identities/HEADs, writes an isolated source mapping,
+and restores with locked mode. It never updates a checkout or tracked lock.
+
+```powershell
+./eng/Verify.ps1 -Configuration Debug -Gate Build -DependencyRoot /path/to/checkouts -OutputRoot "$env:TEMP/graph-build-debug"
+./eng/Verify.ps1 -Configuration Release -Gate Runtime -DependencyRoot /path/to/checkouts -OutputRoot "$env:TEMP/graph-runtime-release"
+```
+
+Repeat each selected gate in both configurations using fresh output directories.
+Build compiles the listed tests, tools and samples but reports runtime NOT_RUN.
+Runtime additionally runs every listed test project and requires one nonempty
+TRX per project, with all tests passed and no skipped results. SharpNeural
+explicitly enables its Vulkan target-face gate during Runtime validation.
+The script restores modified process environment variables on exit.
+
+The GitHub workflow runs Build on hosted Windows runners. Runtime is an
+explicit workflow_dispatch on main using a trusted `infinitystack-gpu` Windows
+x64 runner with the documented DX12/Vulkan devices and native prerequisites.
+It is not run on pull requests. Apple, Linux and mobile qualification remain
+separate matching-platform work. Remote execution is TODO(UNVERIFIED).
+
+The Source entry reports its own source qualification. Package qualification is recorded separately by VerifyPackage.ps1; the trusted runtime workflow now requires both steps. Remote end-to-end workflow qualification is still TODO(UNVERIFIED). Native
+assets and pinned dependency revisions must be available in the remote
+checkouts, and clean-checkout lock convergence is still required before remote
+qualification. No packages or native payloads are uploaded by this workflow.
+
+Current new source-graph Release gate passed: Conformance 356/356 without
+skips, plus MLCook, ComputeAndDraw and benchmark compilation. Expanded build
+coverage found two stale benchmark API uses, repaired to current public EndPass
+and pass-owned timestamp descriptors. The affected scoped transfer and DX12
+timestamp benchmark cases ran successfully (2 warmups, 10 iterations), with
+actual RTX 5090 for the timestamp case. Evidence is
+D:/Projects/InfinityStackVerification/ci-graph-gpu-release-r3.
+This small run validates behavior, not a reliable performance comparison.
+
+The new Debug Runtime graph also passed, Conformance 356/356 with zero skips,
+including benchmark compilation. Evidence: ci-graph-gpu-debug in the same
+verification workspace. Release/Debug suite durations were 59/68 seconds;
+these are aggregate test-suite durations, not the bounded 5/20/55-second
+window/memory observation protocol. That separate runtime protocol is not
+replaced by CI suite success.
+
+## Isolated package runtime CI
+
+`eng/VerifyPackage.ps1` consumes an explicit complete package feed. It copies
+this product's real sample into an isolated application, clears inherited
+build configuration/feed/fallback configuration, uses a fresh package cache,
+restores again in locked mode, and rejects all project dependencies. Every
+resolved nupkg must exist in the selected feed and its cached SHA-256 must
+match that file. SDK implicit library-packs may still be probed by restore;
+the explicit per-package hash requirement prevents qualifying a package absent
+from the selected feed. Logs, resolved package hashes and result are retained.
+
+```powershell
+./eng/VerifyPackage.ps1 -Configuration Debug -PackageFeed /path/to/complete/feed -OutputRoot "$env:TEMP/package-debug"
+./eng/VerifyPackage.ps1 -Configuration Release -PackageFeed /path/to/complete/feed -OutputRoot "$env:TEMP/package-release"
+```
+
+The trusted-device workflow runs this after its Source Runtime gate; supply
+`package_feed` when requesting runtime qualification. The script performs no
+package upload or source checkout. It validates the supplied feed's behavior
+and records hashes, but does not assert that those packages were built from
+the current source HEAD. Producing and publishing packages from the final
+locked source set, remote execution and downloaded-Release consumption remain
+separate required gates. A Source failure cannot be overridden by package PASS.
+
+Current Windows Debug/Release package entries passed using the qualified local
+feed: evidence ci-package-<product>-<configuration> in
+D:/Projects/InfinityStackVerification. SharpGPU checks DX12 and Vulkan compute
+readback and triangle draw; Shader checks nonempty DXIL from its compiler;
+Neural runs both CPU and required GPU comparisons with release assertions.
+Resolved package counts are 31 for GPU, 12 for Shader and 28 for Neural, with
+zero source projects. Empty-feed Shader restore was also verified to fail
+NU1101 and produce no PASS result. These are runtime sample gates, not a
+replacement for the complete product test matrices or platform observation.

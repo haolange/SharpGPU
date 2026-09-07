@@ -13,3 +13,8 @@ DX12 requires successful Agility device-factory initialization using the applica
 Backend implementation tests belong to the independent conformance harness. Infinity.Rendering.Tests has no product friend access. Test migration provenance is recorded in docs/provenance/backend-test-migration.json. Native configuration tests exercise actual Configure/Resolve behavior in isolated load contexts; product code does not contain a separate engine-path enumerator solely for tests.
 
 Windows native DLL loading uses extended-length local/UNC paths at the native boundary, while reported/configured locations remain canonical ordinary paths. This prevents loader path limits from silently selecting shorter runtime directories in deep application layouts.
+
+Product CI owns its explicit project/test inventory and dependency-only pins
+in eng/ci.json. Hosted build and real-device qualification are distinct
+results. Source CI cannot stand in for package consumption or another target
+platform. The consuming workspace continues to own its stack revision manifest.

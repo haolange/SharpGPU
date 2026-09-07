@@ -6,3 +6,4 @@ stack.local.props
 **/TestResults/
 *.trx
 native/runtimes/
+.ci-dependencies/

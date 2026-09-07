@@ -1,0 +1,142 @@
+name: Windows source graph
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      package_feed:
+        description: Complete local package feed on the trusted runtime runner
+        type: string
+        required: false
+      runtime:
+        description: Run all tests on a trusted Windows DX12 and Vulkan device
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+      - name: Read dependency pins
+        id: pins
+        shell: pwsh
+        run: |
+          $pins = (Get-Content -Raw eng/ci.json | ConvertFrom-Json).dependencies
+          foreach ($pin in $pins.PSObject.Properties) {
+            "$($pin.Name)=$($pin.Value.commit)" >> $env:GITHUB_OUTPUT
+          }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: haolange/SharpMath
+          ref: ${{ steps.pins.outputs.SharpMath }}
+          path: .ci-dependencies/SharpMath
+          persist-credentials: false
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: haolange/SharpMetal
+          ref: ${{ steps.pins.outputs.SharpMetal }}
+          path: .ci-dependencies/SharpMetal
+          persist-credentials: false
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: haolange/SharpShader
+          ref: ${{ steps.pins.outputs.SharpShader }}
+          path: .ci-dependencies/SharpShader
+          persist-credentials: false
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: haolange/SharpNeural
+          ref: ${{ steps.pins.outputs.SharpNeural }}
+          path: .ci-dependencies/SharpNeural
+          persist-credentials: false
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: haolange/SharpLLM
+          ref: ${{ steps.pins.outputs.SharpLLM }}
+          path: .ci-dependencies/SharpLLM
+          persist-credentials: false
+      - name: Build source graph
+        shell: pwsh
+        run: ./eng/Verify.ps1 -Configuration '${{ matrix.configuration }}' -Gate Build -DependencyRoot '${{ github.workspace }}/.ci-dependencies' -OutputRoot '${{ runner.temp }}/source-build-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.configuration }}'
+  runtime:
+    if: github.event_name == 'workflow_dispatch' && inputs.runtime && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: [self-hosted, Windows, X64, infinitystack-gpu]
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+      - name: Read dependency pins
+        id: pins
+        shell: pwsh
+        run: |
+          $pins = (Get-Content -Raw eng/ci.json | ConvertFrom-Json).dependencies
+          foreach ($pin in $pins.PSObject.Properties) {
+            "$($pin.Name)=$($pin.Value.commit)" >> $env:GITHUB_OUTPUT
+          }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: haolange/SharpMath
+          ref: ${{ steps.pins.outputs.SharpMath }}
+          path: .ci-dependencies/SharpMath
+          persist-credentials: false
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: haolange/SharpMetal
+          ref: ${{ steps.pins.outputs.SharpMetal }}
+          path: .ci-dependencies/SharpMetal
+          persist-credentials: false
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: haolange/SharpShader
+          ref: ${{ steps.pins.outputs.SharpShader }}
+          path: .ci-dependencies/SharpShader
+          persist-credentials: false
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: haolange/SharpNeural
+          ref: ${{ steps.pins.outputs.SharpNeural }}
+          path: .ci-dependencies/SharpNeural
+          persist-credentials: false
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: haolange/SharpLLM
+          ref: ${{ steps.pins.outputs.SharpLLM }}
+          path: .ci-dependencies/SharpLLM
+          persist-credentials: false
+      - name: Required device qualification
+        shell: pwsh
+        run: ./eng/Verify.ps1 -Configuration '${{ matrix.configuration }}' -Gate Runtime -DependencyRoot '${{ github.workspace }}/.ci-dependencies' -OutputRoot '${{ runner.temp }}/source-runtime-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.configuration }}'
+      - name: Qualify packages from explicit feed
+        shell: pwsh
+        env:
+          STACK_PACKAGE_FEED: ${{ inputs.package_feed }}
+        run: ./eng/VerifyPackage.ps1 -Configuration '${{ matrix.configuration }}' -PackageFeed $env:STACK_PACKAGE_FEED -OutputRoot '${{ runner.temp }}/package-runtime-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.configuration }}'

@@ -552,7 +552,11 @@ namespace SharpGPU.Benchmarks
                 Count = 2,
                 Type = ERHIQueryType.Timestamp,
             });
-            RHITransferPassDescriptor descriptor = new() { Name = "bench.timestamp" };
+            RHITransferPassDescriptor descriptor = new()
+            {
+                Name = "bench.timestamp",
+                Timestamp = new RHITimestampDescriptor { Query = query, BeginIndex = 0, EndIndex = 1 },
+            };
 
             return new PreparedBenchmark
             {
@@ -560,11 +564,9 @@ namespace SharpGPU.Benchmarks
                 Body = () =>
                 {
                     commandBuffer.Begin("bench.timestamp");
-                    commandBuffer.TimestampQueryHeap = query;
                     RHITransferEncoder encoder = commandBuffer.BeginTransferPass(descriptor);
                     encoder.WriteTimestamp(0);
                     encoder.ResolveQuery(query, 0, 1);
-                    commandBuffer.TimestampQueryHeap = null;
                     commandBuffer.EndTransferPass();
                     commandBuffer.End();
                 },
@@ -1581,7 +1583,7 @@ void WorkNode(ThreadNodeInputRecord<InputRecord> input)
             public override void CopyBufferToTexture(in RHIBufferCopyDescriptor src, in RHITextureCopyDescriptor dst, in SharpMath.int3 size) => throw new NotSupportedException();
             public override void CopyTextureToBuffer(in RHITextureCopyDescriptor src, in RHIBufferCopyDescriptor dst, in SharpMath.int3 size) => throw new NotSupportedException();
             public override void CopyTextureToTexture(in RHITextureCopyDescriptor src, in RHITextureCopyDescriptor dst, in SharpMath.int3 size) => throw new NotSupportedException();
-            internal override void EndPassCore() { }
+            public override void EndPass() { }
             protected override void Release() => _ = m_CopyBytes;
         }
 

@@ -1,0 +1,34 @@
+{
+  "product": "SharpGPU",
+  "dependencies": {
+    "SharpMath": {
+      "repository": "haolange/SharpMath",
+      "commit": "f8c5d681d21cd4ab38e674bd473ec4a028cf8e54"
+    },
+    "SharpMetal": {
+      "repository": "haolange/SharpMetal",
+      "commit": "38cd9058e2c196c9f7247e457c269e0a323869fd"
+    },
+    "SharpShader": {
+      "repository": "haolange/SharpShader",
+      "commit": "c37429f250085f3cea5ad45c38f5a68e88346865"
+    },
+    "SharpNeural": {
+      "repository": "haolange/SharpNeural",
+      "commit": "c53a406130f690eb1124f53fc5e5d778971f3fb0"
+    },
+    "SharpLLM": {
+      "repository": "haolange/SharpLLM",
+      "commit": "94fcfc2743bd31628891ed5aab8a85a42b5c9c8f"
+    }
+  },
+  "projects": [
+    "tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj",
+    "tools/SharpGPU.MLCook/SharpGPU.MLCook.csproj",
+    "samples/ComputeAndDraw/ComputeAndDraw.csproj",
+    "benchmarks/SharpGPU.Benchmarks/SharpGPU.Benchmarks.csproj"
+  ],
+  "tests": [
+    "tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj"
+  ]
+}
