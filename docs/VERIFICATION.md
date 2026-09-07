@@ -72,7 +72,7 @@ $props = @(
   "-p:RestoreUseStaticGraphEvaluation=false", "-p:NuGetAudit=false",
   "-m:1", "-nr:false"
 )
-dotnet pack src/SharpGPU/SharpGPU.csproj @props -o "$out/packages-release"
+dotnet pack src/SharpGPU/SharpGPU.csproj @props -o "$out/packages-release-final"
 ```
 
 The package contains `SharpGPU.FeatureMatrix.md` and
@@ -88,12 +88,12 @@ AnyCPU or global-cache assets file can make a package run appear green while
 loading a different assembly.
 
 ```powershell
-$gpu = "D:/Projects/InfinityStack/SharpGPU/artifacts/verification-r12/packages-release-r2"
-$shader = "D:/Projects/InfinityStack/SharpShader/artifacts/verification-r12/packages-release-r2"
-$math = "D:/Projects/InfinityStack/SharpMath/artifacts/packages"
-$metal = "D:/Projects/InfinityStack/SharpMetal/artifacts/packages"
+$gpu = "D:/Projects/InfinityStack/SharpGPU/artifacts/verification-r12/packages-release-final"
+$shader = "D:/Projects/InfinityStack/SharpShader/artifacts/verification-r12/packages-release-final"
+$math = "D:/Projects/InfinityStack/SharpMath/artifacts/verification-r12/packages-release-final"
+$metal = "D:/Projects/InfinityStack/SharpMetal/artifacts/verification-r12/packages-release-final"
 $ie = "D:/Engines/InfinityBrowser/Engine/Intermediate/InfinityStack/20260907/packages-final"
-$cache = "D:/Projects/InfinityStack/SharpGPU/artifacts/verification-r12/nuget-cache-package-gpu-isolated"
+$cache = "D:/Projects/InfinityStack/SharpGPU/artifacts/verification-r12/nuget-cache-package-gpu-final"
 $props = @(
   "-p:Configuration=Release", "-p:Platform=x64",
   "-p:StackReferenceMode=Package",
@@ -115,7 +115,9 @@ dotnet test tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj @
 The isolated Package graph passed **285/285**. This includes the embedded
 feature matrix/native manifest checks, RID layout checks, all portable contract
 tests, and the Windows DX12/Vulkan workloads. The matching run is
-`artifacts/verification-r12/test-results/package-full-isolated-r5/package-full-isolated-r5.trx`.
+`artifacts/verification-r12/test-results/package-full-final.trx`, with the
+Release/x64 restore and build output in `restore-package-final.log` and
+`build-package-final.log`.
 
 ## Platform boundary
 
