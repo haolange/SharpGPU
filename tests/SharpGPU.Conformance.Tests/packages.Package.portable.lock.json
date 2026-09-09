@@ -22,7 +22,7 @@
         "type": "Direct",
         "requested": "[0.4.0-preview.1, )",
         "resolved": "0.4.0-preview.1",
-        "contentHash": "idZrX66RVsaX/6wJK8OU9gUzKXBv7IRBj+Ekm9URsbV/5K0HVizC/rAEFN8a4Q6s4GXCn3Y9lxN/Lee6lAF34A==",
+        "contentHash": "MYqN0N8Ox0lnUZlzJaLFIUO2jaybDLxWRkr3X2hwuj4qZjviz2+bZjNUjIdEo6Hz81TZi0lgbv1zLt8cbNatIw==",
         "dependencies": {
           "SharpGPU.Vortice.Direct3D12": "3.8.3-sharpgpu.1",
           "SharpGPU.Vortice.DirectML": "3.8.3-sharpgpu.1",
@@ -37,7 +37,7 @@
         "type": "Direct",
         "requested": "[0.4.0-preview.1, )",
         "resolved": "0.4.0-preview.1",
-        "contentHash": "HtiVa3zE3JmTBn2k267/Y1013kqrIS4ulgRGsQwOlTLnCZzLE6Ig8MIdPWtPwUD/DsaeHX1qDnjIrAJhQTlSoA==",
+        "contentHash": "B2LFIZHRlMJzRLgMfhPlc2paBMyNSv2dKhPkzUlNYyrm84DHUdvEwdUUp3+tgY5C/iX57H8LHLSFXC4/RKqsdA==",
         "dependencies": {
           "Antlr4.Runtime.Standard": "4.13.1",
           "Silk.NET.Direct3D.Compilers": "2.23.0",
@@ -49,7 +49,7 @@
         "type": "Direct",
         "requested": "[0.4.0-preview.1, )",
         "resolved": "0.4.0-preview.1",
-        "contentHash": "m6rSp4drFOF3FHQit586Wolc54q6/0dw/drHd2rxl8pMcaWy0Mc/bj6imiY8qz2kCpZNvg4PzZDf2pKhLTKUww==",
+        "contentHash": "cIzHRnoSEnbpSoKLZ2Je+bb+0N3PYGl/gjgLKhHwHfPdCYoGI/2HMx9cfj9A91vgeYEAibY//XwpGQI/wjX4BA==",
         "dependencies": {
           "SharpMath": "0.4.0-preview.1",
           "SharpShader": "0.4.0-preview.1",
@@ -61,7 +61,7 @@
         "type": "Direct",
         "requested": "[0.4.0-preview.1, )",
         "resolved": "0.4.0-preview.1",
-        "contentHash": "lzdxgLd86sFlytsX7QJXU9cHFCn7GW3rNouJLFt57J71yKEalB5IvQemxDt36eKG+u61tzkzNR9+9TfUw9F6Og==",
+        "contentHash": "ani4hmi4adsgAIN3QDHctr2LlUjh99W9yAHvyuDK641kQszElYUuqfTyTTchfZZjoYDYfPQ7z4mmduT739RD4Q==",
         "dependencies": {
           "SharpGPU": "0.4.0-preview.1",
           "SharpShader": "0.4.0-preview.1"
@@ -161,7 +161,7 @@
       "SharpGPU.Vortice.Direct3D12": {
         "type": "Transitive",
         "resolved": "3.8.3-sharpgpu.1",
-        "contentHash": "liiCERmBG6/ZTZSoO37WF90+bYj2OaxMORBjaDFx01VGcOs4lDXk5kkJR6kRMreYbK8t3xNdlh3Zlo9+eSccag==",
+        "contentHash": "uuE5c+BJdJLM4puJtbzR1W8ognvz5kDTZ8qoR5NJT4I+57WrHoTsfY+FwS3fE42ya3icVjMd8QC8teNX4G9LdQ==",
         "dependencies": {
           "SharpGPU.Vortice.DXGI": "3.8.3-sharpgpu.1",
           "SharpGen.Runtime": "2.4.2-beta"
@@ -170,7 +170,7 @@
       "SharpGPU.Vortice.DirectML": {
         "type": "Transitive",
         "resolved": "3.8.3-sharpgpu.1",
-        "contentHash": "I8aaYUG+BpB+EP8QDY/XEOMJ4zbsREi20/Hx3B0e/S0CcEP35clT7jTsyH2AEwKGzk8+PKbFbnJcnEf06V9uxA==",
+        "contentHash": "qTv+wOO0vEq2a5fYn4GoY5Fp9deY2FYYIt1CzLjvwjSYaUbDCkHPhyVyMI1UakYVY6440t109EupTKBICjWj8g==",
         "dependencies": {
           "SharpGPU.Vortice.DXGI": "3.8.3-sharpgpu.1",
           "SharpGPU.Vortice.Direct3D12": "3.8.3-sharpgpu.1",
@@ -181,7 +181,7 @@
       "SharpGPU.Vortice.DirectStorage": {
         "type": "Transitive",
         "resolved": "3.8.3-sharpgpu.1",
-        "contentHash": "R82pDWZRUKFPxbDh4Ryj52BHo+tPU1zN+GlAZVtkdOrIroVR8to+ak74ElkUgPvnbK0N8p1Fu17Xfxs7r1j62g==",
+        "contentHash": "RqpI+9xIDVHwW2DhkOJGlSTsMAAVyLgnCC4svN0gchDf3PEy8U1oU6+z0Bhif3CItmCP/BESdWChv+UaHlTPXA==",
         "dependencies": {
           "SharpGPU.Vortice.Direct3D12": "3.8.3-sharpgpu.1",
           "SharpGen.Runtime": "2.4.2-beta"
@@ -190,7 +190,7 @@
       "SharpGPU.Vortice.DirectX": {
         "type": "Transitive",
         "resolved": "3.8.3-sharpgpu.1",
-        "contentHash": "JYUjc26ycE9dr27zQAlJwssNbk/tK/NkoytYwW9u1eL6kD4/dGvz090X6BYtcPfUl+Lu1bjZfTnC6w8kQgiUNA==",
+        "contentHash": "z2hwMVHfUQE6gZxg/IUR7yLedGOnsFoeofOwFdmFitU12fv16FeRtb0JN7Pa7EFOvCx3LOQ+DfZp/BG5vNQsuw==",
         "dependencies": {
           "SharpGen.Runtime": "2.4.2-beta",
           "SharpGen.Runtime.COM": "2.4.2-beta",
@@ -200,7 +200,7 @@
       "SharpGPU.Vortice.DXGI": {
         "type": "Transitive",
         "resolved": "3.8.3-sharpgpu.1",
-        "contentHash": "FfrQPxh6R9p70KzLHEFVznvJ7ErW+64ZDpo83YL0AHsZNiM1Jciv+ZqaTwSzbuONMfTAbYsKxJts7YN13g1JEw==",
+        "contentHash": "SmB25sopAjKvgx+fXnBOWbRmkgM/Ll5KSiFIPvqEVGJRLAk2OHnzkKFKYFrjm75nm9vMtvev4N6fIGiswjHc/Q==",
         "dependencies": {
           "SharpGPU.Vortice.DirectX": "3.8.3-sharpgpu.1",
           "SharpGen.Runtime": "2.4.2-beta"
@@ -209,17 +209,17 @@
       "SharpMath": {
         "type": "Transitive",
         "resolved": "0.4.0-preview.1",
-        "contentHash": "dd6SfZnb4eC0pJlPHuCcY0kzlK5kMeq5CeCMfxo2cVWrSQG3EQj0Bi6D561krMtgsdDcu6W2FaBVq1non+VLsQ=="
+        "contentHash": "3uCWFQSC/+UngCawtLofEa6XxseAfoD6F1dr7I+dFPO2Vsi1N38e3V2ik9g+DJqOOE9QyRHlkjIpKc3IOVEnOA=="
       },
       "SharpMetal": {
         "type": "Transitive",
         "resolved": "0.4.0-preview.1",
-        "contentHash": "caY8lsy0y/yUgDEMnNtVPri5CkS8oOD6rvcwJTjd2e8O6EinonquKHX73NTYm/SP2sesTU594AD3JGB+7qeDGA=="
+        "contentHash": "pstpkLLPl48Q6r1SqktzsW/eOOupo4zuTyy46tsRc2yGXN2+OhdvpT6mSaBOakJsG+nNi4Mt1dxjCXGPQJcrjA=="
       },
       "SharpShader.CSharp.Frontend": {
         "type": "Transitive",
         "resolved": "0.4.0-preview.1",
-        "contentHash": "+X+sOgrsOg5FCV9WqS3uM279F/GVw3BZKHQzPRzPrBbqXUPe2zz5OXLkGCUCA3Wd37918nyfR087BTV9mjj3tA==",
+        "contentHash": "Ajw5j85vHzzauGo5+Uk6K3loNmOzNnHHjGPDrsG5DnYXkJqIyR4fOs2yBA2pTfOvBe/m01B2NhW9NGWtkdvz4A==",
         "dependencies": {
           "Microsoft.CodeAnalysis.CSharp": "5.6.0",
           "SharpShader.CSharp.ShaderLib": "0.4.0-preview.1"
@@ -228,7 +228,7 @@
       "SharpShader.CSharp.ShaderLib": {
         "type": "Transitive",
         "resolved": "0.4.0-preview.1",
-        "contentHash": "wOaSyzuTNNhgW/MPsxGqhEGg2yHAh7/caLbweC3jdQ/YBOzvrNCbzxeGOcflM35HWNpSZToEdnr26t+PzJY6kA=="
+        "contentHash": "L04TaPa2MeVoRV7Vdbcsn8qcR6Ucwn9ZukampIFm5kUzW8Cu0/QKQeT2xEKI8Hgxjh05R+7Qbfknz69uFUCPtw=="
       },
       "Silk.NET.Core": {
         "type": "Transitive",

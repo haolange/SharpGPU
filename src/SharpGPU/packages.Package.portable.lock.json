@@ -12,13 +12,13 @@
         "type": "Direct",
         "requested": "[0.4.0-preview.1, )",
         "resolved": "0.4.0-preview.1",
-        "contentHash": "dd6SfZnb4eC0pJlPHuCcY0kzlK5kMeq5CeCMfxo2cVWrSQG3EQj0Bi6D561krMtgsdDcu6W2FaBVq1non+VLsQ=="
+        "contentHash": "3uCWFQSC/+UngCawtLofEa6XxseAfoD6F1dr7I+dFPO2Vsi1N38e3V2ik9g+DJqOOE9QyRHlkjIpKc3IOVEnOA=="
       },
       "SharpMetal": {
         "type": "Direct",
         "requested": "[0.4.0-preview.1, )",
         "resolved": "0.4.0-preview.1",
-        "contentHash": "caY8lsy0y/yUgDEMnNtVPri5CkS8oOD6rvcwJTjd2e8O6EinonquKHX73NTYm/SP2sesTU594AD3JGB+7qeDGA=="
+        "contentHash": "pstpkLLPl48Q6r1SqktzsW/eOOupo4zuTyy46tsRc2yGXN2+OhdvpT6mSaBOakJsG+nNi4Mt1dxjCXGPQJcrjA=="
       },
       "Vortice.Vulkan": {
         "type": "Direct",

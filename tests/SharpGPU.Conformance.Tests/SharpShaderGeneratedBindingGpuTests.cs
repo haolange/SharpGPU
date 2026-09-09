@@ -2,6 +2,7 @@ using System;
 using Xunit;
 using Xunit.Abstractions;
 using System.Linq;
+using System.Reflection;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using SharpGPU;
@@ -161,15 +162,12 @@ namespace SharpGPU.Conformance.Tests
                 Assert.True(
                     vulkanInstance.HasDebugUtils,
                     "Vulkan validation was requested, but VK_EXT_debug_utils is unavailable.");
-#if DEBUG
-                Assert.True(
-                    vulkanInstance.HasValidationLayerEnabled,
-                    "Vulkan validation was requested, but no validation layer was enabled.");
-#else
-                Assert.False(
-                    vulkanInstance.HasValidationLayerEnabled,
-                    "Vulkan validation layers must remain compiled out in Release.");
-#endif
+                string? libraryConfiguration = typeof(VulkanInstance).Assembly
+                    .GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration;
+                Assert.True(libraryConfiguration is "Debug" or "Release",
+                    $"Unknown SharpGPU build configuration: {libraryConfiguration}");
+                Assert.Equal(libraryConfiguration == "Debug",
+                    vulkanInstance.HasValidationLayerEnabled);
                 vulkanValidation =
                     VulkanValidationCollector.Attach(
                         vulkanInstance.NativeInstance.Handle);
@@ -484,13 +482,8 @@ namespace SharpGPU.Conformance.Tests
                 vulkanValidation!.CompleteAndAssert(
                     "pipeline/resource/dispatch/readback/resource/device cleanup");
 
-#if DEBUG
                 m_Output.WriteLine(
-                    "Vulkan: validationRequest=true, validationLayerEnabled=true, build=Debug, debugMessengerErrors=0, deviceStatus=Success.");
-#else
-                m_Output.WriteLine(
-                    "Vulkan: validationRequest=true, validationLayerEnabled=false, build=Release(layer enabling is compiled out), debugMessengerErrors=0, deviceStatus=Success.");
-#endif
+                    $"Vulkan: validationRequest=true, validationLayerEnabled={((VulkanInstance)instance).HasValidationLayerEnabled}, libraryBuild={typeof(VulkanInstance).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration}, debugMessengerErrors=0, deviceStatus=Success.");
             }
         }
 
