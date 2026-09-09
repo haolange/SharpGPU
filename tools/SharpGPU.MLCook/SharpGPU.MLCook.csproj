@@ -8,9 +8,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>SharpGPU.MLCook</AssemblyName>
     <RootNamespace>SharpGPU.MLCook</RootNamespace>
+    <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="README.md" />
     <ProjectReference Include="../../src/SharpGPU/SharpGPU.csproj" Condition="'$(StackReferenceMode)' == 'Source'" />
     <PackageReference Include="SharpGPU" Version="$(StackPackageVersion)" Condition="'$(StackReferenceMode)' == 'Package'" />
   </ItemGroup>
