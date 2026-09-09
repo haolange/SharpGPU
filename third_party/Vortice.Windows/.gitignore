@@ -261,3 +261,10 @@ launchSettings.json
 
 #Rider
 .idea
+
+# Debug is a binding namespace here, not a build output directory.
+!src/Vortice.DXGI/Debug/
+!src/Vortice.DXGI/Debug/IDXGIInfoQueue.cs
+!src/Vortice.Direct3D11/Debug/
+!src/Vortice.Direct3D11/Debug/ID3D11InfoQueue.cs
+!src/Vortice.Direct3D11/Debug/Message.cs

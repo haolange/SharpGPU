@@ -5,7 +5,7 @@ This document limits the vendored Vortice maintenance surface for SharpGPU DXR 1
 ## Scope
 
 Only DXR 1.2 / Opacity Micromap binding files under
-`Engine/Source/ThirdParty/Vortice.Windows` are in scope.
+`third_party/Vortice.Windows` are in scope.
 Do not mix unrelated D3D12 binding cleanup into this patch.
 Do not implement SharpGPU OMM / SER / Motion object models here (G4-T13..T15).
 
@@ -26,7 +26,7 @@ Do not implement SharpGPU OMM / SER / Motion object models here (G4-T13..T15).
 
 ## Upstream-Ready Diff Rule
 
-Generate the upstream diff from the vendored Vortice root:
+Generate the upstream diff from the vendored Vortice directory inside this SharpGPU checkout:
 
 ```powershell
 git diff -- src/native/include/directx/d3d12.h src/Vortice.Direct3D12/Mappings.xml src/Vortice.Direct3D12/Constants.cs src/Vortice.Direct3D12/RaytracingOpacityMicromapDescription.cs
@@ -34,7 +34,7 @@ git diff -- src/native/include/directx/d3d12.h src/Vortice.Direct3D12/Mappings.x
 
 The patch is upstream-ready only when:
 
-- It compiles inside `Engine/Source/ThirdParty/Vortice.Windows`.
+- It compiles inside `third_party/Vortice.Windows`.
 - It does not depend on SharpGPU runtime types.
 - It contains DXR 1.2 / OMM binding additions only.
 - Enum and struct numeric values match Agility 1.619.3 headers.

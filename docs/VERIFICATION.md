@@ -365,3 +365,22 @@ workload also passed from the published directory. Platform claims remain separa
 ## Mode-isolated NuGet locks
 
 After deliberately generating and reviewing packages.<StackReferenceMode>.<RID-or-portable>.lock.json, append -p:RestoreLockedMode=true to the normal restore command. Alternate Source/Package restores and compare lock hashes. New RIDs need separate locks and matching-host qualification.
+
+## Recovered debug binding sources
+
+The IE duplicate-tree cleanup recovered three original C# files previously
+hidden by the vendored `[Dd]ebug/` ignore rule: DXGI `IDXGIInfoQueue`, and
+Direct3D11 `ID3D11InfoQueue`/`Message`. These are namespace folders, not build
+outputs. The files retain their original copyright and exact contents; narrow
+ignore exceptions keep them visible to Git. DXGI builds through the normal
+SharpGPU source graph. Direct3D11 is an upstream binding project outside the
+SharpGPU runtime dependency graph. Its attempted .NET 10 verification currently fails at restore with NU1009 (SharpGen SDK implicit runtime reference conflicts with central package management); source preservation is complete, but standalone Direct3D11 compilation is NOT verified. Reproduce with
+the same isolated `$props` from the Windows source gate:
+
+```powershell
+dotnet build third_party/Vortice.Windows/src/Vortice.Direct3D11/Vortice.Direct3D11.csproj @props -p:TargetFrameworks=net10.0
+```
+
+The recovered source does not alter previously generated package bytes. Existing
+package qualification remains bound to its original packageCommit; publishing
+new packages from this source requires a new version and the product package gates.
