@@ -18,6 +18,7 @@
     <BaseIntermediateOutputPath>$(StackProductRoot)/artifacts/obj/$(MSBuildProjectName)/$(StackReferenceMode)/$(Platform)/$(_StackOutputRid)/</BaseIntermediateOutputPath>
     <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)$(Configuration)/</MSBuildProjectExtensionsPath>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <NuGetLockFilePath Condition="'$(NuGetLockFilePath)' == ''">$(MSBuildProjectDirectory)/packages.$(StackReferenceMode).$(_StackOutputRid).lock.json</NuGetLockFilePath>
     <DefaultItemExcludes>$(DefaultItemExcludes);$(StackProductRoot)/artifacts/**;**/bin/**;**/obj/**</DefaultItemExcludes>
   </PropertyGroup>
 </Project>

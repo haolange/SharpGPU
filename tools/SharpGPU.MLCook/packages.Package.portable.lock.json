@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "SharpGPU": {
+        "type": "Direct",
+        "requested": "[0.4.0-preview.1, )",
+        "resolved": "0.4.0-preview.1",
+        "contentHash": "idZrX66RVsaX/6wJK8OU9gUzKXBv7IRBj+Ekm9URsbV/5K0HVizC/rAEFN8a4Q6s4GXCn3Y9lxN/Lee6lAF34A==",
+        "dependencies": {
+          "SharpGPU.Vortice.Direct3D12": "3.8.3-sharpgpu.1",
+          "SharpGPU.Vortice.DirectML": "3.8.3-sharpgpu.1",
+          "SharpGPU.Vortice.DirectStorage": "3.8.3-sharpgpu.1",
+          "SharpGen.Runtime": "2.4.2-beta",
+          "SharpMath": "0.4.0-preview.1",
+          "SharpMetal": "0.4.0-preview.1",
+          "Vortice.Vulkan": "3.2.1"
+        }
+      },
+      "SharpGen.Runtime": {
+        "type": "Transitive",
+        "resolved": "2.4.2-beta",
+        "contentHash": "niTtWAUov1F7wZGAlVeEvW+Tnqvg5yTmhI7rxmYu2Utoyu2TbC9tWWpUpMs0PQg5lu5svoYpCAztNjxCqMFP/w=="
+      },
+      "SharpGen.Runtime.COM": {
+        "type": "Transitive",
+        "resolved": "2.4.2-beta",
+        "contentHash": "9lxDFMiepqo3lJQzMSjECCIONeCc2f3Drokgj6HtrTLZcJSftNgcLbD6/iXYj2iphkwgrZb1oLsDOZxoFZkawQ==",
+        "dependencies": {
+          "SharpGen.Runtime": "2.4.2-beta"
+        }
+      },
+      "SharpGPU.Vortice.Direct3D12": {
+        "type": "Transitive",
+        "resolved": "3.8.3-sharpgpu.1",
+        "contentHash": "liiCERmBG6/ZTZSoO37WF90+bYj2OaxMORBjaDFx01VGcOs4lDXk5kkJR6kRMreYbK8t3xNdlh3Zlo9+eSccag==",
+        "dependencies": {
+          "SharpGPU.Vortice.DXGI": "3.8.3-sharpgpu.1",
+          "SharpGen.Runtime": "2.4.2-beta"
+        }
+      },
+      "SharpGPU.Vortice.DirectML": {
+        "type": "Transitive",
+        "resolved": "3.8.3-sharpgpu.1",
+        "contentHash": "I8aaYUG+BpB+EP8QDY/XEOMJ4zbsREi20/Hx3B0e/S0CcEP35clT7jTsyH2AEwKGzk8+PKbFbnJcnEf06V9uxA==",
+        "dependencies": {
+          "SharpGPU.Vortice.DXGI": "3.8.3-sharpgpu.1",
+          "SharpGPU.Vortice.Direct3D12": "3.8.3-sharpgpu.1",
+          "SharpGPU.Vortice.DirectX": "3.8.3-sharpgpu.1",
+          "SharpGen.Runtime": "2.4.2-beta"
+        }
+      },
+      "SharpGPU.Vortice.DirectStorage": {
+        "type": "Transitive",
+        "resolved": "3.8.3-sharpgpu.1",
+        "contentHash": "R82pDWZRUKFPxbDh4Ryj52BHo+tPU1zN+GlAZVtkdOrIroVR8to+ak74ElkUgPvnbK0N8p1Fu17Xfxs7r1j62g==",
+        "dependencies": {
+          "SharpGPU.Vortice.Direct3D12": "3.8.3-sharpgpu.1",
+          "SharpGen.Runtime": "2.4.2-beta"
+        }
+      },
+      "SharpGPU.Vortice.DirectX": {
+        "type": "Transitive",
+        "resolved": "3.8.3-sharpgpu.1",
+        "contentHash": "JYUjc26ycE9dr27zQAlJwssNbk/tK/NkoytYwW9u1eL6kD4/dGvz090X6BYtcPfUl+Lu1bjZfTnC6w8kQgiUNA==",
+        "dependencies": {
+          "SharpGen.Runtime": "2.4.2-beta",
+          "SharpGen.Runtime.COM": "2.4.2-beta",
+          "Vortice.Mathematics": "2.1.0"
+        }
+      },
+      "SharpGPU.Vortice.DXGI": {
+        "type": "Transitive",
+        "resolved": "3.8.3-sharpgpu.1",
+        "contentHash": "FfrQPxh6R9p70KzLHEFVznvJ7ErW+64ZDpo83YL0AHsZNiM1Jciv+ZqaTwSzbuONMfTAbYsKxJts7YN13g1JEw==",
+        "dependencies": {
+          "SharpGPU.Vortice.DirectX": "3.8.3-sharpgpu.1",
+          "SharpGen.Runtime": "2.4.2-beta"
+        }
+      },
+      "SharpMath": {
+        "type": "Transitive",
+        "resolved": "0.4.0-preview.1",
+        "contentHash": "dd6SfZnb4eC0pJlPHuCcY0kzlK5kMeq5CeCMfxo2cVWrSQG3EQj0Bi6D561krMtgsdDcu6W2FaBVq1non+VLsQ=="
+      },
+      "SharpMetal": {
+        "type": "Transitive",
+        "resolved": "0.4.0-preview.1",
+        "contentHash": "caY8lsy0y/yUgDEMnNtVPri5CkS8oOD6rvcwJTjd2e8O6EinonquKHX73NTYm/SP2sesTU594AD3JGB+7qeDGA=="
+      },
+      "Vortice.Mathematics": {
+        "type": "Transitive",
+        "resolved": "2.1.0",
+        "contentHash": "KK+SjNSuKdP+zbavekubi+vaeb1Jo4k87ZF6CMkVWjr6RjJwc8peVtmgzXXDIMy4ZC3ZISyk3llY3q65ISOkBQ=="
+      },
+      "Vortice.Vulkan": {
+        "type": "Transitive",
+        "resolved": "3.2.1",
+        "contentHash": "rYyZFhHky2XgLAAx2yPR5W+cdqGdFtu6HWARDeEinmSotHYXzgo17VNuRo2cmqUsKo2Yo5qDBdRUZVuS8CSKUA=="
+      }
+    }
+  }
+}

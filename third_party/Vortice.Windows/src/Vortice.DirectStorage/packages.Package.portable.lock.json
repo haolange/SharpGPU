@@ -1,8 +1,14 @@
 {
   "version": 2,
   "dependencies": {
-    "net10.0-windows7.0": {
-      "SharpGPU.Vortice.Direct2D1": {
+    "net10.0": {
+      "SharpGen.Runtime": {
+        "type": "Direct",
+        "requested": "[2.4.2-beta, )",
+        "resolved": "2.4.2-beta",
+        "contentHash": "niTtWAUov1F7wZGAlVeEvW+Tnqvg5yTmhI7rxmYu2Utoyu2TbC9tWWpUpMs0PQg5lu5svoYpCAztNjxCqMFP/w=="
+      },
+      "SharpGPU.Vortice.Direct3D12": {
         "type": "Project",
         "dependencies": {
           "SharpGPU.Vortice.DXGI": "[3.8.3-sharpgpu.1, )",
@@ -23,18 +29,6 @@
           "SharpGPU.Vortice.DirectX": "[3.8.3-sharpgpu.1, )",
           "SharpGen.Runtime": "[2.4.2-beta, )"
         }
-      },
-      "SharpGPU.Vortice.SampleFramework": {
-        "type": "Project",
-        "dependencies": {
-          "SharpGPU.Vortice.DirectX": "[3.8.3-sharpgpu.1, )"
-        }
-      },
-      "SharpGen.Runtime": {
-        "type": "CentralTransitive",
-        "requested": "[2.4.2-beta, )",
-        "resolved": "2.4.2-beta",
-        "contentHash": "niTtWAUov1F7wZGAlVeEvW+Tnqvg5yTmhI7rxmYu2Utoyu2TbC9tWWpUpMs0PQg5lu5svoYpCAztNjxCqMFP/w=="
       },
       "SharpGen.Runtime.COM": {
         "type": "CentralTransitive",

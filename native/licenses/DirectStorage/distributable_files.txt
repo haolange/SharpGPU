@@ -1,0 +1,4 @@
+You may distribute the following files:
+
+dstorage.dll
+dstoragecore.dll

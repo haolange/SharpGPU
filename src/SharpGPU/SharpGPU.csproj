@@ -29,7 +29,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="../../docs/SharpGPU/PackageReadme.md" Pack="true" PackagePath="README.md" />
-    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+    <Content Include="../../LICENSE" Pack="true" PackagePath="/" Link="ThirdPartyNotices/SharpGPU/LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="../../docs/SharpGPU/FeatureMatrix.md">
       <LogicalName>SharpGPU.FeatureMatrix.md</LogicalName>
     </EmbeddedResource>

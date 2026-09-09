@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "SharpGen.Runtime": {
+        "type": "Direct",
+        "requested": "[2.4.2-beta, )",
+        "resolved": "2.4.2-beta",
+        "contentHash": "niTtWAUov1F7wZGAlVeEvW+Tnqvg5yTmhI7rxmYu2Utoyu2TbC9tWWpUpMs0PQg5lu5svoYpCAztNjxCqMFP/w=="
+      },
+      "SharpMath": {
+        "type": "Direct",
+        "requested": "[0.4.0-preview.1, )",
+        "resolved": "0.4.0-preview.1",
+        "contentHash": "dd6SfZnb4eC0pJlPHuCcY0kzlK5kMeq5CeCMfxo2cVWrSQG3EQj0Bi6D561krMtgsdDcu6W2FaBVq1non+VLsQ=="
+      },
+      "SharpMetal": {
+        "type": "Direct",
+        "requested": "[0.4.0-preview.1, )",
+        "resolved": "0.4.0-preview.1",
+        "contentHash": "caY8lsy0y/yUgDEMnNtVPri5CkS8oOD6rvcwJTjd2e8O6EinonquKHX73NTYm/SP2sesTU594AD3JGB+7qeDGA=="
+      },
+      "Vortice.Vulkan": {
+        "type": "Direct",
+        "requested": "[3.2.1, )",
+        "resolved": "3.2.1",
+        "contentHash": "rYyZFhHky2XgLAAx2yPR5W+cdqGdFtu6HWARDeEinmSotHYXzgo17VNuRo2cmqUsKo2Yo5qDBdRUZVuS8CSKUA=="
+      },
+      "SharpGen.Runtime.COM": {
+        "type": "Transitive",
+        "resolved": "2.4.2-beta",
+        "contentHash": "9lxDFMiepqo3lJQzMSjECCIONeCc2f3Drokgj6HtrTLZcJSftNgcLbD6/iXYj2iphkwgrZb1oLsDOZxoFZkawQ==",
+        "dependencies": {
+          "SharpGen.Runtime": "2.4.2-beta"
+        }
+      },
+      "Vortice.Mathematics": {
+        "type": "Transitive",
+        "resolved": "2.1.0",
+        "contentHash": "KK+SjNSuKdP+zbavekubi+vaeb1Jo4k87ZF6CMkVWjr6RjJwc8peVtmgzXXDIMy4ZC3ZISyk3llY3q65ISOkBQ=="
+      },
+      "SharpGPU.Vortice.Direct3D12": {
+        "type": "Project",
+        "dependencies": {
+          "SharpGPU.Vortice.DXGI": "[3.8.3-sharpgpu.1, )",
+          "SharpGen.Runtime": "[2.4.2-beta, )"
+        }
+      },
+      "SharpGPU.Vortice.DirectML": {
+        "type": "Project",
+        "dependencies": {
+          "SharpGPU.Vortice.DXGI": "[3.8.3-sharpgpu.1, )",
+          "SharpGPU.Vortice.Direct3D12": "[3.8.3-sharpgpu.1, )",
+          "SharpGPU.Vortice.DirectX": "[3.8.3-sharpgpu.1, )",
+          "SharpGen.Runtime": "[2.4.2-beta, )"
+        }
+      },
+      "SharpGPU.Vortice.DirectStorage": {
+        "type": "Project",
+        "dependencies": {
+          "SharpGPU.Vortice.Direct3D12": "[3.8.3-sharpgpu.1, )",
+          "SharpGen.Runtime": "[2.4.2-beta, )"
+        }
+      },
+      "SharpGPU.Vortice.DirectX": {
+        "type": "Project",
+        "dependencies": {
+          "SharpGen.Runtime": "[2.4.2-beta, )",
+          "SharpGen.Runtime.COM": "[2.4.2-beta, )",
+          "Vortice.Mathematics": "[2.1.0, )"
+        }
+      },
+      "SharpGPU.Vortice.DXGI": {
+        "type": "Project",
+        "dependencies": {
+          "SharpGPU.Vortice.DirectX": "[3.8.3-sharpgpu.1, )",
+          "SharpGen.Runtime": "[2.4.2-beta, )"
+        }
+      }
+    }
+  }
+}

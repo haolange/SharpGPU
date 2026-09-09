@@ -12,14 +12,6 @@
     "SharpShader": {
       "repository": "haolange/SharpShader",
       "commit": "c37429f250085f3cea5ad45c38f5a68e88346865"
-    },
-    "SharpNeural": {
-      "repository": "haolange/SharpNeural",
-      "commit": "c53a406130f690eb1124f53fc5e5d778971f3fb0"
-    },
-    "SharpLLM": {
-      "repository": "haolange/SharpLLM",
-      "commit": "94fcfc2743bd31628891ed5aab8a85a42b5c9c8f"
     }
   },
   "projects": [

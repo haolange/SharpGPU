@@ -58,19 +58,7 @@ jobs:
           path: .ci-dependencies/SharpShader
           persist-credentials: false
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: haolange/SharpNeural
-          ref: ${{ steps.pins.outputs.SharpNeural }}
-          path: .ci-dependencies/SharpNeural
-          persist-credentials: false
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: haolange/SharpLLM
-          ref: ${{ steps.pins.outputs.SharpLLM }}
-          path: .ci-dependencies/SharpLLM
-          persist-credentials: false
       - name: Build source graph
         shell: pwsh
         run: ./eng/Verify.ps1 -Configuration '${{ matrix.configuration }}' -Gate Build -DependencyRoot '${{ github.workspace }}/.ci-dependencies' -OutputRoot '${{ runner.temp }}/source-build-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.configuration }}'
@@ -119,19 +107,7 @@ jobs:
           path: .ci-dependencies/SharpShader
           persist-credentials: false
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: haolange/SharpNeural
-          ref: ${{ steps.pins.outputs.SharpNeural }}
-          path: .ci-dependencies/SharpNeural
-          persist-credentials: false
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: haolange/SharpLLM
-          ref: ${{ steps.pins.outputs.SharpLLM }}
-          path: .ci-dependencies/SharpLLM
-          persist-credentials: false
       - name: Required device qualification
         shell: pwsh
         run: ./eng/Verify.ps1 -Configuration '${{ matrix.configuration }}' -Gate Runtime -DependencyRoot '${{ github.workspace }}/.ci-dependencies' -OutputRoot '${{ runner.temp }}/source-runtime-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.configuration }}'

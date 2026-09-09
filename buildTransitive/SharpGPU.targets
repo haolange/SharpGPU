@@ -1,4 +1,8 @@
 <Project>
+  <ItemGroup>
+    <Content Include="$(MSBuildThisFileDirectory)../licenses/**/*" Link="ThirdPartyNotices/SharpGPU/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(MSBuildThisFileDirectory)../LICENSE" Link="ThirdPartyNotices/SharpGPU/LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
   <Target Name="DeploySharpGpuAgility" AfterTargets="Build;Publish" Condition="'$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe' or '$(IsTestProject)' == 'true'">
     <PropertyGroup>
       <_SharpGpuRid>$(RuntimeIdentifier)</_SharpGpuRid>

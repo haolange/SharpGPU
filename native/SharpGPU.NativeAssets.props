@@ -113,7 +113,7 @@
          not applied when an existing item list is re-included, which silently
          flattened every native asset into the package root. -->
     <Content Include="@(SharpGpuNativeAsset)" Exclude="@(SharpGpuNativeAsset->WithMetadataValue('RuntimeIdentifier', '$(_SharpGpuApplicationRid)')->WithMetadataValue('ApplicationLocal', 'true'))" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="true" PackagePath="%(Link)" Link="%(Link)" />
-    <None Include="$(MSBuildThisFileDirectory)licenses/**/*" Pack="true" PackagePath="licenses/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="$(MSBuildThisFileDirectory)licenses/**/*" Pack="true" PackagePath="licenses/%(RecursiveDir)%(Filename)%(Extension)" Link="ThirdPartyNotices/SharpGPU/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <!-- ProjectReference does not import buildTransitive targets into the consuming app.
        Forward the application-local SDK as copy items as well as RID package assets. -->
