@@ -3,15 +3,15 @@
   "dependencies": {
     "SharpMath": {
       "repository": "haolange/SharpMath",
-      "commit": "f8c5d681d21cd4ab38e674bd473ec4a028cf8e54"
+      "commit": "26b3d704b38b12bc022b94883d5d390aad94d16d"
     },
     "SharpMetal": {
       "repository": "haolange/SharpMetal",
-      "commit": "38cd9058e2c196c9f7247e457c269e0a323869fd"
+      "commit": "5369b24d14bd81482a7dab87776de4cf48d63de4"
     },
     "SharpShader": {
       "repository": "haolange/SharpShader",
-      "commit": "c37429f250085f3cea5ad45c38f5a68e88346865"
+      "commit": "89690ebe6abf47c8ab9425a750170baed6f608be"
     }
   },
   "projects": [
