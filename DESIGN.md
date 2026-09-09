@@ -28,3 +28,5 @@ files; a license inside the nupkg cache alone does not satisfy this contract.
 NuGet locks are named packages.<StackReferenceMode>.<RID-or-portable>.lock.json beside each project. Source and Package modes do not share resolution state. NuGet owns TFM sections within each lock. Existing Configuration/Platform variants do not change package references. Reviewed locks are committed; verification uses RestoreLockedMode. Unsuffixed locks are retired.
 
 CI checks out only this product's build/test dependency closure: SharpMath, SharpMetal and the GPU/Shader peer needed by integration tests. Neural and LLM are not checkout prerequisites for this product. Runtime product dependency direction remains unchanged.
+
+Transitive application deployment Content is excluded from downstream packing. A consumer must not repack another product's notice assets into framework-specific contentFiles that can hide its own portable resources.
