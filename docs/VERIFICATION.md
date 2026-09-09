@@ -374,12 +374,23 @@ Direct3D11 `ID3D11InfoQueue`/`Message`. These are namespace folders, not build
 outputs. The files retain their original copyright and exact contents; narrow
 ignore exceptions keep them visible to Git. DXGI builds through the normal
 SharpGPU source graph. Direct3D11 is an upstream binding project outside the
-SharpGPU runtime dependency graph. Its attempted .NET 10 verification currently fails at restore with NU1009 (SharpGen SDK implicit runtime reference conflicts with central package management); source preservation is complete, but standalone Direct3D11 compilation is NOT verified. Reproduce with
-the same isolated `$props` from the Windows source gate:
+SharpGPU runtime dependency graph. Its standalone build uses the .NET 10 baseline,
+explicit centrally managed SharpGen.Runtime, and the checked DirectX/DXGI
+consumer mappings when those dependencies use their checked bindings.
+The original NU1009 and subsequent missing consumer mapping failure are fixed.
 
 ```powershell
-dotnet build third_party/Vortice.Windows/src/Vortice.Direct3D11/Vortice.Direct3D11.csproj @props -p:TargetFrameworks=net10.0
+dotnet build third_party/Vortice.Windows/src/Vortice.Direct3D11/Vortice.Direct3D11.csproj @props
+dotnet restore third_party/Vortice.Windows/src/Vortice.Direct3D11/Vortice.Direct3D11.csproj @props -p:RestoreLockedMode=true
 ```
+
+2026-09-09 Windows x64: Source/Package, Debug/Release builds pass; both mode
+locks restore successfully. A standalone executable using the resulting source
+assembly completed 10 hardware D3D11 device/context create, ClearState, Flush,
+and dispose cycles. This is a bounded device smoke, not a rendering qualification.
+D3D11 still runs SharpGen at build time and requires Windows SDK 10.0.26100.0;
+it does not claim the portable checked-generated build surface of the active
+DX12 dependencies. Explicit GenerateVorticeBindings regeneration is a separate gate.
 
 The recovered source does not alter previously generated package bytes. Existing
 package qualification remains bound to its original packageCommit; publishing

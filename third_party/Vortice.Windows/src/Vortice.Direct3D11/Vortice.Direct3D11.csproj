@@ -3,7 +3,8 @@
   <Sdk Name="SharpGenTools.Sdk" Version="$(SharpGenVersion)" />
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
+    <SharpGenIncludeRuntimePackageReference Condition="'$(GenerateVorticeBindings)' != 'true'">false</SharpGenIncludeRuntimePackageReference>
     <Description>Direct3D11 bindings</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
@@ -17,7 +18,10 @@
     <Using Include="System.Runtime.InteropServices" />
     <Using Include="SharpGen.Runtime" />
 
+    <PackageReference Include="SharpGen.Runtime" Condition="'$(GenerateVorticeBindings)' != 'true'" />
     <SharpGenMapping Include="Mappings.xml" />
+    <SharpGenConsumerMapping Include="../Vortice.DirectX/Generated/Vortice.DirectX.BindMapping.xml" Condition="'$(GenerateVorticeBindings)' != 'true'" />
+    <SharpGenConsumerMapping Include="../Vortice.DXGI/Generated/Vortice.DXGI.BindMapping.xml" Condition="'$(GenerateVorticeBindings)' != 'true'" />
     <SharpGenExternalDocs Include="Documentation.xml" />
     <ProjectReference Include="..\Vortice.DXGI\Vortice.DXGI.csproj" />
   </ItemGroup>
