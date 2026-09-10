@@ -268,3 +268,5 @@ launchSettings.json
 !src/Vortice.Direct3D11/Debug/
 !src/Vortice.Direct3D11/Debug/ID3D11InfoQueue.cs
 !src/Vortice.Direct3D11/Debug/Message.cs
+!src/Vortice.Direct3D12/Debug/
+!src/Vortice.Direct3D12/Debug/**

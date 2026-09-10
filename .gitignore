@@ -1,9 +1,41 @@
-artifacts/
-**/bin/
-**/obj/
-stack.local.props
-.vs/
+# Build, restore and test output
+/artifacts/
+**/[Bb]in/
+**/[Oo]bj/
 **/TestResults/
 *.trx
-native/runtimes/
-.ci-dependencies/
+*.binlog
+*.nupkg
+*.snupkg
+*.dmp
+*.log
+/coverage/
+
+# Machine-local dependency mapping and disposable checkouts
+/stack.local.props
+/.ci-dependencies/
+/.verification/
+/.extraction-source/
+/.history-*/
+/.history-*.json
+
+# Local editor state and secrets
+.vs/
+.idea/
+.cursor/
+*.user
+*.suo
+*.DotSettings.user
+.env
+.env.*
+!.env.example
+
+# OS temporary files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.tmp
+*.temp
+
+# Provisioned native payload; manifests and notices remain tracked
+/native/runtimes/

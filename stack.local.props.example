@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <StackReferenceMode>Source</StackReferenceMode>
+    <SharpMathRoot>$(MSBuildThisFileDirectory)../SharpMath</SharpMathRoot>
+    <SharpMetalRoot>$(MSBuildThisFileDirectory)../SharpMetal</SharpMetalRoot>
+    <SharpGPURoot>$(MSBuildThisFileDirectory)../SharpGPU</SharpGPURoot>
+    <SharpShaderRoot>$(MSBuildThisFileDirectory)../SharpShader</SharpShaderRoot>
+    <SharpNeuralRoot>$(MSBuildThisFileDirectory)../SharpNeural</SharpNeuralRoot>
+    <SharpLLMRoot>$(MSBuildThisFileDirectory)../SharpLLM</SharpLLMRoot>
+  </PropertyGroup>
+</Project>
