@@ -820,6 +820,15 @@ namespace SharpGPU
         public uint StorageBuffers { get; }
         public uint AccelerationStructures { get; }
         public uint InputAttachments { get; }
+        public uint TotalDescriptorCount =>
+            checked(
+                Samplers
+                + SampledImages
+                + StorageImages
+                + UniformBuffers
+                + StorageBuffers
+                + AccelerationStructures
+                + InputAttachments);
 
         public VulkanDescriptorPoolRequirements(
             uint samplers,
@@ -1132,25 +1141,86 @@ internal readonly struct VulkanDescriptorSetLease
         }
     }
 
+    internal static class VulkanDescriptorPoolPolicy
+    {
+        public static int SetsPerPage(in uint descriptorCount)
+        {
+            if (descriptorCount <= 8)
+            {
+                return 128;
+            }
+
+            if (descriptorCount <= 32)
+            {
+                return 32;
+            }
+
+            if (descriptorCount <= 128)
+            {
+                return 4;
+            }
+
+            return 1;
+        }
+
+        public static bool CanSharePage(
+            in VulkanDescriptorPoolRequirements page,
+            in VulkanDescriptorPoolRequirements request)
+        {
+            if (page.Equals(request))
+            {
+                return true;
+            }
+
+            if (!IsSuperset(page, request))
+            {
+                return false;
+            }
+
+            uint requestTotal = request.TotalDescriptorCount;
+            uint pageTotal = page.TotalDescriptorCount;
+            if (requestTotal == 0)
+            {
+                return pageTotal == 0;
+            }
+
+            return pageTotal <= checked(requestTotal * 2u);
+        }
+
+        private static bool IsSuperset(
+            in VulkanDescriptorPoolRequirements page,
+            in VulkanDescriptorPoolRequirements request)
+        {
+            return page.Samplers >= request.Samplers
+                && page.SampledImages >= request.SampledImages
+                && page.StorageImages >= request.StorageImages
+                && page.UniformBuffers >= request.UniformBuffers
+                && page.StorageBuffers >= request.StorageBuffers
+                && page.AccelerationStructures >= request.AccelerationStructures
+                && page.InputAttachments >= request.InputAttachments;
+        }
+    }
+
     internal sealed class VulkanDescriptorPoolPage
     {
         public VkDescriptorPool Pool { get; }
         public VulkanDescriptorPoolRequirements Requirements { get; }
+        public int MaxSets { get; }
         public int AllocatedSetCount { get; set; }
 
         public VulkanDescriptorPoolPage(
             in VkDescriptorPool pool,
-            in VulkanDescriptorPoolRequirements requirements)
+            in VulkanDescriptorPoolRequirements requirements,
+            in int maxSets)
         {
             Pool = pool;
             Requirements = requirements;
+            MaxSets = maxSets;
         }
     }
 
     internal unsafe sealed class VulkanDescriptorPoolAllocator : IDisposable
     {
-        private const int SetsPerPage = 32;
-
         private readonly object m_Gate = new object();
         private readonly VulkanDevice m_Device;
         private readonly List<VulkanDescriptorPoolPage> m_Pages =
@@ -1203,29 +1273,14 @@ internal readonly struct VulkanDescriptorSetLease
             lock (m_Gate)
             {
                 ThrowIfDisposed();
-                for (int pageIndex = 0; pageIndex < m_Pages.Count; ++pageIndex)
+                if (TryAllocateFromPages(requirements, nativeLayout, exactOnly: true, out VulkanDescriptorSetLease exactLease))
                 {
-                    VulkanDescriptorPoolPage page = m_Pages[pageIndex];
-                    if (!page.Requirements.Equals(requirements)
-                        || page.AllocatedSetCount >= SetsPerPage)
-                    {
-                        continue;
-                    }
+                    return exactLease;
+                }
 
-                    VkResult result = TryAllocate(
-                        page.Pool,
-                        nativeLayout,
-                        out VkDescriptorSet set);
-                    if (result == VkResult.Success)
-                    {
-                        page.AllocatedSetCount++;
-                        return new VulkanDescriptorSetLease(page.Pool, set);
-                    }
-                    if (result != VkResult.ErrorOutOfPoolMemory
-                        && result != VkResult.ErrorFragmentedPool)
-                    {
-                        VulkanUtility.CheckErrors(result);
-                    }
+                if (TryAllocateFromPages(requirements, nativeLayout, exactOnly: false, out VulkanDescriptorSetLease sharedLease))
+                {
+                    return sharedLease;
                 }
 
                 VulkanDescriptorPoolPage newPage = CreatePage(requirements);
@@ -1310,10 +1365,50 @@ internal readonly struct VulkanDescriptorSetLease
             }
         }
 
+        private bool TryAllocateFromPages(
+            in VulkanDescriptorPoolRequirements requirements,
+            in VkDescriptorSetLayout nativeLayout,
+            in bool exactOnly,
+            out VulkanDescriptorSetLease lease)
+        {
+            for (int pageIndex = 0; pageIndex < m_Pages.Count; ++pageIndex)
+            {
+                VulkanDescriptorPoolPage page = m_Pages[pageIndex];
+                bool compatible = exactOnly
+                    ? page.Requirements.Equals(requirements)
+                    : VulkanDescriptorPoolPolicy.CanSharePage(page.Requirements, requirements)
+                        && !page.Requirements.Equals(requirements);
+                if (!compatible || page.AllocatedSetCount >= page.MaxSets)
+                {
+                    continue;
+                }
+
+                VkResult result = TryAllocate(
+                    page.Pool,
+                    nativeLayout,
+                    out VkDescriptorSet set);
+                if (result == VkResult.Success)
+                {
+                    page.AllocatedSetCount++;
+                    lease = new VulkanDescriptorSetLease(page.Pool, set);
+                    return true;
+                }
+                if (result != VkResult.ErrorOutOfPoolMemory
+                    && result != VkResult.ErrorFragmentedPool)
+                {
+                    VulkanUtility.CheckErrors(result);
+                }
+            }
+
+            lease = default;
+            return false;
+        }
+
         private VulkanDescriptorPoolPage CreatePage(
             in VulkanDescriptorPoolRequirements requirements)
         {
-            VkDescriptorPoolSize[] sizes = BuildPoolSizes(requirements);
+            int maxSets = VulkanDescriptorPoolPolicy.SetsPerPage(requirements.TotalDescriptorCount);
+            VkDescriptorPoolSize[] sizes = BuildPoolSizes(requirements, maxSets);
             VkDescriptorPool pool = default;
             fixed (VkDescriptorPoolSize* sizesPointer = sizes)
             {
@@ -1322,7 +1417,7 @@ internal readonly struct VulkanDescriptorSetLease
                     {
                         sType = VkStructureType.DescriptorPoolCreateInfo,
                         flags = VkDescriptorPoolCreateFlags.FreeDescriptorSet,
-                        maxSets = SetsPerPage,
+                        maxSets = (uint)maxSets,
                         poolSizeCount = checked((uint)sizes.Length),
                         pPoolSizes = sizes.Length == 0 ? null : sizesPointer,
                     };
@@ -1334,46 +1429,54 @@ internal readonly struct VulkanDescriptorSetLease
                         &pool));
             }
 
-            return new VulkanDescriptorPoolPage(pool, requirements);
+            return new VulkanDescriptorPoolPage(pool, requirements, maxSets);
         }
 
         private static VkDescriptorPoolSize[] BuildPoolSizes(
-            in VulkanDescriptorPoolRequirements requirements)
+            in VulkanDescriptorPoolRequirements requirements,
+            in int maxSets)
         {
             List<VkDescriptorPoolSize> sizes =
                 new List<VkDescriptorPoolSize>(7);
-            AddSize(sizes, VkDescriptorType.Sampler, requirements.Samplers);
+            AddSize(sizes, VkDescriptorType.Sampler, requirements.Samplers, maxSets);
             AddSize(
                 sizes,
                 VkDescriptorType.SampledImage,
-                requirements.SampledImages);
+                requirements.SampledImages,
+                maxSets);
             AddSize(
                 sizes,
                 VkDescriptorType.StorageImage,
-                requirements.StorageImages);
+                requirements.StorageImages,
+                maxSets);
             AddSize(
                 sizes,
                 VkDescriptorType.UniformBuffer,
-                requirements.UniformBuffers);
+                requirements.UniformBuffers,
+                maxSets);
             AddSize(
                 sizes,
                 VkDescriptorType.StorageBuffer,
-                requirements.StorageBuffers);
+                requirements.StorageBuffers,
+                maxSets);
             AddSize(
                 sizes,
                 VkDescriptorType.AccelerationStructureKHR,
-                requirements.AccelerationStructures);
+                requirements.AccelerationStructures,
+                maxSets);
             AddSize(
                 sizes,
                 VkDescriptorType.InputAttachment,
-                requirements.InputAttachments);
+                requirements.InputAttachments,
+                maxSets);
             return sizes.ToArray();
         }
 
         private static void AddSize(
             List<VkDescriptorPoolSize> sizes,
             in VkDescriptorType type,
-            in uint descriptorsPerSet)
+            in uint descriptorsPerSet,
+            in int maxSets)
         {
             if (descriptorsPerSet == 0)
             {
@@ -1384,7 +1487,7 @@ internal readonly struct VulkanDescriptorSetLease
             {
                 type = type,
                 descriptorCount = checked(
-                    descriptorsPerSet * (uint)SetsPerPage),
+                    descriptorsPerSet * (uint)maxSets),
             });
         }
 

@@ -272,7 +272,7 @@ class RHIWorkGraphPipeline {
 - 静态采样器
   - RHIStaticSamplerDescriptor：按索引绑定的采样器集合，便于在管线布局中固定。
 - 后端实现要点（DX12）
-  - 转换为原生采样器描述，分配 CPU/GPU 描述符对，复制到着色器可见区域。
+  - 转换为原生采样器描述，按完整 descriptor intern 共享 CPU 槽；BindingTable sampler 段才占用 GPU heap。
 
 ```mermaid
 classDiagram
@@ -280,7 +280,6 @@ class RHISampler {
 }
 class Dx12Sampler {
 +NativeCpuDescriptorHandle
-+NativeGpuDescriptorHandle
 }
 RHISampler <|-- Dx12Sampler
 ```

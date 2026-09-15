@@ -8,7 +8,7 @@
 
 ## Product boundary
 
-Keep RHI and backend boundaries explicit. Preserve the maintained Vortice source and patches; do not replace them with an upstream package that lacks the custom behavior.
+Keep RHI and backend boundaries explicit. Do not expose backend Heap/Pool/View containers on the public RHI surface. Preserve the maintained Vortice source and patches; do not replace them with an upstream package that lacks the custom behavior.
 
 ## Implementation and verification
 

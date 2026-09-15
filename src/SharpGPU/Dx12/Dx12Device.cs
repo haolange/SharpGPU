@@ -124,6 +124,9 @@ namespace SharpGPU
 
         private Dx12CpuDescriptorPool? m_StagingPoolCbvSrvUav;
         private Dx12CpuDescriptorPool? m_StagingPoolSampler;
+        private readonly object m_SamplerInternGate = new object();
+        private readonly Dictionary<Dx12SamplerInternKey, Dx12SamplerInternSlot> m_SamplerInterns =
+            new Dictionary<Dx12SamplerInternKey, Dx12SamplerInternSlot>();
         private Vortice.Direct3D12.ID3D12CommandSignature? m_DrawIndirectSignature;
         private Vortice.Direct3D12.ID3D12CommandSignature? m_DrawIndexedIndirectSignature;
         private Vortice.Direct3D12.ID3D12CommandSignature? m_DispatchRayIndirectSignature;
@@ -1278,7 +1281,16 @@ namespace SharpGPU
 
         public override RHISampler CreateSampler(in RHISamplerDescriptor descriptor)
         {
-            return new Dx12Sampler(this, descriptor);
+            Dx12CpuDescriptorAllocation allocation = RetainSamplerIntern(descriptor);
+            try
+            {
+                return new Dx12Sampler(this, descriptor, allocation);
+            }
+            catch
+            {
+                ReleaseSamplerIntern(descriptor);
+                throw;
+            }
         }
 
         public override RHITopLevelAccelStruct CreateTopAccelerationStructure(in RHITopLevelAccelStructDescriptor descriptor)
@@ -1425,6 +1437,92 @@ namespace SharpGPU
             return AllocateDescriptor(DescriptorHeapCbvSrvUav, count, "shader-visible CBV/SRV/UAV");
         }
 
+        public Dx12CpuDescriptorAllocation AllocateStagingCbvSrvUavDescriptor(in int count)
+        {
+            return StagingPoolCbvSrvUav.Allocate(count, "staging CBV/SRV/UAV");
+        }
+
+        public Dx12CpuDescriptorAllocation AllocateStagingSamplerDescriptor(in int count)
+        {
+            return StagingPoolSampler.Allocate(count, "staging sampler");
+        }
+
+        public void FreeStagingCbvSrvUavDescriptor(in Dx12CpuDescriptorAllocation allocation, in int count = 1)
+        {
+            StagingPoolCbvSrvUav.Free(allocation.Heap, allocation.Descriptor.Index, count);
+        }
+
+        public void FreeStagingSamplerDescriptor(in Dx12CpuDescriptorAllocation allocation, in int count = 1)
+        {
+            StagingPoolSampler.Free(allocation.Heap, allocation.Descriptor.Index, count);
+        }
+
+        internal Dx12CpuDescriptorAllocation RetainSamplerIntern(in RHISamplerDescriptor descriptor)
+        {
+            Dx12SamplerInternKey key = Dx12SamplerInternKey.From(descriptor);
+            lock (m_SamplerInternGate)
+            {
+                if (m_SamplerInterns.TryGetValue(key, out Dx12SamplerInternSlot? slot))
+                {
+                    slot.AddRef();
+                    return slot.Allocation;
+                }
+
+                Dx12CpuDescriptorAllocation allocation = AllocateStagingSamplerDescriptor(1);
+                try
+                {
+                    Vortice.Direct3D12.SamplerDescription desc = Dx12Sampler.CreateNativeDescription(descriptor);
+                    NativeDevice.CreateSampler(ref desc, allocation.Descriptor.CpuHandle);
+                    m_SamplerInterns.Add(key, new Dx12SamplerInternSlot(allocation));
+                    return allocation;
+                }
+                catch
+                {
+                    FreeStagingSamplerDescriptor(allocation);
+                    throw;
+                }
+            }
+        }
+
+        internal void ReleaseSamplerIntern(in RHISamplerDescriptor descriptor)
+        {
+            Dx12SamplerInternKey key = Dx12SamplerInternKey.From(descriptor);
+            lock (m_SamplerInternGate)
+            {
+                if (!m_SamplerInterns.TryGetValue(key, out Dx12SamplerInternSlot? slot))
+                {
+                    throw new InvalidOperationException("DX12 sampler intern slot was released more times than it was retained.");
+                }
+
+                if (!slot.ReleaseRef())
+                {
+                    return;
+                }
+
+                m_SamplerInterns.Remove(key);
+                if (m_StagingPoolSampler != null)
+                {
+                    FreeStagingSamplerDescriptor(slot.Allocation);
+                }
+            }
+        }
+
+        private void DisposeSamplerInterns()
+        {
+            lock (m_SamplerInternGate)
+            {
+                if (m_StagingPoolSampler != null)
+                {
+                    foreach (Dx12SamplerInternSlot slot in m_SamplerInterns.Values)
+                    {
+                        FreeStagingSamplerDescriptor(slot.Allocation);
+                    }
+                }
+
+                m_SamplerInterns.Clear();
+            }
+        }
+
         public Dx12DescriptorPair AllocateCbvSrvUavDescriptorPair()
         {
             return AllocateDescriptorPair(
@@ -1432,15 +1530,6 @@ namespace SharpGPU
                 StagingPoolCbvSrvUav,
                 Vortice.Direct3D12.DescriptorHeapType.ConstantBufferViewShaderResourceViewUnorderedAccessView,
                 "CBV/SRV/UAV");
-        }
-
-        public Dx12DescriptorPair AllocateSamplerDescriptorPair()
-        {
-            return AllocateDescriptorPair(
-                DescriptorHeapSampler,
-                StagingPoolSampler,
-                Vortice.Direct3D12.DescriptorHeapType.Sampler,
-                "sampler");
         }
 
         public void CopyDescriptorToShaderVisible(in Dx12DescriptorPair descriptors)
@@ -2668,6 +2757,7 @@ namespace SharpGPU
             ReleaseComObject(ref m_DirectMLDevice1);
             ReleaseComObject(ref m_DirectMLDevice);
 
+            DisposeSamplerInterns();
             DisposeResource(ref m_NullDescriptors);
             DisposeResource(ref m_DescriptorHeapDSV);
             DisposeResource(ref m_DescriptorHeapHeapRTV);

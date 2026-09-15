@@ -8,6 +8,8 @@ Output and intermediate paths are isolated by project, platform, RID, configurat
 
 Public native-backed operations enforce platform and ownership boundaries. No capability downgrade or compatibility implementation is permitted to conceal unsupported execution. Current extraction acceptance is tracked by InfinityBrowser TASK-20260907-INFINITYSTACK-EXTRACTION; this document is not a claim that migration gates have passed.
 
+Binding and descriptor strategy stays behind the backend. The public surface is `RHIBindingTable` with `Count` and `SetBindElement(..., arrayIndex)` for finite bindless; RHI does not grow Heap/Pool/View containers. DX12 gives every table group its own CPU mirror plus GPU segment and publishes on `SetBindingTable`; views and interned sampler slots occupy CPU staging only. Vulkan keeps a set per table and pages pools on the device. Metal fills argument tables or reference buffers and locks a private ViewPool at device create. Backends do not resize shader-visible GPU heaps or native pools at runtime.
+
 DX12 requires successful Agility device-factory initialization using the application D3D12 directory and UTF-8 paths. Source references and packages both deploy these assets; missing assets fail explicitly. The maintained binding and evidence are described in docs/SharpGPU/VorticeAgilityPathPatch.md.
 
 Backend implementation tests belong to the independent conformance harness. Infinity.Rendering.Tests has no product friend access. Test migration provenance is recorded in docs/provenance/backend-test-migration.json. Native configuration tests exercise actual Configure/Resolve behavior in isolated load contexts; product code does not contain a separate engine-path enumerator solely for tests.

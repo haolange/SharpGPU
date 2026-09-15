@@ -315,6 +315,8 @@ public sealed class Dx12BindingTableBindingTests
             _ = device.NullDescriptors.Get(ERHIBindType.Buffer);
             int cbvSrvUavAvailable = device.DescriptorHeapCbvSrvUav.AvailableDescriptorCount;
             int samplerAvailable = device.DescriptorHeapSampler.AvailableDescriptorCount;
+            int stagingCbvAllocated = device.StagingPoolCbvSrvUav.AllocatedDescriptorCount;
+            int stagingSamplerAllocated = device.StagingPoolSampler.AllocatedDescriptorCount;
 
             using RHIBindingTableLayout layout = context.Device.CreateBindingTableLayout(new RHIBindingTableLayoutDescriptor
             {
@@ -333,6 +335,8 @@ public sealed class Dx12BindingTableBindingTests
             }));
             Assert.Equal(cbvSrvUavAvailable, device.DescriptorHeapCbvSrvUav.AvailableDescriptorCount);
             Assert.Equal(samplerAvailable, device.DescriptorHeapSampler.AvailableDescriptorCount);
+            Assert.Equal(stagingCbvAllocated, device.StagingPoolCbvSrvUav.AllocatedDescriptorCount);
+            Assert.Equal(stagingSamplerAllocated, device.StagingPoolSampler.AllocatedDescriptorCount);
 
             using Dx12CpuDescriptorPool stagingPool = new Dx12CpuDescriptorPool(
                 device.NativeDevice,

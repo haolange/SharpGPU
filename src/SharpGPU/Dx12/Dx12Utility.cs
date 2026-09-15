@@ -40,9 +40,271 @@ namespace SharpGPU
         }
     }
 
-    internal unsafe class Dx12DescriptorHeap : Disposal
+    internal static class Dx12DescriptorSizeClass
+    {
+        public const int ClassCount = 5;
+
+        public static int Of(in int count)
+        {
+            if (count <= 1)
+            {
+                return 0;
+            }
+            if (count <= 16)
+            {
+                return 1;
+            }
+            if (count <= 64)
+            {
+                return 2;
+            }
+            if (count <= 256)
+            {
+                return 3;
+            }
+
+            return 4;
+        }
+    }
+
+    internal sealed class Dx12DescriptorRangeAllocator
     {
         public int Capacity => m_Capacity;
+        public int AvailableDescriptorCount
+        {
+            get
+            {
+                int available = 0;
+                for (int i = 0; i < m_FreeBlocks.Count; ++i)
+                {
+                    available = checked(available + m_FreeBlocks.Values[i]);
+                }
+
+                return available;
+            }
+        }
+
+        private readonly int m_Capacity;
+        private readonly SortedList<int, int> m_FreeBlocks;
+        private readonly SortedSet<int>[] m_ClassStarts;
+
+        public Dx12DescriptorRangeAllocator(in int capacity)
+        {
+            if (capacity <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "DX12 descriptor range capacity must be positive.");
+            }
+
+            m_Capacity = capacity;
+            m_FreeBlocks = new SortedList<int, int>(16);
+            m_ClassStarts = new SortedSet<int>[Dx12DescriptorSizeClass.ClassCount];
+            for (int i = 0; i < m_ClassStarts.Length; ++i)
+            {
+                m_ClassStarts[i] = new SortedSet<int>();
+            }
+
+            AddBlock(0, m_Capacity);
+        }
+
+        public int Allocate(in int count)
+        {
+            if (count <= 0 || m_FreeBlocks.Count == 0)
+            {
+                return -1;
+            }
+
+            int startClass = Dx12DescriptorSizeClass.Of(count);
+            for (int cls = startClass; cls < Dx12DescriptorSizeClass.ClassCount; ++cls)
+            {
+                int chosenStart = -1;
+                foreach (int blockStart in m_ClassStarts[cls])
+                {
+                    if (m_FreeBlocks[blockStart] >= count)
+                    {
+                        chosenStart = blockStart;
+                        break;
+                    }
+                }
+
+                if (chosenStart < 0)
+                {
+                    continue;
+                }
+
+                int blockSize = m_FreeBlocks[chosenStart];
+                RemoveBlock(chosenStart);
+                if (blockSize > count)
+                {
+                    AddBlock(chosenStart + count, blockSize - count);
+                }
+
+                return chosenStart;
+            }
+
+            return -1;
+        }
+
+        public void Free(in int index, in int count)
+        {
+            if (count <= 0 || index < 0 || index > m_Capacity - count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index), index, $"DX12 descriptor free range [{index}, {index + count}) is outside heap capacity {m_Capacity}.");
+            }
+
+            for (int i = 0; i < m_FreeBlocks.Count; ++i)
+            {
+                int freeStart = m_FreeBlocks.Keys[i];
+                int freeEnd = checked(freeStart + m_FreeBlocks.Values[i]);
+                int releaseEnd = checked(index + count);
+                if (index < freeEnd && releaseEnd > freeStart)
+                {
+                    throw new InvalidOperationException($"DX12 descriptor range [{index}, {releaseEnd}) overlaps the already free range [{freeStart}, {freeEnd}).");
+                }
+            }
+
+            int newStart = index;
+            int newSize = count;
+
+            if (m_FreeBlocks.TryGetValue(index + count, out int afterSize))
+            {
+                RemoveBlock(index + count);
+                newSize += afterSize;
+            }
+
+            int beforeStart = -1;
+            foreach (int blockStart in m_FreeBlocks.Keys)
+            {
+                if (blockStart + m_FreeBlocks[blockStart] == index)
+                {
+                    beforeStart = blockStart;
+                    break;
+                }
+            }
+
+            if (beforeStart >= 0)
+            {
+                newSize += m_FreeBlocks[beforeStart];
+                RemoveBlock(beforeStart);
+                newStart = beforeStart;
+            }
+
+            AddBlock(newStart, newSize);
+        }
+
+        public void Clear()
+        {
+            m_FreeBlocks.Clear();
+            for (int i = 0; i < m_ClassStarts.Length; ++i)
+            {
+                m_ClassStarts[i].Clear();
+            }
+        }
+
+        private void AddBlock(in int start, in int size)
+        {
+            m_FreeBlocks.Add(start, size);
+            m_ClassStarts[Dx12DescriptorSizeClass.Of(size)].Add(start);
+        }
+
+        private void RemoveBlock(in int start)
+        {
+            int size = m_FreeBlocks[start];
+            m_FreeBlocks.Remove(start);
+            m_ClassStarts[Dx12DescriptorSizeClass.Of(size)].Remove(start);
+        }
+    }
+
+    internal sealed class Dx12DescriptorDirtyRanges
+    {
+        public int RangeCount => m_Ranges.Count;
+        public bool IsEmpty => m_Ranges.Count == 0;
+
+        private readonly List<(int Start, int Count)> m_Ranges = new List<(int Start, int Count)>(4);
+
+        public void Add(in int start, in int count = 1)
+        {
+            if (count <= 0 || start < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(start), start, "DX12 dirty descriptor range must be a non-empty non-negative interval.");
+            }
+
+            int newStart = start;
+            int newEnd = checked(start + count);
+            int insertAt = m_Ranges.Count;
+            for (int i = 0; i < m_Ranges.Count; ++i)
+            {
+                int rangeStart = m_Ranges[i].Start;
+                int rangeEnd = checked(rangeStart + m_Ranges[i].Count);
+                if (newEnd < rangeStart)
+                {
+                    insertAt = i;
+                    break;
+                }
+
+                if (newStart <= rangeEnd && newEnd >= rangeStart)
+                {
+                    newStart = Math.Min(newStart, rangeStart);
+                    newEnd = Math.Max(newEnd, rangeEnd);
+                    m_Ranges.RemoveAt(i);
+                    i--;
+                    insertAt = i + 1;
+                    continue;
+                }
+
+                if (rangeEnd < newStart)
+                {
+                    insertAt = i + 1;
+                }
+            }
+
+            m_Ranges.Insert(insertAt, (newStart, newEnd - newStart));
+        }
+
+        public void Clear()
+        {
+            m_Ranges.Clear();
+        }
+
+        public void CopyTo(List<(int Start, int Count)> destination)
+        {
+            ArgumentNullException.ThrowIfNull(destination);
+            destination.Clear();
+            for (int i = 0; i < m_Ranges.Count; ++i)
+            {
+                destination.Add(m_Ranges[i]);
+            }
+        }
+
+        public bool ShouldCopyAsSingleSpan(out int spanStart, out int spanCount)
+        {
+            if (m_Ranges.Count == 0)
+            {
+                spanStart = 0;
+                spanCount = 0;
+                return false;
+            }
+
+            spanStart = m_Ranges[0].Start;
+            int spanEnd = checked(m_Ranges[m_Ranges.Count - 1].Start + m_Ranges[m_Ranges.Count - 1].Count);
+            spanCount = spanEnd - spanStart;
+            if (m_Ranges.Count == 1)
+            {
+                return true;
+            }
+
+            int live = 0;
+            for (int i = 0; i < m_Ranges.Count; ++i)
+            {
+                live = checked(live + m_Ranges[i].Count);
+            }
+
+            return m_Ranges.Count > 16 || live * 2 >= spanCount;
+        }
+    }
+
+    internal unsafe class Dx12DescriptorHeap : Disposal
+    {
+        public int Capacity => m_RangeAllocator.Capacity;
         public bool IsShaderVisible => m_IsShaderVisible;
         public uint DescriptorSize => m_DescriptorSize;
         public Vortice.Direct3D12.DescriptorHeapType NativeType => m_NativeType;
@@ -55,22 +317,15 @@ namespace SharpGPU
             {
                 lock (m_AllocationGate)
                 {
-                    int available = 0;
-                    for (int i = 0; i < m_FreeBlocks.Count; ++i)
-                    {
-                        available = checked(available + m_FreeBlocks.Values[i]);
-                    }
-
-                    return available;
+                    return m_RangeAllocator.AvailableDescriptorCount;
                 }
             }
         }
 
-        private int m_Capacity;
         private readonly object m_AllocationGate = new();
+        private readonly Dx12DescriptorRangeAllocator m_RangeAllocator;
         private bool m_IsShaderVisible;
         private uint m_DescriptorSize;
-        private SortedList<int, int> m_FreeBlocks;
         private Vortice.Direct3D12.DescriptorHeapType m_NativeType;
         private Vortice.Direct3D12.ID3D12DescriptorHeap m_NativeDescriptorHeap;
 
@@ -81,9 +336,7 @@ namespace SharpGPU
                 throw new ArgumentOutOfRangeException(nameof(count), count, "DX12 descriptor heap capacity must be in the range [1, Int32.MaxValue].");
             }
 
-            m_Capacity = checked((int)count);
-            m_FreeBlocks = new SortedList<int, int>(16);
-            m_FreeBlocks.Add(0, m_Capacity);
+            m_RangeAllocator = new Dx12DescriptorRangeAllocator(checked((int)count));
 
             m_NativeType = type;
             m_IsShaderVisible = (flag & Vortice.Direct3D12.DescriptorHeapFlags.ShaderVisible) != 0;
@@ -104,9 +357,9 @@ namespace SharpGPU
 
         public Dx12DescriptorInfo GetDescriptorInfo(in int index)
         {
-            if ((uint)index >= (uint)m_Capacity)
+            if ((uint)index >= (uint)Capacity)
             {
-                throw new ArgumentOutOfRangeException(nameof(index), index, $"DX12 descriptor index must be in [0, {m_Capacity}).");
+                throw new ArgumentOutOfRangeException(nameof(index), index, $"DX12 descriptor index must be in [0, {Capacity}).");
             }
 
             return new Dx12DescriptorInfo
@@ -131,30 +384,7 @@ namespace SharpGPU
         {
             lock (m_AllocationGate)
             {
-                if (count <= 0 || m_FreeBlocks.Count == 0)
-                {
-                    return -1;
-                }
-
-                for (int i = 0; i < m_FreeBlocks.Count; ++i)
-                {
-                    int blockStart = m_FreeBlocks.Keys[i];
-                    int blockSize = m_FreeBlocks.Values[i];
-
-                    if (blockSize >= count)
-                    {
-                        m_FreeBlocks.RemoveAt(i);
-
-                        if (blockSize > count)
-                        {
-                            m_FreeBlocks.Add(blockStart + count, blockSize - count);
-                        }
-
-                        return blockStart;
-                    }
-                }
-
-                return -1;
+                return m_RangeAllocator.Allocate(count);
             }
         }
 
@@ -169,56 +399,7 @@ namespace SharpGPU
         {
             lock (m_AllocationGate)
             {
-                if (count <= 0 || index < 0 || index > m_Capacity - count)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(index), index, $"DX12 descriptor free range [{index}, {index + count}) is outside heap capacity {m_Capacity}.");
-                }
-
-                for (int i = 0; i < m_FreeBlocks.Count; ++i)
-                {
-                    int freeStart = m_FreeBlocks.Keys[i];
-                    int freeEnd = checked(freeStart + m_FreeBlocks.Values[i]);
-                    int releaseEnd = checked(index + count);
-                    if (index < freeEnd && releaseEnd > freeStart)
-                    {
-                        throw new InvalidOperationException($"DX12 descriptor range [{index}, {releaseEnd}) overlaps the already free range [{freeStart}, {freeEnd}).");
-                    }
-                }
-
-                int newStart = index;
-                int newSize = count;
-
-                // Try to coalesce with the block immediately after
-                if (m_FreeBlocks.TryGetValue(index + count, out int afterSize))
-                {
-                    newSize += afterSize;
-                    m_FreeBlocks.Remove(index + count);
-                }
-
-                // Try to coalesce with the block immediately before
-                int beforeIndex = -1;
-                for (int i = 0; i < m_FreeBlocks.Count; ++i)
-                {
-                    int blockStart = m_FreeBlocks.Keys[i];
-                    int blockSize = m_FreeBlocks.Values[i];
-
-                    if (blockStart + blockSize == index)
-                    {
-                        beforeIndex = i;
-                        break;
-                    }
-                }
-
-                if (beforeIndex >= 0)
-                {
-                    int blockStart = m_FreeBlocks.Keys[beforeIndex];
-                    int blockSize = m_FreeBlocks.Values[beforeIndex];
-                    newStart = blockStart;
-                    newSize += blockSize;
-                    m_FreeBlocks.RemoveAt(beforeIndex);
-                }
-
-                m_FreeBlocks.Add(newStart, newSize);
+                m_RangeAllocator.Free(index, count);
             }
         }
 
@@ -226,7 +407,7 @@ namespace SharpGPU
         {
             lock (m_AllocationGate)
             {
-                m_FreeBlocks.Clear();
+                m_RangeAllocator.Clear();
                 m_NativeDescriptorHeap.Release();
             }
         }
@@ -251,6 +432,24 @@ namespace SharpGPU
         private readonly Vortice.Direct3D12.DescriptorHeapType m_NativeType;
         private readonly int m_PageCapacity;
         private readonly List<Dx12DescriptorHeap> m_Pages = new List<Dx12DescriptorHeap>();
+
+        public int AllocatedDescriptorCount
+        {
+            get
+            {
+                lock (m_Gate)
+                {
+                    int allocated = 0;
+                    for (int i = 0; i < m_Pages.Count; ++i)
+                    {
+                        Dx12DescriptorHeap page = m_Pages[i];
+                        allocated = checked(allocated + (page.Capacity - page.AvailableDescriptorCount));
+                    }
+
+                    return allocated;
+                }
+            }
+        }
 
         public Dx12CpuDescriptorPool(
             Vortice.Direct3D12.ID3D12Device10 device,

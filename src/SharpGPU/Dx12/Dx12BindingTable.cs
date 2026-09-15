@@ -25,7 +25,6 @@ namespace SharpGPU
         Dx12Device Device { get; }
         Dx12DescriptorClass DescriptorClass { get; }
         Vortice.Direct3D12.CpuDescriptorHandle NativeCpuDescriptorHandle { get; }
-        Vortice.Direct3D12.GpuDescriptorHandle NativeGpuDescriptorHandle { get; }
     }
 
     internal readonly struct Dx12BindingKey : IEquatable<Dx12BindingKey>
@@ -129,7 +128,6 @@ namespace SharpGPU
         public Vortice.Direct3D12.ShaderVisibility Visibility { get; }
         public int DescriptorCount { get; }
         public int[] BindingIndices { get; }
-        public bool RequiresOwnedRange => DescriptorCount > 1 || BindingIndices.Length > 1;
 
         public Dx12BindingTableGroupPlan(
             in Dx12DescriptorHeapClass heapClass,
@@ -374,14 +372,14 @@ namespace SharpGPU
     {
         private readonly object m_Gate = new object();
         private readonly Dx12Device m_Device;
-        private readonly Dx12DescriptorPair?[] m_Descriptors = new Dx12DescriptorPair?[(int)ERHIBindType.Pending];
+        private readonly Dx12CpuDescriptorAllocation?[] m_Descriptors = new Dx12CpuDescriptorAllocation?[(int)ERHIBindType.Pending];
 
         public Dx12NullDescriptorCache(Dx12Device device)
         {
             m_Device = device;
         }
 
-        public Dx12DescriptorPair Get(in ERHIBindType bindType)
+        public Vortice.Direct3D12.CpuDescriptorHandle Get(in ERHIBindType bindType)
         {
             int descriptorIndex = (int)bindType;
             if (descriptorIndex < 0 || descriptorIndex >= m_Descriptors.Length)
@@ -398,12 +396,12 @@ namespace SharpGPU
             {
                 if (m_Descriptors[descriptorIndex].HasValue)
                 {
-                    return m_Descriptors[descriptorIndex]!.Value;
+                    return m_Descriptors[descriptorIndex]!.Value.Descriptor.CpuHandle;
                 }
 
-                Dx12DescriptorPair descriptor = Create(bindType);
+                Dx12CpuDescriptorAllocation descriptor = Create(bindType);
                 m_Descriptors[descriptorIndex] = descriptor;
-                return descriptor;
+                return descriptor.Descriptor.CpuHandle;
             }
         }
 
@@ -418,42 +416,38 @@ namespace SharpGPU
                         continue;
                     }
 
-                    Dx12DescriptorPair descriptor = m_Descriptors[i]!.Value;
-                    m_Device.FreeDescriptorPair(descriptor);
+                    m_Device.FreeStagingCbvSrvUavDescriptor(m_Descriptors[i]!.Value);
                     m_Descriptors[i] = null;
                 }
             }
         }
 
-        private Dx12DescriptorPair Create(in ERHIBindType bindType)
+        private Dx12CpuDescriptorAllocation Create(in ERHIBindType bindType)
         {
-            Dx12DescriptorPair descriptors = m_Device.AllocateCbvSrvUavDescriptorPair();
+            Dx12CpuDescriptorAllocation descriptors = m_Device.AllocateStagingCbvSrvUavDescriptor(1);
 
             try
             {
                 if (bindType == ERHIBindType.UniformBuffer)
                 {
-                    m_Device.NativeDevice.CreateConstantBufferView(null, descriptors.Staging.CpuHandle);
-                    m_Device.CopyDescriptorToShaderVisible(descriptors);
+                    m_Device.NativeDevice.CreateConstantBufferView(null, descriptors.Descriptor.CpuHandle);
                     return descriptors;
                 }
 
                 if (Dx12Utility.ConvertToDx12BindType(bindType) == Vortice.Direct3D12.DescriptorRangeType.ShaderResourceView)
                 {
                     Vortice.Direct3D12.ShaderResourceViewDescription srv = CreateNullSrvDescription(bindType);
-                    m_Device.NativeDevice.CreateShaderResourceView(null, srv, descriptors.Staging.CpuHandle);
-                    m_Device.CopyDescriptorToShaderVisible(descriptors);
+                    m_Device.NativeDevice.CreateShaderResourceView(null, srv, descriptors.Descriptor.CpuHandle);
                     return descriptors;
                 }
 
                 Vortice.Direct3D12.UnorderedAccessViewDescription uav = CreateNullUavDescription(bindType);
-                m_Device.NativeDevice.CreateUnorderedAccessView(null, null, uav, descriptors.Staging.CpuHandle);
-                m_Device.CopyDescriptorToShaderVisible(descriptors);
+                m_Device.NativeDevice.CreateUnorderedAccessView(null, null, uav, descriptors.Descriptor.CpuHandle);
                 return descriptors;
             }
             catch
             {
-                m_Device.FreeDescriptorPair(descriptors);
+                m_Device.FreeStagingCbvSrvUavDescriptor(descriptors);
                 throw;
             }
         }
@@ -563,21 +557,18 @@ namespace SharpGPU
         public int HeapIndex;
         public int DescriptorCount;
         public bool IsSampler;
-        public bool OwnsRange;
         public Vortice.Direct3D12.GpuDescriptorHandle GpuHandle;
+        public Dx12CpuDescriptorAllocation Staging;
+        public Dx12DescriptorDirtyRanges Dirty;
     }
 
     internal readonly struct Dx12DescriptorSource
     {
         public Vortice.Direct3D12.CpuDescriptorHandle CpuHandle { get; }
-        public Vortice.Direct3D12.GpuDescriptorHandle GpuHandle { get; }
 
-        public Dx12DescriptorSource(
-            in Vortice.Direct3D12.CpuDescriptorHandle cpuHandle,
-            in Vortice.Direct3D12.GpuDescriptorHandle gpuHandle)
+        public Dx12DescriptorSource(in Vortice.Direct3D12.CpuDescriptorHandle cpuHandle)
         {
             CpuHandle = cpuHandle;
-            GpuHandle = gpuHandle;
         }
     }
 
@@ -590,6 +581,7 @@ namespace SharpGPU
         private readonly bool[] m_BoundStates;
         private readonly Dx12Device m_Device;
         private readonly Dx12BindingTableGroupStorage[] m_GroupStorages;
+        private readonly List<(int Start, int Count)> m_DirtyCopyScratch = new List<(int Start, int Count)>(4);
         private int m_MissingRequiredDescriptorCount;
 
         public Dx12BindingTable(Dx12Device device, in RHIBindingTableDescriptor descriptor)
@@ -645,6 +637,66 @@ namespace SharpGPU
                 throw new ArgumentOutOfRangeException(nameof(groupIndex));
             }
             return m_GroupStorages[groupIndex].GpuHandle;
+        }
+
+        public void PublishDirtyDescriptors()
+        {
+            ThrowIfDisposed();
+            for (int groupIndex = 0; groupIndex < m_GroupStorages.Length; ++groupIndex)
+            {
+                ref Dx12BindingTableGroupStorage storage = ref m_GroupStorages[groupIndex];
+                if (storage.Dirty == null || storage.Dirty.IsEmpty || storage.HeapIndex < 0)
+                {
+                    continue;
+                }
+
+                Dx12DescriptorHeap destinationHeap = storage.IsSampler
+                    ? m_Device.DescriptorHeapSampler
+                    : m_Device.DescriptorHeapCbvSrvUav;
+                Vortice.Direct3D12.DescriptorHeapType nativeType = destinationHeap.NativeType;
+                if (storage.Dirty.ShouldCopyAsSingleSpan(out int spanStart, out int spanCount))
+                {
+                    m_Device.NativeDevice.CopyDescriptorsSimple(
+                        (uint)spanCount,
+                        OffsetHandle(destinationHeap.NativeCpuStartHandle, storage.HeapIndex + spanStart, destinationHeap.DescriptorSize),
+                        OffsetHandle(storage.Staging.Descriptor.CpuHandle, spanStart, storage.Staging.Heap.DescriptorSize),
+                        nativeType);
+                }
+                else
+                {
+                    storage.Dirty.CopyTo(m_DirtyCopyScratch);
+                    int rangeCount = m_DirtyCopyScratch.Count;
+                    Vortice.Direct3D12.CpuDescriptorHandle[] destStarts = new Vortice.Direct3D12.CpuDescriptorHandle[rangeCount];
+                    Vortice.Direct3D12.CpuDescriptorHandle[] srcStarts = new Vortice.Direct3D12.CpuDescriptorHandle[rangeCount];
+                    uint[] destSizes = new uint[rangeCount];
+                    uint[] srcSizes = new uint[rangeCount];
+                    for (int i = 0; i < rangeCount; ++i)
+                    {
+                        (int start, int count) = m_DirtyCopyScratch[i];
+                        destStarts[i] = OffsetHandle(
+                            destinationHeap.NativeCpuStartHandle,
+                            storage.HeapIndex + start,
+                            destinationHeap.DescriptorSize);
+                        srcStarts[i] = OffsetHandle(
+                            storage.Staging.Descriptor.CpuHandle,
+                            start,
+                            storage.Staging.Heap.DescriptorSize);
+                        destSizes[i] = (uint)count;
+                        srcSizes[i] = (uint)count;
+                    }
+
+                    m_Device.NativeDevice.CopyDescriptors(
+                        (uint)rangeCount,
+                        destStarts,
+                        destSizes,
+                        (uint)rangeCount,
+                        srcStarts,
+                        srcSizes,
+                        nativeType);
+                }
+
+                storage.Dirty.Clear();
+            }
         }
 
         public void EnsureReadyForBinding()
@@ -716,30 +768,22 @@ namespace SharpGPU
                 storage.HeapIndex = -1;
                 storage.DescriptorCount = groupPlan.DescriptorCount;
                 storage.IsSampler = groupPlan.HeapClass == Dx12DescriptorHeapClass.Sampler;
-                storage.OwnsRange = groupPlan.RequiresOwnedRange;
-
-                if (storage.OwnsRange)
-                {
-                    Dx12DescriptorInfo allocation = storage.IsSampler
-                        ? m_Device.AllocateSamplerDescriptor(storage.DescriptorCount)
-                        : m_Device.AllocateCbvSrvUavDescriptor(storage.DescriptorCount);
-                    storage.HeapIndex = allocation.Index;
-                    storage.GpuHandle = allocation.GpuHandle;
-                    InitializeOptionalRange(groupPlan, storage);
-                    continue;
-                }
-
-                int bindingIndex = groupPlan.BindingIndices[0];
-                ref readonly Dx12BindInfo bindInfo = ref BindingTableLayout.BindInfos[bindingIndex];
-                storage.GpuHandle = bindInfo.Requirement == ERHIBindingRequirement.Optional
-                    ? m_Device.NullDescriptors.Get(bindInfo.Type).ShaderVisible.GpuHandle
-                    : default;
+                storage.Dirty = new Dx12DescriptorDirtyRanges();
+                storage.Staging = storage.IsSampler
+                    ? m_Device.AllocateStagingSamplerDescriptor(storage.DescriptorCount)
+                    : m_Device.AllocateStagingCbvSrvUavDescriptor(storage.DescriptorCount);
+                Dx12DescriptorInfo allocation = storage.IsSampler
+                    ? m_Device.AllocateSamplerDescriptor(storage.DescriptorCount)
+                    : m_Device.AllocateCbvSrvUavDescriptor(storage.DescriptorCount);
+                storage.HeapIndex = allocation.Index;
+                storage.GpuHandle = allocation.GpuHandle;
+                InitializeOptionalRange(groupPlan, ref storage);
             }
         }
 
         private void InitializeOptionalRange(
             Dx12BindingTableGroupPlan groupPlan,
-            in Dx12BindingTableGroupStorage storage)
+            ref Dx12BindingTableGroupStorage storage)
         {
             for (int i = 0; i < groupPlan.BindingIndices.Length; ++i)
             {
@@ -749,10 +793,10 @@ namespace SharpGPU
                     continue;
                 }
 
-                Dx12DescriptorPair nullDescriptor = m_Device.NullDescriptors.Get(bindInfo.Type);
+                Vortice.Direct3D12.CpuDescriptorHandle nullHandle = m_Device.NullDescriptors.Get(bindInfo.Type);
                 for (int arrayIndex = 0; arrayIndex < (int)bindInfo.Count; ++arrayIndex)
                 {
-                    CopyDescriptor(storage, bindInfo.DescriptorOffset + arrayIndex, nullDescriptor.Staging.CpuHandle);
+                    CopyDescriptor(ref storage, bindInfo.DescriptorOffset + arrayIndex, nullHandle);
                 }
             }
         }
@@ -805,36 +849,19 @@ namespace SharpGPU
 
             bool hasSource = TryGetDescriptorSource(element, bindInfo, out Dx12DescriptorSource source);
             ref Dx12BindingTableGroupStorage storage = ref m_GroupStorages[bindInfo.GroupIndex];
-            Dx12DescriptorPair nullDescriptor = default;
-            if (!hasSource && bindInfo.Requirement == ERHIBindingRequirement.Optional)
+            if (hasSource)
             {
-                nullDescriptor = m_Device.NullDescriptors.Get(bindInfo.Type);
+                CopyDescriptor(
+                    ref storage,
+                    bindInfo.DescriptorOffset + arrayIndex,
+                    source.CpuHandle);
             }
-
-            if (storage.OwnsRange)
+            else if (bindInfo.Requirement == ERHIBindingRequirement.Optional)
             {
-                if (hasSource)
-                {
-                    CopyDescriptor(
-                        storage,
-                        bindInfo.DescriptorOffset + arrayIndex,
-                        source.CpuHandle);
-                }
-                else if (bindInfo.Requirement == ERHIBindingRequirement.Optional)
-                {
-                    CopyDescriptor(
-                        storage,
-                        bindInfo.DescriptorOffset + arrayIndex,
-                        nullDescriptor.Staging.CpuHandle);
-                }
-            }
-            else
-            {
-                storage.GpuHandle = hasSource
-                    ? source.GpuHandle
-                    : bindInfo.Requirement == ERHIBindingRequirement.Optional
-                        ? nullDescriptor.ShaderVisible.GpuHandle
-                        : default;
+                CopyDescriptor(
+                    ref storage,
+                    bindInfo.DescriptorOffset + arrayIndex,
+                    m_Device.NullDescriptors.Get(bindInfo.Type));
             }
 
             int stateIndex = bindInfo.StateOffset + arrayIndex;
@@ -952,9 +979,7 @@ namespace SharpGPU
                     $"DX12 binding table space {BindingTableLayout.Index} binding ({bindInfo.Type}, slot {bindInfo.Slot}) requires descriptor class {expectedClass}, but received {descriptor.DescriptorClass}.");
             }
 
-            return new Dx12DescriptorSource(
-                descriptor.NativeCpuDescriptorHandle,
-                descriptor.NativeGpuDescriptorHandle);
+            return new Dx12DescriptorSource(descriptor.NativeCpuDescriptorHandle);
         }
         private ArgumentException CreateResourceTypeException(in Dx12BindInfo bindInfo, string expectedField)
         {
@@ -964,17 +989,20 @@ namespace SharpGPU
         }
 
         private void CopyDescriptor(
-            in Dx12BindingTableGroupStorage storage,
+            ref Dx12BindingTableGroupStorage storage,
             in int descriptorOffset,
             in Vortice.Direct3D12.CpuDescriptorHandle sourceHandle)
         {
-            Dx12DescriptorHeap destinationHeap = storage.IsSampler
-                ? m_Device.DescriptorHeapSampler
-                : m_Device.DescriptorHeapCbvSrvUav;
-            Vortice.Direct3D12.CpuDescriptorHandle destinationHandle = destinationHeap.NativeCpuStartHandle.Offset(
-                storage.HeapIndex + descriptorOffset,
-                destinationHeap.DescriptorSize);
-            m_Device.NativeDevice.CopyDescriptorsSimple(1, destinationHandle, sourceHandle, destinationHeap.NativeType);
+            Vortice.Direct3D12.CpuDescriptorHandle destinationHandle = OffsetHandle(
+                storage.Staging.Descriptor.CpuHandle,
+                descriptorOffset,
+                storage.Staging.Heap.DescriptorSize);
+            m_Device.NativeDevice.CopyDescriptorsSimple(
+                1,
+                destinationHandle,
+                sourceHandle,
+                storage.Staging.Heap.NativeType);
+            storage.Dirty.Add(descriptorOffset);
         }
 
         private void ReleaseOwnedRanges()
@@ -982,24 +1010,43 @@ namespace SharpGPU
             for (int i = 0; i < m_GroupStorages.Length; ++i)
             {
                 ref Dx12BindingTableGroupStorage storage = ref m_GroupStorages[i];
-                if (!storage.OwnsRange || storage.HeapIndex < 0)
+                int descriptorCount = storage.DescriptorCount;
+                if (storage.HeapIndex >= 0)
                 {
-                    continue;
+                    int heapIndex = storage.HeapIndex;
+                    storage.HeapIndex = -1;
+                    if (storage.IsSampler)
+                    {
+                        m_Device.FreeSamplerDescriptor(heapIndex, descriptorCount);
+                    }
+                    else
+                    {
+                        m_Device.FreeCbvSrvUavDescriptor(heapIndex, descriptorCount);
+                    }
                 }
 
-                int heapIndex = storage.HeapIndex;
-                int descriptorCount = storage.DescriptorCount;
-                storage.HeapIndex = -1;
-                storage.OwnsRange = false;
-                if (storage.IsSampler)
+                if (storage.Staging.Heap != null)
                 {
-                    m_Device.FreeSamplerDescriptor(heapIndex, descriptorCount);
-                }
-                else
-                {
-                    m_Device.FreeCbvSrvUavDescriptor(heapIndex, descriptorCount);
+                    Dx12CpuDescriptorAllocation staging = storage.Staging;
+                    storage.Staging = default;
+                    if (storage.IsSampler)
+                    {
+                        m_Device.FreeStagingSamplerDescriptor(staging, descriptorCount);
+                    }
+                    else
+                    {
+                        m_Device.FreeStagingCbvSrvUavDescriptor(staging, descriptorCount);
+                    }
                 }
             }
+        }
+
+        private static Vortice.Direct3D12.CpuDescriptorHandle OffsetHandle(
+            in Vortice.Direct3D12.CpuDescriptorHandle start,
+            in int offset,
+            in uint descriptorSize)
+        {
+            return new Vortice.Direct3D12.CpuDescriptorHandle(start, offset, descriptorSize);
         }
 
 

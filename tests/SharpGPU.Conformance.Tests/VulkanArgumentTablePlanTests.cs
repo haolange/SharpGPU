@@ -31,6 +31,54 @@ namespace SharpGPU.Conformance.Tests
         }
 
         [Fact]
+        public void PoolPolicy_ShouldTierSetsPerPageAndAllowSupersetShareWithinWasteLimit()
+        {
+            Assert.Equal(128, VulkanDescriptorPoolPolicy.SetsPerPage(1));
+            Assert.Equal(128, VulkanDescriptorPoolPolicy.SetsPerPage(8));
+            Assert.Equal(32, VulkanDescriptorPoolPolicy.SetsPerPage(9));
+            Assert.Equal(32, VulkanDescriptorPoolPolicy.SetsPerPage(32));
+            Assert.Equal(4, VulkanDescriptorPoolPolicy.SetsPerPage(33));
+            Assert.Equal(4, VulkanDescriptorPoolPolicy.SetsPerPage(128));
+            Assert.Equal(1, VulkanDescriptorPoolPolicy.SetsPerPage(129));
+
+            VulkanDescriptorPoolRequirements exact = new(
+                samplers: 2,
+                sampledImages: 1,
+                storageImages: 0,
+                uniformBuffers: 0,
+                storageBuffers: 1,
+                accelerationStructures: 0);
+            Assert.True(VulkanDescriptorPoolPolicy.CanSharePage(exact, exact));
+
+            VulkanDescriptorPoolRequirements shareable = new(
+                samplers: 2,
+                sampledImages: 2,
+                storageImages: 0,
+                uniformBuffers: 0,
+                storageBuffers: 1,
+                accelerationStructures: 0);
+            Assert.True(VulkanDescriptorPoolPolicy.CanSharePage(shareable, exact));
+
+            VulkanDescriptorPoolRequirements tooWasteful = new(
+                samplers: 8,
+                sampledImages: 8,
+                storageImages: 0,
+                uniformBuffers: 0,
+                storageBuffers: 1,
+                accelerationStructures: 0);
+            Assert.False(VulkanDescriptorPoolPolicy.CanSharePage(tooWasteful, exact));
+
+            VulkanDescriptorPoolRequirements missingStorage = new(
+                samplers: 2,
+                sampledImages: 2,
+                storageImages: 0,
+                uniformBuffers: 0,
+                storageBuffers: 0,
+                accelerationStructures: 0);
+            Assert.False(VulkanDescriptorPoolPolicy.CanSharePage(missingStorage, exact));
+        }
+
+        [Fact]
         public void Plan_ShouldRejectUnknownInvalidAndAmbiguousBindings()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => CreatePlan(

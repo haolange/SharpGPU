@@ -233,6 +233,7 @@ namespace SharpGPU
             }
 
             dx12BindingTable.EnsureReadyForBinding();
+            dx12BindingTable.PublishDirtyDescriptors();
             return dx12BindingTable;
         }
     }

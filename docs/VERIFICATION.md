@@ -39,6 +39,9 @@ dotnet test tests/SharpGPU.Conformance.Tests/SharpGPU.Conformance.Tests.csproj `
   --results-directory "$out/test-results/source-release"
 ```
 
+Descriptor-strategy unit tests that do not require a matching GPU host:
+`Dx12DescriptorAllocatorTests`, `VulkanBindingTablePlanTests.PoolPolicy_ShouldTierSetsPerPageAndAllowSupersetShareWithinWasteLimit`, and `MetalBindingTablePlanTests.TextureViewPool_ShouldLockFirstSuccessfulCapacityOnTheLadder`. Metal native slot-clear after dispose remains `TODO(UNVERIFIED)` without a Metal host.
+
 On the current Windows x64 host the Release source build completed with zero
 errors and the full conformance run passed **289/289**. It exercised the
 DirectX 12 and Vulkan compute/draw paths, native memory and synchronization,

@@ -246,7 +246,6 @@ class RHISampler {
 }
 class Dx12Sampler {
 +NativeCpuDescriptorHandle
-+NativeGpuDescriptorHandle
 +Release()
 }
 class MetalSampler {

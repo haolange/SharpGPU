@@ -54,14 +54,13 @@ namespace SharpGPU
     {
         public Dx12Device Device => m_Dx12Device;
         public Dx12DescriptorClass DescriptorClass => Dx12DescriptorClass.AccelerationStructure;
-        public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuDescriptorHandle => m_Descriptors.Staging.CpuHandle;
-        public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuDescriptorHandle => m_Descriptors.ShaderVisible.GpuHandle;
+        public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuDescriptorHandle => m_Staging.Descriptor.CpuHandle;
         public Vortice.Direct3D12.ID3D12Resource ResultBuffer => m_NativeResultBuffer;
         public Vortice.Direct3D12.BuildRaytracingAccelerationStructureDescription NativeAccelStructDescriptor => m_NativeAccelStructDescriptor;
 
         private Dx12Device m_Dx12Device;
-        private int m_DescriptionHeapIndex;
-        private Dx12DescriptorPair m_Descriptors;
+        private bool m_HasDescriptors;
+        private Dx12CpuDescriptorAllocation m_Staging;
         private Vortice.Direct3D12.ID3D12Resource m_NativeResultBuffer;
         private Vortice.Direct3D12.ID3D12Resource m_NativeScratchBuffer;
         private Vortice.Direct3D12.ID3D12Resource m_NativeInstancesBuffer;
@@ -71,7 +70,7 @@ namespace SharpGPU
         {
             m_Dx12Device = device;
             m_Descriptor = descriptor;
-            m_DescriptionHeapIndex = -1;
+            m_HasDescriptors = false;
             RHIOpacityMicromapContract.ValidateTlasDescriptor(device, in descriptor);
             RHIAccelStructMotionContract.ValidateTlasDescriptor(device, in descriptor);
             Span<RHIAccelStructInstance> asInstances = descriptor.Instances.Span;
@@ -118,16 +117,15 @@ namespace SharpGPU
             m_NativeScratchBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ScratchDataSizeInBytes, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess, Vortice.Direct3D12.ResourceStates.Common | Vortice.Direct3D12.ResourceStates.UnorderedAccess, Dx12RaytracingHelper.kDefaultHeapProps);
             m_NativeResultBuffer = Dx12RaytracingHelper.CreateBuffer(m_Dx12Device.NativeDevice, (uint)nativeAccelStructPrebuildInfo.ResultDataMaxSizeInBytes, Vortice.Direct3D12.ResourceFlags.AllowUnorderedAccess, Vortice.Direct3D12.ResourceStates.Common | Vortice.Direct3D12.ResourceStates.RaytracingAccelerationStructure, Dx12RaytracingHelper.kDefaultHeapProps);
 
-            m_Descriptors = m_Dx12Device.AllocateCbvSrvUavDescriptorPair();
-            m_DescriptionHeapIndex = m_Descriptors.ShaderVisible.Index;
+            m_Staging = m_Dx12Device.AllocateStagingCbvSrvUavDescriptor(1);
+            m_HasDescriptors = true;
 
             Vortice.Direct3D12.ShaderResourceViewDescription accelStructSrvDesc = new Vortice.Direct3D12.ShaderResourceViewDescription();
             accelStructSrvDesc.Format = Vortice.DXGI.Format.Unknown;
             accelStructSrvDesc.ViewDimension = Vortice.Direct3D12.ShaderResourceViewDimension.RaytracingAccelerationStructure;
             accelStructSrvDesc.Shader4ComponentMapping = 5768;
             accelStructSrvDesc.RaytracingAccelerationStructure.Location = m_NativeResultBuffer.GPUVirtualAddress;
-            m_Dx12Device.NativeDevice.CreateShaderResourceView(null, accelStructSrvDesc, m_Descriptors.Staging.CpuHandle);
-            m_Dx12Device.CopyDescriptorToShaderVisible(m_Descriptors);
+            m_Dx12Device.NativeDevice.CreateShaderResourceView(null, accelStructSrvDesc, m_Staging.Descriptor.CpuHandle);
 
             m_NativeAccelStructDescriptor.Inputs = nativeAccelStructDescriptor;
             m_NativeAccelStructDescriptor.DestinationAccelerationStructureData = m_NativeResultBuffer.GPUVirtualAddress;
@@ -191,10 +189,10 @@ namespace SharpGPU
 
         protected override void Release()
         {
-            if (m_DescriptionHeapIndex >= 0)
+            if (m_HasDescriptors)
             {
-                m_Dx12Device.FreeDescriptorPair(m_Descriptors);
-                m_DescriptionHeapIndex = -1;
+                m_Dx12Device.FreeStagingCbvSrvUavDescriptor(m_Staging);
+                m_HasDescriptors = false;
             }
             m_NativeResultBuffer.Release();
             m_NativeScratchBuffer.Release();

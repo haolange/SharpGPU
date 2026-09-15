@@ -100,7 +100,7 @@ ADR-0064 已完成第一个 clean break：公共 raster attachment 只保留 Inp
 | GPU file I/O | `StorageQueue` | DirectStorage native + qualified | unavailable/fail closed | MTLIO native/runtime-probed，当前无 Metal-specific qualified evidence | DX12 实装；Metal 部分；Vulkan 无同构是正确结果，命名仍应细分 |
 | Sparse 2D/3D | 有 texture API | reserved textures/tile mapping/residency；native Tier4 当前折叠为 RHI Tier3，Tier4-specific 语义/资格未独立公开 | sparse image 2D/3D feature与mapping | sparse/placement texture mapping | 部分：机制存在，2D/3D/MSAA/residency/Tier4 需要拆分 capability 与 GPU evidence |
 | Sparse buffer | capability skeleton | 未形成独立可证明 route | unavailable | unavailable | 不得由 sparse texture 推导 |
-| Bindless/indexing | BindingTable + typed capabilities | descriptor table/indexing | descriptor indexing 部分 probe；无 descriptor buffer/heap lowering | MTL4 argument table strategy | 部分；strategy 与 limits 需要继续分层 |
+| Bindless/indexing | BindingTable + `Count` + `SetBindElement(..., arrayIndex)`；不暴露 Heap/Pool/View 容器 | table 自有 CPU 镜像 + GPU 段；SetBindElement 只写 CPU；SetBindingTable flush `CopyDescriptors` | set + Device pool 页（SetsPerPage 分档 / 超集共页）；`vkUpdateDescriptorSets` + BindSet | argument table / reference buffer + 创建期锁定的私有 ViewPool | 公共面已落地为有限 bindless BindingTable；后端 strategy 不进 RHI，也不热换 GPU heap / native pool |
 | Barriers/sync | state/barrier/fence/semaphore | Enhanced + classic barrier path | synchronization2 + core barrier path | Metal4 command/memory barrier path | 基础实装；timeline/shared event/external ownership 仍需公共查询 |
 | Pipeline cache | 有 factory | native | native | fail closed（当前 blob contract 不同构） | 部分；应引入 typed archive/binary strategy 而非伪 portable blob |
 | Video | 无 | 未暴露 D3D12 Video | 未暴露 KHR Video | 未接 VideoToolbox | 缺失但应归 media service，而非 graphics core |

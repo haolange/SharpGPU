@@ -18,6 +18,28 @@ namespace SharpGPU
         }
     }
 
+    internal static class MetalTextureViewPoolCapacity
+    {
+        internal static readonly uint[] Ladder = { 262144, 65536, 16384, 4096 };
+
+        internal static uint SelectLockedCapacity(Func<uint, bool> tryCreate)
+        {
+            ArgumentNullException.ThrowIfNull(tryCreate);
+            for (int i = 0; i < Ladder.Length; ++i)
+            {
+                uint capacity = Ladder[i];
+                if (tryCreate(capacity))
+                {
+                    return capacity;
+                }
+            }
+
+            throw new InvalidOperationException(
+                "Failed to create MTLTextureViewPool at any locked capacity "
+                + $"[{string.Join(", ", Ladder)}].");
+        }
+    }
+
     internal sealed class MetalTextureViewIndexAllocator
     {
         internal const uint DefaultCapacity = 4096;
@@ -160,7 +182,7 @@ namespace SharpGPU
 
         protected override void Release()
         {
-            m_Texture.MetalDevice.ReleaseTextureViewIndex(m_PoolLease);
+            m_Texture.MetalDevice.ReleaseTextureView(m_PoolLease);
             m_ResourceID = default;
         }
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using SharpGPU;
@@ -250,6 +251,31 @@ namespace SharpGPU.Conformance.Tests
             Assert.Throws<ObjectDisposedException>(() => table.GetBindCount());
             Assert.Throws<ObjectDisposedException>(() =>
                 table.SetBindElement(default, ERHIBindType.Buffer, 0));
+        }
+
+        [Fact]
+        public void TextureViewPool_ShouldLockFirstSuccessfulCapacityOnTheLadder()
+        {
+            Assert.Equal(new uint[] { 262144, 65536, 16384, 4096 }, MetalTextureViewPoolCapacity.Ladder);
+
+            List<uint> attempted = new();
+            uint locked = MetalTextureViewPoolCapacity.SelectLockedCapacity(capacity =>
+            {
+                attempted.Add(capacity);
+                return capacity == 16384;
+            });
+
+            Assert.Equal(16384u, locked);
+            Assert.Equal(new uint[] { 262144, 65536, 16384 }, attempted);
+            Assert.Equal(
+                16384u,
+                new MetalTextureViewIndexAllocator(locked).Capacity);
+            InvalidOperationException exhausted = Assert.Throws<InvalidOperationException>(
+                () => MetalTextureViewPoolCapacity.SelectLockedCapacity(_ => false));
+            Assert.Contains("262144", exhausted.Message, StringComparison.Ordinal);
+            Assert.Contains("4096", exhausted.Message, StringComparison.Ordinal);
+            // TODO(UNVERIFIED): Metal host create/dispose must clear the native ViewPool slot
+            // and reuse the software index. This environment has no Metal device.
         }
 
         [Fact]

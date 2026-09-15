@@ -15,26 +15,13 @@ namespace SharpGPU
         };
         public ERHITextureDimension Dimension => m_Dimension;
 
-        public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuDescriptorHandle
-        {
-            get
-            {
-                return m_Descriptors.Staging.CpuHandle;
-            }
-        }
-        public Vortice.Direct3D12.GpuDescriptorHandle NativeGpuDescriptorHandle
-        {
-            get
-            {
-                return m_Descriptors.ShaderVisible.GpuHandle;
-            }
-        }
+        public Vortice.Direct3D12.CpuDescriptorHandle NativeCpuDescriptorHandle => m_Staging.Descriptor.CpuHandle;
 
         private bool m_HasDescriptors;
         private ERHITextureViewType m_ViewType;
         private ERHITextureDimension m_Dimension;
         private Dx12Texture m_Dx12Texture;
-        private Dx12DescriptorPair m_Descriptors;
+        private Dx12CpuDescriptorAllocation m_Staging;
 
         public Dx12TextureView(Dx12Texture texture, in RHITextureViewDescriptor descriptor)
         {
@@ -52,7 +39,7 @@ namespace SharpGPU
                         nameof(descriptor));
                 }
 
-                if(Dx12Utility.IsShaderResourceTexture(texture.Descriptor.UsageFlag))
+                if (Dx12Utility.IsShaderResourceTexture(texture.Descriptor.UsageFlag))
                 {
                     Vortice.Direct3D12.ShaderResourceViewDescription desc = new Vortice.Direct3D12.ShaderResourceViewDescription();
                     desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
@@ -64,10 +51,9 @@ namespace SharpGPU
                     Dx12Utility.FillTextureCubeArraySRV(ref desc.TextureCubeArray, descriptor, texture.Descriptor.Dimension);
                     Dx12Utility.FillTexture3DSRV(ref desc.Texture3D, descriptor, texture.Descriptor.Dimension);
 
-                    m_Descriptors = m_Dx12Texture.Dx12Device.AllocateCbvSrvUavDescriptorPair();
+                    m_Staging = m_Dx12Texture.Dx12Device.AllocateStagingCbvSrvUavDescriptor(1);
                     m_HasDescriptors = true;
-                    m_Dx12Texture.Dx12Device.NativeDevice.CreateShaderResourceView(m_Dx12Texture.NativeResource, desc, m_Descriptors.Staging.CpuHandle);
-                    m_Dx12Texture.Dx12Device.CopyDescriptorToShaderVisible(m_Descriptors);
+                    m_Dx12Texture.Dx12Device.NativeDevice.CreateShaderResourceView(m_Dx12Texture.NativeResource, desc, m_Staging.Descriptor.CpuHandle);
                 }
             }
             else if (descriptor.ViewType == ERHITextureViewType.UnorderedAccess)
@@ -82,15 +68,14 @@ namespace SharpGPU
                             nameof(descriptor));
                     }
 
-                    m_Descriptors = m_Dx12Texture.Dx12Device.AllocateCbvSrvUavDescriptorPair();
+                    m_Staging = m_Dx12Texture.Dx12Device.AllocateStagingCbvSrvUavDescriptor(1);
                     m_HasDescriptors = true;
                     m_Dx12Texture.Dx12Device.CreateSamplerFeedbackUnorderedAccessView(
                         paired.NativeResource,
                         m_Dx12Texture.NativeResource,
-                        m_Descriptors.Staging.CpuHandle);
-                    m_Dx12Texture.Dx12Device.CopyDescriptorToShaderVisible(m_Descriptors);
+                        m_Staging.Descriptor.CpuHandle);
                 }
-                else if(Dx12Utility.IsUnorderedAccessTexture(texture.Descriptor.UsageFlag))
+                else if (Dx12Utility.IsUnorderedAccessTexture(texture.Descriptor.UsageFlag))
                 {
                     Vortice.Direct3D12.UnorderedAccessViewDescription desc = new Vortice.Direct3D12.UnorderedAccessViewDescription();
                     desc.Format = Dx12Utility.ConvertToDx12ViewFormat(texture.Descriptor.Format);
@@ -99,10 +84,9 @@ namespace SharpGPU
                     Dx12Utility.FillTexture3DUAV(ref desc.Texture3D, descriptor, texture.Descriptor.Dimension);
                     Dx12Utility.FillTexture2DArrayUAV(ref desc.Texture2DArray, descriptor, texture.Descriptor.Dimension);
 
-                    m_Descriptors = m_Dx12Texture.Dx12Device.AllocateCbvSrvUavDescriptorPair();
+                    m_Staging = m_Dx12Texture.Dx12Device.AllocateStagingCbvSrvUavDescriptor(1);
                     m_HasDescriptors = true;
-                    m_Dx12Texture.Dx12Device.NativeDevice.CreateUnorderedAccessView(m_Dx12Texture.NativeResource, null, desc, m_Descriptors.Staging.CpuHandle);
-                    m_Dx12Texture.Dx12Device.CopyDescriptorToShaderVisible(m_Descriptors);
+                    m_Dx12Texture.Dx12Device.NativeDevice.CreateUnorderedAccessView(m_Dx12Texture.NativeResource, null, desc, m_Staging.Descriptor.CpuHandle);
                 }
             }
 
@@ -116,7 +100,7 @@ namespace SharpGPU
         {
             if (m_HasDescriptors)
             {
-                m_Dx12Texture.Dx12Device.FreeDescriptorPair(m_Descriptors);
+                m_Dx12Texture.Dx12Device.FreeStagingCbvSrvUavDescriptor(m_Staging);
                 m_HasDescriptors = false;
             }
         }

@@ -35,7 +35,7 @@ namespace SharpGPU
         private string? m_TimestampQueriesUnavailableReason;
         private string? m_MetalMLUnavailableReason;
         private MTLTextureViewPool m_TextureViewPool;
-        private readonly MetalTextureViewIndexAllocator m_TextureViewIndices = new();
+        private MetalTextureViewIndexAllocator m_TextureViewIndices = null!;
         // Metal 4 ML runtime objects (pipeline / binding table / intermediates heap) are retained
         // for the device lifetime so a future Metal4-native artifact route can reuse the encoder path.
         private readonly List<MTL4MachineLearningPipelineState> m_MetalMLPipelineStates = new List<MTL4MachineLearningPipelineState>();
@@ -2027,6 +2027,19 @@ namespace SharpGPU
             _ = m_TextureViewIndices.Release(lease);
         }
 
+        internal void ReleaseTextureView(in MetalTextureViewIndexLease lease)
+        {
+            ClearNativeTextureViewSlot(lease.Index);
+            _ = m_TextureViewIndices.Release(lease);
+        }
+
+        private void ClearNativeTextureViewSlot(in uint index)
+        {
+            // SharpMetal exposes SetTextureView(texture, index). Passing a null texture pointer
+            // is the native nil-slot clear; this host cannot execute Metal to verify the slot.
+            _ = m_TextureViewPool.SetTextureView(IntPtr.Zero, (ulong)index);
+        }
+
         internal void RemoveResidencyAllocation(in MTLAllocation allocation)
         {
             if (allocation.NativePtr == IntPtr.Zero || m_CommandQueueMap == null)
@@ -2066,23 +2079,43 @@ namespace SharpGPU
 
         private void CreateTextureViewPool()
         {
-            MTLResourceViewPoolDescriptor poolDescriptor = MTLResourceViewPoolDescriptor.New();
-            NSError error = default;
+            string? lastError = null;
+            uint lockedCapacity;
             try
             {
-                poolDescriptor.ResourceViewCount = m_TextureViewIndices.Capacity;
-                m_TextureViewPool = m_NativeDevice.NewTextureViewPool(poolDescriptor, ref error);
+                lockedCapacity = MetalTextureViewPoolCapacity.SelectLockedCapacity(capacity =>
+                {
+                    MTLResourceViewPoolDescriptor poolDescriptor = MTLResourceViewPoolDescriptor.New();
+                    NSError error = default;
+                    try
+                    {
+                        poolDescriptor.ResourceViewCount = capacity;
+                        m_TextureViewPool = m_NativeDevice.NewTextureViewPool(poolDescriptor, ref error);
+                    }
+                    finally
+                    {
+                        ObjectiveCRuntime.Release(poolDescriptor.NativePtr);
+                    }
+
+                    if (m_TextureViewPool.NativePtr != IntPtr.Zero)
+                    {
+                        return true;
+                    }
+
+                    lastError = error.NativePtr != IntPtr.Zero
+                        ? error.LocalizedDescription.ToString()
+                        : "unknown error";
+                    return false;
+                });
             }
-            finally
+            catch (InvalidOperationException exception)
             {
-                ObjectiveCRuntime.Release(poolDescriptor.NativePtr);
+                throw new InvalidOperationException(
+                    $"Failed to create MTLTextureViewPool: {lastError ?? "unknown error"}",
+                    exception);
             }
 
-            if (m_TextureViewPool.NativePtr == IntPtr.Zero)
-            {
-                string errorText = error.NativePtr != IntPtr.Zero ? error.LocalizedDescription.ToString() : "unknown error";
-                throw new InvalidOperationException($"Failed to create MTLTextureViewPool: {errorText}");
-            }
+            m_TextureViewIndices = new MetalTextureViewIndexAllocator(lockedCapacity);
         }
 
         protected override void Release()
