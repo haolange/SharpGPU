@@ -10,7 +10,16 @@
 - [Dx12Utility.cs](file://src/SharpGPU/Dx12/Dx12Utility.cs)
 - [Dx12Pipeline.cs](file://src/SharpGPU/Dx12/Dx12Pipeline.cs)
 - [Dx12Instance.cs](file://src/SharpGPU/Dx12/Dx12Instance.cs)
+- [Dx12BindingTable.cs](file://src/SharpGPU/Dx12/Dx12BindingTable.cs)
+- [Dx12Sampler.cs](file://src/SharpGPU/Dx12/Dx12Sampler.cs)
 </cite>
+
+## 更新摘要
+**所做更改**
+- 更新了描述符绑定系统架构，包括CPU暂存方法、Dx12DescriptorDirtyRanges批量复制优化和采样器intern系统
+- 新增了采样器引用计数机制的详细说明
+- 更新了描述符堆管理的性能优化策略
+- 增强了命令执行流程中的批量复制优化说明
 
 ## 目录
 1. [简介](#简介)
@@ -26,6 +35,8 @@
 
 ## 简介
 本文件面向使用 SharpGPU DirectX 12 后端的开发者，系统性阐述 Dx12Device 的设备初始化、能力探测、资源管理、命令执行机制，并深入说明 DX12 特有的描述符堆管理、命令签名、渲染通道与光线追踪支持。同时覆盖 DirectML 集成、Work Graph 支持与 Mesh Shading 实现，提供性能优化策略、内存管理最佳实践与调试技巧，以及 DX12 特定的配置选项、错误处理与故障排除方法。
+
+**最新更新**：本次更新重点介绍了描述符绑定系统的重大架构变更，包括CPU暂存方法、Dx12DescriptorDirtyRanges高效批量复制和采样器intern系统与引用计数机制。
 
 ## 项目结构
 DX12 后端位于 src/SharpGPU/Dx12 目录，围绕设备、命令队列、命令缓冲、资源与管线等关键对象组织：
@@ -46,6 +57,8 @@ B --> G["命令签名(间接绘制/计算/光线追踪/Mesh)"]
 B --> H["DirectML 设备与记录器"]
 B --> I["内存与堆(Dx12Heap/纹理/缓冲)"]
 D --> J["管线与布局(PipelineLayout/Pipelines)"]
+B --> K["采样器Intern系统"]
+B --> L["描述符脏区域跟踪"]
 ```
 
 图表来源
@@ -53,6 +66,8 @@ D --> J["管线与布局(PipelineLayout/Pipelines)"]
 - [Dx12Device.cs:137-157](file://src/SharpGPU/Dx12/Dx12Device.cs#L137-L157)
 - [Dx12CommandQueue.cs:36-56](file://src/SharpGPU/Dx12/Dx12CommandQueue.cs#L36-L56)
 - [Dx12CommandBuffer.cs:39-56](file://src/SharpGPU/Dx12/Dx12CommandBuffer.cs#L39-L56)
+- [Dx12BindingTable.cs:560-580](file://src/SharpGPU/Dx12/Dx12BindingTable.cs#L560-L580)
+- [Dx12Sampler.cs:6-104](file://src/SharpGPU/Dx12/Dx12Sampler.cs#L6-L104)
 
 章节来源
 - [Dx12Instance.cs:20-106](file://src/SharpGPU/Dx12/Dx12Instance.cs#L20-L106)
@@ -64,6 +79,11 @@ D --> J["管线与布局(PipelineLayout/Pipelines)"]
 - 资源层：统一构建资源描述、堆分配、放置资源、稀疏纹理保留与瓦片映射。
 - 管线层：根签名与管线状态创建、绑定表计划与绑定、Mesh Shading 流水线流、光线追踪状态对象。
 - 工具层：格式/过滤/地址模式/堆类型/查询类型等转换，错误码到 RHI 错误映射，命令列表创建辅助。
+
+**新增组件**：
+- 描述符脏区域跟踪：Dx12DescriptorDirtyRanges 用于高效跟踪和批量复制变化的描述符
+- 采样器Intern系统：通过引用计数机制避免重复创建相同配置的采样器
+- CPU暂存池：分离CPU可见和GPU可见的描述符堆，提高内存访问效率
 
 章节来源
 - [Dx12Device.cs:137-157](file://src/SharpGPU/Dx12/Dx12Device.cs#L137-L157)
@@ -117,6 +137,10 @@ Q-->>App : Signal Fence/Semaphore
   - 暴露 DrawIndirect/DispatchComputeIndirect/DispatchRayIndirect/DispatchMeshIndirect 等命令签名。
   - 提供 DirectML 设备与命令记录器访问。
 
+**新增功能**：
+- 采样器Intern系统：通过字典缓存相同配置的采样器，减少重复创建开销
+- CPU暂存池：分离StagingPoolCbvSrvUav和StagingPoolSampler，提高内存访问效率
+
 ```mermaid
 classDiagram
 class Dx12Device {
@@ -131,6 +155,8 @@ class Dx12Device {
 +GetTextureMemoryRequirements()
 +QueryFormatSupport()
 +QueryResolveSupport()
++AllocateStagingCbvSrvUavDescriptor()
++AllocateStagingSamplerDescriptor()
 }
 class Dx12CpuDescriptorPool {
 +Allocate(count, name)
@@ -141,14 +167,22 @@ class Dx12DescriptorHeap {
 +Free(index, count)
 +NativeDescriptorHeap
 }
+class Dx12SamplerInternSlot {
++Allocation
++RefCount
++AddRef()
++ReleaseRef()
+}
 Dx12Device --> Dx12CpuDescriptorPool : "管理CPU可见描述符页"
 Dx12Device --> Dx12DescriptorHeap : "持有多种堆"
+Dx12Device --> Dx12SamplerInternSlot : "采样器引用计数"
 ```
 
 图表来源
 - [Dx12Device.cs:48-157](file://src/SharpGPU/Dx12/Dx12Device.cs#L48-L157)
 - [Dx12Utility.cs:247-339](file://src/SharpGPU/Dx12/Dx12Utility.cs#L247-L339)
 - [Dx12Utility.cs:43-121](file://src/SharpGPU/Dx12/Dx12Utility.cs#L43-L121)
+- [Dx12Sampler.cs:78-104](file://src/SharpGPU/Dx12/Dx12Sampler.cs#L78-L104)
 
 章节来源
 - [Dx12Device.cs:137-157](file://src/SharpGPU/Dx12/Dx12Device.cs#L137-L157)
@@ -157,13 +191,20 @@ Dx12Device --> Dx12DescriptorHeap : "持有多种堆"
 - [Dx12Device.cs:785-800](file://src/SharpGPU/Dx12/Dx12Device.cs#L785-L800)
 
 ### 描述符堆管理：CPU/GPU 可见堆与池化分配
+
+**重大架构变更**：新的描述符绑定系统采用CPU暂存方法，通过Dx12DescriptorDirtyRanges实现高效批量复制。
+
 - 设计要点
   - 分离 CPU 可见的 Staging 堆与 GPU 可见的 ShaderVisible 堆。
   - 使用 Dx12CpuDescriptorPool 分页管理 CPU 可见堆，按需扩容。
   - Dx12DescriptorHeap 内部维护空闲块合并，避免碎片。
+  - **新增**：Dx12DescriptorDirtyRanges 跟踪描述符变化，支持智能批量复制。
+  - **新增**：采样器Intern系统通过引用计数避免重复创建。
+
 - 使用流程
   - 在命令缓冲中设置已绑定的描述符堆句柄集合。
   - 通过池分配临时 CBV/SRV/UAV 描述符，并在命令缓冲结束时释放。
+  - **新增**：PublishDirtyDescriptors() 方法批量复制变化的描述符到GPU堆。
 
 ```mermaid
 flowchart TD
@@ -173,20 +214,103 @@ Pool -- 否 --> NewPage["新建一页描述符堆"]
 NewPage --> TryAlloc["尝试在新页分配"]
 Pool -- 是 --> UsePage["在现有页分配"]
 TryAlloc --> UsePage
-UsePage --> Return["返回CpuDescriptorAllocation"]
+UsePage --> Track["标记为脏区域"]
+Track --> Batch{"是否达到批量阈值?"}
+Batch -- 否 --> Return["返回CpuDescriptorAllocation"]
+Batch -- 是 --> Copy["批量复制到GPU堆"]
+Copy --> Clear["清除脏区域"]
+Clear --> Return
 Return --> End(["结束"])
 ```
 
 图表来源
-- [Dx12Utility.cs:247-339](file://src/SharpGPU/Dx12/Dx12Utility.cs#L247-L339)
+- [Dx12Utility.cs:247-339](file://src/SharpGPU/Dx12/Dx12Utility.cs#L247-339)
 - [Dx12CommandBuffer.cs:50-56](file://src/SharpGPU/Dx12/Dx12CommandBuffer.cs#L50-L56)
 - [Dx12CommandBuffer.cs:262-282](file://src/SharpGPU/Dx12/Dx12CommandBuffer.cs#L262-L282)
+- [Dx12BindingTable.cs:642-700](file://src/SharpGPU/Dx12/Dx12BindingTable.cs#L642-L700)
 
 章节来源
 - [Dx12Utility.cs:43-121](file://src/SharpGPU/Dx12/Dx12Utility.cs#L43-L121)
 - [Dx12Utility.cs:247-339](file://src/SharpGPU/Dx12/Dx12Utility.cs#L247-L339)
 - [Dx12CommandBuffer.cs:50-56](file://src/SharpGPU/Dx12/Dx12CommandBuffer.cs#L50-L56)
 - [Dx12CommandBuffer.cs:262-282](file://src/SharpGPU/Dx12/Dx12CommandBuffer.cs#L262-L282)
+- [Dx12BindingTable.cs:642-700](file://src/SharpGPU/Dx12/Dx12BindingTable.cs#L642-L700)
+
+### 采样器Intern系统：引用计数与去重
+
+**新增功能**：采样器Intern系统通过引用计数机制避免重复创建相同配置的采样器。
+
+- 设计要点
+  - Dx12SamplerInternKey 基于采样器配置参数生成唯一键
+  - Dx12SamplerInternSlot 包含描述符分配和引用计数
+  - 通过字典缓存已创建的采样器实例
+  - 自动管理引用计数的增减和清理
+
+- 工作流程
+  - 创建采样器时检查是否存在相同配置的实例
+  - 如果存在则增加引用计数并复用
+  - 销毁时减少引用计数，为零时清理资源
+
+```mermaid
+flowchart TD
+Create["创建采样器"] --> Key["生成InternKey"]
+Key --> Check{"是否存在相同实例?"}
+Check -- 是 --> AddRef["增加引用计数"]
+Check -- 否 --> CreateNew["创建新实例"]
+CreateNew --> Cache["加入缓存"]
+AddRef --> Return["返回实例"]
+Cache --> Return
+Return --> Use["使用采样器"]
+Use --> Destroy["销毁采样器"]
+Destroy --> DecRef["减少引用计数"]
+DecRef --> CheckZero{"引用计数是否为0?"}
+CheckZero -- 否 --> Done["完成"]
+CheckZero -- 是 --> Cleanup["清理资源"]
+Cleanup --> Done
+```
+
+图表来源
+- [Dx12Sampler.cs:6-76](file://src/SharpGPU/Dx12/Dx12Sampler.cs#L6-L76)
+- [Dx12Sampler.cs:78-104](file://src/SharpGPU/Dx12/Dx12Sampler.cs#L78-L104)
+- [Dx12Device.cs:127-129](file://src/SharpGPU/Dx12/Dx12Device.cs#L127-L129)
+
+章节来源
+- [Dx12Sampler.cs:6-155](file://src/SharpGPU/Dx12/Dx12Sampler.cs#L6-L155)
+- [Dx12Device.cs:127-129](file://src/SharpGPU/Dx12/Dx12Device.cs#L127-L129)
+
+### 描述符脏区域跟踪：高效批量复制
+
+**新增功能**：Dx12DescriptorDirtyRanges 类提供高效的描述符变化跟踪和批量复制机制。
+
+- 核心特性
+  - 维护有序的不连续范围列表
+  - 支持范围合并和优化
+  - 智能判断是否适合单次拷贝
+  - 提供批量复制接口
+
+- 优化策略
+  - 当脏区域数量超过16个或活跃描述符占总数一半以上时，使用单次大范围拷贝
+  - 否则使用多个小范围拷贝，减少不必要的内存移动
+  - 自动合并相邻或重叠的范围
+
+```mermaid
+flowchart TD
+Mark["标记描述符为脏"] --> Merge["合并相邻范围"]
+Merge --> Optimize{"是否需要优化?"}
+Optimize -- 是 --> Single["转换为单范围"]
+Optimize -- 否 --> Multiple["保持多范围"]
+Single --> Copy["批量拷贝"]
+Multiple --> Copy
+Copy --> Clear["清除脏区域"]
+```
+
+图表来源
+- [Dx12Utility.cs:217-303](file://src/SharpGPU/Dx12/Dx12Utility.cs#L217-L303)
+- [Dx12BindingTable.cs:642-700](file://src/SharpGPU/Dx12/Dx12BindingTable.cs#L642-L700)
+
+章节来源
+- [Dx12Utility.cs:217-303](file://src/SharpGPU/Dx12/Dx12Utility.cs#L217-L303)
+- [Dx12BindingTable.cs:642-700](file://src/SharpGPU/Dx12/Dx12BindingTable.cs#L642-L700)
 
 ### 命令执行机制：命令缓冲与队列
 - 命令缓冲
@@ -367,13 +491,17 @@ CB --> Enc["编码器(传输/计算/栅格化/RT/ML/WG)"]
 Dev --> DS["描述符堆"]
 Dev --> CS["命令签名"]
 Dev --> DML["DirectML"]
+Dev --> SI["采样器Intern"]
 CB --> PL["管线/布局"]
+CB --> DR["描述符脏区域"]
 ```
 
 图表来源
 - [Dx12Device.cs:137-157](file://src/SharpGPU/Dx12/Dx12Device.cs#L137-L157)
 - [Dx12CommandQueue.cs:36-56](file://src/SharpGPU/Dx12/Dx12CommandQueue.cs#L36-L56)
 - [Dx12CommandBuffer.cs:39-56](file://src/SharpGPU/Dx12/Dx12CommandBuffer.cs#L39-L56)
+- [Dx12BindingTable.cs:560-580](file://src/SharpGPU/Dx12/Dx12BindingTable.cs#L560-L580)
+- [Dx12Sampler.cs:6-104](file://src/SharpGPU/Dx12/Dx12Sampler.cs#L6-L104)
 
 章节来源
 - [Dx12Device.cs:137-157](file://src/SharpGPU/Dx12/Dx12Device.cs#L137-L157)
@@ -384,6 +512,8 @@ CB --> PL["管线/布局"]
 - 描述符堆
   - 使用分页池减少频繁创建/销毁开销；尽量复用 GPU 可见堆，减少拷贝。
   - 合理预估容量，避免频繁扩容导致的重新分配。
+  - **新增**：利用Dx12DescriptorDirtyRanges的智能批量复制，减少不必要的内存移动。
+  - **新增**：采样器Intern系统避免重复创建相同配置的采样器。
 - 命令缓冲
   - 批量设置根参数与描述符，减少状态切换；合理使用本地根签名降低全局根签名成本。
   - 避免在单帧内过多小命令，合并绘制/计算批次。
@@ -398,7 +528,10 @@ CB --> PL["管线/布局"]
 - DirectML
   - 预编译算子，复用命令记录器；将 ML 任务与渲染/计算任务交错以隐藏延迟。
 
-[本节为通用指导，不直接分析具体文件]
+**新增优化策略**：
+- CPU暂存方法：分离CPU和GPU可见的描述符堆，提高内存访问效率
+- 智能批量复制：根据脏区域分布选择最优的复制策略
+- 引用计数管理：自动清理不再使用的采样器实例
 
 ## 故障排除指南
 - 常见错误与定位
@@ -406,29 +539,37 @@ CB --> PL["管线/布局"]
   - 描述符堆溢出：增大页面容量或优化分配策略；确保及时释放临时描述符。
   - 格式不支持：使用 QueryFormatSupport/QueryResolveSupport 提前验证；检查 MSAA 质量级别。
   - 设备丢失：捕获 HRESULT 映射到的 ERHIErrorCode.DeviceLost，并恢复设备状态。
+  - **新增**：采样器引用计数异常：检查ReleaseRef()调用是否正确，避免负数引用计数。
+  - **新增**：脏区域未清理：确保PublishDirtyDescriptors()正确调用，避免内存泄漏。
 - 调试技巧
   - 启用调试层与 GPU 验证；在命令缓冲 End 失败时 Dump 设备消息。
   - 使用 PIX 事件标记命名关键编码段，便于可视化分析。
   - 对 DirectML 与光线追踪，分别检查算子编译与状态对象创建返回值。
+  - **新增**：监控描述符堆使用情况，定期检查AllocatedDescriptorCount。
+  - **新增**：跟踪采样器Intern字典大小，避免内存增长。
 
 章节来源
 - [Dx12CommandBuffer.cs:87-111](file://src/SharpGPU/Dx12/Dx12CommandBuffer.cs#L87-L111)
 - [Dx12CommandBuffer.cs:188-210](file://src/SharpGPU/Dx12/Dx12CommandBuffer.cs#L188-L210)
 - [Dx12Pipeline.cs:418-463](file://src/SharpGPU/Dx12/Dx12Pipeline.cs#L418-L463)
 - [Dx12Utility.cs:351-435](file://src/SharpGPU/Dx12/Dx12Utility.cs#L351-L435)
+- [Dx12Sampler.cs:94-103](file://src/SharpGPU/Dx12/Dx12Sampler.cs#L94-L103)
+- [Dx12BindingTable.cs:642-700](file://src/SharpGPU/Dx12/Dx12BindingTable.cs#L642-L700)
 
 ## 结论
-SharpGPU 的 DX12 后端以 Dx12Device 为核心，围绕描述符堆、命令签名、管线与资源管理构建了高效且可扩展的渲染与计算框架。通过对格式与能力的前置探测、合理的内存与堆管理、以及 DirectML/Work Graph/Mesh Shading 的集成，能够在现代 GPU 上获得良好性能与功能覆盖。结合调试与性能优化建议，可进一步提升稳定性与吞吐。
+SharpGPU 的 DX12 后端以 Dx12Device 为核心，围绕描述符堆、命令签名、管线与资源管理构建了高效且可扩展的渲染与计算框架。通过对格式与能力的前置探测、合理的内存与堆管理、以及 DirectML/Work Graph/Mesh Shading 的集成，能够在现代 GPU 上获得良好性能与功能覆盖。
 
-[本节为总结性内容，不直接分析具体文件]
+**最新改进**：本次更新引入的描述符绑定系统重大架构变更显著提升了性能和内存效率。CPU暂存方法、Dx12DescriptorDirtyRanges批量复制优化和采样器Intern系统共同构成了一个更加健壮和高效的描述符管理机制。结合调试与性能优化建议，可进一步提升稳定性与吞吐。
 
 ## 附录
 - DX12 特定配置选项
   - 调试层与 GPU 验证：在实例创建时启用，有助于捕获早期错误。
   - Agility SDK：确保 D3D12Core.dll 存在并按需加载。
   - 队列请求：按场景调整 compute/transfer/graphics 队列数量。
+  - **新增**：描述符堆容量配置：根据应用场景调整StagingDescriptorPageCapacity等参数。
 - 错误处理
   - 统一通过 CHECK_HR 与 RequireCreatedObject 抛出 RHIException，并映射设备状态。
+  - **新增**：采样器引用计数异常处理：确保ReleaseRef()不会导致负数引用计数。
 - 参考路径
   - 设备初始化：[Dx12Device.cs:137-157](file://src/SharpGPU/Dx12/Dx12Device.cs#L137-L157)
   - 能力探测：[Dx12Device.cs:546-673](file://src/SharpGPU/Dx12/Dx12Device.cs#L546-L673)
@@ -439,3 +580,6 @@ SharpGPU 的 DX12 后端以 Dx12Device 为核心，围绕描述符堆、命令�
   - 光线追踪：[Dx12Pipeline.cs:529-774](file://src/SharpGPU/Dx12/Dx12Pipeline.cs#L529-L774)
   - DirectML：[Dx12Device.cs:87-108](file://src/SharpGPU/Dx12/Dx12Device.cs#L87-L108)
   - Work Graph：[Dx12CommandBuffer.cs:242-260](file://src/SharpGPU/Dx12/Dx12CommandBuffer.cs#L242-L260)
+  - **新增**：采样器Intern：[Dx12Sampler.cs:6-155](file://src/SharpGPU/Dx12/Dx12Sampler.cs#L6-L155)
+  - **新增**：脏区域跟踪：[Dx12Utility.cs:217-303](file://src/SharpGPU/Dx12/Dx12Utility.cs#L217-L303)
+  - **新增**：批量复制：[Dx12BindingTable.cs:642-700](file://src/SharpGPU/Dx12/Dx12BindingTable.cs#L642-L700)

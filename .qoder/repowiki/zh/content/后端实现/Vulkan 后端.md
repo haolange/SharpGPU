@@ -9,7 +9,15 @@
 - [VulkanMemory.cs](file://src/SharpGPU/Vulkan/VulkanMemory.cs)
 - [VulkanPipeline.cs](file://src/SharpGPU/Vulkan/VulkanPipeline.cs)
 - [VulkanUtility.cs](file://src/SharpGPU/Vulkan/VulkanUtility.cs)
+- [VulkanBindingTable.cs](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs)
 </cite>
+
+## 更新摘要
+**变更内容**
+- 新增统一描述符绑定方法实现，包含描述符池分页和"2倍浪费超集共享"模型
+- 更新了描述符分配器架构，支持更高效的资源共享机制
+- 增强了描述符池策略，优化了内存使用和资源利用率
+- 改进了描述符集租约管理，提供更好的生命周期控制
 
 ## 目录
 1. [简介](#简介)
@@ -24,7 +32,7 @@
 10. [附录](#附录)
 
 ## 简介
-本文件面向 SharpGPU 的 Vulkan 后端，系统性阐述从实例创建、物理设备枚举、逻辑设备与队列管理，到命令缓冲录制与提交、管线状态对象、描述符集布局、内存分配与着色器模块管理的完整实现。同时覆盖验证层使用、性能分析工具集成点、跨平台兼容性处理，以及针对 Vulkan 的配置选项、错误诊断与优化建议。
+本文件面向 SharpGPU 的 Vulkan 后端，系统性阐述从实例创建、物理设备枚举、逻辑设备与队列管理，到命令缓冲录制与提交、管线状态对象、描述符集布局、内存分配与着色器模块管理的完整实现。特别关注最新的统一描述符绑定方法实现，包括描述符池分页和"2倍浪费超集共享"模型，为更好的表间资源共享提供技术支持。同时覆盖验证层使用、性能分析工具集成点、跨平台兼容性处理，以及针对 Vulkan 的配置选项、错误诊断与优化建议。
 
 ## 项目结构
 Vulkan 后端位于 src/SharpGPU/Vulkan 目录下，围绕以下关键文件组织：
@@ -32,6 +40,7 @@ Vulkan 后端位于 src/SharpGPU/Vulkan 目录下，围绕以下关键文件组�
 - 命令与同步：VulkanCommandQueue.cs、VulkanCommandBuffer.cs
 - 资源与内存：VulkanMemory.cs（含堆、稀疏纹理、预算查询）
 - 管线与着色器：VulkanPipeline.cs（计算/光栅管线、布局、私有绑定）
+- 描述符绑定系统：VulkanBindingTable.cs（统一描述符绑定、池分页、共享策略）
 - 通用转换与工具：VulkanUtility.cs（格式/阶段/访问标志转换、错误封装、平台检测）
 
 ```mermaid
@@ -41,19 +50,23 @@ B --> C["VulkanCommandQueue<br/>队列获取/提交/稀疏绑定"]
 C --> D["VulkanCommandBuffer<br/>命令池/缓冲/编码器入口/临时资源回收"]
 B --> E["VulkanPipeline<br/>管线布局/计算/光栅管线/私有绑定"]
 B --> F["VulkanMemory<br/>缓冲/图像创建/内存类型筛选/堆/稀疏/预算"]
-B --> G["VulkanUtility<br/>平台/版本/转换/错误封装"]
+B --> G["VulkanBindingTable<br/>统一描述符绑定/池分页/共享策略"]
+B --> H["VulkanUtility<br/>平台/版本/转换/错误封装"]
+G --> I["VulkanDescriptorPoolAllocator<br/>描述符池分配器"]
+I --> J["VulkanDescriptorPoolPolicy<br/>共享策略算法"]
 ```
 
-图表来源
+**图表来源**
 - [VulkanInstance.cs:74-418](file://src/SharpGPU/Vulkan/VulkanInstance.cs#L74-L418)
 - [VulkanDevice.cs:182-800](file://src/SharpGPU/Vulkan/VulkanDevice.cs#L182-L800)
 - [VulkanCommandQueue.cs:46-158](file://src/SharpGPU/Vulkan/VulkanCommandQueue.cs#L46-L158)
 - [VulkanCommandBuffer.cs:43-80](file://src/SharpGPU/Vulkan/VulkanCommandBuffer.cs#L43-L80)
 - [VulkanPipeline.cs:32-177](file://src/SharpGPU/Vulkan/VulkanPipeline.cs#L32-L177)
 - [VulkanMemory.cs:9-127](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L9-L127)
+- [VulkanBindingTable.cs:1222-1558](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L1222-L1558)
 - [VulkanUtility.cs:27-121](file://src/SharpGPU/Vulkan/VulkanUtility.cs#L27-L121)
 
-章节来源
+**章节来源**
 - [VulkanInstance.cs:74-418](file://src/SharpGPU/Vulkan/VulkanInstance.cs#L74-L418)
 - [VulkanDevice.cs:182-800](file://src/SharpGPU/Vulkan/VulkanDevice.cs#L182-L800)
 
@@ -64,19 +77,21 @@ B --> G["VulkanUtility<br/>平台/版本/转换/错误封装"]
 - VulkanCommandBuffer：管理命令池与缓冲，提供传输/计算/光栅/光线追踪编码入口，维护图像布局覆盖与临时资源回收。
 - VulkanPipeline：创建管线布局、计算管线与光栅管线，支持动态渲染、私有绑定布局与兼容变体。
 - VulkanMemory：缓冲/图像创建信息构造、内存类型筛选、堆分配与映射、稀疏纹理需求查询与绑定、内存预算查询。
+- **VulkanBindingTable**：**统一描述符绑定系统，包含描述符池分页、共享策略和租约管理**。
 - VulkanUtility：平台检测、版本计算、RHI 与 Vulkan 类型转换、统一错误封装。
 
-章节来源
+**章节来源**
 - [VulkanInstance.cs:74-418](file://src/SharpGPU/Vulkan/VulkanInstance.cs#L74-L418)
 - [VulkanDevice.cs:182-800](file://src/SharpGPU/Vulkan/VulkanDevice.cs#L182-L800)
 - [VulkanCommandQueue.cs:46-158](file://src/SharpGPU/Vulkan/VulkanCommandQueue.cs#L46-L158)
 - [VulkanCommandBuffer.cs:43-80](file://src/SharpGPU/Vulkan/VulkanCommandBuffer.cs#L43-L80)
 - [VulkanPipeline.cs:32-177](file://src/SharpGPU/Vulkan/VulkanPipeline.cs#L32-L177)
 - [VulkanMemory.cs:9-127](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L9-L127)
+- [VulkanBindingTable.cs:1222-1558](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L1222-L1558)
 - [VulkanUtility.cs:27-121](file://src/SharpGPU/Vulkan/VulkanUtility.cs#L27-L121)
 
 ## 架构总览
-下图展示了从应用调用到 GPU 执行的端到端流程，涵盖实例初始化、设备选择、队列与命令缓冲、管线与内存资源、提交与同步。
+下图展示了从应用调用到 GPU 执行的端到端流程，涵盖实例初始化、设备选择、队列与命令缓冲、管线与内存资源、描述符绑定系统、提交与同步。
 
 ```mermaid
 sequenceDiagram
@@ -87,6 +102,8 @@ participant Q as "VulkanCommandQueue"
 participant CB as "VulkanCommandBuffer"
 participant Mem as "VulkanMemory"
 participant Pip as "VulkanPipeline"
+participant BT as "VulkanBindingTable"
+participant DPA as "VulkanDescriptorPoolAllocator"
 App->>Inst : 创建实例(表面/验证/扩展)
 Inst-->>App : 枚举物理设备
 App->>Dev : 构造设备(查询属性/特性链/队列族)
@@ -95,18 +112,22 @@ App->>Q : 获取队列(图形/计算/传输)
 App->>CB : 创建命令缓冲(命令池+缓冲)
 App->>Pip : 创建管线布局/管线
 App->>Mem : 创建缓冲/图像/堆
+App->>BT : 创建绑定表(统一描述符绑定)
+BT->>DPA : 分配描述符集(池分页/共享策略)
+DPA-->>BT : 返回描述符集租约
 App->>CB : Begin/录制命令(编码)
 App->>Q : Submit(等待/信号/栅栏)
 Q-->>App : 提交结果/错误
 ```
 
-图表来源
+**图表来源**
 - [VulkanInstance.cs:74-418](file://src/SharpGPU/Vulkan/VulkanInstance.cs#L74-L418)
 - [VulkanDevice.cs:182-800](file://src/SharpGPU/Vulkan/VulkanDevice.cs#L182-L800)
 - [VulkanCommandQueue.cs:46-158](file://src/SharpGPU/Vulkan/VulkanCommandQueue.cs#L46-L158)
 - [VulkanCommandBuffer.cs:43-80](file://src/SharpGPU/Vulkan/VulkanCommandBuffer.cs#L43-L80)
 - [VulkanPipeline.cs:32-177](file://src/SharpGPU/Vulkan/VulkanPipeline.cs#L32-L177)
 - [VulkanMemory.cs:9-127](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L9-L127)
+- [VulkanBindingTable.cs:1222-1558](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L1222-L1558)
 
 ## 详细组件分析
 
@@ -132,11 +153,11 @@ CreateInst --> Enumerate["枚举物理设备"]
 Enumerate --> End(["结束"])
 ```
 
-图表来源
+**图表来源**
 - [VulkanInstance.cs:127-380](file://src/SharpGPU/Vulkan/VulkanInstance.cs#L127-L380)
 - [VulkanInstance.cs:382-418](file://src/SharpGPU/Vulkan/VulkanInstance.cs#L382-L418)
 
-章节来源
+**章节来源**
 - [VulkanInstance.cs:127-380](file://src/SharpGPU/Vulkan/VulkanInstance.cs#L127-L380)
 - [VulkanInstance.cs:382-418](file://src/SharpGPU/Vulkan/VulkanInstance.cs#L382-L418)
 
@@ -166,11 +187,11 @@ class VulkanDevice {
 }
 ```
 
-图表来源
+**图表来源**
 - [VulkanDevice.cs:11-191](file://src/SharpGPU/Vulkan/VulkanDevice.cs#L11-L191)
 - [VulkanDevice.cs:193-800](file://src/SharpGPU/Vulkan/VulkanDevice.cs#L193-L800)
 
-章节来源
+**章节来源**
 - [VulkanDevice.cs:193-800](file://src/SharpGPU/Vulkan/VulkanDevice.cs#L193-L800)
 
 ### VulkanCommandQueue：提交与稀疏绑定
@@ -195,11 +216,11 @@ Q->>Dev : MarkDeviceLost(error)
 end
 ```
 
-图表来源
+**图表来源**
 - [VulkanCommandQueue.cs:63-158](file://src/SharpGPU/Vulkan/VulkanCommandQueue.cs#L63-L158)
 - [VulkanCommandQueue.cs:160-369](file://src/SharpGPU/Vulkan/VulkanCommandQueue.cs#L160-L369)
 
-章节来源
+**章节来源**
 - [VulkanCommandQueue.cs:63-158](file://src/SharpGPU/Vulkan/VulkanCommandQueue.cs#L63-L158)
 - [VulkanCommandQueue.cs:160-369](file://src/SharpGPU/Vulkan/VulkanCommandQueue.cs#L160-L369)
 
@@ -220,13 +241,13 @@ Record --> EndCmd["vkEndCommandBuffer"]
 EndCmd --> OnSubmitted["OnSubmitted()清理布局覆盖"]
 ```
 
-图表来源
+**图表来源**
 - [VulkanCommandBuffer.cs:43-98](file://src/SharpGPU/Vulkan/VulkanCommandBuffer.cs#L43-L98)
 - [VulkanCommandBuffer.cs:100-194](file://src/SharpGPU/Vulkan/VulkanCommandBuffer.cs#L100-L194)
 - [VulkanCommandBuffer.cs:196-330](file://src/SharpGPU/Vulkan/VulkanCommandBuffer.cs#L196-L330)
 - [VulkanCommandBuffer.cs:441-555](file://src/SharpGPU/Vulkan/VulkanCommandBuffer.cs#L441-L555)
 
-章节来源
+**章节来源**
 - [VulkanCommandBuffer.cs:43-98](file://src/SharpGPU/Vulkan/VulkanCommandBuffer.cs#L43-L98)
 - [VulkanCommandBuffer.cs:100-194](file://src/SharpGPU/Vulkan/VulkanCommandBuffer.cs#L100-L194)
 - [VulkanCommandBuffer.cs:196-330](file://src/SharpGPU/Vulkan/VulkanCommandBuffer.cs#L196-L330)
@@ -264,12 +285,12 @@ VulkanComputePipeline --> VulkanPipelineLayout : "使用"
 VulkanRasterPipeline --> VulkanPipelineLayout : "使用/扩展"
 ```
 
-图表来源
+**图表来源**
 - [VulkanPipeline.cs:10-177](file://src/SharpGPU/Vulkan/VulkanPipeline.cs#L10-L177)
 - [VulkanPipeline.cs:238-310](file://src/SharpGPU/Vulkan/VulkanPipeline.cs#L238-L310)
 - [VulkanPipeline.cs:312-742](file://src/SharpGPU/Vulkan/VulkanPipeline.cs#L312-L742)
 
-章节来源
+**章节来源**
 - [VulkanPipeline.cs:10-177](file://src/SharpGPU/Vulkan/VulkanPipeline.cs#L10-L177)
 - [VulkanPipeline.cs:238-310](file://src/SharpGPU/Vulkan/VulkanPipeline.cs#L238-L310)
 - [VulkanPipeline.cs:312-742](file://src/SharpGPU/Vulkan/VulkanPipeline.cs#L312-L742)
@@ -292,17 +313,75 @@ QueryReq --> BuildSub["构建子资源瓦片/mip-tail"]
 BuildSub --> Bind["vkQueueBindSparse绑定"]
 ```
 
-图表来源
+**图表来源**
 - [VulkanMemory.cs:9-127](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L9-L127)
 - [VulkanMemory.cs:133-370](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L133-L370)
 - [VulkanMemory.cs:376-533](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L376-L533)
 - [VulkanMemory.cs:539-728](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L539-L728)
 
-章节来源
+**章节来源**
 - [VulkanMemory.cs:9-127](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L9-L127)
 - [VulkanMemory.cs:133-370](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L133-L370)
 - [VulkanMemory.cs:376-533](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L376-L533)
 - [VulkanMemory.cs:539-728](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L539-L728)
+
+### VulkanBindingTable：统一描述符绑定系统与池分页
+
+**更新** 实现了统一的描述符绑定方法，包含描述符池分页和"2倍浪费超集共享"模型，提供更好的资源共享机制。
+
+- **统一描述符绑定**：通过 VulkanBindingTableLayout 和 VulkanBindingTable 提供一致的绑定接口，支持多种描述符类型（采样器、图像、缓冲区、加速结构等）。
+- **描述符池分页**：VulkanDescriptorPoolAllocator 管理多个描述符池页面，根据描述符需求动态创建和管理页面。
+- **"2倍浪费超集共享"模型**：VulkanDescriptorPoolPolicy 实现智能共享策略，允许超集页面被请求者共享，但浪费不超过2倍。
+- **描述符集租约**：VulkanDescriptorSetLease 提供描述符集的租约管理，支持安全的生命周期控制和自动回收。
+
+```mermaid
+flowchart TD
+Request["描述符分配请求"] --> ExactSearch{"精确匹配搜索"}
+ExactSearch --> |找到| ExactLease["返回精确租约"]
+ExactSearch --> |未找到| SharedSearch{"超集共享搜索"}
+SharedSearch --> |找到| SharedLease["返回共享租约"]
+SharedSearch --> |未找到| CreatePage["创建新页面"]
+CreatePage --> Allocate["分配描述符集"]
+Allocate --> NewLease["返回新租约"]
+ExactLease --> Return["返回租约"]
+SharedLease --> Return
+NewLease --> Return
+```
+
+**图表来源**
+- [VulkanBindingTable.cs:1255-1307](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L1255-L1307)
+- [VulkanBindingTable.cs:1368-1405](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L1368-L1405)
+- [VulkanBindingTable.cs:1407-1433](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L1407-L1433)
+
+**章节来源**
+- [VulkanBindingTable.cs:8-83](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L8-L83)
+- [VulkanBindingTable.cs:84-647](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L84-L647)
+- [VulkanBindingTable.cs:1222-1558](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L1222-L1558)
+
+### VulkanDescriptorPoolPolicy：共享策略算法
+
+**更新** 实现了"2倍浪费超集共享"模型，优化描述符池的资源利用率。
+
+- **SetsPerPage**：根据描述符总数计算每页的描述符集数量，采用分级策略（128/32/4/1）。
+- **CanSharePage**：判断页面是否可以被共享，要求页面是请求的超集且浪费不超过2倍。
+- **IsSuperset**：检查页面是否包含请求的所有描述符类型且数量足够。
+
+```mermaid
+flowchart TD
+CheckEqual{"页面与请求相等?"}
+CheckEqual --> |是| ShareTrue["允许共享"]
+CheckEqual --> |否| CheckSuperset{"页面是请求的超集?"}
+CheckSuperset --> |否| ShareFalse["不允许共享"]
+CheckSuperset --> |是| CheckWaste{"浪费比例<=2倍?"}
+CheckWaste --> |是| ShareTrue
+CheckWaste --> |否| ShareFalse
+```
+
+**图表来源**
+- [VulkanBindingTable.cs:1144-1202](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L1144-L1202)
+
+**章节来源**
+- [VulkanBindingTable.cs:1144-1202](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L1144-L1202)
 
 ### VulkanUtility：转换与错误封装
 - 平台检测：识别 Android/iOS/Windows/macOS/Linux。
@@ -310,7 +389,7 @@ BuildSub --> Bind["vkQueueBindSparse绑定"]
 - 类型转换：像素格式、交换链格式、顶点格式、索引类型、加速结构顶点格式、缓冲/图像用途、采样数、图像类型/视图类型、数组层数、图像面、内存属性、阶段/访问标志、图像布局等。
 - 错误封装：将 VkResult 映射为 RHI 错误码与设备状态，统一抛出 RHIException。
 
-章节来源
+**章节来源**
 - [VulkanUtility.cs:27-121](file://src/SharpGPU/Vulkan/VulkanUtility.cs#L27-L121)
 - [VulkanUtility.cs:123-800](file://src/SharpGPU/Vulkan/VulkanUtility.cs#L123-L800)
 
@@ -322,6 +401,8 @@ BuildSub --> Bind["vkQueueBindSparse绑定"]
   - VulkanCommandBuffer 依赖 VulkanCommandQueue 的命令池与队列族，并协调各编码器（传输/计算/光栅/光线追踪）。
   - VulkanPipeline 依赖 VulkanDevice 的管线布局与能力，使用 VulkanUtility 进行格式/状态转换。
   - VulkanMemory 依赖 VulkanDevice 的内存属性与能力，使用 VulkanUtility 进行内存属性与格式转换。
+  - **VulkanBindingTable 依赖 VulkanDevice 的描述符功能和限制，使用 VulkanDescriptorPoolAllocator 进行描述符集分配**。
+  - **VulkanDescriptorPoolAllocator 依赖 VulkanDescriptorPoolPolicy 进行共享策略决策**。
 - 外部依赖：Vortice.Vulkan 提供的 Vk* 类型与原生函数；Khronos 验证层与扩展。
 
 ```mermaid
@@ -332,29 +413,35 @@ Util --> Q["VulkanCommandQueue"]
 Util --> CB["VulkanCommandBuffer"]
 Util --> Pip["VulkanPipeline"]
 Util --> Mem["VulkanMemory"]
+Util --> BT["VulkanBindingTable"]
 Inst --> Dev
 Dev --> Q
 Dev --> Pip
 Dev --> Mem
+Dev --> BT
 Q --> CB
+BT --> DPA["VulkanDescriptorPoolAllocator"]
+DPA --> Policy["VulkanDescriptorPoolPolicy"]
 ```
 
-图表来源
+**图表来源**
 - [VulkanInstance.cs:74-418](file://src/SharpGPU/Vulkan/VulkanInstance.cs#L74-L418)
 - [VulkanDevice.cs:182-800](file://src/SharpGPU/Vulkan/VulkanDevice.cs#L182-L800)
 - [VulkanCommandQueue.cs:46-158](file://src/SharpGPU/Vulkan/VulkanCommandQueue.cs#L46-L158)
 - [VulkanCommandBuffer.cs:43-80](file://src/SharpGPU/Vulkan/VulkanCommandBuffer.cs#L43-L80)
 - [VulkanPipeline.cs:32-177](file://src/SharpGPU/Vulkan/VulkanPipeline.cs#L32-L177)
 - [VulkanMemory.cs:9-127](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L9-L127)
+- [VulkanBindingTable.cs:1222-1558](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L1222-L1558)
 - [VulkanUtility.cs:27-121](file://src/SharpGPU/Vulkan/VulkanUtility.cs#L27-L121)
 
-章节来源
+**章节来源**
 - [VulkanInstance.cs:74-418](file://src/SharpGPU/Vulkan/VulkanInstance.cs#L74-L418)
 - [VulkanDevice.cs:182-800](file://src/SharpGPU/Vulkan/VulkanDevice.cs#L182-L800)
 - [VulkanCommandQueue.cs:46-158](file://src/SharpGPU/Vulkan/VulkanCommandQueue.cs#L46-L158)
 - [VulkanCommandBuffer.cs:43-80](file://src/SharpGPU/Vulkan/VulkanCommandBuffer.cs#L43-L80)
 - [VulkanPipeline.cs:32-177](file://src/SharpGPU/Vulkan/VulkanPipeline.cs#L32-L177)
 - [VulkanMemory.cs:9-127](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L9-L127)
+- [VulkanBindingTable.cs:1222-1558](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L1222-L1558)
 - [VulkanUtility.cs:27-121](file://src/SharpGPU/Vulkan/VulkanUtility.cs#L27-L121)
 
 ## 性能考量
@@ -365,6 +452,7 @@ Q --> CB
 - 动态渲染：在支持的平台上使用动态渲染以减少 RenderPass 切换与状态重建。
 - 稀疏纹理：仅在需要按需驻留时使用，注意瓦片粒度与对齐，避免碎片化。
 - 预算监控：定期查询内存预算与使用量，及时调整资源规模以避免溢出。
+- **描述符池优化**：利用"2倍浪费超集共享"模型提高描述符池利用率，减少内存浪费；通过分页策略平衡内存使用与分配效率。
 
 [本节为通用指导，无需特定文件来源]
 
@@ -376,16 +464,18 @@ Q --> CB
 - 管线创建失败：检查着色器阶段、布局、动态渲染配置与附件格式；利用管线缓存的错误提示定位问题。
 - 内存分配失败：确认内存类型与属性满足存储模式；检查堆大小与对齐；使用预算查询评估剩余空间。
 - 稀疏绑定失败：验证队列族支持稀疏绑定，子资源瓦片范围不越界，堆兼容性与偏移正确。
+- **描述符分配失败**：检查描述符池容量是否足够，验证共享策略是否正常工作，确认描述符集租约是否正确释放。
 
-章节来源
+**章节来源**
 - [VulkanInstance.cs:127-380](file://src/SharpGPU/Vulkan/VulkanInstance.cs#L127-L380)
 - [VulkanDevice.cs:193-800](file://src/SharpGPU/Vulkan/VulkanDevice.cs#L193-L800)
 - [VulkanCommandQueue.cs:63-158](file://src/SharpGPU/Vulkan/VulkanCommandQueue.cs#L63-L158)
 - [VulkanPipeline.cs:238-310](file://src/SharpGPU/Vulkan/VulkanPipeline.cs#L238-L310)
 - [VulkanMemory.cs:539-728](file://src/SharpGPU/Vulkan/VulkanMemory.cs#L539-L728)
+- [VulkanBindingTable.cs:1309-1345](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L1309-L1345)
 
 ## 结论
-SharpGPU 的 Vulkan 后端以清晰的层次组织实现了从实例到设备、队列、命令缓冲、管线与内存的全链路管理。通过特性链与扩展探测，兼顾不同 Vulkan 版本与平台差异；借助验证层与统一错误封装，提升可诊断性；结合动态渲染、同步2与稀疏纹理等现代特性，提供高性能与灵活性。建议在工程中合理使用队列并行、管线缓存与内存预算，以获得稳定与高效的渲染与计算体验。
+SharpGPU 的 Vulkan 后端以清晰的层次组织实现了从实例到设备、队列、命令缓冲、管线与内存的全链路管理。通过特性链与扩展探测，兼顾不同 Vulkan 版本与平台差异；借助验证层与统一错误封装，提升可诊断性；结合动态渲染、同步2与稀疏纹理等现代特性，提供高性能与灵活性。**最新的统一描述符绑定方法通过描述符池分页和"2倍浪费超集共享"模型，显著提升了资源利用率和表间共享效率**。建议在工程中合理使用队列并行、管线缓存、内存预算和描述符池优化，以获得稳定与高效的渲染与计算体验。
 
 [本节为总结，无需特定文件来源]
 
@@ -395,16 +485,19 @@ SharpGPU 的 Vulkan 后端以清晰的层次组织实现了从实例到设备、
   - 队列请求：根据工作负载调整图形/计算/传输队列数量，避免过多导致上下文切换开销。
   - 动态渲染：在支持设备上优先使用动态渲染，减少 RenderPass 切换。
   - 同步2：在支持设备上启用同步2，获得更精确的阶段/访问控制。
+  - **描述符池配置**：根据应用的工作负载特点调整描述符池大小和共享策略，平衡内存使用与分配性能。
 - 性能分析工具集成点：
   - 调试标签：通过 vkCmdBeginDebugUtilsLabelEXT/vkCmdEndDebugUtilsLabelEXT 标注命令缓冲片段，便于 PIX/RenderDoc 等工具分析。
   - 校准时间戳：在支持的设备上启用 VK_KHR_calibrated_timestamps，提高 CPU/GPU 时间同步精度。
+  - **描述符池监控**：利用 AllocatedSetCount 属性监控描述符集使用情况，优化池大小和共享策略。
 - 跨平台兼容性：
   - 表面扩展：根据平台启用相应 surface 扩展（Win32/X11/Wayland/Android/AppKit/UIKit）。
   - Portability：在 iOS 等平台启用 portability enumeration 以增强设备枚举兼容性。
   - 平台最低版本：Android 要求 Vulkan 1.1+，确保 loader 与驱动满足要求。
 
-章节来源
+**章节来源**
 - [VulkanInstance.cs:127-198](file://src/SharpGPU/Vulkan/VulkanInstance.cs#L127-L198)
 - [VulkanInstance.cs:420-478](file://src/SharpGPU/Vulkan/VulkanInstance.cs#L420-L478)
 - [VulkanDevice.cs:193-800](file://src/SharpGPU/Vulkan/VulkanDevice.cs#L193-L800)
 - [VulkanUtility.cs:27-57](file://src/SharpGPU/Vulkan/VulkanUtility.cs#L27-L57)
+- [VulkanBindingTable.cs:1235-1253](file://src/SharpGPU/Vulkan/VulkanBindingTable.cs#L1235-L1253)
