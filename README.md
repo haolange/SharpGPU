@@ -1,115 +1,125 @@
 # SharpGPU
 
-SharpGPU is a .NET 10 hardware abstraction over DirectX 12, Vulkan and Metal. The public surface is a set of explicit mechanisms: devices, resources, immutable pipelines, binding tables, command encoders, queues and presentation. Pass topology, barrier inference, memory aliasing and transient-resource lifetime stay with the caller, typically a render graph.
+把现代图形 API 收成一套显式、失败即关闭的硬件抽象。
 
-Shaders enter as compiled payloads. SharpGPU does not ship a shader compiler. Swap-chain acquire and present report `ERHISwapChainStatus` and leave recreate to the caller. Unsupported factories throw `NotSupportedException` rather than substituting another execution path.
+DirectX 12 × Vulkan × Metal
 
-The maintained product is the RHI, the three backends, and the Vortice bindings those backends rely on. [samples/ComputeAndDraw](samples/ComputeAndDraw) is a headless compute-and-raster workload. [docs/SharpGPU/QuickStart.md](docs/SharpGPU/QuickStart.md) is the smallest transfer-pass example and shows the optional `SharpGPU.Scopes` and `SharpGPU.Builders` helpers. The low-level contract is the `SharpGPU` namespace itself.
+[English](README.en.md) · [设计与架构](#设计与架构) · [问题反馈](https://github.com/haolange/SharpGPU/issues)
 
-## Backends
+## 这是硬件抽象，不是渲染器
 
-`ERHIBackend` is `Metal`, `Vulkan`, `DirectX12` or `Pending`. There is no Auto value. `RHIInstance.GetBackendByPlatform` returns a suggestion: DirectX 12 on Windows unless `bForceVulkan` is set, Metal on macOS and iOS, Vulkan on Linux and Android. The caller copies that value into `RHIInstanceDescriptor`. `Pending` cannot create an instance.
+SharpGPU 是 .NET 10 上的 DirectX 12、Vulkan 与 Metal 硬件抽象。公开面是一组显式机制：设备、资源、不可变管线、绑定表、命令编码器、队列和呈现。Pass 拓扑、屏障推导、内存别名和瞬态资源寿命留在调用方，通常是一层 Render Graph。
 
-`RHIInstance.IsBackendSupported` checks the operating system only. It does not probe drivers or native libraries. Driver and feature availability show up when the device is created and when `RHIDevice.Capabilities` is read. A build that does not define `SHARPGPU_ENABLE_DX12` has no DirectX 12 path.
+着色器以编译后的字节码进入。SharpGPU 不带着色器编译器。交换链的获取和呈现只返回 `ERHISwapChainStatus`，重建留给调用方。不支持的工厂抛出 `NotSupportedException`，不换一条执行路径顶上。
 
-`RHIInstanceDescriptor` also carries the debug and validation switches, the native surface kind, and the requested graphics, compute and transfer queue counts. One `RHIInstance` owns every enumerated device. `GetDevice` returns a device by index. A queue is `RHIDevice.GetCommandQueue(ERHIPipelineType, index)`.
+本库维护 RHI、三个后端，以及这些后端依赖的 Vortice 绑定。[samples/ComputeAndDraw](samples/ComputeAndDraw) 是无窗口的计算加光栅示例。[docs/SharpGPU/QuickStart.md](docs/SharpGPU/QuickStart.md) 是最短的传输 Pass，并演示可选的 `SharpGPU.Scopes` 与 `SharpGPU.Builders`。底层契约在 `SharpGPU` 命名空间。
 
-`ERHIDeviceState` is `Unknown`, `Operational`, `Lost`, `Removed` or `Reset`. `Lost` is a timeout or device-loss recovery. `Removed` is a physical adapter going away. `Reset` means previous resources are dead and must be created again. Native failures surface as `RHIException`, which carries `ERHIErrorCode`, the backend, the native code and message, and the device state.
+## 设计与架构
 
-`RHIAdapterIdentity` holds a LUID and a device UUID when the backend actually has them. `RequireMatch` is the check for “this swap chain or shared resource must land on that adapter”.
+### 后端
 
-## Resources
+`ERHIBackend` 为 `Metal`、`Vulkan`、`DirectX12` 或 `Pending`。没有 Auto。`RHIInstance.GetBackendByPlatform` 只给建议：Windows 上默认 DirectX 12，`bForceVulkan` 为真时改用 Vulkan；macOS 与 iOS 为 Metal；Linux 与 Android 为 Vulkan。调用方把这个值写入 `RHIInstanceDescriptor`。`Pending` 不能用来创建实例。
 
-GPU memory is a buffer or a texture. `RHIBufferDescriptor` carries byte size, element format, usage and `ERHIStorageMode`. `RHITextureDescriptor` adds mip count, `uint3` extent, pixel format, sample count and dimension. `ERHIStorageMode` is `GPULocal`, `HostUpload`, `GPUUpload`, `Readback` or `Memoryless`.
+`RHIInstance.IsBackendSupported` 只检查操作系统，不探测驱动或原生库。驱动和功能是否真能用，要等设备创建以及读取 `RHIDevice.Capabilities`。未定义 `SHARPGPU_ENABLE_DX12` 的构建没有 DirectX 12 路径。
 
-`CreateBuffer` and `CreateTexture` allocate committed resources. `CreatePlacedBuffer` and `CreatePlacedTexture` place a resource in an `RHIHeap` created from `RHIHeapDescription`. `ERHIHeapType` selects the kind of heap (`Default`, `BuffersOnly`, `TexturesOnly`, `RenderTarget`), not the CPU/GPU traffic direction; that direction is `ERHIStorageMode`. Sparse textures and buffers, residency and budget queries are separate memory capabilities. Call them only after the matching capability is available.
+`RHIInstanceDescriptor` 还带调试层、校验层、原生表面种类，以及请求的图形、计算、传输队列数量。一个 `RHIInstance` 拥有枚举到的全部设备。`GetDevice` 按索引取设备。队列是 `RHIDevice.GetCommandQueue(ERHIPipelineType, index)`。
 
-A view is a range plus an access mode on a resource the caller already owns. Buffers expose `CreateBufferView`. Textures expose a texture-view descriptor for mip and array ranges. Tensors and function libraries have their own view types. These views are not the backend descriptor heaps, pools or argument-buffer pools; those stay inside the backend.
+`ERHIDeviceState` 为 `Unknown`、`Operational`、`Lost`、`Removed`、`Reset`。`Lost` 是超时或设备丢失后的恢复。`Removed` 是物理适配器消失。`Reset` 表示此前的资源已经失效，需要重新创建。原生失败表现为 `RHIException`，其中有 `ERHIErrorCode`、后端、原生代码与消息，以及设备状态。
 
-Samplers are either `RHISampler` objects or static samplers embedded in a pipeline layout. A sampler-feedback map is paired with its texture at creation time. The encoder cannot rebind that pairing later.
+`RHIAdapterIdentity` 在后端确实提供时保存 LUID 和设备 UUID。`RequireMatch` 用来断言「这块交换链或共享资源必须落在那张适配器上」。
 
-## Shaders and pipelines
+### 资源
 
-`RHIFunctionDescriptor` points at bytecode (`ERHIShaderPayloadKind`: `Dxil`, `SpirV`, `MslSource` or `MetalLibrary`), an entry name and an `ERHIFunctionType`. A function library compiles a payload once; `CreateFunction` then selects an entry. Ray tracing and work graphs consume libraries. Raster and compute library reuse is a capability, and it is unavailable on some backends.
+GPU 内存是 Buffer 或 Texture。`RHIBufferDescriptor` 包含字节大小、元素格式、用途和 `ERHIStorageMode`。`RHITextureDescriptor` 另有 mip 数量、`uint3` 范围、像素格式、采样数和维度。`ERHIStorageMode` 为 `GPULocal`、`HostUpload`、`GPUUpload`、`Readback` 或 `Memoryless`。
 
-Pipelines are immutable after creation.
+`CreateBuffer` 与 `CreateTexture` 创建 Committed 资源。`CreatePlacedBuffer` 与 `CreatePlacedTexture` 把资源放进由 `RHIHeapDescription` 创建的 `RHIHeap`。`ERHIHeapType` 选择堆的种类（`Default`、`BuffersOnly`、`TexturesOnly`、`RenderTarget`），不表示 CPU/GPU 的传输方向；方向由 `ERHIStorageMode` 表示。稀疏纹理和缓冲、驻留与预算查询是各自的内存能力，先确认能力可用再调用。
 
-- `RHIRasterPipelineDescriptor` locks sample count, color and depth formats, render state, an optional fragment function, a pipeline layout and a `RHIPrimitiveAssemblerDescriptor`. The assembler is either a vertex function plus vertex layouts, or a mesh function with an optional task function. An optional `RHIRasterAttachmentShaderAbiClaim` checks that the shader outputs and the pass attachments are the same contract.
-- `RHIComputePipelineDescriptor` locks the thread-group size, the compute function and the layout. The descriptor carries the group size so Metal, DirectX 12 and Vulkan share one place to read it.
-- Ray tracing, work graphs and machine learning have their own pipeline types. Machine-learning execution is a binary pipeline: an `RHIMLBinary` becomes an `RHIMLPipeline`, then a binding table, then an `RHIMLEncoder`. There is no public runtime op-graph API.
+视图是调用方已有资源上的一段范围加一种访问方式。Buffer 使用 `CreateBufferView`。Texture 使用描述 mip 与数组范围的视图描述符。Tensor 和函数库有自己的视图类型。这些视图不是后端的 descriptor heap、pool 或 argument buffer pool，后者留在后端内部。
 
-`RHIPipelineCache` imports and exports an opaque blob. The caller stores the bytes. A driver or GPU change makes old entries incompatible; import reports that instead of pretending the cache hit.
+采样器要么是 `RHISampler` 对象，要么是嵌进管线布局的静态采样器。Sampler Feedback 贴图在创建时就和目标纹理配对，编码器之后不能改配对。
 
-## Binding
+### 着色器与管线
 
-`RHIPipelineLayoutDescriptor` names binding-table layouts, a push-constant size, optional static samplers, whether the layout is a local ray-tracing signature, and whether it includes a vertex layout. At record time the encoder binds `RHIBindingTable` objects. A table has a `Count` and `SetBindElement(..., arrayIndex)` for a finite bindless range.
+`RHIFunctionDescriptor` 指向字节码（`ERHIShaderPayloadKind`：`Dxil`、`SpirV`、`MslSource` 或 `MetalLibrary`）、入口名和 `ERHIFunctionType`。函数库把一份载荷编译一次，再由 `CreateFunction` 选取入口。光线追踪和工作图消费函数库。光栅与计算对函数库的复用是一项能力，部分后端不可用。
 
-DirectX 12 descriptor heaps, Vulkan descriptor pools and the Metal view pool are backend storage. They are not public types, and they are not resized as shader-visible heaps at runtime.
+管线创建后不可变。
 
-## Command recording
+- `RHIRasterPipelineDescriptor` 锁定采样数、颜色与深度格式、渲染状态、可选的片段函数、管线布局和 `RHIPrimitiveAssemblerDescriptor`。装配器要么是顶点函数加顶点布局，要么是网格函数加可选的 task 函数。可选的 `RHIRasterAttachmentShaderAbiClaim` 检查着色器输出和 Pass 附件是同一份契约。
+- `RHIComputePipelineDescriptor` 锁定线程组大小、计算函数和布局。组大小写在描述符里，Metal、DirectX 12 和 Vulkan 读同一处。
+- 光线追踪、工作图和机器学习各有自己的管线类型。机器学习执行的是二进制管线：`RHIMLBinary` 变成 `RHIMLPipeline`，再是绑定表和 `RHIMLEncoder`。没有公开的运行时算子图 API。
 
-`RHICommandQueue.CreateCommandBuffer` returns the buffer. `Begin(string name)` starts recording; the name is the debug label. `End` closes it for submit.
+`RHIPipelineCache` 导入和导出一块不透明字节。调用方自己保存。驱动或 GPU 变化会使旧条目不兼容；导入会报告这一点，而不是假装命中。
 
-A buffer has one active encoder. The pass begin call selects it, and the matching `End*Pass` clears it. The six encoders are:
+### 绑定
 
-| Pass | Begin / end |
+`RHIPipelineLayoutDescriptor` 给出绑定表布局、Push Constant 大小、可选静态采样器、是否为光线追踪的 local signature，以及是否包含顶点布局。录制时编码器绑定 `RHIBindingTable`。表有 `Count`，并用 `SetBindElement(..., arrayIndex)` 表达有限的 bindless 范围。
+
+DirectX 12 的 descriptor heap、Vulkan 的 descriptor pool 和 Metal 的 view pool 是后端存储。它们不是公开类型，运行时也不把 shader-visible heap 再扩一层。
+
+### 命令录制
+
+`RHICommandQueue.CreateCommandBuffer` 得到命令缓冲。`Begin(string name)` 开始录制，名字是调试标签。`End` 结束录制，之后可以提交。
+
+一个命令缓冲同时只有一个活动编码器。对应的 Begin 选定它，匹配的 `End*Pass` 结束它。六种编码器是：
+
+| Pass | Begin / End |
 |---|---|
-| Transfer | `BeginTransferPass` / `EndTransferPass` |
-| Compute | `BeginComputePass` / `EndComputePass` |
-| Ray tracing | `BeginRaytracingPass` / `EndRaytracingPass` |
-| Raster | `BeginRasterPass` / `EndRasterPass` |
-| Machine learning | `BeginMLPass` / `EndMLPass` |
-| Work graph | `BeginWorkGraphPass` / `EndWorkGraphPass` |
+| 传输 | `BeginTransferPass` / `EndTransferPass` |
+| 计算 | `BeginComputePass` / `EndComputePass` |
+| 光线追踪 | `BeginRaytracingPass` / `EndRaytracingPass` |
+| 光栅 | `BeginRasterPass` / `EndRasterPass` |
+| 机器学习 | `BeginMLPass` / `EndMLPass` |
+| 工作图 | `BeginWorkGraphPass` / `EndWorkGraphPass` |
 
-Raster recording covers draws, indirect draws, viewports and binding. Compute recording covers dispatch and indirect dispatch. Transfer recording covers copies and blits. Every encoder records `RHIBarrier` values: global, buffer or texture. Stage and access masks use Before/After pairs. Texture barriers also carry `ERHITextureLayout` (13 values, including copy, resolve, present and `Common`). A non-null source or destination queue is a cross-queue ownership transfer.
+光栅录制绘制、间接绘制、视口和绑定。计算录制 Dispatch 与间接 Dispatch。传输录制拷贝和 Blit。每种编码器都录制 `RHIBarrier`：全局、Buffer 或 Texture。阶段与访问掩码成对使用 Before/After。纹理屏障另带 `ERHITextureLayout`（13 个值，含拷贝、Resolve、Present 和 `Common`）。源队列或目标队列非空时，表示跨队列所有权转移。
 
-Indirect command buffers are a separate capability used to record draw streams in parallel and `Execute` them inside an encoder. Vulkan does not implement that contract.
+间接命令缓冲是另一项能力，用来并行录制绘制流，再在编码器里 `Execute`。Vulkan 不实现这份契约。
 
-## Submit and synchronization
+### 提交与同步
 
-`RHICommandQueue.Submit` takes `RHIQueueSubmitDescriptor`: command buffers, semaphore waits with a stage mask, signal semaphores, and an optional completion fence. An empty submit throws `ArgumentException` ("A queue submission must contain work or a synchronization operation."). The queue reserves semaphore and fence operations and rolls them back if the native submit fails. That reservation is internal. Callers fill the descriptor; they do not call reserve, commit or rollback themselves.
+`RHICommandQueue.Submit` 接收 `RHIQueueSubmitDescriptor`：命令缓冲、带阶段掩码的信号量等待、要发出的信号量，以及可选的完成栅栏。空提交抛出 `ArgumentException`（「A queue submission must contain work or a synchronization operation.」）。队列在原生提交失败时回滚已经预约的信号量和栅栏。预约是内部实现。调用方只填描述符，不自己调用 reserve、commit 或 rollback。
 
-`RHIFence` is the CPU/GPU signal. `Wait` returns `ERHIFenceStatus` (`Success`, `NotReady` or `Undefined`), not a boolean. `Reset` is legal once the signal has completed. `RHISemaphore` is the GPU/GPU signal carried in the submit descriptor.
+`RHIFence` 是 CPU 与 GPU 之间的信号。`Wait` 返回 `ERHIFenceStatus`（`Success`、`NotReady` 或 `Undefined`），不返回布尔值。信号完成后可以 `Reset`。`RHISemaphore` 是 GPU 与 GPU 之间的信号，放在提交描述符里。
 
-Timestamp, occlusion and pipeline-statistics results are read from `RHIQuery` after the GPU has written them. `TryGetTimestamp`, `TryGetOcclusion` and `TryGetPipelineStatistics` return false while the result is still pending. Calibrated timestamps are `QueryClockCalibration` on devices whose synchronization capability reports them. There is no CPU-clock substitute.
+时间戳、遮挡和管线统计从 `RHIQuery` 读取，要等 GPU 写完。结果未就绪时 `TryGetTimestamp`、`TryGetOcclusion` 和 `TryGetPipelineStatistics` 返回 false。校准时间戳是 `QueryClockCalibration`，仅当同步能力报告可用时存在。没有用 CPU 时钟冒充的路径。
 
-## Presentation
+### 呈现
 
-`RHISwapChainDescriptor` names the window handles, `ERHINativeSurfaceKind` (`Win32Hwnd`, `AppKitNsWindow`, `X11Window`, `WaylandSurface`, `UIKitUiWindow`, `AndroidNativeWindow` or `Headless`), extent, buffer count, format, present mode, frame rate, `FrameBufferOnly`, a surface generation and the present queue.
+`RHISwapChainDescriptor` 给出窗口句柄、`ERHINativeSurfaceKind`（`Win32Hwnd`、`AppKitNsWindow`、`X11Window`、`WaylandSurface`、`UIKitUiWindow`、`AndroidNativeWindow` 或 `Headless`）、范围、缓冲数量、格式、呈现模式、帧率、`FrameBufferOnly`、表面代际和呈现队列。
 
-Acquire and present take their own descriptors and return `ERHISwapChainStatus`: `Success`, `NotReady`, `Timeout`, `Occluded`, `Suboptimal`, `OutOfDate`, `SurfaceLost` or `DeviceLost`. `Suboptimal` still presents. `OutOfDate`, `SurfaceLost` and `DeviceLost` need the caller to rebuild the swap chain or the device. The HAL does not do that rebuild, and it does not idle the queue on its own.
+获取和呈现使用各自的描述符，并返回 `ERHISwapChainStatus`：`Success`、`NotReady`、`Timeout`、`Occluded`、`Suboptimal`、`OutOfDate`、`SurfaceLost` 或 `DeviceLost`。`Suboptimal` 仍可呈现。`OutOfDate`、`SurfaceLost` 和 `DeviceLost` 需要调用方重建交换链或设备。HAL 不代做这次重建，也不自行把队列闲置下来。
 
-## Capabilities
+### 能力
 
-`RHIDevice.Capabilities` is 14 domains, each a small object with tier, strategy, provenance and an unavailable reason:
+`RHIDevice.Capabilities` 有 14 个域。每个域是一个小对象，带有等级、策略、来源和不可用原因：
 
-`Raster`, `Binding`, `Synchronization`, `Memory`, `Storage`, `PipelineCache`, `Presentation`, `RayTracing`, `Mesh`, `MachineLearning`, `WorkGraph`, `IndirectCommandBuffer`, `Compute`, `FunctionLibrary`.
+`Raster`、`Binding`、`Synchronization`、`Memory`、`Storage`、`PipelineCache`、`Presentation`、`RayTracing`、`Mesh`、`MachineLearning`、`WorkGraph`、`IndirectCommandBuffer`、`Compute`、`FunctionLibrary`。
 
-`ERHICapabilityTier` runs from `Unavailable` through `Tier4`. What a tier means is defined per domain in the [feature matrix](docs/SharpGPU/FeatureMatrix.md), not by a single ladder. `ERHICapabilityStrategy` says how the backend implements it (`CoreApi`, `NativeExtension`, `NativeSpecialized`, `NativeLibrary`). `ERHICapabilityProbeKind` says how that answer was obtained.
+`ERHICapabilityTier` 从 `Unavailable` 到 `Tier4`。某一级表示什么，由 [能力矩阵](docs/SharpGPU/FeatureMatrix.md) 按域定义，不是一根统一的梯子。`ERHICapabilityStrategy` 说明后端如何实现（`CoreApi`、`NativeExtension`、`NativeSpecialized`、`NativeLibrary`）。`ERHICapabilityProbeKind` 说明这个答案是怎么得到的。
 
-`RHIDeviceLimit` holds the alignments and maximums used on every upload and dispatch. The wider numeric limits are `RHICapabilityLimits.TryGetValue`. A missing key means this backend does not report that limit.
+`RHIDeviceLimit` 放每次上传和派发都会用到的对齐与上限。更宽的数值限制走 `RHICapabilityLimits.TryGetValue`。查不到键，表示这个后端不报告该项。
 
-Exact questions that a domain tier cannot answer have their own queries: `QueryFormatSupport`, `QueryResolveSupport`, `QueryRasterAttachmentSupport`, and the cooperative-matrix configuration query. Ray tracing is several facets (pipeline, inline, opacity micromap, motion), not one tier number. Storage queues, variable-rate shading, mesh shaders, work graphs and sampler feedback are the same kind of opt-in: the matrix names the type, and a missing native path throws.
+域等级回答不了的精确问题另有查询：`QueryFormatSupport`、`QueryResolveSupport`、`QueryRasterAttachmentSupport`，以及协作矩阵配置查询。光线追踪是几项分面（管线、内联、不透明度微映射、运动），不是一个等级数字。存储队列、可变速率着色、网格着色器、工作图和 Sampler Feedback 同样是可选能力：矩阵写出类型名，没有原生路径就抛异常。
 
-## Qualification
+### 资格
 
-A capability describes the device that was probed. `Passed`, `Failed`, `Unverified` and `BLOCKED_PLATFORM` describe a scenario run on a matching host. Those words live in the feature matrix and in [docs/VERIFICATION.md](docs/VERIFICATION.md). A successful native probe is not a passed qualification. The matrix is the list of which hosts have a current report and which are still blocked.
+能力描述的是刚探测过的那台设备。`Passed`、`Failed`、`Unverified` 和 `BLOCKED_PLATFORM` 描述的是在匹配主机上跑过的场景。这些词只出现在能力矩阵和 [docs/VERIFICATION.md](docs/VERIFICATION.md)。原生探测成功不等于场景资格通过。哪些主机已有报告、哪些仍被挡住，以矩阵为准。
 
-## Getting started
+## 开始使用
 
-- Install the .NET SDK selected by [global.json](global.json). Runtime projects target .NET 10; compiler generators retain their declared build-time targets.
-- For source development, copy [stack.local.props.example](stack.local.props.example) to `stack.local.props` and adjust the checkout paths. The template assumes sibling InfinityStack repositories; only mapped dependencies used by the chosen build need to be present. Product tests may require additional peers.
-- Follow [docs/VERIFICATION.md](docs/VERIFICATION.md) for the authoritative build, test, pack and platform-specific commands. Start with the [standalone sample](samples/ComputeAndDraw).
-- For package consumption, use `StackReferenceMode=Package` and an explicitly supplied feed containing the matching product versions. Source and package modes apply to the complete graph. Package availability is determined by published assets; this README does not assume a nuget.org release.
+- 安装 [global.json](global.json) 选定的 .NET SDK。运行时项目目标是 .NET 10；编译器生成器保留各自声明的构建目标。
+- 源码开发时，把 [stack.local.props.example](stack.local.props.example) 复制为 `stack.local.props` 并改检出路径。模板假定 InfinityStack 仓库彼此相邻；所选构建用到的依赖在即可。产品测试可能还需要更多同伴仓库。
+- 构建、测试、打包和平台命令以 [docs/VERIFICATION.md](docs/VERIFICATION.md) 为准。从 [独立示例](samples/ComputeAndDraw) 开始。
+- 以包消费时使用 `StackReferenceMode=Package`，并显式提供含匹配版本的源。Source 与 Package 作用于整张依赖图。包是否可获取取决于已发布的资产；本文不假定 nuget.org 上已有发行。
 
-## Repository layout
+## 仓库布局
 
-`src/` owns runtime code, `samples/` runnable workloads, `docs/` the feature matrix, quick start and verification, and `eng/` verification automation. Tests and tools live in their own directories where applicable. [AGENTS.md](AGENTS.md) defines contribution rules and product boundaries.
+`src/` 是运行时，`samples/` 是可运行负载，`docs/` 是能力矩阵、快速开始和验证，`eng/` 是验证自动化。测试和工具各自有目录。[AGENTS.md](AGENTS.md) 定义贡献规则和产品边界。
 
-Build outputs, isolated package caches and raw run evidence belong under ignored `artifacts/`. Commit source, reviewed lock files and portable configuration templates; keep machine paths in `stack.local.props`. Historical run summaries do not imply that their disposable output directories still exist.
+构建输出、隔离的包缓存和原始运行证据放在被忽略的 `artifacts/`。提交源码、已审阅的 lock 和可移植配置模板；机器路径留在 `stack.local.props`。历史运行摘要不表示那些一次性输出目录还在。
 
-Native inputs and hashes are recorded in [native/assets.json](native/assets.json); NuGet native inputs are restored by the build. Device support must be checked at runtime.
+原生输入和哈希记在 [native/assets.json](native/assets.json)；NuGet 原生输入由构建还原。设备支持必须在运行时检查。
 
-## License
+## 许可证
 
-[MPL-2.0](LICENSE). Existing copyright notices and third-party notices remain with their respective files. Extraction records and inherited notices are retained under [docs/provenance](docs/provenance).
+[MPL-2.0](LICENSE)。既有版权声明和第三方声明留在各自文件。[docs/provenance](docs/provenance) 保留提取记录和继承来的声明。

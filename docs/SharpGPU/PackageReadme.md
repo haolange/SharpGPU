@@ -1,5 +1,7 @@
 # SharpGPU
 
+[简体中文](../../README.md) · [English](../../README.en.md)
+
 SharpGPU is a .NET 10 hardware abstraction over DirectX 12, Vulkan and Metal. The public surface is devices, resources, immutable pipelines, `RHIBindingTable`, command encoders, queues and presentation. Pass topology, barrier inference, memory aliasing and transient-resource lifetime stay with the caller. Shaders enter as `Dxil`, `SpirV`, `MslSource` or `MetalLibrary` payloads. SharpGPU does not compile them, and it does not recreate a swap chain when present fails.
 
 `ERHIBackend` is `Metal`, `Vulkan`, `DirectX12` or `Pending`. There is no Auto value. `GetBackendByPlatform` is a suggestion. `IsBackendSupported` checks the operating system only. A build without `SHARPGPU_ENABLE_DX12` has no DirectX 12 path.
