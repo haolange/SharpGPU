@@ -2,13 +2,25 @@
 
 ## Authority
 
-- [DESIGN.md](DESIGN.md) owns product architecture. [docs/VERIFICATION.md](docs/VERIFICATION.md) owns build/test/pack and platform qualification commands.
+- This file owns contribution rules and product boundaries. [docs/VERIFICATION.md](docs/VERIFICATION.md) owns build, test, pack and platform qualification commands.
 - Work on the checked-out branch, normally `main`. Do not create branches, PRs, remotes or publish without explicit user authorization.
 - Preserve unrelated and uncommitted work. Do not rewrite Git history or discard source provenance during cleanup.
 
 ## Product boundary
 
-Keep RHI and backend boundaries explicit. Do not expose backend Heap/Pool/View containers on the public RHI surface. Preserve the maintained Vortice source and patches; do not replace them with an upstream package that lacks the custom behavior.
+SharpGPU builds independently of Infinity Engine. Product sources live under `src/`, owned tests under `tests/`, tools under `tools/` and examples under `samples/`. Original source and preserved history stay in [docs/provenance/extraction.json](docs/provenance/extraction.json) and [docs/provenance/commit-map.txt](docs/provenance/commit-map.txt). Missing dependencies fail; they do not fall back to another version. Products do not infer an Infinity Engine location or a developer drive from the current directory, do not duplicate a consuming workspace's revision manifest, and do not record their own commit inside themselves. The Infinity Engine integration records its checkout SHAs in its own root `stack.lock.json`. Current extraction acceptance is tracked by InfinityBrowser TASK-20260907-INFINITYSTACK-EXTRACTION; these instructions are not a claim that migration gates have passed.
+
+Source and Package modes are explicit and graph-wide. Local checkout paths belong only in ignored `stack.local.props`. Package versions are owned by project configuration and mode-specific NuGet lock files named `packages.<StackReferenceMode>.<RID-or-portable>.lock.json` beside each project. The two modes do not share resolution state. NuGet owns target-framework sections within each lock. Configuration and Platform variants do not change package references. Reviewed locks are committed; verification uses `RestoreLockedMode`. Unsuffixed locks are retired. Output and intermediate paths are isolated by project, platform, RID, configuration and SDK target framework. Native packages use `runtimes/<rid>/native`; host integrations select their explicit deployment layout.
+
+The public binding surface is `RHIBindingTable` with `Count` and `SetBindElement(..., arrayIndex)` for finite bindless. RHI does not grow Heap, Pool or View containers. DX12 gives every table group its own CPU mirror plus GPU segment and publishes on `SetBindingTable`; views and interned sampler slots occupy CPU staging only. Vulkan keeps a set per table and pages pools on the device. Metal fills argument tables or reference buffers and locks a private ViewPool at device create. Backends do not resize shader-visible GPU heaps or native pools at runtime. Preserve the maintained Vortice source and patches; do not replace them with an upstream package that lacks the custom behavior.
+
+DX12 requires successful Agility device-factory initialization using the application D3D12 directory and UTF-8 paths. Source references and packages both deploy these assets; missing assets fail explicitly. The maintained binding and evidence are described in [docs/SharpGPU/VorticeAgilityPathPatch.md](docs/SharpGPU/VorticeAgilityPathPatch.md). Public native-backed operations enforce platform and ownership boundaries. No capability downgrade or compatibility implementation may conceal unsupported execution.
+
+Backend implementation tests belong to the independent conformance harness. `Infinity.Rendering.Tests` has no product friend access. Test migration provenance is recorded in [docs/provenance/backend-test-migration.json](docs/provenance/backend-test-migration.json). Native configuration tests exercise actual Configure/Resolve behavior in isolated load contexts; product code does not contain a separate engine-path enumerator solely for tests. Windows native DLL loading uses extended-length local/UNC paths at the native boundary, while reported and configured locations remain canonical ordinary paths.
+
+Product CI owns its project and test inventory and dependency-only pins in `eng/ci.json`. A hosted build and a real-device qualification are distinct results. Source CI cannot stand in for package consumption or another target platform. CI checks out only this product's build and test dependency closure: SharpMath, SharpMetal, and the GPU/Shader peer needed by integration tests. Neural and LLM are not checkout prerequisites. Runtime product dependency direction remains unchanged. The consuming workspace continues to own its stack revision manifest.
+
+Application notice deployment uses `ThirdPartyNotices/<product>/` for both source and package consumers. Source Content metadata and package `buildTransitive` Content items copy the same license inputs during build and publish. Native DLL and Agility locations remain separate. Host staging must preserve these notice files; a license inside the nupkg cache alone does not satisfy this contract. Transitive application-deployment Content is excluded from downstream packing. A consumer must not repack another product's notice assets into framework-specific `contentFiles` that can hide its own portable resources.
 
 ## Implementation and verification
 
@@ -16,7 +28,7 @@ Keep RHI and backend boundaries explicit. Do not expose backend Heap/Pool/View c
 - Keep a single implementation path. Do not introduce legacy aliases, forwarding assemblies, compatibility shims or silent dependency fallbacks.
 - Source/Package selection is graph-wide. Keep local checkout paths in ignored `stack.local.props`; update the portable template when its contract changes. Do not commit developer drive paths.
 - Use current build/test/runtime evidence for behavior changes. Test the relevant error, cancellation and lifetime paths. Mark unavailable matching-platform execution `TODO(UNVERIFIED)` or `BLOCKED_PLATFORM`.
-- First-party code and package metadata use Mozilla Public License 2.0 (MPL-2.0); preserve [LICENSE](LICENSE), source attribution and third-party licenses and notices. Update README/design/verification when their contracts change.
+- First-party code and package metadata use Mozilla Public License 2.0 (MPL-2.0); preserve [LICENSE](LICENSE), source attribution and third-party licenses and notices. Update this file, [README.md](README.md) and [docs/VERIFICATION.md](docs/VERIFICATION.md) when their contracts change.
 
 ## 工程洁净度：第一性原则
 
