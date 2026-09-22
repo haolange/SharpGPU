@@ -1,8 +1,16 @@
 # SharpGPU
 
-SharpGPU is a .NET 10 GPU hardware abstraction for DirectX 12, Vulkan and Metal. It supplies explicit mechanisms that map onto those APIs. Pass topology, barrier inference, memory aliasing and transient-resource lifetime stay with the caller. SharpGPU does not compile shaders, and it does not recreate a swap chain when present fails.
+[简体中文](../../README.md) · [English](../../README.en.md)
 
-The public binding surface is `RHIBindingTable`. Unsupported factories throw `NotSupportedException` instead of silently substituting another execution path. `RHIDeviceCapabilities` publishes 14 domains for the current device only. `Passed` and `BLOCKED_PLATFORM` are qualification results, not capability tiers.
+SharpGPU is a .NET 10 hardware abstraction over DirectX 12, Vulkan and Metal. The public surface is devices, resources, immutable pipelines, `RHIBindingTable`, command encoders, queues and presentation. Pass topology, barrier inference, memory aliasing and transient-resource lifetime stay with the caller. Shaders enter as `Dxil`, `SpirV`, `MslSource` or `MetalLibrary` payloads. SharpGPU does not compile them, and it does not recreate a swap chain when present fails.
+
+`ERHIBackend` is `Metal`, `Vulkan`, `DirectX12` or `Pending`. There is no Auto value. `GetBackendByPlatform` is a suggestion. `IsBackendSupported` checks the operating system only. A build without `SHARPGPU_ENABLE_DX12` has no DirectX 12 path.
+
+Create an `RHIInstance`, take a device, then a graphics, compute or transfer queue. Committed buffers and textures come from `CreateBuffer` and `CreateTexture`. Placed and sparse allocation, residency and budget queries are capabilities. Record into one command buffer with a single active encoder: Transfer, Compute, RayTracing, Raster, Machine Learning or Work Graph. `Submit` takes command buffers, semaphore waits, signal semaphores and an optional completion fence. `RHIFence.Wait` returns `ERHIFenceStatus`.
+
+`RHIDeviceCapabilities` has 14 domains: Raster, Binding, Synchronization, Memory, Storage, PipelineCache, Presentation, RayTracing, Mesh, MachineLearning, WorkGraph, IndirectCommandBuffer, Compute and FunctionLibrary. Tier, strategy and provenance describe that device. `Passed` and `BLOCKED_PLATFORM` are qualification results in the feature matrix, not capability tiers. Unsupported factories throw `NotSupportedException`.
+
+Machine-learning execution is an `RHIMLBinary` pipeline. The repository README and the feature matrix name the remaining opt-in contracts (mesh shaders, work graphs, opacity micromaps, motion, storage queues, variable-rate shading, sampler feedback).
 
 Start with:
 
